@@ -30,7 +30,7 @@ class BatchTextEmbeddingOutput(DictMixin):
 class BatchTextEmbeddingUsage(DictMixin):
     total_tokens: int
 
-    def __init__(self, total_tokens: int, **kwargs):
+    def __init__(self, total_tokens: int=None, **kwargs):
         super().__init__(total_tokens=total_tokens, **kwargs)
 
 
