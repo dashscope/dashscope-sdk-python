@@ -203,6 +203,9 @@ class Recognition(BaseApi):
                             logger.debug('first package delay {}'.format(
                                 self.get_first_package_delay()))
                         sentence = part.output['sentence']
+                        if 'heartbeat' in sentence and sentence['heartbeat'] == True:
+                            logger.debug('recv heartbeat')
+                            continue
                         logger.debug(
                             'Recv Result [rid:{}]:{}, isEnd: {}'.format(
                                 part.request_id, sentence,
