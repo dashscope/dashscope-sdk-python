@@ -119,7 +119,7 @@ class Message(DictMixin):
     role: str
     content: Union[str, List]
 
-    def __init__(self, role: str, content: str, **kwargs):
+    def __init__(self, role: str, content: str = None, **kwargs):
         super().__init__(role=role, content=content, **kwargs)
 
     @classmethod
@@ -145,7 +145,7 @@ class Choice(DictMixin):
                  message: Message = None,
                  **kwargs):
         msgObject = None
-        if message is not None:
+        if message is not None and message:
             msgObject = Message(**message)
         super().__init__(finish_reason=finish_reason,
                          message=msgObject,
