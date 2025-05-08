@@ -16,15 +16,22 @@ class VideoSynthesis(BaseAsyncApi):
     """API for video synthesis.
     """
     class Models:
+        """@deprecated, use wanx2.1-t2v-plus instead"""
         wanx_txt2video_pro = 'wanx-txt2video-pro'
+        """@deprecated, use wanx2.1-i2v-plus instead"""
         wanx_img2video_pro = 'wanx-img2video-pro'
+
         wanx_2_1_t2v_turbo = 'wanx2.1-t2v-turbo'
         wanx_2_1_t2v_plus = 'wanx2.1-t2v-plus'
+
+        wanx_2_1_i2v_plus = 'wanx2.1-i2v-plus'
+        wanx_2_1_i2v_turbo = 'wanx2.1-i2v-turbo'
 
     @classmethod
     def call(cls,
              model: str,
-             prompt: Any,
+             prompt: Any = None,
+             # """@deprecated, use prompt_extend in parameters """
              extend_prompt: bool = True,
              negative_prompt: str = None,
              template: str = None,
@@ -33,13 +40,20 @@ class VideoSynthesis(BaseAsyncApi):
              extra_input: Dict = None,
              workspace: str = None,
              task: str = None,
+             function: str = None,
+             mask_image_url: str = None,
+             base_image_url: str = None,
+             head_frame: str = None,
+             tail_frame: str = None,
+             first_frame_url: str = None,
+             last_frame_url: str = None,
              **kwargs) -> VideoSynthesisResponse:
         """Call video synthesis service and get result.
 
         Args:
             model (str): The model, reference ``Models``.
             prompt (Any): The prompt for video synthesis.
-            extend_prompt (bool): The extend_prompt. Whether to enable write expansion. The default value is True.
+            extend_prompt (bool): @deprecated, use prompt_extend in parameters
             negative_prompt (str): The negative prompt is the opposite of the prompt meaning.
             template (str): LoRa input, such as gufeng, katong, etc.
             img_url (str): The input image url, Generate the URL of the image referenced by the video.
@@ -47,6 +61,13 @@ class VideoSynthesis(BaseAsyncApi):
             workspace (str): The dashscope workspace id.
             extra_input (Dict): The extra input parameters.
             task (str): The task of api, ref doc.
+            function (str): The specific functions to be achieved. like:
+                colorization,super_resolution,expand,remove_watermaker,doodle,
+                description_edit_with_mask,description_edit,stylization_local,stylization_all
+            base_image_url (str): Enter the URL address of the target edited image.
+            mask_image_url (str): Provide the URL address of the image of the marked area by the user. It should be consistent with the image resolution of the base_image_url.
+            first_frame_url (str): The URL of the first frame image for generating the video.
+            last_frame_url (str): The URL of the last frame image for generating the video.
             **kwargs:
                 size(str, `optional`): The output video size(width*height).
                 duration(int, optional): The duration. Duration of video generation. The default value is 5, in seconds.
@@ -68,13 +89,21 @@ class VideoSynthesis(BaseAsyncApi):
                             workspace=workspace,
                             extra_input=extra_input,
                             task=task,
+                            function=function,
+                            mask_image_url=mask_image_url,
+                            base_image_url=base_image_url,
+                            head_frame=head_frame,
+                            tail_frame=tail_frame,
+                            first_frame_url=first_frame_url,
+                            last_frame_url=last_frame_url,
                             **kwargs)
 
     @classmethod
     def async_call(cls,
                    model: str,
-                   prompt: Any,
+                   prompt: Any = None,
                    img_url: str = None,
+                   # """@deprecated, use prompt_extend in parameters """
                    extend_prompt: bool = True,
                    negative_prompt: str = None,
                    template: str = None,
@@ -82,13 +111,20 @@ class VideoSynthesis(BaseAsyncApi):
                    extra_input: Dict = None,
                    workspace: str = None,
                    task: str = None,
+                   function: str = None,
+                   mask_image_url: str = None,
+                   base_image_url: str = None,
+                   head_frame: str = None,
+                   tail_frame: str = None,
+                   first_frame_url: str = None,
+                   last_frame_url: str = None,
                    **kwargs) -> VideoSynthesisResponse:
         """Create a video synthesis task, and return task information.
 
         Args:
             model (str): The model, reference ``Models``.
             prompt (Any): The prompt for video synthesis.
-            extend_prompt (bool): The extend_prompt. Whether to enable write expansion. The default value is True.
+            extend_prompt (bool): @deprecated, use prompt_extend in parameters
             negative_prompt (str): The negative prompt is the opposite of the prompt meaning.
             template (str): LoRa input, such as gufeng, katong, etc.
             img_url (str): The input image url, Generate the URL of the image referenced by the video.
@@ -96,6 +132,13 @@ class VideoSynthesis(BaseAsyncApi):
             workspace (str): The dashscope workspace id.
             extra_input (Dict): The extra input parameters.
             task (str): The task of api, ref doc.
+            function (str): The specific functions to be achieved. like:
+                colorization,super_resolution,expand,remove_watermaker,doodle,
+                description_edit_with_mask,description_edit,stylization_local,stylization_all
+            base_image_url (str): Enter the URL address of the target edited image.
+            mask_image_url (str): Provide the URL address of the image of the marked area by the user. It should be consistent with the image resolution of the base_image_url.
+            first_frame_url (str): The URL of the first frame image for generating the video.
+            last_frame_url (str): The URL of the last frame image for generating the video.
             **kwargs:
                 size(str, `optional`): The output video size(width*height).
                 duration(int, optional): The duration. Duration of video generation. The default value is 5, in seconds.
@@ -108,21 +151,66 @@ class VideoSynthesis(BaseAsyncApi):
             DashScopeAPIResponse: The video synthesis
                 task id in the response.
         """
-        if prompt is None or not prompt:
-            raise InputRequired('prompt is required!')
         task_group, function = _get_task_group_and_task(__name__)
         inputs = {PROMPT: prompt, 'extend_prompt': extend_prompt}
         if negative_prompt:
             inputs['negative_prompt'] = negative_prompt
         if template:
             inputs['template'] = template
+        if function:
+            inputs['function'] = function
+
         has_upload = False
+
         if img_url is not None and img_url:
             is_upload, res_img_url = check_and_upload_local(
                 model, img_url, api_key)
             if is_upload:
                 has_upload = True
             inputs['img_url'] = res_img_url
+
+        if mask_image_url is not None and mask_image_url:
+            is_upload, res_mask_image_url = check_and_upload_local(
+                model, mask_image_url, api_key)
+            if is_upload:
+                has_upload = True
+            inputs['mask_image_url'] = mask_image_url
+
+        if base_image_url is not None and base_image_url:
+            is_upload, res_base_image_url = check_and_upload_local(
+                model, base_image_url, api_key)
+            if is_upload:
+                has_upload = True
+            inputs['base_image_url'] = res_base_image_url
+
+        if head_frame is not None and head_frame:
+            is_upload, res_head_frame = check_and_upload_local(
+                model, head_frame, api_key)
+            if is_upload:
+                has_upload = True
+            inputs['head_frame'] = res_head_frame
+
+        if tail_frame is not None and tail_frame:
+            is_upload, res_tail_frame = check_and_upload_local(
+                model, tail_frame, api_key)
+            if is_upload:
+                has_upload = True
+            inputs['tail_frame'] = res_tail_frame
+
+        if first_frame_url is not None and first_frame_url:
+            is_upload, res_first_frame_url = check_and_upload_local(
+                model, first_frame_url, api_key)
+            if is_upload:
+                has_upload = True
+            inputs['first_frame_url'] = res_first_frame_url
+
+        if last_frame_url is not None and last_frame_url:
+            is_upload, res_last_frame_url = check_and_upload_local(
+                model, last_frame_url, api_key)
+            if is_upload:
+                has_upload = True
+            inputs['last_frame_url'] = res_last_frame_url
+
         if extra_input is not None and extra_input:
             inputs = {**inputs, **extra_input}
         if has_upload:
