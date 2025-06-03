@@ -53,7 +53,6 @@ class HttpRequest(AioBaseRequest):
                  timeout: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
                  task_id: Optional[str] = None,
                  flattened_output: bool = False) -> None:
-        """优化后的HttpSSERequest，保持接口不变"""
         self._init_ssl_context()  # 确保SSL上下文已初始化
 
         super().__init__()
