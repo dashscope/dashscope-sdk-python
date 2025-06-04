@@ -53,38 +53,49 @@ class HttpRequest(AioBaseRequest):
                  timeout: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
                  task_id: Optional[str] = None,
                  flattened_output: bool = False) -> None:
-        self._init_ssl_context()  # 确保SSL上下文已初始化
+        """HttpSSERequest, processing http server sent event stream.
 
+        Args:
+            url (str): The request url.
+            api_key (str): The api key.
+            method (str): The http method(GET|POST).
+            stream (bool, optional): Is stream request. Defaults to True.
+            timeout (int, optional): Total request timeout.
+                Defaults to DEFAULT_REQUEST_TIMEOUT_SECONDS.
+        """
+
+        self._init_ssl_context()
         super().__init__()
         self.url = url
         self.flattened_output = flattened_output
         self.async_request = async_request
         self.headers = {
             'Accept': 'application/json',
-            'Authorization': f'Bearer {api_key}',
+            'Authorization': 'Bearer %s' % api_key,
             **self.headers,
         }
         self.query = query
-
-        if self.async_request and not self.query:
-            self.headers['X-DashScope-Async'] = 'enable'
-
+        if self.async_request and self.query is False:
+            self.headers = {
+                'X-DashScope-Async': 'enable',
+                **self.headers,
+            }
         self.method = http_method
         if self.method == HTTPMethod.POST:
             self.headers['Content-Type'] = 'application/json'
 
         self.stream = stream
         if self.stream:
-            self.headers.update({
-                'Accept': SSE_CONTENT_TYPE,
-                'X-Accel-Buffering': 'no',
-                'X-DashScope-SSE': 'enable'
-            })
-
-        if self.query and task_id:
-            self.url = self.url.replace('api', 'api-task') + f'{task_id}'
-
-        self.timeout = timeout or DEFAULT_REQUEST_TIMEOUT_SECONDS
+            self.headers['Accept'] = SSE_CONTENT_TYPE
+            self.headers['X-Accel-Buffering'] = 'no'
+            self.headers['X-DashScope-SSE'] = 'enable'
+        if self.query:
+            self.url = self.url.replace('api', 'api-task')
+            self.url += '%s' % task_id
+        if timeout is None:
+            self.timeout = DEFAULT_REQUEST_TIMEOUT_SECONDS
+        else:
+            self.timeout = timeout
 
     def _get_session(self) -> requests.Session:
         session_key = f"sync_{self.timeout}"
@@ -95,12 +106,12 @@ class HttpRequest(AioBaseRequest):
                 pool_connections=10,
                 pool_maxsize=100
             )
-            # 新版设置SSL上下文的方式
+            # 设置SSL上下文的方式
             session.mount('https://', adapter)
             session.mount('http://', adapter)
 
             # 添加SSL配置
-            if hasattr(adapter, 'init_poolmanager'):  # 新版适配
+            if hasattr(adapter, 'init_poolmanager'):
                 adapter.init_poolmanager(
                     connections=10,
                     maxsize=100,
