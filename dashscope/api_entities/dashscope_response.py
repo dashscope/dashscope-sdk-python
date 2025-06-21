@@ -58,7 +58,7 @@ class DictMixin(dict):
         return super().__setitem__(attr, value)
 
     def __getattr__(self, attr):
-        return self[attr]
+        return self.get(attr)
 
     def __setattr__(self, attr, value):
         self[attr] = value
