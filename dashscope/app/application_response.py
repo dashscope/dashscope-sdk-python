@@ -105,6 +105,50 @@ class ApplicationDocReference(DictMixin):
                          page_number=page_number,
                          **kwargs)
 
+@dataclass(init=False)
+class WorkflowMessage(DictMixin):
+    node_id: str
+    node_name: str
+    node_type: str
+    node_status: str
+    node_is_completed: str
+    node_msg_seq_id: int
+    message: str
+
+    class Message(DictMixin):
+        role: str
+        content: str
+
+    def __init__(self,
+                 node_id: str = None,
+                 node_name: str = None,
+                 node_type: str = None,
+                 node_status: str = None,
+                 node_is_completed: str = None,
+                 node_msg_seq_id: int = None,
+                 message: Message = None,
+                 **kwargs):
+        """ Workflow message.
+
+        Args:
+            node_id (str, optional): .
+            node_name (str, optional): .
+            node_type (str, optional): .
+            node_status (str, optional): .
+            node_is_completed (str, optional): .
+            node_msg_seq_id (int, optional): .
+            message (Message, optional): .
+        """
+
+        super().__init__(node_id=node_id,
+                         node_name=node_name,
+                         node_type=node_type,
+                         node_status=node_status,
+                         node_is_completed=node_is_completed,
+                         node_msg_seq_id=node_msg_seq_id,
+                         message=message,
+                         **kwargs)
+
 
 @dataclass(init=False)
 class ApplicationOutput(DictMixin):
@@ -113,6 +157,7 @@ class ApplicationOutput(DictMixin):
     session_id: str
     thoughts: List[ApplicationThought]
     doc_references: List[ApplicationDocReference]
+    workflow_message: WorkflowMessage
 
     def __init__(self,
                  text: str = None,
