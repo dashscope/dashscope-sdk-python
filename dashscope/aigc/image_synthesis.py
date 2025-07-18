@@ -24,7 +24,7 @@ class ImageSynthesis(BaseAsyncApi):
     @classmethod
     def call(cls,
              model: str,
-             prompt: Any,
+             prompt: Any = None,
              negative_prompt: Any = None,
              images: List[str] = None,
              api_key: str = None,
@@ -36,6 +36,9 @@ class ImageSynthesis(BaseAsyncApi):
              function: str = None,
              mask_image_url: str = None,
              base_image_url: str = None,
+             image_url: str = None,
+             style_index: int = None,
+             style_ref_url: str = None,
              **kwargs) -> ImageSynthesisResponse:
         """Call image(s) synthesis service and get result.
 
@@ -87,12 +90,15 @@ class ImageSynthesis(BaseAsyncApi):
                             function=function,
                             mask_image_url=mask_image_url,
                             base_image_url=base_image_url,
+                            image_url=image_url,
+                            style_index=style_index,
+                            style_ref_url=style_ref_url,
                             **kwargs)
 
     @classmethod
     def async_call(cls,
                    model: str,
-                   prompt: Any,
+                   prompt: Any =  None,
                    negative_prompt: Any = None,
                    images: List[str] = None,
                    api_key: str = None,
@@ -104,6 +110,9 @@ class ImageSynthesis(BaseAsyncApi):
                    function: str = None,
                    mask_image_url: str = None,
                    base_image_url: str = None,
+                   image_url: str = None,
+                   style_index: int = None,
+                   style_ref_url: str = None,
                    **kwargs) -> ImageSynthesisResponse:
         """Create a image(s) synthesis task, and return task information.
 
@@ -142,8 +151,11 @@ class ImageSynthesis(BaseAsyncApi):
                 task id in the response.
         """
         if prompt is None or not prompt:
-            raise InputRequired('prompt is required!')
+            if "style-repaint" not in model:
+                raise InputRequired('prompt is required!')
         task_group, f = _get_task_group_and_task(__name__)
+        if "style-repaint" in model:
+            f = "generation"
         input = {PROMPT: prompt}
         has_upload = False
         if negative_prompt is not None:
@@ -180,6 +192,23 @@ class ImageSynthesis(BaseAsyncApi):
                 has_upload = True
             input['base_image_url'] = res_base_image_url
 
+        if image_url is not None and image_url:
+            is_upload, res_image_url = check_and_upload_local(
+                model, image_url, api_key)
+            if is_upload:
+                has_upload = True
+            input['image_url'] = res_image_url
+
+        if style_index is not None and style_index:
+            input['style_index'] = style_index
+
+        if style_ref_url is not None and style_ref_url:
+            is_upload, res_style_ref_url = check_and_upload_local(
+                model, style_ref_url, api_key)
+            if is_upload:
+                has_upload = True
+            input['style_ref_url'] = res_style_ref_url
+
         if extra_input is not None and extra_input:
             input = {**input, **extra_input}
 
@@ -192,6 +221,8 @@ class ImageSynthesis(BaseAsyncApi):
             task = ImageSynthesis.task
         if model is not None and model and 'imageedit' in model:
             task = 'image2image'
+        if model is not None and model and 'style-repaint' in model:
+            task = 'image-generation'
 
         response = super().async_call(
             model=model,
