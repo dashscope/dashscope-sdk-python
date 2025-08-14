@@ -3,19 +3,31 @@ from dashscope import Generation
 
 messages = [
     {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "你是谁？"},
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "text",
+                "text": "abc" * 1024 + "你是谁？",
+                "cache_control": {
+                    "type": "ephemeral",
+                    "ttl": "5m"
+                }
+            }
+        ]
+    }
 ]
 response = Generation.call(
     api_key=os.getenv("DASHSCOPE_API_KEY"),
-    model="qwen-plus",
+    model=os.getenv("MODEL_NAME"),
     messages=messages,
     result_format="message",
-    enable_encryption=True,
+    incremental_output=True,
     stream=True,
 )
 
 for chunk in response:
-    print(chunk.output.choices[0].message.content)
+    print(chunk)
 
 # if response.status_code == 200:
 #     print(response.output.choices[0].message.content)
