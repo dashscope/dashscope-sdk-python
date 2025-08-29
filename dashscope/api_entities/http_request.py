@@ -1,5 +1,5 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
-
+import datetime
 import json
 import ssl
 from http import HTTPStatus
@@ -148,6 +148,8 @@ class HttpRequest(AioBaseRequest):
                     params = {}
                     if hasattr(self, 'data') and self.data is not None:
                         params = getattr(self.data, 'parameters', {})
+                    if params:
+                        params = self.__handle_parameters(params)
                     response = await session.get(url=self.url,
                                                  params=params,
                                                  headers=self.headers)
@@ -164,6 +166,32 @@ class HttpRequest(AioBaseRequest):
         except BaseException as e:
             logger.error(e)
             raise e
+
+    def __handle_parameters(self, params: dict) -> dict:
+        def __format(value):
+            print(value)
+            if isinstance(value, bool):
+                return str(value).lower()
+            elif isinstance(value, (str, int, float)):
+                return value
+            elif value is None:
+                return ''
+            elif isinstance(value, (datetime.datetime, datetime.date)):
+                return value.isoformat()
+            elif isinstance(value, (list, tuple)):
+                return ','.join(str(__format(x)) for x in value)
+            elif isinstance(value, dict):
+                return json.dumps(value)
+            else:
+                try:
+                    return str(value)
+                except Exception as e:
+                    raise ValueError(f"Unsupported type {type(value)} for param formatting: {e}")
+
+        formatted = {}
+        for k, v in params.items():
+            formatted[k] = __format(v)
+        return formatted
 
     async def _handle_aio_response(self, response: aiohttp.ClientResponse):
         request_id = ''
