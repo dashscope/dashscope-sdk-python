@@ -167,9 +167,9 @@ class HttpRequest(AioBaseRequest):
             logger.error(e)
             raise e
 
-    def __handle_parameters(self, params: dict) -> dict:
+    @staticmethod
+    def __handle_parameters(params: dict) -> dict:
         def __format(value):
-            print(value)
             if isinstance(value, bool):
                 return str(value).lower()
             elif isinstance(value, (str, int, float)):
