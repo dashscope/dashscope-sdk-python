@@ -98,6 +98,10 @@ class Request:
         volume=50,
         speech_rate=1.0,
         pitch_rate=1.0,
+        seed=0,
+        synthesis_type=0,
+        instruction=None,
+        language_hints: list = None,
     ):
         self.task_id = self.genUid()
         self.apikey = apikey
@@ -109,6 +113,10 @@ class Request:
         self.volume = volume
         self.speech_rate = speech_rate
         self.pitch_rate = pitch_rate
+        self.seed = seed
+        self.synthesis_type = synthesis_type
+        self.instruction = instruction
+        self.language_hints = language_hints
 
     def genUid(self):
         # 生成随机UUID
@@ -156,6 +164,8 @@ class Request:
                     'rate': self.speech_rate,
                     'format': self.format,
                     'pitch': self.pitch_rate,
+                    'seed': self.seed,
+                    'type': self.synthesis_type
                 },
             },
         }
@@ -163,6 +173,10 @@ class Request:
             cmd['payload']['parameters']['bit_rate'] = self.bit_rate
         if additional_params:
             cmd['payload']['parameters'].update(additional_params)
+        if self.instruction is not None:
+            cmd['payload']['parameters']['instruction'] = self.instruction
+        if self.language_hints is not None:
+            cmd['payload']['parameters']['language_hints'] = self.language_hints
         return json.dumps(cmd)
 
     def getContinueRequest(self, text):
@@ -207,6 +221,10 @@ class SpeechSynthesizer:
         volume=50,
         speech_rate=1.0,
         pitch_rate=1.0,
+        seed=0,
+        synthesis_type=0,
+        instruction=None,
+        language_hints: list = None,
         headers=None,
         callback: ResultCallback = None,
         workspace=None,
@@ -237,6 +255,14 @@ class SpeechSynthesizer:
             Dashscope workspace ID.
         url: str
             Dashscope WebSocket URL.
+        seed: int
+            The seed of the synthesizer, with a range from 0 to 65535. Default is 0.
+        synthesis_type: int
+            The type of the synthesizer, Default is 0.
+        instruction: str
+            The instruction of the synthesizer, max length is 128.
+        language_hints: list
+            The language hints of the synthesizer. supported language: zh, en.
         additional_params: Dict
             Additional parameters for the Dashscope API.
         """
@@ -271,6 +297,10 @@ class SpeechSynthesizer:
             volume=volume,
             speech_rate=speech_rate,
             pitch_rate=pitch_rate,
+            seed=seed,
+            synthesis_type=synthesis_type,
+            instruction=instruction,
+            language_hints=language_hints
         )
         self.last_request_id = self.request.task_id
         self.start_event = threading.Event()
