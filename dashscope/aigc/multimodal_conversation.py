@@ -24,9 +24,10 @@ class MultiModalConversation(BaseApi):
     def call(
         cls,
         model: str,
-        messages: List,
+        messages: List = None,
         api_key: str = None,
         workspace: str = None,
+        text: str = None,
         **kwargs
     ) -> Union[MultiModalConversationResponse, Generator[
             MultiModalConversationResponse, None, None]]:
@@ -55,6 +56,7 @@ class MultiModalConversation(BaseApi):
                 if None, will retrieve by rule [1].
                 [1]: https://help.aliyun.com/zh/dashscope/developer-reference/api-key-settings. # noqa E501
             workspace (str): The dashscope workspace id.
+            text (str): The text to generate.
             **kwargs:
                 stream(bool, `optional`): Enable server-sent events
                     (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501
@@ -68,7 +70,10 @@ class MultiModalConversation(BaseApi):
                     tokens with top_p probability mass. So 0.1 means only
                     the tokens comprising the top 10% probability mass are
                     considered[qwen-turbo,bailian-v1].
+                voice(string, `optional`): The voice name of qwen tts, include 'Cherry'/'Ethan'/'Sunny'/'Dylan' and so on,
+                    you can get the total voice list : https://help.aliyun.com/zh/model-studio/qwen-tts.
                 top_k(float, `optional`):
+
 
         Raises:
             InvalidInput: The history and auto_history are mutually exclusive.
@@ -78,18 +83,24 @@ class MultiModalConversation(BaseApi):
                   Generator[MultiModalConversationResponse, None, None]]: If
             stream is True, return Generator, otherwise MultiModalConversationResponse.
         """
-        if (messages is None or not messages):
-            raise InputRequired('prompt or messages is required!')
         if model is None or not model:
             raise ModelRequired('Model is required!')
         task_group, _ = _get_task_group_and_task(__name__)
-        msg_copy = copy.deepcopy(messages)
-        has_upload = cls._preprocess_messages(model, msg_copy, api_key)
-        if has_upload:
-            headers = kwargs.pop('headers', {})
-            headers['X-DashScope-OssResourceResolve'] = 'enable'
-            kwargs['headers'] = headers
-        input = {'messages': msg_copy}
+        input = {}
+        msg_copy = None
+
+        if messages is not None and messages:
+            msg_copy = copy.deepcopy(messages)
+            has_upload = cls._preprocess_messages(model, msg_copy, api_key)
+            if has_upload:
+                headers = kwargs.pop('headers', {})
+                headers['X-DashScope-OssResourceResolve'] = 'enable'
+                kwargs['headers'] = headers
+
+        if text is not None and text:
+            input.update({'text': text})
+        if msg_copy is not None:
+            input.update({'messages': msg_copy})
         response = super().call(model=model,
                                 task_group=task_group,
                                 task=MultiModalConversation.task,
@@ -145,9 +156,10 @@ class AioMultiModalConversation(BaseAioApi):
     async def call(
         cls,
         model: str,
-        messages: List,
+        messages: List = None,
         api_key: str = None,
         workspace: str = None,
+        text: str = None,
         **kwargs
     ) -> Union[MultiModalConversationResponse, Generator[
             MultiModalConversationResponse, None, None]]:
@@ -176,6 +188,7 @@ class AioMultiModalConversation(BaseAioApi):
                 if None, will retrieve by rule [1].
                 [1]: https://help.aliyun.com/zh/dashscope/developer-reference/api-key-settings. # noqa E501
             workspace (str): The dashscope workspace id.
+            text (str): The text to generate.
             **kwargs:
                 stream(bool, `optional`): Enable server-sent events
                     (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501
@@ -189,6 +202,8 @@ class AioMultiModalConversation(BaseAioApi):
                     tokens with top_p probability mass. So 0.1 means only
                     the tokens comprising the top 10% probability mass are
                     considered[qwen-turbo,bailian-v1].
+                voice(string, `optional`): The voice name of qwen tts, include 'Cherry'/'Ethan'/'Sunny'/'Dylan' and so on,
+                    you can get the total voice list : https://help.aliyun.com/zh/model-studio/qwen-tts.
                 top_k(float, `optional`):
 
         Raises:
@@ -199,18 +214,24 @@ class AioMultiModalConversation(BaseAioApi):
                   Generator[MultiModalConversationResponse, None, None]]: If
             stream is True, return Generator, otherwise MultiModalConversationResponse.
         """
-        if (messages is None or not messages):
-            raise InputRequired('prompt or messages is required!')
         if model is None or not model:
             raise ModelRequired('Model is required!')
         task_group, _ = _get_task_group_and_task(__name__)
-        msg_copy = copy.deepcopy(messages)
-        has_upload = cls._preprocess_messages(model, msg_copy, api_key)
-        if has_upload:
-            headers = kwargs.pop('headers', {})
-            headers['X-DashScope-OssResourceResolve'] = 'enable'
-            kwargs['headers'] = headers
-        input = {'messages': msg_copy}
+        input = {}
+        msg_copy = None
+
+        if messages is not None and messages:
+            msg_copy = copy.deepcopy(messages)
+            has_upload = cls._preprocess_messages(model, msg_copy, api_key)
+            if has_upload:
+                headers = kwargs.pop('headers', {})
+                headers['X-DashScope-OssResourceResolve'] = 'enable'
+                kwargs['headers'] = headers
+
+        if text is not None and text:
+            input.update({'text': text})
+        if msg_copy is not None:
+            input.update({'messages': msg_copy})
         response = await super().call(model=model,
                                       task_group=task_group,
                                       task=AioMultiModalConversation.task,

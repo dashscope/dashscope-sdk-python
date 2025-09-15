@@ -153,6 +153,26 @@ class Choice(DictMixin):
 
 
 @dataclass(init=False)
+class Audio(DictMixin):
+    data: str
+    url: str
+    id: str
+    expires_at: int
+
+    def __init__(self,
+                 data: str = None,
+                 url: str = None,
+                 id: str = None,
+                 expires_at: int = None,
+                 **kwargs):
+        super().__init__(data=data,
+                         url=url,
+                         id=id,
+                         expires_at=expires_at,
+                         **kwargs)
+
+
+@dataclass(init=False)
 class GenerationOutput(DictMixin):
     text: str
     choices: List[Choice]
@@ -217,20 +237,25 @@ class GenerationResponse(DashScopeAPIResponse):
 @dataclass(init=False)
 class MultiModalConversationOutput(DictMixin):
     choices: List[Choice]
+    audio: Audio
 
     def __init__(self,
                  text: str = None,
                  finish_reason: str = None,
                  choices: List[Choice] = None,
+                 audio: Audio = None,
                  **kwargs):
         chs = None
         if choices is not None:
             chs = []
             for choice in choices:
                 chs.append(Choice(**choice))
+        if audio is not None:
+            audio = Audio(**audio)
         super().__init__(text=text,
                          finish_reason=finish_reason,
                          choices=chs,
+                         audio=audio,
                          **kwargs)
 
 
@@ -238,15 +263,18 @@ class MultiModalConversationOutput(DictMixin):
 class MultiModalConversationUsage(DictMixin):
     input_tokens: int
     output_tokens: int
+    characters: int
 
     # TODO add image usage info.
 
     def __init__(self,
                  input_tokens: int = 0,
                  output_tokens: int = 0,
+                 characters: int = 0,
                  **kwargs):
         super().__init__(input_tokens=input_tokens,
                          output_tokens=output_tokens,
+                         characters=characters,
                          **kwargs)
 
 
@@ -378,7 +406,7 @@ class RecognitionResponse(DashScopeAPIResponse):
         """
         result = False
         if sentence is not None and 'end_time' in sentence and sentence[
-                'end_time'] is not None:
+            'end_time'] is not None:
             result = True
         return result
 
@@ -445,8 +473,8 @@ class ImageSynthesisOutput(DictMixin):
     results: List[ImageSynthesisResult]
 
     def __init__(self,
-                 task_id: str =  None,
-                 task_status: str =  None,
+                 task_id: str = None,
+                 task_status: str = None,
                  results: List[ImageSynthesisResult] = [],
                  **kwargs):
         res = []
