@@ -24,7 +24,7 @@ from dashscope.embeddings.batch_text_embedding_response import \
     BatchTextEmbeddingResponse
 from dashscope.embeddings.multimodal_embedding import (
     MultiModalEmbedding, MultiModalEmbeddingItemAudio,
-    MultiModalEmbeddingItemImage, MultiModalEmbeddingItemText)
+    MultiModalEmbeddingItemImage, MultiModalEmbeddingItemText, AioMultiModalEmbedding)
 from dashscope.embeddings.text_embedding import TextEmbedding
 from dashscope.files import Files
 from dashscope.models import Models
@@ -55,6 +55,7 @@ __all__ = [
     Models,
     TextEmbedding,
     MultiModalEmbedding,
+    AioMultiModalEmbedding,
     MultiModalEmbeddingItemAudio,
     MultiModalEmbeddingItemImage,
     MultiModalEmbeddingItemText,
