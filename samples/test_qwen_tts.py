@@ -20,19 +20,26 @@ use_stream = True
 
 response = dashscope.MultiModalConversation.call(
     api_key=os.getenv('DASHSCOPE_API_KEY'),
-    model="qwen-tts",
+    model="qwen3-tts-flash",
     text="Today is a wonderful day to build something people love!",
     voice="Cherry",
-    stream=use_stream
+    stream=use_stream,
+    language_type="zh"
 )
 if use_stream:
     # print the audio data in stream mode
     for chunk in response:
+        if chunk.output is None:
+            print(f"error: {chunk}")
+            break
         audio = chunk.output.audio
-        print("base64 audio data is: {}", chunk.output.audio.data)
+        print(f"base64 audio data is: {chunk.output.audio.data}")
         if chunk.output.finish_reason == "stop":
-            print("finish at: {} ", chunk.output.audio.expires_at)
+            print(f"finish at: {chunk.output.audio.expires_at}")
 else:
-    # print the audio url in non-stream mode
-    print("synthesized audio url is: {}", response.output.audio.url)
-    print("finish at: {} ", response.output.audio.expires_at)
+    if response.output is None:
+        print(f"error: {response}")
+    else:
+        # print the audio url in non-stream mode
+        print(f"synthesized audio url is: {response.output.audio.url}")
+        print(f"finish at: {response.output.audio.expires_at}")

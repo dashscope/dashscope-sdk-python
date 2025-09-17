@@ -28,6 +28,8 @@ class MultiModalConversation(BaseApi):
         api_key: str = None,
         workspace: str = None,
         text: str = None,
+        voice: str = None,
+        language_type: str = None,
         **kwargs
     ) -> Union[MultiModalConversationResponse, Generator[
             MultiModalConversationResponse, None, None]]:
@@ -57,6 +59,9 @@ class MultiModalConversation(BaseApi):
                 [1]: https://help.aliyun.com/zh/dashscope/developer-reference/api-key-settings. # noqa E501
             workspace (str): The dashscope workspace id.
             text (str): The text to generate.
+            voice (str): The voice name of qwen tts, include 'Cherry'/'Ethan'/'Sunny'/'Dylan' and so on,
+                    you can get the total voice list : https://help.aliyun.com/zh/model-studio/qwen-tts.
+            language_type (str): The synthesized language type, default is 'auto', useful for [qwen3-tts].
             **kwargs:
                 stream(bool, `optional`): Enable server-sent events
                     (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501
@@ -70,8 +75,6 @@ class MultiModalConversation(BaseApi):
                     tokens with top_p probability mass. So 0.1 means only
                     the tokens comprising the top 10% probability mass are
                     considered[qwen-turbo,bailian-v1].
-                voice(string, `optional`): The voice name of qwen tts, include 'Cherry'/'Ethan'/'Sunny'/'Dylan' and so on,
-                    you can get the total voice list : https://help.aliyun.com/zh/model-studio/qwen-tts.
                 top_k(float, `optional`):
 
 
@@ -99,6 +102,10 @@ class MultiModalConversation(BaseApi):
 
         if text is not None and text:
             input.update({'text': text})
+        if voice is not None and voice:
+            input.update({'voice': voice})
+        if language_type is not None and language_type:
+            input.update({'language_type': language_type})
         if msg_copy is not None:
             input.update({'messages': msg_copy})
         response = super().call(model=model,
@@ -160,6 +167,8 @@ class AioMultiModalConversation(BaseAioApi):
         api_key: str = None,
         workspace: str = None,
         text: str = None,
+        voice: str = None,
+        language_type: str = None,
         **kwargs
     ) -> Union[MultiModalConversationResponse, Generator[
             MultiModalConversationResponse, None, None]]:
@@ -189,6 +198,9 @@ class AioMultiModalConversation(BaseAioApi):
                 [1]: https://help.aliyun.com/zh/dashscope/developer-reference/api-key-settings. # noqa E501
             workspace (str): The dashscope workspace id.
             text (str): The text to generate.
+            voice (str): The voice name of qwen tts, include 'Cherry'/'Ethan'/'Sunny'/'Dylan' and so on,
+                    you can get the total voice list : https://help.aliyun.com/zh/model-studio/qwen-tts.
+            language_type (str): The synthesized language type, default is 'auto', useful for [qwen3-tts].
             **kwargs:
                 stream(bool, `optional`): Enable server-sent events
                     (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501
@@ -202,8 +214,6 @@ class AioMultiModalConversation(BaseAioApi):
                     tokens with top_p probability mass. So 0.1 means only
                     the tokens comprising the top 10% probability mass are
                     considered[qwen-turbo,bailian-v1].
-                voice(string, `optional`): The voice name of qwen tts, include 'Cherry'/'Ethan'/'Sunny'/'Dylan' and so on,
-                    you can get the total voice list : https://help.aliyun.com/zh/model-studio/qwen-tts.
                 top_k(float, `optional`):
 
         Raises:
@@ -230,6 +240,10 @@ class AioMultiModalConversation(BaseAioApi):
 
         if text is not None and text:
             input.update({'text': text})
+        if voice is not None and voice:
+            input.update({'voice': voice})
+        if language_type is not None and language_type:
+            input.update({'language_type': language_type})
         if msg_copy is not None:
             input.update({'messages': msg_copy})
         response = await super().call(model=model,

@@ -158,6 +158,7 @@ class QwenTtsRealtime:
                        response_format: AudioFormat = AudioFormat.
                        PCM_24000HZ_MONO_16BIT,
                        mode: str = 'server_commit',
+                       language_type: str = None,
                        **kwargs) -> None:
         '''
         update session configuration, should be used before create response
@@ -170,6 +171,8 @@ class QwenTtsRealtime:
             output audio format
         mode: str
             response mode, server_commit or commit
+        language_type: str
+            language type for synthesized audio, default is 'auto'
         '''
         self.config = {
             'voice': voice,
@@ -177,6 +180,8 @@ class QwenTtsRealtime:
             'response_format': response_format.format,
             'sample_rate': response_format.sample_rate,
         }
+        if language_type is not None:
+            self.config['language_type'] = language_type
         self.config.update(kwargs)
         self.__send_str(
             json.dumps({
