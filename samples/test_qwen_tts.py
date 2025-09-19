@@ -24,7 +24,7 @@ response = dashscope.MultiModalConversation.call(
     text="Today is a wonderful day to build something people love!",
     voice="Cherry",
     stream=use_stream,
-    language_type="zh"
+    language_type="English"
 )
 if use_stream:
     # print the audio data in stream mode
