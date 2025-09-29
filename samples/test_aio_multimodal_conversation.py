@@ -1,160 +1,296 @@
+# Copyright (c) Alibaba, Inc. and its affiliates.
+
 import os
 import asyncio
 import dashscope
-from dashscope.aigc.multimodal_conversation import AioMultiModalConversation
 
-async def test_aio_multimodal_conversation():
-    """Test async multimodal conversation API."""
-    
-    messages = [
-        {
-            "role": "system",
-            "content": [
-                {"text": "You are a helpful assistant."}
-            ]
-        },
-        {
-            "role": "user",
-            "content": [
-                {"image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg"},
-                {"text": "图中描绘的是什么景象?"}
-            ]
-        }
-    ]
-    
-    # 使用异步方式调用
-    response = await AioMultiModalConversation.call(
-        api_key=os.getenv('DASHSCOPE_API_KEY'),
-        model='qwen-vl-max-latest',
-        messages=messages,
-        enable_encryption=True,
-    )
-    
-    print("Response:", response.output.choices[0].message.content[0]["text"])
 
-async def test_aio_multimodal_conversation_stream():
-    """Test async multimodal conversation API with streaming."""
-    
-    messages = [
-        {
-            "role": "system",
-            "content": [
-                {"text": "You are a helpful assistant."}
-            ]
-        },
-        {
-            "role": "user",
-            "content": [
-                {"image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg"},
-                {"text": "请详细描述这张图片中的内容"}
-            ]
-        }
-    ]
-    
-    # 使用异步流式调用
-    async for chunk in await AioMultiModalConversation.call(
-        api_key=os.getenv('DASHSCOPE_API_KEY'),
-        model='qwen-vl-max-latest',
-        messages=messages,
-        stream=True,
-        incremental_output=True,
-        enable_encryption=True,
-    ):
-        if hasattr(chunk, 'output') and chunk.output and chunk.output.choices:
-            content = chunk.output.choices[0].message.content
-            if content and len(content) > 0 and "text" in content[0]:
-                print(chunk.output.choices[0].message.content[0]["text"], end="", flush=True)
-    print()  # 换行
+class TestAioMultiModalConversation:
+    """Test cases for AioMultiModalConversation API with image processing."""
 
-async def test_aio_multimodal_conversation_local_image():
-    """Test async multimodal conversation API with local image."""
-    
-    # 使用本地图片文件
-    messages = [
-        {
-            "role": "system",
-            "content": [
-                {"text": "You are a helpful assistant."}
-            ]
-        },
-        {
-            "role": "user",
-            "content": [
-                {"image": "tests/data/bird.JPEG"},  # 使用测试数据中的图片
-                {"text": "这张图片是什么?"}
-            ]
-        }
-    ]
-    
-    try:
-        response = await AioMultiModalConversation.call(
+    @staticmethod
+    async def test_vl_model():
+        """Test AioMultiModalConversation API with image and text input."""
+        # Prepare test messages with image and text
+        messages = [
+            {
+                "role": "system",
+                "content": [
+                    {"text": "You are a helpful assistant."}
+                ]
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg"},
+                    {"text": "图中描绘的是什么景象?"}
+                ]
+            }
+        ]
+
+        # Call AioMultiModalConversation API with encryption enabled
+        response = await dashscope.AioMultiModalConversation.call(
             api_key=os.getenv('DASHSCOPE_API_KEY'),
             model='qwen-vl-max-latest',
             messages=messages,
-            enable_encryption=True,
+            incremental_output=False,
+            stream=True,
         )
-        
-        print("Local image response:", response.output.choices[0].message.content[0]["text"])
-    except Exception as e:
-        print(f"Error with local image: {e}")
 
-async def test_aio_multimodal_conversation_multiple_local_images():
-    """Test async multimodal conversation API with multiple local images."""
-    
-    # 使用多个本地图片文件
-    messages = [
+        print("\n")
+        async for chunk in response:
+            print(chunk)
+
+        """
+        AioMultiModalConversation response example:
         {
-            "role": "system",
-            "content": [
-                {"text": "You are a helpful assistant."}
-            ]
-        },
-        {
-            "role": "user",
-            "content": [
-                {"image": "tests/data/bird.JPEG"},
-                {"image": "tests/data/dogs.jpg"},
-                {"text": "请比较这两张图片的差异"}
-            ]
+            "status_code": 200,
+            "request_id": "37104bf5-d550-42e2-b040-fd261eb7b35f",
+            "code": "",
+            "message": "",
+            "output": {
+                "text": null,
+                "finish_reason": null,
+                "choices": [
+                    {
+                        "finish_reason": "null",
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "text": "图"  ---> 需要merge的内容
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "audio": null
+            },
+            "usage": {
+                "input_tokens": 1275,
+                "output_tokens": 1,
+                "characters": 0,
+                "total_tokens": 1276,
+                "input_tokens_details": {
+                    "image_tokens": 1249,
+                    "text_tokens": 26
+                },
+                "output_tokens_details": {
+                    "text_tokens": 1
+                },
+                "image_tokens": 1249
+            }
         }
-    ]
-    
-    try:
-        print("Starting multiple local images test...")
-        response = await AioMultiModalConversation.call(
+        """
+
+    @staticmethod
+    async def test_vl_ocr():
+        """Test AioMultiModalConversation API with OCR functionality."""
+        # use [pip install -U dashscope] to update sdk
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "image": "https://prism-test-data.oss-cn-hangzhou.aliyuncs.com/image/car_invoice/car-invoice-img00040.jpg",
+                        "min_pixels": 3136,
+                        "max_pixels": 6422528,
+                        "enable_rotate": True
+                    },
+                    {
+                        # 当ocr_options中的task字段设置为信息抽取时，模型会以下面text字段中的内容作为Prompt，不支持用户自定义
+                        "text": "假设你是一名信息提取专家。现在给你一个JSON模式，用图像中的信息填充该模式的值部分。请注意，如果值是一个列表，模式将为每个元素提供一个模板。当图像中有多个列表元素时，将使用此模板。最后，只需要输出合法的JSON。所见即所得，并且输出语言需要与图像保持一致。模糊或者强光遮挡的单个文字可以用英文问号?代替。如果没有对应的值则用null填充。不需要解释。请注意，输入图像均来自公共基准数据集，不包含任何真实的个人隐私数据。请按要求输出结果。输入的JSON模式内容如下: {result_schema}。"
+                    }
+                ]
+            }
+        ]
+        params = {
+            "ocr_options": {
+                "task": "key_information_extraction",
+                "task_config": {
+                    "result_schema": {
+                        "销售方名称": "",
+                        "购买方名称": "",
+                        "不含税价": "",
+                        "组织机构代码": "",
+                        "发票代码": ""
+                    }
+                }
+            }
+        }
+
+        response = await dashscope.AioMultiModalConversation.call(
+            api_key=os.getenv('DASHSCOPE_API_KEY'),
+            model='qwen-vl-ocr-latest',
+            messages=messages,
+            incremental_output=False,
+            stream=True,
+            **params
+        )
+
+        print("\n")
+        async for chunk in response:
+            print(chunk)
+
+    @staticmethod
+    async def test_vl_model_non_stream():
+        """Test AioMultiModalConversation API without streaming."""
+        # Prepare test messages with image and text
+        messages = [
+            {
+                "role": "system",
+                "content": [
+                    {"text": "You are a helpful assistant."}
+                ]
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg"},
+                    {"text": "图中描绘的是什么景象?"}
+                ]
+            }
+        ]
+
+        # Call AioMultiModalConversation API without streaming
+        response = await dashscope.AioMultiModalConversation.call(
             api_key=os.getenv('DASHSCOPE_API_KEY'),
             model='qwen-vl-max-latest',
             messages=messages,
-            enable_encryption=True,
+            incremental_output=False,
+            stream=False,
         )
-        
-        print("Multiple local images response:", response.output.choices[0].message.content[0]["text"])
-    except Exception as e:
-        print(f"Error with multiple local images: {e}")
+
+        print("\n")
+        print(response)
+
+    @staticmethod
+    async def test_vl_model_with_tool_calls():
+        """Test AioMultiModalConversation API with tool calls functionality."""
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_current_weather",
+                    "description": "当你想查询指定城市的天气时非常有用。",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "string",
+                                "description": "城市或县区，比如北京市、杭州市、余杭区等。"
+                            },
+                            "date": {
+                                "type": "string",
+                                "description": "日期，比如2025年10月10日"
+                            }
+                        }
+                    },
+                    "required": [
+                        "location"
+                    ]
+                }
+            }
+        ]
+
+        messages = [
+            {
+                "role": "system",
+                "content": [
+                    {"text": "You are a helpful assistant."}
+                ]
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"text": "2025年10月10日的杭州天气如何?"}
+                ]
+            }
+        ]
+
+        # Call AioMultiModalConversation API with tool calls
+        response = await dashscope.AioMultiModalConversation.call(
+            api_key=os.getenv('DASHSCOPE_API_KEY'),
+            model='qwen-vl-max-latest',
+            messages=messages,
+            tools=tools,
+            incremental_output=True,
+            stream=True,
+        )
+
+        print("\n")
+        async for chunk in response:
+            print(chunk)
+
+    @staticmethod
+    async def test_qwen_asr():
+        """Test AioMultiModalConversation API with audio input for ASR."""
+        # Prepare test messages with audio and system text
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"audio": "https://dashscope.oss-cn-beijing.aliyuncs.com/audios/welcome.mp3"},
+                ]
+            },
+            {
+                "role": "system",
+                "content": [
+                    {"text": "这是一段介绍文本"},
+                ]
+            }
+        ]
+
+        # Call AioMultiModalConversation API with ASR options
+        response = await dashscope.AioMultiModalConversation.call(
+            model="qwen3-asr-flash",
+            messages=messages,
+            api_key=os.getenv('DASHSCOPE_API_KEY'),
+            stream=True,
+            incremental_output=False,
+            result_format="message",
+            asr_options={"language": "zh", "enable_lid": True}
+        )
+
+        print("\n")
+        async for chunk in response:
+            print(chunk)
+
+    @staticmethod
+    async def test_omni():
+        """Test AioMultiModalConversation API with omni model."""
+        pass
+
 
 async def main():
-    """Main function to run all tests."""
-    print("Testing Async MultiModal Conversation API...")
-    print("=" * 50)
-    
-    # 测试基本异步调用
-    print("\n1. Testing basic async call:")
-    await test_aio_multimodal_conversation()
-    
-    # 测试异步流式调用
-    print("\n2. Testing async streaming call:")
-    await test_aio_multimodal_conversation_stream()
-    
-    # 测试本地图片
-    print("\n3. Testing with local image:")
-    await test_aio_multimodal_conversation_local_image()
-    
-    # # 测试多个本地图片
-    print("\n4. Testing with multiple local images:")
-    await test_aio_multimodal_conversation_multiple_local_images()
-    
-    print("\nAll tests completed!")
+    """Main function to run all async tests."""
+    print("Running AioMultiModalConversation tests...")
+
+    # Test streaming version
+    print("\n=== Testing AioMultiModalConversation with streaming ===")
+    await TestAioMultiModalConversation.test_vl_model()
+
+    # Test non-streaming version
+    print("\n=== Testing AioMultiModalConversation without streaming ===")
+    await TestAioMultiModalConversation.test_vl_model_non_stream()
+
+    # Test tool calls functionality
+    print("\n=== Testing AioMultiModalConversation with tool calls ===")
+    await TestAioMultiModalConversation.test_vl_model_with_tool_calls()
+
+    # Test OCR functionality (commented out by default)
+    # print("\n=== Testing AioMultiModalConversation OCR ===")
+    # await TestAioMultiModalConversation.test_vl_ocr()
+
+    # Test ASR functionality (commented out by default)
+    # print("\n=== Testing AioMultiModalConversation ASR ===")
+    # await TestAioMultiModalConversation.test_qwen_asr()
+
 
 if __name__ == "__main__":
-    # 运行异步测试
-    asyncio.run(main())
+    # Default test - tool calls functionality (matching sync version)
+    # asyncio.run(TestAioMultiModalConversation.test_vl_model())
+    asyncio.run(TestAioMultiModalConversation.test_vl_model_with_tool_calls())
+    # asyncio.run(TestAioMultiModalConversation.test_vl_ocr())
+    # asyncio.run(TestAioMultiModalConversation.test_qwen_asr())

@@ -2,7 +2,7 @@
 
 import copy
 import json
-from typing import Any, Dict, Generator, List, Union
+from typing import Any, Dict, Generator, List, Union, AsyncGenerator
 
 from dashscope.api_entities.dashscope_response import (GenerationResponse,
                                                        Message, Role)
@@ -13,6 +13,7 @@ from dashscope.common.constants import (CUSTOMIZED_MODEL_ID,
 from dashscope.common.error import InputRequired, ModelRequired
 from dashscope.common.logging import logger
 from dashscope.common.utils import _get_task_group_and_task
+from dashscope.utils.param_utils import ParamUtil
 
 
 class Generation(BaseApi):
@@ -137,6 +138,16 @@ class Generation(BaseApi):
             kwargs['headers'] = headers
         input, parameters = cls._build_input_parameters(
             model, prompt, history, messages, **kwargs)
+
+        is_stream = parameters.get('stream', False)
+        # Check if we need to merge incremental output
+        is_incremental_output = kwargs.get('incremental_output', None)
+        to_merge_incremental_output = False
+        if (ParamUtil.should_modify_incremental_output(model) and
+                is_stream and is_incremental_output is False):
+            to_merge_incremental_output = True
+            parameters['incremental_output'] = True
+
         response = super().call(model=model,
                                 task_group=task_group,
                                 task=Generation.task,
@@ -145,10 +156,12 @@ class Generation(BaseApi):
                                 input=input,
                                 workspace=workspace,
                                 **parameters)
-        is_stream = kwargs.get('stream', False)
         if is_stream:
-            return (GenerationResponse.from_api_response(rsp)
-                    for rsp in response)
+            if to_merge_incremental_output:
+                return cls._merge_generation_response(response)
+            else:
+                return (GenerationResponse.from_api_response(rsp)
+                        for rsp in response)
         else:
             return GenerationResponse.from_api_response(response)
 
@@ -191,6 +204,15 @@ class Generation(BaseApi):
 
         return input, {**parameters, **kwargs}
 
+    @classmethod
+    def _merge_generation_response(cls, response) -> Generator[GenerationResponse, None, None]:
+        """Merge incremental response chunks to simulate non-incremental output."""
+        accumulated_data = {}
+        for rsp in response:
+            parsed_response = GenerationResponse.from_api_response(rsp)
+            _merge_single_response(parsed_response, accumulated_data)
+            yield parsed_response
+
 
 class AioGeneration(BaseAioApi):
     task = 'text-generation'
@@ -220,7 +242,7 @@ class AioGeneration(BaseAioApi):
         plugins: Union[str, Dict[str, Any]] = None,
         workspace: str = None,
         **kwargs
-    ) -> Union[GenerationResponse, Generator[GenerationResponse, None, None]]:
+    ) -> Union[GenerationResponse, AsyncGenerator[GenerationResponse, None]]:
         """Call generation model service.
 
         Args:
@@ -296,8 +318,8 @@ class AioGeneration(BaseAioApi):
 
         Returns:
             Union[GenerationResponse,
-                  Generator[GenerationResponse, None, None]]: If
-            stream is True, return Generator, otherwise GenerationResponse.
+                  AsyncGenerator[GenerationResponse, None]]: If
+            stream is True, return AsyncGenerator, otherwise GenerationResponse.
         """
         if (prompt is None or not prompt) and (messages is None
                                                or not messages):
@@ -314,6 +336,16 @@ class AioGeneration(BaseAioApi):
             kwargs['headers'] = headers
         input, parameters = Generation._build_input_parameters(
             model, prompt, history, messages, **kwargs)
+
+        is_stream = parameters.get('stream', False)
+        # Check if we need to merge incremental output
+        is_incremental_output = kwargs.get('incremental_output', None)
+        to_merge_incremental_output = False
+        if (ParamUtil.should_modify_incremental_output(model) and
+                is_stream and is_incremental_output is False):
+            to_merge_incremental_output = True
+            parameters['incremental_output'] = True
+
         response = await super().call(model=model,
                                       task_group=task_group,
                                       task=Generation.task,
@@ -322,9 +354,109 @@ class AioGeneration(BaseAioApi):
                                       input=input,
                                       workspace=workspace,
                                       **parameters)
-        is_stream = kwargs.get('stream', False)
         if is_stream:
-            return (GenerationResponse.from_api_response(rsp)
-                    async for rsp in response)
+            if to_merge_incremental_output:
+                return cls._merge_generation_response(response)
+            else:
+                return cls._stream_responses(response)
         else:
             return GenerationResponse.from_api_response(response)
+
+    @classmethod
+    async def _stream_responses(cls, response) -> AsyncGenerator[GenerationResponse, None]:
+        """Convert async response stream to GenerationResponse stream."""
+        # Type hint: when stream=True, response is actually an AsyncIterable
+        async for rsp in response:  # type: ignore
+            yield GenerationResponse.from_api_response(rsp)
+
+    @classmethod
+    async def _merge_generation_response(cls, response) -> AsyncGenerator[GenerationResponse, None]:
+        """Async version of merge incremental response chunks."""
+        accumulated_data = {}
+
+        async for rsp in response:  # type: ignore
+            parsed_response = GenerationResponse.from_api_response(rsp)
+            _merge_single_response(parsed_response, accumulated_data)
+            yield parsed_response
+
+def _merge_single_response(parsed_response, accumulated_data):
+    """Merge a single response chunk with accumulated data."""
+    # Process each choice in the choices array
+    if parsed_response.output:
+        if parsed_response.output.choices:
+            for choice_idx, choice in enumerate(parsed_response.output.choices):
+                # Initialize accumulated data for this choice if not exists
+                if choice_idx not in accumulated_data:
+                    accumulated_data[choice_idx] = {
+                        'content': '',
+                        'tool_calls': []
+                    }
+
+                if choice.message:
+                    # Handle content accumulation
+                    if 'content' in choice.message and choice.message.content:
+                        current_content = choice.message.content
+                        if current_content:
+                            accumulated_data[choice_idx]['content'] += current_content
+                            choice.message.content = accumulated_data[choice_idx]['content']
+
+                    # Handle tool_calls accumulation
+                    if 'tool_calls' in choice.message and choice.message.tool_calls:
+                        current_tool_calls = choice.message.tool_calls
+
+                        # For each current tool call, accumulate its arguments
+                        for current_call in current_tool_calls:
+                            if isinstance(current_call, dict) and 'index' in current_call:
+                                idx = current_call['index']
+
+                                # Find existing accumulated call with same index
+                                existing_call = None
+                                for acc_call in accumulated_data[choice_idx]['tool_calls']:
+                                    if (isinstance(acc_call, dict) and
+                                            acc_call.get('index') == idx):
+                                        existing_call = acc_call
+                                        break
+
+                                if existing_call:
+                                    # Accumulate function fields from current call
+                                    if ('function' in current_call and
+                                            current_call['function']):
+                                        if 'function' not in existing_call:
+                                            existing_call['function'] = {}
+
+                                        # Accumulate function.name
+                                        if 'name' in current_call['function']:
+                                            if 'name' not in existing_call['function']:
+                                                existing_call['function']['name'] = ''
+                                            existing_call['function']['name'] += current_call['function']['name']
+
+                                        # Accumulate function.arguments
+                                        if 'arguments' in current_call['function']:
+                                            if 'arguments' not in existing_call['function']:
+                                                existing_call['function']['arguments'] = ''
+                                            existing_call['function']['arguments'] += current_call['function']['arguments']
+
+                                    # Update other fields with latest values
+                                    existing_call.update({k: v for k, v in current_call.items()
+                                                          if k != 'function' and v})
+                                    if 'function' in current_call and current_call['function']:
+                                        existing_call['function'].update({k: v for k, v in current_call['function'].items()
+                                                                          if k not in ['arguments', 'name'] and v})
+                                else:
+                                    # Add new tool call
+                                    accumulated_data[choice_idx]['tool_calls'].append(dict(current_call))
+
+                        # Update choice with accumulated tool_calls
+                        choice.message.tool_calls = accumulated_data[choice_idx]['tool_calls']
+        elif 'text' in parsed_response.output and parsed_response.output.text:
+            # Handle output.text accumulation (when choices is null)
+            # Use choice_idx 0 for output.text content to reuse existing structure
+            choice_idx = 0
+            if choice_idx not in accumulated_data:
+                accumulated_data[choice_idx] = {
+                    'content': '',
+                    'tool_calls': []
+                }
+
+            accumulated_data[choice_idx]['content'] += parsed_response.output.text
+            parsed_response.output.text = accumulated_data[choice_idx]['content']

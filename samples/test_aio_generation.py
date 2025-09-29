@@ -1,14 +1,16 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+import asyncio
 import os
-from dashscope import Generation
+from dashscope.aigc.generation import AioGeneration
 
 
-class TestGeneration:
-    """Test cases for Generation API with cache control and streaming."""
+class TestAioGeneration:
+    """Test cases for AioGeneration API with cache control and streaming."""
 
     @staticmethod
-    def test_response_with_content():
+    async def test_response_with_content():
+        """Test async generation with content response."""
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
             {
@@ -26,8 +28,8 @@ class TestGeneration:
             }
         ]
 
-        # Call Generation API with streaming enabled
-        response = Generation.call(
+        # Call AioGeneration API with streaming enabled
+        response = await AioGeneration.call(
             api_key=os.getenv("DASHSCOPE_API_KEY"),
             model="qwen3-max",
             messages=messages,
@@ -36,8 +38,8 @@ class TestGeneration:
             stream=True,
         )
 
-        print("\n")
-        for chunk in response:
+        print("\n=== Async Content Response Test ===")
+        async for chunk in response:
             print(chunk)
 
         """
@@ -70,7 +72,8 @@ class TestGeneration:
         """
 
     @staticmethod
-    def test_response_with_reasoning_content():
+    async def test_response_with_reasoning_content():
+        """Test async generation with reasoning content response."""
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
             {
@@ -88,21 +91,20 @@ class TestGeneration:
             }
         ]
 
-        # Call Generation API with streaming enabled
-        response = Generation.call(
+        # Call AioGeneration API with streaming enabled
+        response = await AioGeneration.call(
             api_key=os.getenv("DASHSCOPE_API_KEY"),
             model="qwen-plus",
             messages=messages,
             result_format="message",
             enable_thinking=True,
-            incremental_output=False, # enable_thinking为true时，只能设置为true
+            incremental_output=False,  # enable_thinking为true时，只能设置为true
             stream=True,
         )
 
-        print("\n")
-        for chunk in response:
+        print("\n=== Async Reasoning Content Response Test ===")
+        async for chunk in response:
             print(chunk)
-
 
         """
         reasoning_content 的示例如下：
@@ -140,7 +142,8 @@ class TestGeneration:
         """
 
     @staticmethod
-    def test_response_with_tool_calls():
+    async def test_response_with_tool_calls():
+        """Test async generation with tool calls response."""
         tools = [
             {
                 "type": "function",
@@ -171,7 +174,7 @@ class TestGeneration:
             }
         ]
         messages = [{"role": "user", "content": "杭州天气怎么样"}]
-        response = Generation.call(
+        response = await AioGeneration.call(
             # 若没有配置环境变量，请用百炼API Key将下行替换为：api_key="sk-xxx",
             api_key=os.getenv('DASHSCOPE_API_KEY'),
             model='qwen-plus',
@@ -182,10 +185,9 @@ class TestGeneration:
             stream=True,
         )
 
-        print("\n")
-        for chunk in response:
+        print("\n=== Async Tool Calls Response Test ===")
+        async for chunk in response:
             print(chunk)
-
 
         """
         tool calls 示例：
@@ -231,16 +233,17 @@ class TestGeneration:
         """
 
     @staticmethod
-    def test_response_with_search_info():
+    async def test_response_with_search_info():
+        """Test async generation with search info response."""
         # 配置API Key
         # 若没有配置环境变量，请用百炼API Key将下行替换为：API_KEY = "sk-xxx"
         API_KEY = os.getenv('DASHSCOPE_API_KEY')
 
-        def call_deep_research_model(messages, step_name):
+        async def call_deep_research_model(messages, step_name):
             print(f"\n=== {step_name} ===")
 
             try:
-                responses = Generation.call(
+                responses = await AioGeneration.call(
                     api_key=API_KEY,
                     model="qwen-deep-research",
                     messages=messages,
@@ -249,7 +252,7 @@ class TestGeneration:
                     # incremental_output=True #使用增量输出请添加此参数
                 )
 
-                return process_responses(responses, step_name)
+                return await process_responses(responses, step_name)
 
             except Exception as e:
                 print(f"调用API时发生错误: {e}")
@@ -263,14 +266,14 @@ class TestGeneration:
                 print(f"\n[{phase}] {status}")
 
         # 处理响应
-        def process_responses(responses, step_name):
+        async def process_responses(responses, step_name):
             current_phase = None
             phase_content = ""
             research_goal = ""
             web_sites = []
             keepalive_shown = False  # 标记是否已经显示过KeepAlive提示
 
-            for response in responses:
+            async for response in responses:
                 # 检查响应状态码
                 if hasattr(response, 'status_code') and response.status_code != 200:
                     print(f"HTTP返回码：{response.status_code}")
@@ -388,12 +391,13 @@ class TestGeneration:
             print("请设置环境变量或直接在代码中修改 API_KEY 变量")
             return
 
+        print("=== Async Search Info Response Test ===")
         print("用户发起对话：研究一下人工智能在教育中的应用")
 
         # 第一步：模型反问确认
         # 模型会分析用户问题，提出细化问题来明确研究方向
         messages = [{'role': 'user', 'content': '研究一下人工智能在教育中的应用'}]
-        step1_content = call_deep_research_model(messages, "第一步：模型反问确认")
+        step1_content = await call_deep_research_model(messages, "第一步：模型反问确认")
 
         # 第二步：深入研究
         # 基于第一步的反问内容，模型会执行完整的研究流程
@@ -403,11 +407,22 @@ class TestGeneration:
             {'role': 'user', 'content': '我主要关注个性化学习和智能评估这两个方面'}
         ]
 
-        call_deep_research_model(messages, "第二步：深入研究")
+        await call_deep_research_model(messages, "第二步：深入研究")
         print("\n 研究完成！")
 
+
+async def main():
+    """Main function to run all async tests."""
+    print("开始运行异步生成测试用例...")
+
+    # Run individual test cases
+    await TestAioGeneration.test_response_with_content()
+    # await TestAioGeneration.test_response_with_tool_calls()
+    # await TestAioGeneration.test_response_with_search_info()
+    # await TestAioGeneration.test_response_with_reasoning_content()
+
+    print("\n所有异步测试用例执行完成！")
+
+
 if __name__ == "__main__":
-    # TestGeneration.test_response_with_content()
-    # TestGeneration.test_response_with_tool_calls()
-    TestGeneration.test_response_with_search_info()
-    # TestGeneration.test_response_with_reasoning_content()
+    asyncio.run(main())
