@@ -34,40 +34,14 @@ class TestGeneration:
             result_format="message",
             incremental_output=False,
             stream=True,
+            logprobs=True,
+            top_logprobs=5,
+            n=4,
         )
 
         print("\n")
         for chunk in response:
             print(chunk)
-
-        """
-        content的示例如下：
-        {
-            "status_code": 200,
-            "request_id": "a0700200-eb09-4d6c-ae76-d891ec1ae77b",
-            "code": "",
-            "message": "",
-            "output": {
-                "text": null,
-                "finish_reason": null,
-                "choices": [
-                    {
-                        "finish_reason": "null",
-                        "message": {
-                            "role": "assistant",
-                            "content": "你好"   ---> 需要merge的内容
-                        }
-                    }
-                ]
-            },
-            "usage": {
-                "input_tokens": 28,
-                "output_tokens": 4,
-                "total_tokens": 32,
-                "cached_tokens": 0
-            }
-        }
-        """
 
     @staticmethod
     def test_response_with_reasoning_content():
@@ -102,42 +76,6 @@ class TestGeneration:
         print("\n")
         for chunk in response:
             print(chunk)
-
-
-        """
-        reasoning_content 的示例如下：
-        {
-            "status_code": 200,
-            "request_id": "5bef2386-ce04-4d63-a650-fa6f72c84bfb",
-            "code": "",
-            "message": "",
-            "output": {
-                "text": null,
-                "finish_reason": null,
-                "choices": [
-                    {
-                        "finish_reason": "null",
-                        "message": {
-                            "role": "assistant",
-                            "content": "",
-                            "reasoning_content": "首先"  ---> 不需要merge的内容，因为只支持增量模式
-                        }
-                    }
-                ]
-            },
-            "usage": {
-                "input_tokens": 28,
-                "output_tokens": 3,
-                "total_tokens": 31,
-                "output_tokens_details": {
-                    "reasoning_tokens": 1
-                },
-                "prompt_tokens_details": {
-                    "cached_tokens": 0
-                }
-            }
-        }
-        """
 
     @staticmethod
     def test_response_with_tool_calls():
@@ -185,50 +123,6 @@ class TestGeneration:
         print("\n")
         for chunk in response:
             print(chunk)
-
-
-        """
-        tool calls 示例：
-        {
-            "status_code": 200,
-            "request_id": "fb9231ea-723c-4e72-b504-e075c7d312de",
-            "code": "",
-            "message": "",
-            "output": {
-                "text": null,
-                "finish_reason": null,
-                "choices": [
-                    {
-                        "finish_reason": "null",
-                        "message": {
-                            "role": "assistant",
-                            "content": "",
-                            "tool_calls": [  ---> 需要merge的内容
-                                {
-                                    "index": 0,
-                                    "id": "call_b9c94cf8838d46a4911a7e",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "get_current_weather",
-                                        "arguments": "{\"location\":"
-                                    }
-                                }
-                            ]
-                        },
-                        "index": 0
-                    }
-                ]
-            },
-            "usage": {
-                "input_tokens": 204,
-                "output_tokens": 16,
-                "total_tokens": 220,
-                "prompt_tokens_details": {
-                    "cached_tokens": 0
-                }
-            }
-        }
-        """
 
     @staticmethod
     def test_response_with_search_info():
@@ -408,6 +302,6 @@ class TestGeneration:
 
 if __name__ == "__main__":
     # TestGeneration.test_response_with_content()
-    # TestGeneration.test_response_with_tool_calls()
-    TestGeneration.test_response_with_search_info()
+    TestGeneration.test_response_with_tool_calls()
+    # TestGeneration.test_response_with_search_info()
     # TestGeneration.test_response_with_reasoning_content()

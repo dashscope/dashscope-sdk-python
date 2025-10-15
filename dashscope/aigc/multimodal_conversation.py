@@ -10,6 +10,7 @@ from dashscope.common.error import InputRequired, ModelRequired
 from dashscope.common.utils import _get_task_group_and_task
 from dashscope.utils.oss_utils import preprocess_message_element
 from dashscope.utils.param_utils import ParamUtil
+from dashscope.utils.message_utils import merge_single_response
 
 
 class MultiModalConversation(BaseApi):
@@ -169,7 +170,7 @@ class MultiModalConversation(BaseApi):
 
         for rsp in response:
             parsed_response = MultiModalConversationResponse.from_api_response(rsp)
-            _merge_multimodal_single_response(parsed_response, accumulated_data)
+            merge_single_response(parsed_response, accumulated_data)
             yield parsed_response
 
 
@@ -335,85 +336,7 @@ class AioMultiModalConversation(BaseAioApi):
 
         async for rsp in response:
             parsed_response = MultiModalConversationResponse.from_api_response(rsp)
-            _merge_multimodal_single_response(parsed_response, accumulated_data)
+            merge_single_response(parsed_response, accumulated_data)
             yield parsed_response
 
 
-def _merge_multimodal_single_response(parsed_response, accumulated_data):
-    """Merge a single multimodal response chunk with accumulated data."""
-    # Process each choice in the choices array
-    if parsed_response.output and parsed_response.output.choices:
-        for choice_idx, choice in enumerate(parsed_response.output.choices):
-            # Initialize accumulated data for this choice if not exists
-            if choice_idx not in accumulated_data:
-                accumulated_data[choice_idx] = {
-                    'content': [],
-                    'tool_calls': []
-                }
-
-            if choice.message:
-                # Handle content accumulation for multimodal content
-                if choice.message.content:
-                    current_content = choice.message.content
-
-                    # Ensure accumulated content list has enough elements
-                    while len(accumulated_data[choice_idx]['content']) < len(current_content):
-                        accumulated_data[choice_idx]['content'].append({'text': ''})
-
-                    # Merge each content element
-                    for content_idx, content_item in enumerate(current_content):
-                        if isinstance(content_item, dict) and 'text' in content_item:
-                            if content_item['text']:
-                                # Accumulate text content
-                                accumulated_data[choice_idx]['content'][content_idx]['text'] += content_item['text']
-                                # Update the current response with accumulated content
-                                choice.message.content[content_idx]['text'] = accumulated_data[choice_idx]['content'][content_idx]['text']
-
-                # Handle tool_calls accumulation
-                if 'tool_calls' in choice.message and choice.message.tool_calls:
-                    current_tool_calls = choice.message.tool_calls
-
-                    # For each current tool call, accumulate its arguments
-                    for current_call in current_tool_calls:
-                        if isinstance(current_call, dict) and 'index' in current_call:
-                            idx = current_call['index']
-
-                            # Find existing accumulated call with same index
-                            existing_call = None
-                            for acc_call in accumulated_data[choice_idx]['tool_calls']:
-                                if (isinstance(acc_call, dict) and
-                                        acc_call.get('index') == idx):
-                                    existing_call = acc_call
-                                    break
-
-                            if existing_call:
-                                # Accumulate function fields from current call
-                                if ('function' in current_call and
-                                        current_call['function']):
-                                    if 'function' not in existing_call:
-                                        existing_call['function'] = {}
-
-                                    # Accumulate function.name
-                                    if 'name' in current_call['function']:
-                                        if 'name' not in existing_call['function']:
-                                            existing_call['function']['name'] = ''
-                                        existing_call['function']['name'] += current_call['function']['name']
-
-                                    # Accumulate function.arguments
-                                    if 'arguments' in current_call['function']:
-                                        if 'arguments' not in existing_call['function']:
-                                            existing_call['function']['arguments'] = ''
-                                        existing_call['function']['arguments'] += current_call['function']['arguments']
-
-                                # Update other fields with latest values
-                                existing_call.update({k: v for k, v in current_call.items()
-                                                      if k != 'function' and v})
-                                if 'function' in current_call and current_call['function']:
-                                    existing_call['function'].update({k: v for k, v in current_call['function'].items()
-                                                                      if k not in ['arguments', 'name'] and v})
-                            else:
-                                # Add new tool call
-                                accumulated_data[choice_idx]['tool_calls'].append(dict(current_call))
-
-                    # Update choice with accumulated tool_calls
-                    choice.message.tool_calls = accumulated_data[choice_idx]['tool_calls']

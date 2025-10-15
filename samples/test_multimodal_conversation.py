@@ -40,49 +40,6 @@ class TestMultiModalConversation:
         for chunk in response:
             print(chunk)
 
-
-        """
-        MultiModalConversation response example:
-        {
-            "status_code": 200,
-            "request_id": "37104bf5-d550-42e2-b040-fd261eb7b35f",
-            "code": "",
-            "message": "",
-            "output": {
-                "text": null,
-                "finish_reason": null,
-                "choices": [
-                    {
-                        "finish_reason": "null",
-                        "message": {
-                            "role": "assistant",
-                            "content": [
-                                {
-                                    "text": "图"  ---> 需要merge的内容
-                                }
-                            ]
-                        }
-                    }
-                ],
-                "audio": null
-            },
-            "usage": {
-                "input_tokens": 1275,
-                "output_tokens": 1,
-                "characters": 0,
-                "total_tokens": 1276,
-                "input_tokens_details": {
-                    "image_tokens": 1249,
-                    "text_tokens": 26
-                },
-                "output_tokens_details": {
-                    "text_tokens": 1
-                },
-                "image_tokens": 1249
-            }
-        }
-        """
-
     @staticmethod
     def test_vl_model_with_tool_calls():
         tools = [
@@ -227,6 +184,37 @@ class TestMultiModalConversation:
         for chunk in response:
             print(chunk)
 
+
+    @staticmethod
+    def test_vl_model_with_reasoning_content():
+        messages = [
+            {
+                "role": "system",
+                "content": [
+                    {"text": "You are a helpful assistant."}
+                ]
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"text": "1.1和0.9哪个大?"}
+                ]
+            }
+        ]
+
+        # Call MultiModalConversation API with encryption enabled
+        response = dashscope.MultiModalConversation.call(
+            api_key=os.getenv('DASHSCOPE_API_KEY'),
+            model='qwen3-vl-30b-a3b-thinking',
+            messages=messages,
+            incremental_output=False,
+            stream=True,
+        )
+
+        print("\n")
+        for chunk in response:
+            print(chunk)
+
     @staticmethod
     def test_omni():
         pass
@@ -235,5 +223,6 @@ class TestMultiModalConversation:
 if __name__ == "__main__":
     # TestMultiModalConversation.test_vl_model()
     TestMultiModalConversation.test_vl_model_with_tool_calls()
+    # TestMultiModalConversation.test_vl_model_with_reasoning_content()
     # TestMultiModalConversation.test_vl_ocr()
     # TestMultiModalConversation.test_qwen_asr()
