@@ -1,7 +1,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import copy
-from typing import Generator, List, Union
+from typing import AsyncGenerator, Generator, List, Union
 
 from dashscope.api_entities.dashscope_response import \
     MultiModalConversationResponse
@@ -9,6 +9,8 @@ from dashscope.client.base_api import BaseAioApi, BaseApi
 from dashscope.common.error import InputRequired, ModelRequired
 from dashscope.common.utils import _get_task_group_and_task
 from dashscope.utils.oss_utils import preprocess_message_element
+from dashscope.utils.param_utils import ParamUtil
+from dashscope.utils.message_utils import merge_single_response
 
 
 class MultiModalConversation(BaseApi):
@@ -108,6 +110,16 @@ class MultiModalConversation(BaseApi):
             input.update({'language_type': language_type})
         if msg_copy is not None:
             input.update({'messages': msg_copy})
+
+        # Check if we need to merge incremental output
+        is_incremental_output = kwargs.get('incremental_output', None)
+        to_merge_incremental_output = False
+        is_stream = kwargs.get('stream', False)
+        if (ParamUtil.should_modify_incremental_output(model) and
+                is_stream and is_incremental_output is not None and is_incremental_output is False):
+            to_merge_incremental_output = True
+            kwargs['incremental_output'] = True
+
         response = super().call(model=model,
                                 task_group=task_group,
                                 task=MultiModalConversation.task,
@@ -116,10 +128,12 @@ class MultiModalConversation(BaseApi):
                                 input=input,
                                 workspace=workspace,
                                 **kwargs)
-        is_stream = kwargs.get('stream', False)
         if is_stream:
-            return (MultiModalConversationResponse.from_api_response(rsp)
-                    for rsp in response)
+            if to_merge_incremental_output:
+                return cls._merge_multimodal_response(response)
+            else:
+                return (MultiModalConversationResponse.from_api_response(rsp)
+                        for rsp in response)
         else:
             return MultiModalConversationResponse.from_api_response(response)
 
@@ -149,6 +163,16 @@ class MultiModalConversation(BaseApi):
                         has_upload = True
         return has_upload
 
+    @classmethod
+    def _merge_multimodal_response(cls, response) -> Generator[MultiModalConversationResponse, None, None]:
+        """Merge incremental response chunks to simulate non-incremental output."""
+        accumulated_data = {}
+
+        for rsp in response:
+            parsed_response = MultiModalConversationResponse.from_api_response(rsp)
+            merge_single_response(parsed_response, accumulated_data)
+            yield parsed_response
+
 
 class AioMultiModalConversation(BaseAioApi):
     """Async MultiModal conversational robot interface.
@@ -170,8 +194,8 @@ class AioMultiModalConversation(BaseAioApi):
         voice: str = None,
         language_type: str = None,
         **kwargs
-    ) -> Union[MultiModalConversationResponse, Generator[
-            MultiModalConversationResponse, None, None]]:
+    ) -> Union[MultiModalConversationResponse, AsyncGenerator[
+            MultiModalConversationResponse, None]]:
         """Call the conversation model service asynchronously.
 
         Args:
@@ -221,8 +245,8 @@ class AioMultiModalConversation(BaseAioApi):
 
         Returns:
             Union[MultiModalConversationResponse,
-                  Generator[MultiModalConversationResponse, None, None]]: If
-            stream is True, return Generator, otherwise MultiModalConversationResponse.
+                  AsyncGenerator[MultiModalConversationResponse, None]]: If
+            stream is True, return AsyncGenerator, otherwise MultiModalConversationResponse.
         """
         if model is None or not model:
             raise ModelRequired('Model is required!')
@@ -246,6 +270,16 @@ class AioMultiModalConversation(BaseAioApi):
             input.update({'language_type': language_type})
         if msg_copy is not None:
             input.update({'messages': msg_copy})
+
+        # Check if we need to merge incremental output
+        is_incremental_output = kwargs.get('incremental_output', None)
+        to_merge_incremental_output = False
+        is_stream = kwargs.get('stream', False)
+        if (ParamUtil.should_modify_incremental_output(model) and
+                is_stream and is_incremental_output is not None and is_incremental_output is False):
+            to_merge_incremental_output = True
+            kwargs['incremental_output'] = True
+
         response = await super().call(model=model,
                                       task_group=task_group,
                                       task=AioMultiModalConversation.task,
@@ -254,10 +288,11 @@ class AioMultiModalConversation(BaseAioApi):
                                       input=input,
                                       workspace=workspace,
                                       **kwargs)
-        is_stream = kwargs.get('stream', False)
         if is_stream:
-            return (MultiModalConversationResponse.from_api_response(rsp)
-                    async for rsp in response)
+            if to_merge_incremental_output:
+                return cls._merge_multimodal_response(response)
+            else:
+                return cls._stream_responses(response)
         else:
             return MultiModalConversationResponse.from_api_response(response)
 
@@ -286,3 +321,22 @@ class AioMultiModalConversation(BaseAioApi):
                     if is_upload and not has_upload:
                         has_upload = True
         return has_upload
+
+    @classmethod
+    async def _stream_responses(cls, response) -> AsyncGenerator[MultiModalConversationResponse, None]:
+        """Convert async response stream to MultiModalConversationResponse stream."""
+        # Type hint: when stream=True, response is actually an AsyncIterable
+        async for rsp in response:  # type: ignore
+            yield MultiModalConversationResponse.from_api_response(rsp)
+
+    @classmethod
+    async def _merge_multimodal_response(cls, response) -> AsyncGenerator[MultiModalConversationResponse, None]:
+        """Async version of merge incremental response chunks."""
+        accumulated_data = {}
+
+        async for rsp in response:
+            parsed_response = MultiModalConversationResponse.from_api_response(rsp)
+            merge_single_response(parsed_response, accumulated_data)
+            yield parsed_response
+
+
