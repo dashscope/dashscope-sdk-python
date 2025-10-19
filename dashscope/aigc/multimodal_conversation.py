@@ -130,7 +130,9 @@ class MultiModalConversation(BaseApi):
                                 **kwargs)
         if is_stream:
             if to_merge_incremental_output:
-                return cls._merge_multimodal_response(response)
+                # Extract n parameter for merge logic
+                n = kwargs.get('n', 1)
+                return cls._merge_multimodal_response(response, n)
             else:
                 return (MultiModalConversationResponse.from_api_response(rsp)
                         for rsp in response)
@@ -164,14 +166,15 @@ class MultiModalConversation(BaseApi):
         return has_upload
 
     @classmethod
-    def _merge_multimodal_response(cls, response) -> Generator[MultiModalConversationResponse, None, None]:
+    def _merge_multimodal_response(cls, response, n=1) -> Generator[MultiModalConversationResponse, None, None]:
         """Merge incremental response chunks to simulate non-incremental output."""
         accumulated_data = {}
 
         for rsp in response:
             parsed_response = MultiModalConversationResponse.from_api_response(rsp)
-            merge_single_response(parsed_response, accumulated_data)
-            yield parsed_response
+            should_yield = merge_single_response(parsed_response, accumulated_data, n)
+            if should_yield:
+                yield parsed_response
 
 
 class AioMultiModalConversation(BaseAioApi):
@@ -290,7 +293,9 @@ class AioMultiModalConversation(BaseAioApi):
                                       **kwargs)
         if is_stream:
             if to_merge_incremental_output:
-                return cls._merge_multimodal_response(response)
+                # Extract n parameter for merge logic
+                n = kwargs.get('n', 1)
+                return cls._merge_multimodal_response(response, n)
             else:
                 return cls._stream_responses(response)
         else:
@@ -330,13 +335,14 @@ class AioMultiModalConversation(BaseAioApi):
             yield MultiModalConversationResponse.from_api_response(rsp)
 
     @classmethod
-    async def _merge_multimodal_response(cls, response) -> AsyncGenerator[MultiModalConversationResponse, None]:
+    async def _merge_multimodal_response(cls, response, n=1) -> AsyncGenerator[MultiModalConversationResponse, None]:
         """Async version of merge incremental response chunks."""
         accumulated_data = {}
 
         async for rsp in response:
             parsed_response = MultiModalConversationResponse.from_api_response(rsp)
-            merge_single_response(parsed_response, accumulated_data)
-            yield parsed_response
+            should_yield = merge_single_response(parsed_response, accumulated_data, n)
+            if should_yield:
+                yield parsed_response
 
 

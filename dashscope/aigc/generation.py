@@ -159,7 +159,9 @@ class Generation(BaseApi):
                                 **parameters)
         if is_stream:
             if to_merge_incremental_output:
-                return cls._merge_generation_response(response)
+                # Extract n parameter for merge logic
+                n = parameters.get('n', 1)
+                return cls._merge_generation_response(response, n)
             else:
                 return (GenerationResponse.from_api_response(rsp)
                         for rsp in response)
@@ -206,13 +208,14 @@ class Generation(BaseApi):
         return input, {**parameters, **kwargs}
 
     @classmethod
-    def _merge_generation_response(cls, response) -> Generator[GenerationResponse, None, None]:
+    def _merge_generation_response(cls, response, n=1) -> Generator[GenerationResponse, None, None]:
         """Merge incremental response chunks to simulate non-incremental output."""
         accumulated_data = {}
         for rsp in response:
             parsed_response = GenerationResponse.from_api_response(rsp)
-            merge_single_response(parsed_response, accumulated_data)
-            yield parsed_response
+            should_yield = merge_single_response(parsed_response, accumulated_data, n)
+            if should_yield:
+                yield parsed_response
 
 
 class AioGeneration(BaseAioApi):
@@ -357,7 +360,9 @@ class AioGeneration(BaseAioApi):
                                       **parameters)
         if is_stream:
             if to_merge_incremental_output:
-                return cls._merge_generation_response(response)
+                # Extract n parameter for merge logic
+                n = parameters.get('n', 1)
+                return cls._merge_generation_response(response, n)
             else:
                 return cls._stream_responses(response)
         else:
@@ -371,11 +376,12 @@ class AioGeneration(BaseAioApi):
             yield GenerationResponse.from_api_response(rsp)
 
     @classmethod
-    async def _merge_generation_response(cls, response) -> AsyncGenerator[GenerationResponse, None]:
+    async def _merge_generation_response(cls, response, n=1) -> AsyncGenerator[GenerationResponse, None]:
         """Async version of merge incremental response chunks."""
         accumulated_data = {}
 
         async for rsp in response:  # type: ignore
             parsed_response = GenerationResponse.from_api_response(rsp)
-            merge_single_response(parsed_response, accumulated_data)
-            yield parsed_response
+            should_yield = merge_single_response(parsed_response, accumulated_data, n)
+            if should_yield:
+                yield parsed_response

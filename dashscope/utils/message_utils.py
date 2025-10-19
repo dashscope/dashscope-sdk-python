@@ -1,28 +1,54 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
-def merge_single_response(parsed_response, accumulated_data):
-    """Merge a single response chunk with accumulated data."""
+def merge_single_response(parsed_response, accumulated_data, n=1):
+    """Merge a single response chunk with accumulated data.
+
+    Args:
+        parsed_response: The response chunk to merge
+        accumulated_data: Dictionary storing accumulated data for each choice
+        n: Number of expected choices (default 1)
+
+    Returns:
+        bool: True if this response should be yielded, False if filtered
+    """
+    # Check if all choices have been sent (for n > 1 case)
+    if n > 1 and accumulated_data:
+        all_sent = any(data.get('all_choices_sent', False)
+                       for data in accumulated_data.values())
+        if all_sent:
+            return False
+
     # Handle output.text accumulation when choices is null
     if (parsed_response.output and
             hasattr(parsed_response.output, 'text') and
             parsed_response.output.text and
             (not parsed_response.output.choices or parsed_response.output.choices is None)):
-        choice_idx = 0  # Use choice_idx 0 for output.text content to reuse existing structure
+        choice_idx = 0
         if choice_idx not in accumulated_data:
             accumulated_data[choice_idx] = {
                 'content': '',
                 'reasoning_content': '',
                 'tool_calls': [],
-                'logprobs': {'content': []}
+                'logprobs': {'content': []},
+                'finished': False,
+                'finish_reason': None,
+                'all_choices_sent': False,
+                'role': None
             }
         accumulated_data[choice_idx]['content'] += parsed_response.output.text
         parsed_response.output.text = accumulated_data[choice_idx]['content']
-        return
+        return True
 
     # Process each choice in the choices array
     if parsed_response.output and parsed_response.output.choices:
-        for choice_enum_idx, choice in enumerate(parsed_response.output.choices):
-            # Use choice.index if available, otherwise use enumerate index for compatibility
+        choices = parsed_response.output.choices
+
+        # Filter out empty choices array
+        if not choices:
+            return False
+
+        for choice_enum_idx, choice in enumerate(choices):
+            # Use choice.index if available, otherwise use enumerate index
             try:
                 choice_idx = choice.index if hasattr(choice, 'index') and 'index' in choice else choice_enum_idx
             except (KeyError, AttributeError):
@@ -34,15 +60,23 @@ def merge_single_response(parsed_response, accumulated_data):
                     'content': '',
                     'reasoning_content': '',
                     'tool_calls': [],
-                    'logprobs': {'content': []}
+                    'logprobs': {'content': []},
+                    'finished': False,
+                    'finish_reason': None,
+                    'all_choices_sent': False,
+                    'role': None
                 }
 
             if choice.message:
+                # Save role if present
+                if hasattr(choice.message, 'role') and choice.message.role:
+                    accumulated_data[choice_idx]['role'] = choice.message.role
+
                 # Handle content accumulation
                 if 'content' in choice.message and choice.message.content:
                     current_content = choice.message.content
                     if current_content:
-                        # Check if content is multimodal format (array with text fields)
+                        # Check if content is multimodal format
                         if isinstance(current_content, list):
                             # Handle multimodal content (array format)
                             # Initialize accumulated content as array if not already
@@ -126,6 +160,10 @@ def merge_single_response(parsed_response, accumulated_data):
                     # Update choice with accumulated tool_calls
                     choice.message.tool_calls = accumulated_data[choice_idx]['tool_calls']
 
+                # Restore role if we have it
+                if accumulated_data[choice_idx]['role'] and (not hasattr(choice.message, 'role') or not choice.message.role):
+                    choice.message.role = accumulated_data[choice_idx]['role']
+
             # Handle logprobs accumulation (only if logprobs exists)
             try:
                 if ('logprobs' in choice and choice.logprobs and
@@ -140,8 +178,74 @@ def merge_single_response(parsed_response, accumulated_data):
 
                         # Extend the accumulated logprobs content array
                         accumulated_data[choice_idx]['logprobs']['content'].extend(current_logprobs_content)
-                        # Update choice with accumulated logprobs
-                        choice.logprobs['content'] = accumulated_data[choice_idx]['logprobs']['content']
             except (KeyError, AttributeError, TypeError):
                 # logprobs field might not exist or be in unexpected format, safely skip
                 pass
+
+            # Always set accumulated logprobs if we have any
+            if (accumulated_data[choice_idx]['logprobs']['content'] and
+                    hasattr(choice, 'logprobs') and choice.logprobs):
+                choice.logprobs['content'] = accumulated_data[choice_idx][
+                    'logprobs']['content']
+
+            # Handle finish_reason for n > 1 case
+            if (n > 1 and hasattr(choice, 'finish_reason') and
+                    choice.finish_reason and
+                    choice.finish_reason != 'null'):
+                accumulated_data[choice_idx]['finish_reason'] = \
+                    choice.finish_reason
+                accumulated_data[choice_idx]['finished'] = True
+
+        # Check if all choices are finished when n > 1
+        if n > 1:
+            finished_count = sum(1 for data in accumulated_data.values()
+                                 if data.get('finished', False))
+
+            # If not all choices finished, hide finish_reason
+            if finished_count < n:
+                for choice in choices:
+                    if (hasattr(choice, 'finish_reason') and
+                            choice.finish_reason and
+                            choice.finish_reason != 'null'):
+                        choice.finish_reason = 'null'
+            else:
+                # All choices finished, mark as sent first
+                for data in accumulated_data.values():
+                    data['all_choices_sent'] = True
+
+                # Return final result with all choices
+                all_choices = []
+                for choice_idx, data in accumulated_data.items():
+                    # Create a new choice object
+                    final_choice_dict = {
+                        'index': choice_idx,
+                        'finish_reason': data['finish_reason']
+                    }
+
+                    # Create message
+                    message_dict = {
+                        'role': data['role'] if data['role'] else 'assistant'
+                    }
+                    if data['content']:
+                        message_dict['content'] = (
+                            data['content'] if isinstance(data['content'], str)
+                            else data['content'])
+                    if data['reasoning_content']:
+                        message_dict['reasoning_content'] = data['reasoning_content']
+                    if data['tool_calls']:
+                        message_dict['tool_calls'] = data['tool_calls']
+
+                    final_choice_dict['message'] = message_dict
+
+                    # Add logprobs if present
+                    if data['logprobs']['content']:
+                        final_choice_dict['logprobs'] = {
+                            'content': data['logprobs']['content']
+                        }
+
+                    all_choices.append(final_choice_dict)
+
+                # Update output choices with all accumulated choices
+                parsed_response.output.choices = all_choices
+
+    return True

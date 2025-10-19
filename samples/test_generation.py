@@ -16,7 +16,7 @@ class TestGeneration:
                 "content": [
                     {
                         "type": "text",
-                        "text": "你好",
+                        "text": "从1到1000选择一个数字",
                         "cache_control": {
                             "type": "ephemeral",
                             "ttl": "5m"
@@ -33,6 +33,8 @@ class TestGeneration:
             messages=messages,
             result_format="message",
             incremental_output=False,
+            temperature=1.0,
+            top_p=1.0,
             stream=True,
             logprobs=True,
             top_logprobs=5,
@@ -301,7 +303,7 @@ class TestGeneration:
         print("\n 研究完成！")
 
 if __name__ == "__main__":
-    # TestGeneration.test_response_with_content()
-    TestGeneration.test_response_with_tool_calls()
+    TestGeneration.test_response_with_content()
+    # TestGeneration.test_response_with_tool_calls()
     # TestGeneration.test_response_with_search_info()
     # TestGeneration.test_response_with_reasoning_content()
