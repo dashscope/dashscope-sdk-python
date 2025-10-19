@@ -196,4 +196,8 @@ class Application(BaseApi):
         if image_list is not None and image_list:
             input_param['image_list'] = image_list
 
+        file_list = kwargs.pop('file_list', None)
+        if file_list is not None and file_list:
+            input_param['file_list'] = file_list
+
         return input_param, {**parameters, **kwargs}
