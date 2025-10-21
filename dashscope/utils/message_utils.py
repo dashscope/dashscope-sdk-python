@@ -21,7 +21,6 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
     # Handle output.text accumulation when choices is null
     if (parsed_response.output and
             hasattr(parsed_response.output, 'text') and
-            parsed_response.output.text and
             (not parsed_response.output.choices or parsed_response.output.choices is None)):
         choice_idx = 0
         if choice_idx not in accumulated_data:
@@ -35,7 +34,10 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
                 'all_choices_sent': False,
                 'role': None
             }
-        accumulated_data[choice_idx]['content'] += parsed_response.output.text
+        # Accumulate text if not empty
+        if parsed_response.output.text:
+            accumulated_data[choice_idx]['content'] += parsed_response.output.text
+        # Always set accumulated content back to response
         parsed_response.output.text = accumulated_data[choice_idx]['content']
         return True
 
@@ -73,7 +75,7 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
                     accumulated_data[choice_idx]['role'] = choice.message.role
 
                 # Handle content accumulation
-                if 'content' in choice.message and choice.message.content:
+                if 'content' in choice.message:
                     current_content = choice.message.content
                     if current_content:
                         # Check if content is multimodal format
@@ -93,14 +95,24 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
                                     if content_item['text']:
                                         # Accumulate text content
                                         accumulated_data[choice_idx]['content'][content_idx]['text'] += content_item['text']
-                                        # Update the current response with accumulated content
-                                        choice.message.content[content_idx]['text'] = accumulated_data[choice_idx]['content'][content_idx]['text']
+                            # Update the current response with accumulated content
+                            for content_idx in range(len(accumulated_data[choice_idx]['content'])):
+                                if content_idx < len(choice.message.content):
+                                    choice.message.content[content_idx]['text'] = accumulated_data[choice_idx]['content'][content_idx]['text']
                         else:
                             # Handle regular content (string format)
-                            # Initialize accumulated content as string if not already
+                            # Initialize accumulated content as string
                             if isinstance(accumulated_data[choice_idx]['content'], list):
                                 accumulated_data[choice_idx]['content'] = ''
+                            # Accumulate content if not empty
                             accumulated_data[choice_idx]['content'] += current_content
+                    # Always set accumulated content back to response
+                    if not isinstance(accumulated_data[choice_idx]['content'], list):
+                        choice.message.content = accumulated_data[choice_idx]['content']
+                    else:
+                        # For multimodal content, ensure message.content
+                        # exists
+                        if not isinstance(choice.message.content, list):
                             choice.message.content = accumulated_data[choice_idx]['content']
 
                 # Handle reasoning_content accumulation
