@@ -138,8 +138,15 @@ class ImageSynthesis(BaseAsyncApi):
         has_upload = False
         if negative_prompt is not None:
             inputs[NEGATIVE_PROMPT] = negative_prompt
-        if images is not None:
-            inputs[IMAGES] = images
+        if images is not None and images and len(images) > 0:
+            new_images = []
+            for image in images:
+                is_upload, new_image = check_and_upload_local(
+                    model, image, api_key)
+                if is_upload:
+                    has_upload = True
+                new_images.append(new_image)
+            inputs[IMAGES] = new_images
         if sketch_image_url is not None and sketch_image_url:
             is_upload, sketch_image_url = check_and_upload_local(
                 model, sketch_image_url, api_key)
@@ -178,10 +185,20 @@ class ImageSynthesis(BaseAsyncApi):
             headers['X-DashScope-OssResourceResolve'] = 'enable'
             kwargs['headers'] = headers
 
-        if task is None:
-            task = ImageSynthesis.task
-        if model is not None and model and 'imageedit' in model:
-            task = 'image2image'
+        def __get_i2i_task(task, model) -> str:
+            # 处理task参数：优先使用有效的task值
+            if task is not None and task != "":
+                return task
+
+            # 根据model确定任务类型
+            if model is not None and model != "":
+                if 'imageedit' in model or "wan2.5-i2i" in model:
+                    return 'image2image'
+
+            # 默认返回文本到图像任务
+            return ImageSynthesis.task
+
+        task = __get_i2i_task(task, model)
 
         return inputs, kwargs, task
 
