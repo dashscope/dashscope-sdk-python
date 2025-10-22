@@ -72,7 +72,31 @@ class RequestBodyInput(DashPayloadInput):
             "directive": self.directive,
             "dialog_id": self.dialog_id
         }
+@dataclass
+class AsrPostProcessing:
+    replace_words: list = field(default=None)
 
+    def to_dict(self):
+        if self.replace_words is None:
+            return None
+        if len(self.replace_words) == 0:
+            return None
+        return {
+            "replace_words":  [word.to_dict() for word in self.replace_words]
+        }
+
+@dataclass
+class ReplaceWord:
+    source: str = field(default=None)
+    target: str = field(default=None)
+    match_mode: str = field(default=None)
+
+    def to_dict(self):
+        return {
+            "source": self.source,
+            "target": self.target,
+            "match_mode": self.match_mode
+        }
 
 @dataclass
 class Upstream:
@@ -80,7 +104,9 @@ class Upstream:
     audio_format: str = field(default="pcm")  # 上行语音格式，默认pcm.支持pcm/opus
     type: str = field(default="AudioOnly")  # 上行类型：AudioOnly 仅语音通话; AudioAndVideo 上传视频
     mode: str = field(default="tap2talk")  # 客户端交互模式 push2talk/tap2talk/duplex
-    # sample_rate: int  # 合成音频采样率
+    sample_rate: int = field(default=16000)  # 音频采样率
+    vocabulary_id: str = field(default=None)
+    asr_post_processing: AsrPostProcessing = field(default=None)
     pass_through_params: dict = field(default=None)
 
     def to_dict(self):
@@ -88,8 +114,12 @@ class Upstream:
             "type": self.type,
             "mode": self.mode,
             "audio_format": self.audio_format,
-            # "sample_rate": self.sample_rate
+            "sample_rate": self.sample_rate,
+            "vocabulary_id": self.vocabulary_id,
         }
+        if self.asr_post_processing is not None:
+            upstream["asr_post_processing"] = self.asr_post_processing.to_dict()
+
         if self.pass_through_params is not None:
             upstream.update(self.pass_through_params)
         return upstream
