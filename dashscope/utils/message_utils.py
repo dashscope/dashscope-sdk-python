@@ -184,6 +184,10 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
 
                     # Update choice with accumulated tool_calls
                     choice.message.tool_calls = accumulated_data[choice_idx]['tool_calls']
+                elif accumulated_data[choice_idx]['tool_calls']:
+                    # If current response has no tool_calls but we have
+                    # accumulated tool_calls, restore them
+                    choice.message.tool_calls = accumulated_data[choice_idx]['tool_calls']
 
                 # Restore role if we have it
                 if accumulated_data[choice_idx]['role'] and (not hasattr(choice.message, 'role') or not choice.message.role):
@@ -456,6 +460,9 @@ def merge_multimodal_single_response(parsed_response, accumulated_data, n=1):
                                 accumulated_data[choice_idx]['tool_calls'].append(dict(current_call))
 
                     # Update choice with accumulated tool_calls
+                    choice.message.tool_calls = accumulated_data[choice_idx]['tool_calls']
+                elif accumulated_data[choice_idx]['tool_calls']:
+                    # If current response has no tool_calls but we have accumulated tool_calls, restore them
                     choice.message.tool_calls = accumulated_data[choice_idx]['tool_calls']
 
                 # Restore role if we have it
