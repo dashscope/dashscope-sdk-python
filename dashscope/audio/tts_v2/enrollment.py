@@ -68,20 +68,25 @@ class VoiceEnrollmentService(BaseApi):
         logger.debug('>>>>recv', response)
         return response
 
-    def create_voice(self, target_model: str, prefix: str, url: str) -> str:
+    def create_voice(self, target_model: str, prefix: str, url: str, language_hints: List[str] = None) -> str:
         '''
         创建新克隆音色
         param: target_model 克隆音色对应的语音合成模型版本
         param: prefix 音色自定义前缀，仅允许数字和小写字母，小于十个字符。
         param: url 用于克隆的音频文件url
+        param: language_hints 克隆音色目标语言
         return: voice_id
         '''
-        response = self.__call_with_input(input={
+
+        input_params = {
             'action': 'create_voice',
             'target_model': target_model,
             'prefix': prefix,
-            'url': url,
-        }, )
+            'url': url
+        }
+        if language_hints is not None:
+            input_params['language_hints'] = language_hints
+        response = self.__call_with_input(input_params)
         self._last_request_id = response.request_id
         if response.status_code == 200:
             return response.output['voice_id']
