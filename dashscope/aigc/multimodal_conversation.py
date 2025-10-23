@@ -10,7 +10,7 @@ from dashscope.common.error import InputRequired, ModelRequired
 from dashscope.common.utils import _get_task_group_and_task
 from dashscope.utils.oss_utils import preprocess_message_element
 from dashscope.utils.param_utils import ParamUtil
-from dashscope.utils.message_utils import merge_single_response
+from dashscope.utils.message_utils import merge_multimodal_single_response
 
 
 class MultiModalConversation(BaseApi):
@@ -172,7 +172,7 @@ class MultiModalConversation(BaseApi):
 
         for rsp in response:
             parsed_response = MultiModalConversationResponse.from_api_response(rsp)
-            should_yield = merge_single_response(parsed_response, accumulated_data, n)
+            should_yield = merge_multimodal_single_response(parsed_response, accumulated_data, n)
             if should_yield:
                 yield parsed_response
 
@@ -341,7 +341,7 @@ class AioMultiModalConversation(BaseAioApi):
 
         async for rsp in response:
             parsed_response = MultiModalConversationResponse.from_api_response(rsp)
-            should_yield = merge_single_response(parsed_response, accumulated_data, n)
+            should_yield = merge_multimodal_single_response(parsed_response, accumulated_data, n)
             if should_yield:
                 yield parsed_response
 
