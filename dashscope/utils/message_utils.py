@@ -69,7 +69,18 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
                     'role': None
                 }
 
-            if choice.message:
+            # Handle message field - create if null
+            if not choice.message:
+                # Create message object with accumulated data
+                choice.message = {
+                    'role': accumulated_data[choice_idx]['role'] if accumulated_data[choice_idx]['role'] else 'assistant',
+                    'content': accumulated_data[choice_idx]['content']
+                }
+                if accumulated_data[choice_idx]['reasoning_content']:
+                    choice.message['reasoning_content'] = accumulated_data[choice_idx]['reasoning_content']
+                if accumulated_data[choice_idx]['tool_calls']:
+                    choice.message['tool_calls'] = accumulated_data[choice_idx]['tool_calls']
+            else:
                 # Save role if present
                 if hasattr(choice.message, 'role') and choice.message.role:
                     accumulated_data[choice_idx]['role'] = choice.message.role
