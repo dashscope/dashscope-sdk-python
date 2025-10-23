@@ -131,7 +131,9 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
                     current_reasoning_content = choice.message.reasoning_content
                     if current_reasoning_content:
                         accumulated_data[choice_idx]['reasoning_content'] += current_reasoning_content
-                    # Always set the accumulated reasoning_content back, even if current is empty
+                # Always set the accumulated reasoning_content back if we
+                # have any, even if current response doesn't have it
+                if accumulated_data[choice_idx]['reasoning_content']:
                     choice.message.reasoning_content = accumulated_data[choice_idx]['reasoning_content']
 
                 # Handle tool_calls accumulation
@@ -402,7 +404,9 @@ def merge_multimodal_single_response(parsed_response, accumulated_data, n=1):
                     current_reasoning_content = choice.message.reasoning_content
                     if current_reasoning_content:
                         accumulated_data[choice_idx]['reasoning_content'] += current_reasoning_content
-                    # Always set the accumulated reasoning_content back, even if current is empty
+                # Always set the accumulated reasoning_content back if we
+                # have any, even if current response doesn't have it
+                if accumulated_data[choice_idx]['reasoning_content']:
                     choice.message.reasoning_content = accumulated_data[choice_idx]['reasoning_content']
 
                 # Handle tool_calls accumulation
