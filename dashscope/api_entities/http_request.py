@@ -372,5 +372,4 @@ class HttpRequest(AioBaseRequest):
                 for rsp in self._handle_response(response):
                     yield rsp
         except BaseException as e:
-            logger.error(e)
             raise e
