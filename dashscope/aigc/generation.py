@@ -2,7 +2,7 @@
 
 import copy
 import json
-from typing import Any, Dict, Generator, List, Union
+from typing import Any, Dict, Generator, List, Union, AsyncGenerator
 
 from dashscope.api_entities.dashscope_response import (GenerationResponse,
                                                        Message, Role)
@@ -13,6 +13,8 @@ from dashscope.common.constants import (CUSTOMIZED_MODEL_ID,
 from dashscope.common.error import InputRequired, ModelRequired
 from dashscope.common.logging import logger
 from dashscope.common.utils import _get_task_group_and_task
+from dashscope.utils.param_utils import ParamUtil
+from dashscope.utils.message_utils import merge_single_response
 
 
 class Generation(BaseApi):
@@ -137,6 +139,16 @@ class Generation(BaseApi):
             kwargs['headers'] = headers
         input, parameters = cls._build_input_parameters(
             model, prompt, history, messages, **kwargs)
+
+        is_stream = parameters.get('stream', False)
+        # Check if we need to merge incremental output
+        is_incremental_output = kwargs.get('incremental_output', None)
+        to_merge_incremental_output = False
+        if (ParamUtil.should_modify_incremental_output(model) and
+                is_stream and is_incremental_output is False):
+            to_merge_incremental_output = True
+            parameters['incremental_output'] = True
+
         response = super().call(model=model,
                                 task_group=task_group,
                                 task=Generation.task,
@@ -145,10 +157,14 @@ class Generation(BaseApi):
                                 input=input,
                                 workspace=workspace,
                                 **parameters)
-        is_stream = kwargs.get('stream', False)
         if is_stream:
-            return (GenerationResponse.from_api_response(rsp)
-                    for rsp in response)
+            if to_merge_incremental_output:
+                # Extract n parameter for merge logic
+                n = parameters.get('n', 1)
+                return cls._merge_generation_response(response, n)
+            else:
+                return (GenerationResponse.from_api_response(rsp)
+                        for rsp in response)
         else:
             return GenerationResponse.from_api_response(response)
 
@@ -191,6 +207,16 @@ class Generation(BaseApi):
 
         return input, {**parameters, **kwargs}
 
+    @classmethod
+    def _merge_generation_response(cls, response, n=1) -> Generator[GenerationResponse, None, None]:
+        """Merge incremental response chunks to simulate non-incremental output."""
+        accumulated_data = {}
+        for rsp in response:
+            parsed_response = GenerationResponse.from_api_response(rsp)
+            should_yield = merge_single_response(parsed_response, accumulated_data, n)
+            if should_yield:
+                yield parsed_response
+
 
 class AioGeneration(BaseAioApi):
     task = 'text-generation'
@@ -220,7 +246,7 @@ class AioGeneration(BaseAioApi):
         plugins: Union[str, Dict[str, Any]] = None,
         workspace: str = None,
         **kwargs
-    ) -> Union[GenerationResponse, Generator[GenerationResponse, None, None]]:
+    ) -> Union[GenerationResponse, AsyncGenerator[GenerationResponse, None]]:
         """Call generation model service.
 
         Args:
@@ -296,8 +322,8 @@ class AioGeneration(BaseAioApi):
 
         Returns:
             Union[GenerationResponse,
-                  Generator[GenerationResponse, None, None]]: If
-            stream is True, return Generator, otherwise GenerationResponse.
+                  AsyncGenerator[GenerationResponse, None]]: If
+            stream is True, return AsyncGenerator, otherwise GenerationResponse.
         """
         if (prompt is None or not prompt) and (messages is None
                                                or not messages):
@@ -314,6 +340,16 @@ class AioGeneration(BaseAioApi):
             kwargs['headers'] = headers
         input, parameters = Generation._build_input_parameters(
             model, prompt, history, messages, **kwargs)
+
+        is_stream = parameters.get('stream', False)
+        # Check if we need to merge incremental output
+        is_incremental_output = kwargs.get('incremental_output', None)
+        to_merge_incremental_output = False
+        if (ParamUtil.should_modify_incremental_output(model) and
+                is_stream and is_incremental_output is False):
+            to_merge_incremental_output = True
+            parameters['incremental_output'] = True
+
         response = await super().call(model=model,
                                       task_group=task_group,
                                       task=Generation.task,
@@ -322,9 +358,30 @@ class AioGeneration(BaseAioApi):
                                       input=input,
                                       workspace=workspace,
                                       **parameters)
-        is_stream = kwargs.get('stream', False)
         if is_stream:
-            return (GenerationResponse.from_api_response(rsp)
-                    async for rsp in response)
+            if to_merge_incremental_output:
+                # Extract n parameter for merge logic
+                n = parameters.get('n', 1)
+                return cls._merge_generation_response(response, n)
+            else:
+                return cls._stream_responses(response)
         else:
             return GenerationResponse.from_api_response(response)
+
+    @classmethod
+    async def _stream_responses(cls, response) -> AsyncGenerator[GenerationResponse, None]:
+        """Convert async response stream to GenerationResponse stream."""
+        # Type hint: when stream=True, response is actually an AsyncIterable
+        async for rsp in response:  # type: ignore
+            yield GenerationResponse.from_api_response(rsp)
+
+    @classmethod
+    async def _merge_generation_response(cls, response, n=1) -> AsyncGenerator[GenerationResponse, None]:
+        """Async version of merge incremental response chunks."""
+        accumulated_data = {}
+
+        async for rsp in response:  # type: ignore
+            parsed_response = GenerationResponse.from_api_response(rsp)
+            should_yield = merge_single_response(parsed_response, accumulated_data, n)
+            if should_yield:
+                yield parsed_response
