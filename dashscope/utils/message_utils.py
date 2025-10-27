@@ -18,6 +18,27 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
         if all_sent:
             return False
 
+    # Track usage for each choice index when n > 1
+    # Each streaming packet contains usage info for one specific choice
+    if (n > 1 and parsed_response.usage and 
+            parsed_response.output and parsed_response.output.choices and
+            len(parsed_response.output.choices) > 0):
+        if 'usage_by_index' not in accumulated_data:
+            accumulated_data['usage_by_index'] = {}
+
+        # Get the choice index from the first (and typically only) choice in this packet
+        try:
+            first_choice = parsed_response.output.choices[0]
+            choice_idx = first_choice.index if hasattr(
+                first_choice, 'index') and 'index' in first_choice else 0
+
+            # Store only output_tokens for this choice index
+            if 'output_tokens' in parsed_response.usage:
+                accumulated_data['usage_by_index'][choice_idx] = dict(
+                    parsed_response.usage)
+        except (KeyError, AttributeError, IndexError):
+            pass
+
     # Handle output.text accumulation when choices is null
     if (parsed_response.output and
             hasattr(parsed_response.output, 'text') and
@@ -240,11 +261,16 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
             else:
                 # All choices finished, mark as sent first
                 for data in accumulated_data.values():
-                    data['all_choices_sent'] = True
+                    if isinstance(data, dict) and 'all_choices_sent' in data:
+                        data['all_choices_sent'] = True
 
                 # Return final result with all choices
                 all_choices = []
                 for choice_idx, data in accumulated_data.items():
+                    # Skip non-choice data (like usage_by_index)
+                    if not isinstance(data, dict) or 'finished' not in data:
+                        continue
+
                     # Create a new choice object
                     final_choice_dict = {
                         'index': choice_idx,
@@ -277,6 +303,44 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
                 # Update output choices with all accumulated choices
                 parsed_response.output.choices = all_choices
 
+                # Aggregate usage from all choice indices
+                if 'usage_by_index' in accumulated_data and accumulated_data[
+                        'usage_by_index']:
+                    aggregated_usage = {}
+                    usage_by_idx = accumulated_data['usage_by_index']
+
+                    # Sum output_tokens and recalculate total_tokens
+                    total_output_tokens = 0
+                    input_tokens = None
+                    prompt_tokens_details = None
+
+                    for idx, usage in usage_by_idx.items():
+                        if 'output_tokens' in usage:
+                            total_output_tokens += usage['output_tokens']
+                        # input_tokens should be the same for all indices
+                        if input_tokens is None and 'input_tokens' in usage:
+                            input_tokens = usage['input_tokens']
+                        # Keep prompt_tokens_details from any index
+                        # (should be same)
+                        if (prompt_tokens_details is None and
+                                'prompt_tokens_details' in usage):
+                            prompt_tokens_details = usage[
+                                'prompt_tokens_details']
+
+                    # Build aggregated usage
+                    if input_tokens is not None:
+                        aggregated_usage['input_tokens'] = input_tokens
+                    aggregated_usage['output_tokens'] = total_output_tokens
+                    if input_tokens is not None:
+                        aggregated_usage['total_tokens'] = (
+                            input_tokens + total_output_tokens)
+                    if prompt_tokens_details is not None:
+                        aggregated_usage['prompt_tokens_details'] = (
+                            prompt_tokens_details)
+
+                    # Update response usage with aggregated values
+                    parsed_response.usage = aggregated_usage
+
     return True
 
 
@@ -297,6 +361,27 @@ def merge_multimodal_single_response(parsed_response, accumulated_data, n=1):
                        for data in accumulated_data.values())
         if all_sent:
             return False
+
+    # Track usage for each choice index when n > 1
+    # Each streaming packet contains usage info for one specific choice
+    if (n > 1 and parsed_response.usage and 
+            parsed_response.output and parsed_response.output.choices and
+            len(parsed_response.output.choices) > 0):
+        if 'usage_by_index' not in accumulated_data:
+            accumulated_data['usage_by_index'] = {}
+
+        # Get the choice index from the first (and typically only) choice in this packet
+        try:
+            first_choice = parsed_response.output.choices[0]
+            choice_idx = first_choice.index if hasattr(
+                first_choice, 'index') and 'index' in first_choice else 0
+
+            # Store only output_tokens for this choice index
+            if 'output_tokens' in parsed_response.usage:
+                accumulated_data['usage_by_index'][choice_idx] = dict(
+                    parsed_response.usage)
+        except (KeyError, AttributeError, IndexError):
+            pass
 
     # Handle output.text accumulation when choices is null
     if (parsed_response.output and
@@ -516,11 +601,16 @@ def merge_multimodal_single_response(parsed_response, accumulated_data, n=1):
             else:
                 # All choices finished, mark as sent first
                 for data in accumulated_data.values():
-                    data['all_choices_sent'] = True
+                    if isinstance(data, dict) and 'all_choices_sent' in data:
+                        data['all_choices_sent'] = True
 
                 # Return final result with all choices
                 all_choices = []
                 for choice_idx, data in accumulated_data.items():
+                    # Skip non-choice data (like usage_by_index)
+                    if not isinstance(data, dict) or 'finished' not in data:
+                        continue
+
                     # Create a new choice object
                     final_choice_dict = {
                         'index': choice_idx,
@@ -552,5 +642,43 @@ def merge_multimodal_single_response(parsed_response, accumulated_data, n=1):
 
                 # Update output choices with all accumulated choices
                 parsed_response.output.choices = all_choices
+
+                # Aggregate usage from all choice indices
+                if 'usage_by_index' in accumulated_data and accumulated_data[
+                        'usage_by_index']:
+                    aggregated_usage = {}
+                    usage_by_idx = accumulated_data['usage_by_index']
+
+                    # Sum output_tokens and recalculate total_tokens
+                    total_output_tokens = 0
+                    input_tokens = None
+                    prompt_tokens_details = None
+
+                    for idx, usage in usage_by_idx.items():
+                        if 'output_tokens' in usage:
+                            total_output_tokens += usage['output_tokens']
+                        # input_tokens should be the same for all indices
+                        if input_tokens is None and 'input_tokens' in usage:
+                            input_tokens = usage['input_tokens']
+                        # Keep prompt_tokens_details from any index
+                        # (should be same)
+                        if (prompt_tokens_details is None and
+                                'prompt_tokens_details' in usage):
+                            prompt_tokens_details = usage[
+                                'prompt_tokens_details']
+
+                    # Build aggregated usage
+                    if input_tokens is not None:
+                        aggregated_usage['input_tokens'] = input_tokens
+                    aggregated_usage['output_tokens'] = total_output_tokens
+                    if input_tokens is not None:
+                        aggregated_usage['total_tokens'] = (
+                            input_tokens + total_output_tokens)
+                    if prompt_tokens_details is not None:
+                        aggregated_usage['prompt_tokens_details'] = (
+                            prompt_tokens_details)
+
+                    # Update response usage with aggregated values
+                    parsed_response.usage = aggregated_usage
 
     return True
