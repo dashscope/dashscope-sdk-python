@@ -213,9 +213,13 @@ class Generation(BaseApi):
         accumulated_data = {}
         for rsp in response:
             parsed_response = GenerationResponse.from_api_response(rsp)
-            should_yield = merge_single_response(parsed_response, accumulated_data, n)
-            if should_yield:
+            result = merge_single_response(parsed_response, accumulated_data, n)
+            if result is True:
                 yield parsed_response
+            elif isinstance(result, list):
+                # Multiple responses to yield (for n>1 non-stop cases)
+                for resp in result:
+                    yield resp
 
 
 class AioGeneration(BaseAioApi):
@@ -382,6 +386,10 @@ class AioGeneration(BaseAioApi):
 
         async for rsp in response:  # type: ignore
             parsed_response = GenerationResponse.from_api_response(rsp)
-            should_yield = merge_single_response(parsed_response, accumulated_data, n)
-            if should_yield:
+            result = merge_single_response(parsed_response, accumulated_data, n)
+            if result is True:
                 yield parsed_response
+            elif isinstance(result, list):
+                # Multiple responses to yield (for n>1 non-stop cases)
+                for resp in result:
+                    yield resp

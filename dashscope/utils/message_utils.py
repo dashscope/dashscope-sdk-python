@@ -1,4 +1,5 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
+import copy
 
 def merge_single_response(parsed_response, accumulated_data, n=1):
     """Merge a single response chunk with accumulated data.
@@ -9,12 +10,15 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
         n: Number of expected choices (default 1)
 
     Returns:
-        bool: True if this response should be yielded, False if filtered
+        bool or list: True if this response should be yielded normally,
+                      False if filtered, or a list of responses for n>1 with
+                      non-stop finish reasons
     """
     # Check if all choices have been sent (for n > 1 case)
     if n > 1 and accumulated_data:
-        all_sent = any(data.get('all_choices_sent', False)
-                       for data in accumulated_data.values())
+        all_sent = all(data.get('all_choices_sent', False)
+                       for data in accumulated_data.values()
+                       if isinstance(data, dict) and 'all_choices_sent' in data)
         if all_sent:
             return False
 
@@ -246,100 +250,175 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
                     choice.finish_reason
                 accumulated_data[choice_idx]['finished'] = True
 
-        # Check if all choices are finished when n > 1
+        # Handle n > 1 case: different strategies for different finish_reason
         if n > 1:
+            # Count finished choices
             finished_count = sum(1 for data in accumulated_data.values()
-                                 if data.get('finished', False))
+                                 if isinstance(data, dict) and
+                                 data.get('finished', False))
 
-            # If not all choices finished, hide finish_reason
-            if finished_count < n:
-                for choice in choices:
-                    if (hasattr(choice, 'finish_reason') and
-                            choice.finish_reason and
-                            choice.finish_reason != 'null'):
-                        choice.finish_reason = 'null'
-            else:
-                # All choices finished, mark as sent first
-                for data in accumulated_data.values():
-                    if isinstance(data, dict) and 'all_choices_sent' in data:
-                        data['all_choices_sent'] = True
+            # Find all finished choices in current packet
+            finished_choices_in_packet = []
+            for choice in choices:
+                if (hasattr(choice, 'finish_reason') and
+                        choice.finish_reason and
+                        choice.finish_reason != 'null'):
+                    choice_idx = (choice.index if hasattr(choice, 'index') and
+                                  'index' in choice else 0)
+                    finish_reason = choice.finish_reason
+                    finished_choices_in_packet.append(
+                        (choice_idx, finish_reason, choice))
 
-                # Return final result with all choices
-                all_choices = []
-                for choice_idx, data in accumulated_data.items():
-                    # Skip non-choice data (like usage_by_index)
-                    if not isinstance(data, dict) or 'finished' not in data:
-                        continue
+            # No finish_reason in current packet: return as is
+            if not finished_choices_in_packet:
+                return True
 
-                    # Create a new choice object
-                    final_choice_dict = {
-                        'index': choice_idx,
-                        'finish_reason': data['finish_reason']
-                    }
+            # Get finish_reason type from first finished choice
+            first_finish_reason = finished_choices_in_packet[0][1]
 
-                    # Create message
-                    message_dict = {
-                        'role': data['role'] if data['role'] else 'assistant'
-                    }
-                    if data['content']:
-                        message_dict['content'] = (
-                            data['content'] if isinstance(data['content'], str)
-                            else data['content'])
-                    if data['reasoning_content']:
-                        message_dict['reasoning_content'] = data['reasoning_content']
-                    if data['tool_calls']:
-                        message_dict['tool_calls'] = data['tool_calls']
+            # For stop: wait all choices, then merge into one result
+            if first_finish_reason == 'stop':
+                if finished_count < n:
+                    # Hide finish_reason until all finished
+                    for choice in choices:
+                        if (hasattr(choice, 'finish_reason') and
+                                choice.finish_reason and
+                                choice.finish_reason != 'null'):
+                            choice.finish_reason = 'null'
+                else:
+                    # All finished: merge all choices into one result
+                    for data in accumulated_data.values():
+                        if isinstance(data, dict) and 'all_choices_sent' in data:
+                            data['all_choices_sent'] = True
 
-                    final_choice_dict['message'] = message_dict
+                    # Return final result with all choices
+                    all_choices = []
+                    for choice_idx, data in accumulated_data.items():
+                        # Skip non-choice data (like usage_by_index)
+                        if not isinstance(data, dict) or 'finished' not in data:
+                            continue
 
-                    # Add logprobs if present
-                    if data['logprobs']['content']:
-                        final_choice_dict['logprobs'] = {
-                            'content': data['logprobs']['content']
+                        # Create a new choice object
+                        final_choice_dict = {
+                            'index': choice_idx,
+                            'finish_reason': data['finish_reason']
                         }
 
-                    all_choices.append(final_choice_dict)
+                        # Create message
+                        message_dict = {
+                            'role': data['role'] if data['role'] else 'assistant'
+                        }
+                        if data['content']:
+                            message_dict['content'] = (
+                                data['content'] if isinstance(data['content'], str)
+                                else data['content'])
+                        if data['reasoning_content']:
+                            message_dict['reasoning_content'] = data['reasoning_content']
+                        if data['tool_calls']:
+                            message_dict['tool_calls'] = data['tool_calls']
 
-                # Update output choices with all accumulated choices
-                parsed_response.output.choices = all_choices
+                        final_choice_dict['message'] = message_dict
 
-                # Aggregate usage from all choice indices
-                if 'usage_by_index' in accumulated_data and accumulated_data[
-                        'usage_by_index']:
-                    aggregated_usage = {}
-                    usage_by_idx = accumulated_data['usage_by_index']
+                        # Add logprobs if present
+                        if data['logprobs']['content']:
+                            final_choice_dict['logprobs'] = {
+                                'content': data['logprobs']['content']
+                            }
 
-                    # Sum output_tokens and recalculate total_tokens
-                    total_output_tokens = 0
-                    input_tokens = None
-                    prompt_tokens_details = None
+                        all_choices.append(final_choice_dict)
 
-                    for idx, usage in usage_by_idx.items():
-                        if 'output_tokens' in usage:
-                            total_output_tokens += usage['output_tokens']
-                        # input_tokens should be the same for all indices
-                        if input_tokens is None and 'input_tokens' in usage:
-                            input_tokens = usage['input_tokens']
-                        # Keep prompt_tokens_details from any index
-                        # (should be same)
-                        if (prompt_tokens_details is None and
-                                'prompt_tokens_details' in usage):
-                            prompt_tokens_details = usage[
-                                'prompt_tokens_details']
+                    # Update output choices with all accumulated choices
+                    parsed_response.output.choices = all_choices
 
-                    # Build aggregated usage
-                    if input_tokens is not None:
-                        aggregated_usage['input_tokens'] = input_tokens
-                    aggregated_usage['output_tokens'] = total_output_tokens
-                    if input_tokens is not None:
-                        aggregated_usage['total_tokens'] = (
-                            input_tokens + total_output_tokens)
-                    if prompt_tokens_details is not None:
-                        aggregated_usage['prompt_tokens_details'] = (
-                            prompt_tokens_details)
+                    # Aggregate usage from all choice indices
+                    if 'usage_by_index' in accumulated_data and accumulated_data[
+                            'usage_by_index']:
+                        aggregated_usage = {}
+                        usage_by_idx = accumulated_data['usage_by_index']
 
-                    # Update response usage with aggregated values
-                    parsed_response.usage = aggregated_usage
+                        # Sum output_tokens and recalculate total_tokens
+                        total_output_tokens = 0
+                        input_tokens = None
+                        prompt_tokens_details = None
+
+                        for idx, usage in usage_by_idx.items():
+                            if 'output_tokens' in usage:
+                                total_output_tokens += usage['output_tokens']
+                            # input_tokens should be the same for all indices
+                            if input_tokens is None and 'input_tokens' in usage:
+                                input_tokens = usage['input_tokens']
+                            # Keep prompt_tokens_details from any index
+                            # (should be same)
+                            if (prompt_tokens_details is None and
+                                    'prompt_tokens_details' in usage):
+                                prompt_tokens_details = usage[
+                                    'prompt_tokens_details']
+
+                        # Build aggregated usage
+                        if input_tokens is not None:
+                            aggregated_usage['input_tokens'] = input_tokens
+                        aggregated_usage['output_tokens'] = total_output_tokens
+                        if input_tokens is not None:
+                            aggregated_usage['total_tokens'] = (
+                                input_tokens + total_output_tokens)
+                        if prompt_tokens_details is not None:
+                            aggregated_usage['prompt_tokens_details'] = (
+                                prompt_tokens_details)
+
+                        # Update response usage with aggregated values
+                        parsed_response.usage = aggregated_usage
+            else:
+                # For non-stop (e.g., tool_calls): output each choice separately
+                responses_to_yield = []
+
+                for choice_idx, finish_reason, choice in finished_choices_in_packet:
+                    current_data = accumulated_data.get(choice_idx)
+                    if (current_data is None or
+                            current_data.get('all_choices_sent', False)):
+                        continue
+
+                    current_data['all_choices_sent'] = True
+
+                    # Create a new response for this choice
+                    if responses_to_yield:
+                        # Clone the response for additional choices
+                        new_response = copy.deepcopy(parsed_response)
+                    else:
+                        # Use the original response for the first choice
+                        new_response = parsed_response
+
+                    # Set only this choice in the response
+                    new_response.output.choices = [choice]
+
+                    # Remove index field from tool_calls in final output
+                    if (hasattr(choice, 'message') and choice.message and
+                            'tool_calls' in choice.message and
+                            choice.message.tool_calls):
+                        for tool_call in choice.message.tool_calls:
+                            if isinstance(tool_call, dict) and 'index' in tool_call:
+                                del tool_call['index']
+
+                    # Update usage with this choice's output tokens
+                    if (new_response.usage and
+                            'usage_by_index' in accumulated_data and
+                            choice_idx in accumulated_data['usage_by_index']):
+                        current_usage = accumulated_data['usage_by_index'][
+                            choice_idx]
+                        if 'output_tokens' in current_usage:
+                            new_response.usage['output_tokens'] = (
+                                current_usage['output_tokens'])
+                            if 'input_tokens' in current_usage:
+                                new_response.usage['total_tokens'] = (
+                                    current_usage['input_tokens'] +
+                                    current_usage['output_tokens'])
+
+                    responses_to_yield.append(new_response)
+
+                # Return list of responses if we have any
+                if responses_to_yield:
+                    return responses_to_yield
+                else:
+                    return False
 
     return True
 
@@ -586,99 +665,178 @@ def merge_multimodal_single_response(parsed_response, accumulated_data, n=1):
                     choice.finish_reason
                 accumulated_data[choice_idx]['finished'] = True
 
-        # Check if all choices are finished when n > 1
+        # Handle n > 1 case: different strategies for different
+        # finish_reason
         if n > 1:
+            # Count finished choices
             finished_count = sum(1 for data in accumulated_data.values()
-                                 if data.get('finished', False))
+                                 if isinstance(data, dict) and
+                                 data.get('finished', False))
 
-            # If not all choices finished, hide finish_reason
-            if finished_count < n:
-                for choice in choices:
-                    if (hasattr(choice, 'finish_reason') and
-                            choice.finish_reason and
-                            choice.finish_reason != 'null'):
-                        choice.finish_reason = 'null'
-            else:
-                # All choices finished, mark as sent first
-                for data in accumulated_data.values():
-                    if isinstance(data, dict) and 'all_choices_sent' in data:
-                        data['all_choices_sent'] = True
+            # Find all finished choices in current packet
+            finished_choices_in_packet = []
+            for choice in choices:
+                if (hasattr(choice, 'finish_reason') and
+                        choice.finish_reason and
+                        choice.finish_reason != 'null'):
+                    choice_idx = (choice.index if hasattr(choice, 'index') and
+                                  'index' in choice else 0)
+                    finish_reason = choice.finish_reason
+                    finished_choices_in_packet.append(
+                        (choice_idx, finish_reason, choice))
 
-                # Return final result with all choices
-                all_choices = []
-                for choice_idx, data in accumulated_data.items():
-                    # Skip non-choice data (like usage_by_index)
-                    if not isinstance(data, dict) or 'finished' not in data:
-                        continue
+            # No finish_reason in current packet: return as is
+            if not finished_choices_in_packet:
+                return True
 
-                    # Create a new choice object
-                    final_choice_dict = {
-                        'index': choice_idx,
-                        'finish_reason': data['finish_reason']
-                    }
+            # Get finish_reason type from first finished choice
+            first_finish_reason = finished_choices_in_packet[0][1]
 
-                    # Create message
-                    message_dict = {
-                        'role': data['role'] if data['role'] else 'assistant'
-                    }
-                    if data['content']:
-                        message_dict['content'] = (
-                            data['content'] if isinstance(data['content'], str)
-                            else data['content'])
-                    if data['reasoning_content']:
-                        message_dict['reasoning_content'] = data['reasoning_content']
-                    if data['tool_calls']:
-                        message_dict['tool_calls'] = data['tool_calls']
+            # For stop: wait all choices, then merge into one result
+            if first_finish_reason == 'stop':
+                if finished_count < n:
+                    # Hide finish_reason until all finished
+                    for choice in choices:
+                        if (hasattr(choice, 'finish_reason') and
+                                choice.finish_reason and
+                                choice.finish_reason != 'null'):
+                            choice.finish_reason = 'null'
+                else:
+                    # All finished: merge all choices into one result
+                    for data in accumulated_data.values():
+                        if isinstance(data, dict) and 'all_choices_sent' in data:
+                            data['all_choices_sent'] = True
 
-                    final_choice_dict['message'] = message_dict
+                    # Return final result with all choices
+                    all_choices = []
+                    for choice_idx, data in accumulated_data.items():
+                        # Skip non-choice data (like usage_by_index)
+                        if not isinstance(data, dict) or 'finished' not in data:
+                            continue
 
-                    # Add logprobs if present
-                    if data['logprobs']['content']:
-                        final_choice_dict['logprobs'] = {
-                            'content': data['logprobs']['content']
+                        # Create a new choice object
+                        final_choice_dict = {
+                            'index': choice_idx,
+                            'finish_reason': data['finish_reason']
                         }
 
-                    all_choices.append(final_choice_dict)
+                        # Create message
+                        message_dict = {
+                            'role': data['role'] if data['role'] else 'assistant'
+                        }
+                        if data['content']:
+                            message_dict['content'] = (
+                                data['content'] if isinstance(data['content'],
+                                                              str)
+                                else data['content'])
+                        if data['reasoning_content']:
+                            message_dict['reasoning_content'] = (
+                                data['reasoning_content'])
+                        if data['tool_calls']:
+                            message_dict['tool_calls'] = data['tool_calls']
 
-                # Update output choices with all accumulated choices
-                parsed_response.output.choices = all_choices
+                        final_choice_dict['message'] = message_dict
 
-                # Aggregate usage from all choice indices
-                if 'usage_by_index' in accumulated_data and accumulated_data[
-                        'usage_by_index']:
-                    aggregated_usage = {}
-                    usage_by_idx = accumulated_data['usage_by_index']
+                        # Add logprobs if present
+                        if data['logprobs']['content']:
+                            final_choice_dict['logprobs'] = {
+                                'content': data['logprobs']['content']
+                            }
 
-                    # Sum output_tokens and recalculate total_tokens
-                    total_output_tokens = 0
-                    input_tokens = None
-                    prompt_tokens_details = None
+                        all_choices.append(final_choice_dict)
 
-                    for idx, usage in usage_by_idx.items():
-                        if 'output_tokens' in usage:
-                            total_output_tokens += usage['output_tokens']
-                        # input_tokens should be the same for all indices
-                        if input_tokens is None and 'input_tokens' in usage:
-                            input_tokens = usage['input_tokens']
-                        # Keep prompt_tokens_details from any index
-                        # (should be same)
-                        if (prompt_tokens_details is None and
-                                'prompt_tokens_details' in usage):
-                            prompt_tokens_details = usage[
-                                'prompt_tokens_details']
+                    # Update output choices with all accumulated choices
+                    parsed_response.output.choices = all_choices
 
-                    # Build aggregated usage
-                    if input_tokens is not None:
-                        aggregated_usage['input_tokens'] = input_tokens
-                    aggregated_usage['output_tokens'] = total_output_tokens
-                    if input_tokens is not None:
-                        aggregated_usage['total_tokens'] = (
-                            input_tokens + total_output_tokens)
-                    if prompt_tokens_details is not None:
-                        aggregated_usage['prompt_tokens_details'] = (
-                            prompt_tokens_details)
+                    # Aggregate usage from all choice indices
+                    if 'usage_by_index' in accumulated_data and accumulated_data[
+                            'usage_by_index']:
+                        aggregated_usage = {}
+                        usage_by_idx = accumulated_data['usage_by_index']
 
-                    # Update response usage with aggregated values
-                    parsed_response.usage = aggregated_usage
+                        # Sum output_tokens and recalculate total_tokens
+                        total_output_tokens = 0
+                        input_tokens = None
+                        prompt_tokens_details = None
+
+                        for idx, usage in usage_by_idx.items():
+                            if 'output_tokens' in usage:
+                                total_output_tokens += usage['output_tokens']
+                            # input_tokens should be the same for all indices
+                            if input_tokens is None and 'input_tokens' in usage:
+                                input_tokens = usage['input_tokens']
+                            # Keep prompt_tokens_details from any index
+                            # (should be same)
+                            if (prompt_tokens_details is None and
+                                    'prompt_tokens_details' in usage):
+                                prompt_tokens_details = usage[
+                                    'prompt_tokens_details']
+
+                        # Build aggregated usage
+                        if input_tokens is not None:
+                            aggregated_usage['input_tokens'] = input_tokens
+                        aggregated_usage['output_tokens'] = total_output_tokens
+                        if input_tokens is not None:
+                            aggregated_usage['total_tokens'] = (
+                                input_tokens + total_output_tokens)
+                        if prompt_tokens_details is not None:
+                            aggregated_usage['prompt_tokens_details'] = (
+                                prompt_tokens_details)
+
+                        # Update response usage with aggregated values
+                        parsed_response.usage = aggregated_usage
+            else:
+                # For non-stop (e.g., tool_calls): output each choice
+                # separately
+                responses_to_yield = []
+
+                for choice_idx, finish_reason, choice in finished_choices_in_packet:
+                    current_data = accumulated_data.get(choice_idx)
+                    if (current_data is None or
+                            current_data.get('all_choices_sent', False)):
+                        continue
+
+                    current_data['all_choices_sent'] = True
+
+                    # Create a new response for this choice
+                    if responses_to_yield:
+                        # Clone the response for additional choices
+                        new_response = copy.deepcopy(parsed_response)
+                    else:
+                        # Use the original response for the first choice
+                        new_response = parsed_response
+
+                    # Set only this choice in the response
+                    new_response.output.choices = [choice]
+
+                    # Remove index field from tool_calls in final output
+                    if (hasattr(choice, 'message') and choice.message and
+                            'tool_calls' in choice.message and
+                            choice.message.tool_calls):
+                        for tool_call in choice.message.tool_calls:
+                            if isinstance(tool_call, dict) and 'index' in tool_call:
+                                del tool_call['index']
+
+                    # Update usage with this choice's output tokens
+                    if (new_response.usage and
+                            'usage_by_index' in accumulated_data and
+                            choice_idx in accumulated_data['usage_by_index']):
+                        current_usage = accumulated_data['usage_by_index'][
+                            choice_idx]
+                        if 'output_tokens' in current_usage:
+                            new_response.usage['output_tokens'] = (
+                                current_usage['output_tokens'])
+                            if 'input_tokens' in current_usage:
+                                new_response.usage['total_tokens'] = (
+                                    current_usage['input_tokens'] +
+                                    current_usage['output_tokens'])
+
+                    responses_to_yield.append(new_response)
+
+                # Return list of responses if we have any
+                if responses_to_yield:
+                    return responses_to_yield
+                else:
+                    return False
 
     return True

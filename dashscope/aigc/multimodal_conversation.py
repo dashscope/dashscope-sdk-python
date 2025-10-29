@@ -172,9 +172,13 @@ class MultiModalConversation(BaseApi):
 
         for rsp in response:
             parsed_response = MultiModalConversationResponse.from_api_response(rsp)
-            should_yield = merge_multimodal_single_response(parsed_response, accumulated_data, n)
-            if should_yield:
+            result = merge_multimodal_single_response(parsed_response, accumulated_data, n)
+            if result is True:
                 yield parsed_response
+            elif isinstance(result, list):
+                # Multiple responses to yield (for n>1 non-stop cases)
+                for resp in result:
+                    yield resp
 
 
 class AioMultiModalConversation(BaseAioApi):
@@ -341,8 +345,12 @@ class AioMultiModalConversation(BaseAioApi):
 
         async for rsp in response:
             parsed_response = MultiModalConversationResponse.from_api_response(rsp)
-            should_yield = merge_multimodal_single_response(parsed_response, accumulated_data, n)
-            if should_yield:
+            result = merge_multimodal_single_response(parsed_response, accumulated_data, n)
+            if result is True:
                 yield parsed_response
+            elif isinstance(result, list):
+                # Multiple responses to yield (for n>1 non-stop cases)
+                for resp in result:
+                    yield resp
 
 
