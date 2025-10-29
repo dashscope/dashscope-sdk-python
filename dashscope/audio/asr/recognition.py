@@ -189,7 +189,7 @@ class Recognition(BaseApi):
         responses = self.__launch_request()
         for part in responses:
             if part.status_code == HTTPStatus.OK:
-                if len(part.output) == 0:
+                if len(part.output) == 0 or ('finished' in part.output and part.output['finished'] == True):
                     self._on_complete_timestamp = time.time() * 1000
                     logger.debug('last package delay {}'.format(
                         self.get_last_package_delay()))
