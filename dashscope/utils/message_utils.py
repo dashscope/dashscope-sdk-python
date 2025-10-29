@@ -293,11 +293,14 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
 
                     # Return final result with all choices
                     all_choices = []
-                    for choice_idx, data in accumulated_data.items():
-                        # Skip non-choice data (like usage_by_index)
-                        if not isinstance(data, dict) or 'finished' not in data:
-                            continue
+                    # Sort by choice_idx to ensure correct order
+                    sorted_items = sorted(
+                        [(idx, data) for idx, data in accumulated_data.items()
+                         if isinstance(data, dict) and 'finished' in data],
+                        key=lambda x: x[0]
+                    )
 
+                    for choice_idx, data in sorted_items:
                         # Create a new choice object
                         final_choice_dict = {
                             'index': choice_idx,
@@ -709,11 +712,14 @@ def merge_multimodal_single_response(parsed_response, accumulated_data, n=1):
 
                     # Return final result with all choices
                     all_choices = []
-                    for choice_idx, data in accumulated_data.items():
-                        # Skip non-choice data (like usage_by_index)
-                        if not isinstance(data, dict) or 'finished' not in data:
-                            continue
+                    # Sort by choice_idx to ensure correct order
+                    sorted_items = sorted(
+                        [(idx, data) for idx, data in accumulated_data.items()
+                         if isinstance(data, dict) and 'finished' in data],
+                        key=lambda x: x[0]
+                    )
 
+                    for choice_idx, data in sorted_items:
                         # Create a new choice object
                         final_choice_dict = {
                             'index': choice_idx,
