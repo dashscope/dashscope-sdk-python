@@ -158,6 +158,12 @@ class QwenTtsRealtime:
                        response_format: AudioFormat = AudioFormat.
                        PCM_24000HZ_MONO_16BIT,
                        mode: str = 'server_commit',
+                       sample_rate: int = None,
+                       volume: int = None,
+                       speech_rate: float = None,
+                       audio_format: str = None,
+                       pitch_rate: float = None,
+                       bit_rate: int = None,
                        language_type: str = None,
                        **kwargs) -> None:
         '''
@@ -173,6 +179,18 @@ class QwenTtsRealtime:
             response mode, server_commit or commit
         language_type: str
             language type for synthesized audio, default is 'auto'
+        sample_rate: int
+            sampleRate for tts, range [8000,16000,22050,24000,44100,48000] default is 24000
+        volume: int
+            volume for tts, range [0,100] default is 50
+        speech_rate: float
+            speech_rate for tts, range [0.5~2.0] default is 1.0
+        audio_format: str
+            format for tts, support mp3,wav,pcm,opus, default is 'pcm'
+        pitch_rate: float
+            pitch_rate for tts, range [0.5~2.0] default is 1.0
+        bit_rate: int
+            bit_rate for tts, support 6~510,default is 128kbps. only work on format: opus/mp3
         '''
         self.config = {
             'voice': voice,
@@ -180,6 +198,19 @@ class QwenTtsRealtime:
             'response_format': response_format.format,
             'sample_rate': response_format.sample_rate,
         }
+        if sample_rate is not None:  # 如果配置，则更新
+            self.config['sample_rate'] = sample_rate
+        if volume is not None:
+            self.config['volume'] = volume
+        if speech_rate is not None:
+            self.config['speech_rate'] = speech_rate
+        if audio_format is not None:
+            self.config['response_format'] = audio_format  # 如果配置，则更新
+        if pitch_rate is not None:
+            self.config['pitch_rate'] = pitch_rate
+        if bit_rate is not None:
+            self.config['bit_rate'] = bit_rate
+
         if language_type is not None:
             self.config['language_type'] = language_type
         self.config.update(kwargs)

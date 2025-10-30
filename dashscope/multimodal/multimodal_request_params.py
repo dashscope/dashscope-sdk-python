@@ -217,7 +217,8 @@ class ClientInfo:
 
     def to_dict(self):
         info = {
-            "user_id": self.user_id
+            "user_id": self.user_id,
+            "sdk": "python"
         }
         if self.device is not None:
             info["device"] = self.device.to_dict()
