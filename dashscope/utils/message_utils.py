@@ -390,16 +390,11 @@ def merge_single_response(parsed_response, accumulated_data, n=1):
                         # Use the original response for the first choice
                         new_response = parsed_response
 
-                    # Set only this choice in the response
-                    new_response.output.choices = [choice]
+                    # Deep copy choice to avoid modifying accumulated_data
+                    choice_copy = copy.deepcopy(choice)
 
-                    # Remove index field from tool_calls in final output
-                    if (hasattr(choice, 'message') and choice.message and
-                            'tool_calls' in choice.message and
-                            choice.message.tool_calls):
-                        for tool_call in choice.message.tool_calls:
-                            if isinstance(tool_call, dict) and 'index' in tool_call:
-                                del tool_call['index']
+                    # Set only this choice in the response
+                    new_response.output.choices = [choice_copy]
 
                     # Update usage with this choice's output tokens
                     if (new_response.usage and
@@ -812,16 +807,11 @@ def merge_multimodal_single_response(parsed_response, accumulated_data, n=1):
                         # Use the original response for the first choice
                         new_response = parsed_response
 
-                    # Set only this choice in the response
-                    new_response.output.choices = [choice]
+                    # Deep copy choice to avoid modifying accumulated_data
+                    choice_copy = copy.deepcopy(choice)
 
-                    # Remove index field from tool_calls in final output
-                    if (hasattr(choice, 'message') and choice.message and
-                            'tool_calls' in choice.message and
-                            choice.message.tool_calls):
-                        for tool_call in choice.message.tool_calls:
-                            if isinstance(tool_call, dict) and 'index' in tool_call:
-                                del tool_call['index']
+                    # Set only this choice in the response
+                    new_response.output.choices = [choice_copy]
 
                     # Update usage with this choice's output tokens
                     if (new_response.usage and
