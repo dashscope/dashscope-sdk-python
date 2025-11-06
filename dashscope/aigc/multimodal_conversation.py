@@ -120,6 +120,12 @@ class MultiModalConversation(BaseApi):
             to_merge_incremental_output = True
             kwargs['incremental_output'] = True
 
+        # Pass incremental_to_full flag via headers user-agent
+        if 'headers' not in kwargs:
+            kwargs['headers'] = {}
+        flag = '1' if to_merge_incremental_output else '0'
+        kwargs['headers']['user-agent'] = f'incremental_to_full/{flag}'
+
         response = super().call(model=model,
                                 task_group=task_group,
                                 task=MultiModalConversation.task,
@@ -286,6 +292,15 @@ class AioMultiModalConversation(BaseAioApi):
                 is_stream and is_incremental_output is not None and is_incremental_output is False):
             to_merge_incremental_output = True
             kwargs['incremental_output'] = True
+
+        # Pass incremental_to_full flag via headers user-agent
+        if 'headers' not in kwargs:
+            kwargs['headers'] = {}
+        flag = '1' if to_merge_incremental_output else '0'
+        kwargs['headers']['user-agent'] = (
+            kwargs['headers'].get('user-agent', '') +
+            f'; incremental_to_full/{flag}'
+        )
 
         response = await super().call(model=model,
                                       task_group=task_group,

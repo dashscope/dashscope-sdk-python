@@ -34,8 +34,9 @@ class WebSocketRequest(AioBaseRequest):
         timeout: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
         flattened_output: bool = False,
         pre_task_id=None,
+        user_agent: str = '',
     ) -> None:
-        super().__init__()
+        super().__init__(user_agent=user_agent)
         """HttpRequest.
 
         Args:

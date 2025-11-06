@@ -33,7 +33,8 @@ class HttpRequest(AioBaseRequest):
                  timeout: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
                  task_id: str = None,
                  flattened_output: bool = False,
-                 encryption: Optional[Encryption] = None) -> None:
+                 encryption: Optional[Encryption] = None,
+                 user_agent: str = '') -> None:
         """HttpSSERequest, processing http server sent event stream.
 
         Args:
@@ -43,9 +44,11 @@ class HttpRequest(AioBaseRequest):
             stream (bool, optional): Is stream request. Defaults to True.
             timeout (int, optional): Total request timeout.
                 Defaults to DEFAULT_REQUEST_TIMEOUT_SECONDS.
+            user_agent (str, optional): Additional user agent string to
+                append. Defaults to ''.
         """
 
-        super().__init__()
+        super().__init__(user_agent=user_agent)
         self.url = url
         self.flattened_output = flattened_output
         self.async_request = async_request

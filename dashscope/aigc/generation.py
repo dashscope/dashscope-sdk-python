@@ -149,6 +149,12 @@ class Generation(BaseApi):
             to_merge_incremental_output = True
             parameters['incremental_output'] = True
 
+        # Pass incremental_to_full flag via headers user-agent
+        if 'headers' not in parameters:
+            parameters['headers'] = {}
+        flag = '1' if to_merge_incremental_output else '0'
+        parameters['headers']['user-agent'] = f'incremental_to_full/{flag}'
+
         response = super().call(model=model,
                                 task_group=task_group,
                                 task=Generation.task,
@@ -353,6 +359,12 @@ class AioGeneration(BaseAioApi):
                 is_stream and is_incremental_output is False):
             to_merge_incremental_output = True
             parameters['incremental_output'] = True
+
+        # Pass incremental_to_full flag via headers user-agent
+        if 'headers' not in parameters:
+            parameters['headers'] = {}
+        flag = '1' if to_merge_incremental_output else '0'
+        parameters['headers']['user-agent'] = f'incremental_to_full/{flag}'
 
         response = await super().call(model=model,
                                       task_group=task_group,

@@ -31,9 +31,15 @@ def _get_protocol_params(kwargs):
     base_address = kwargs.pop('base_address', None)
     flattened_output = kwargs.pop('flattened_output', False)
     extra_url_parameters = kwargs.pop('extra_url_parameters', None)
+
+    # Extract user-agent from headers if present
+    user_agent = ''
+    if headers and 'user-agent' in headers:
+        user_agent = headers.pop('user-agent')
+
     return (api_protocol, ws_stream_mode, is_binary_input, http_method, stream,
             async_request, query, headers, request_timeout, form, resources,
-            base_address, flattened_output, extra_url_parameters)
+            base_address, flattened_output, extra_url_parameters, user_agent)
 
 
 def _build_api_request(model: str,
@@ -46,8 +52,8 @@ def _build_api_request(model: str,
                        **kwargs):
     (api_protocol, ws_stream_mode, is_binary_input, http_method, stream,
      async_request, query, headers, request_timeout, form, resources,
-     base_address, flattened_output,
-     extra_url_parameters) = _get_protocol_params(kwargs)
+     base_address, flattened_output, extra_url_parameters,
+     user_agent) = _get_protocol_params(kwargs)
     task_id = kwargs.pop('task_id', None)
     enable_encryption = kwargs.pop('enable_encryption', False)
     encryption = None
@@ -87,7 +93,8 @@ def _build_api_request(model: str,
                               timeout=request_timeout,
                               task_id=task_id,
                               flattened_output=flattened_output,
-                              encryption=encryption)
+                              encryption=encryption,
+                              user_agent=user_agent)
     elif api_protocol == ApiProtocol.WEBSOCKET:
         if base_address is not None:
             websocket_url = base_address
@@ -101,7 +108,8 @@ def _build_api_request(model: str,
                                    is_binary_input=is_binary_input,
                                    timeout=request_timeout,
                                    flattened_output=flattened_output,
-                                   pre_task_id=pre_task_id)
+                                   pre_task_id=pre_task_id,
+                                   user_agent=user_agent)
     else:
         raise UnsupportedApiProtocol(
             'Unsupported protocol: %s, support [http, https, websocket]' %

@@ -9,7 +9,7 @@ from dashscope.version import __version__
 
 
 class BaseRequest(ABC):
-    def __init__(self) -> None:
+    def __init__(self, user_agent: str = '') -> None:
         try:
             platform_info = platform.platform()
         except Exception:
@@ -26,6 +26,11 @@ class BaseRequest(ABC):
             platform_info,
             processor_info,
         )
+
+        # Append user_agent if provided and not empty
+        if user_agent:
+            ua += '; ' + user_agent
+
         self.headers = {'user-agent': ua}
         disable_data_inspection = os.environ.get(
             DASHSCOPE_DISABLE_DATA_INSPECTION_ENV, 'true')
