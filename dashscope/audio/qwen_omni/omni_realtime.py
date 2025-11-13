@@ -265,15 +265,16 @@ class OmniRealtimeConversation:
                 'language': translation_params.language
             }
         if transcription_params is not None:
-            self.config['language'] = transcription_params.language
-            if transcription_params.corpus is not None:
-                self.config['corpus'] = transcription_params.corpus
+            self.config['input_audio_transcription'] = {}
+            self.config['input_audio_transcription'].update({'language': transcription_params.language})
             if transcription_params.corpus_text is not None:
-                self.config['corpus'] = {
+                transcription_params.corpus = {
                     "text": transcription_params.corpus_text
                 }
+            if transcription_params.corpus is not None:
+                self.config['input_audio_transcription'].update({'corpus': transcription_params.corpus})
             self.config['input_audio_format'] = transcription_params.input_audio_format
-            self.config['sample_rate']= transcription_params.sample_rate
+            self.config['sample_rate'] = transcription_params.sample_rate
         self.config.update(kwargs)
         self.__send_str(
             json.dumps({
