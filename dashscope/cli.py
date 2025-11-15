@@ -215,10 +215,10 @@ class Oss:
                   'DASHSCOPE_API_KEY or pass it as argument by -k/--api_key')
             return
 
-        oss_url = OssUtils.upload(model=args.model,
-                                  file_path=file_path,
-                                  api_key=api_key,
-                                  base_address=args.base_url)
+        oss_url, _ = OssUtils.upload(model=args.model,
+                                     file_path=file_path,
+                                     api_key=api_key,
+                                     base_address=args.base_url)
 
         if not oss_url:
             print('Failed to upload file: %s' % file_path)

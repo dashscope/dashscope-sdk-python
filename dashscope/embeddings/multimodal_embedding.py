@@ -105,9 +105,11 @@ class MultiModalEmbedding(BaseApi):
                 {'factor': 3, 'image': ''}]
         """
         has_upload = False
+        upload_certificate = None
         for elem in input:
             if not isinstance(elem, (int, float, bool, str, bytes, bytearray)):
-                is_upload = preprocess_message_element(model, elem, api_key)
+                is_upload, upload_certificate = preprocess_message_element(
+                    model, elem, api_key, upload_certificate)
                 if is_upload and not has_upload:
                     has_upload = True
         return has_upload
@@ -174,9 +176,11 @@ class AioMultiModalEmbedding(BaseAioApi):
                 {'factor': 3, 'image': ''}]
         """
         has_upload = False
+        upload_certificate = None
         for elem in input:
             if not isinstance(elem, (int, float, bool, str, bytes, bytearray)):
-                is_upload = preprocess_message_element(model, elem, api_key)
+                is_upload, upload_certificate = preprocess_message_element(
+                    model, elem, api_key, upload_certificate)
                 if is_upload and not has_upload:
                     has_upload = True
         return has_upload

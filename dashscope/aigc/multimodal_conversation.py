@@ -160,13 +160,15 @@ class MultiModalConversation(BaseApi):
             ]
         """
         has_upload = False
+        upload_certificate = None
+
         for message in messages:
             content = message['content']
             for elem in content:
                 if not isinstance(elem,
                                   (int, float, bool, str, bytes, bytearray)):
-                    is_upload = preprocess_message_element(
-                        model, elem, api_key)
+                    is_upload, upload_certificate = preprocess_message_element(
+                        model, elem, api_key, upload_certificate)
                     if is_upload and not has_upload:
                         has_upload = True
         return has_upload
@@ -335,13 +337,15 @@ class AioMultiModalConversation(BaseAioApi):
             ]
         """
         has_upload = False
+        upload_certificate = None
+
         for message in messages:
             content = message['content']
             for elem in content:
                 if not isinstance(elem,
                                   (int, float, bool, str, bytes, bytearray)):
-                    is_upload = preprocess_message_element(
-                        model, elem, api_key)
+                    is_upload, upload_certificate = preprocess_message_element(
+                        model, elem, api_key, upload_certificate)
                     if is_upload and not has_upload:
                         has_upload = True
         return has_upload

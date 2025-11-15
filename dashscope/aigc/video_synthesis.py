@@ -121,45 +121,46 @@ class VideoSynthesis(BaseAsyncApi):
             inputs['function'] = function
 
         has_upload = False
+        upload_certificate = None
 
         if img_url is not None and img_url:
-            is_upload, res_img_url = check_and_upload_local(
-                model, img_url, api_key)
+            is_upload, res_img_url, upload_certificate = check_and_upload_local(
+                model, img_url, api_key, upload_certificate)
             if is_upload:
                 has_upload = True
             inputs['img_url'] = res_img_url
 
         if audio_url is not None and audio_url:
-            is_upload, res_audio_url = check_and_upload_local(
-                model, audio_url, api_key)
+            is_upload, res_audio_url, upload_certificate = check_and_upload_local(
+                model, audio_url, api_key, upload_certificate)
             if is_upload:
                 has_upload = True
             inputs['audio_url'] = res_audio_url
 
         if head_frame is not None and head_frame:
-            is_upload, res_head_frame = check_and_upload_local(
-                model, head_frame, api_key)
+            is_upload, res_head_frame, upload_certificate = check_and_upload_local(
+                model, head_frame, api_key, upload_certificate)
             if is_upload:
                 has_upload = True
             inputs['head_frame'] = res_head_frame
 
         if tail_frame is not None and tail_frame:
-            is_upload, res_tail_frame = check_and_upload_local(
-                model, tail_frame, api_key)
+            is_upload, res_tail_frame, upload_certificate = check_and_upload_local(
+                model, tail_frame, api_key, upload_certificate)
             if is_upload:
                 has_upload = True
             inputs['tail_frame'] = res_tail_frame
 
         if first_frame_url is not None and first_frame_url:
-            is_upload, res_first_frame_url = check_and_upload_local(
-                model, first_frame_url, api_key)
+            is_upload, res_first_frame_url, upload_certificate = check_and_upload_local(
+                model, first_frame_url, api_key, upload_certificate)
             if is_upload:
                 has_upload = True
             inputs['first_frame_url'] = res_first_frame_url
 
         if last_frame_url is not None and last_frame_url:
-            is_upload, res_last_frame_url = check_and_upload_local(
-                model, last_frame_url, api_key)
+            is_upload, res_last_frame_url, upload_certificate = check_and_upload_local(
+                model, last_frame_url, api_key, upload_certificate)
             if is_upload:
                 has_upload = True
             inputs['last_frame_url'] = res_last_frame_url

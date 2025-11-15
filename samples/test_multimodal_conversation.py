@@ -41,6 +41,33 @@ class TestMultiModalConversation:
             print(chunk)
 
     @staticmethod
+    def test_vl_model_with_video():
+        """Test MultiModalConversation API with image and text input."""
+        # Prepare test messages with image and text
+        messages = [{"role": "user",
+                     "content": [
+                         {"video": [
+                             "/Users/zhiyi/Downloads/vl_data/1.jpg",
+                             "/Users/zhiyi/Downloads/vl_data/2.jpg",
+                             "/Users/zhiyi/Downloads/vl_data/3.jpg",
+                             "/Users/zhiyi/Downloads/vl_data/4.jpg",
+                         ]},
+                         {"text": "描述这个视频的具体过程"}]}]
+
+        # Call MultiModalConversation API with encryption enabled
+        response = dashscope.MultiModalConversation.call(
+            api_key=os.getenv('DASHSCOPE_API_KEY'),
+            model='qwen-vl-max-latest',
+            messages=messages,
+            incremental_output=True,
+            stream=True,
+        )
+
+        print("\n")
+        for chunk in response:
+            print(chunk)
+
+    @staticmethod
     def test_vl_model_with_tool_calls():
         tools = [
             {
@@ -222,7 +249,8 @@ class TestMultiModalConversation:
 
 if __name__ == "__main__":
     # TestMultiModalConversation.test_vl_model()
-    TestMultiModalConversation.test_vl_model_with_tool_calls()
+    TestMultiModalConversation.test_vl_model_with_video()
+    # TestMultiModalConversation.test_vl_model_with_tool_calls()
     # TestMultiModalConversation.test_vl_model_with_reasoning_content()
     # TestMultiModalConversation.test_vl_ocr()
     # TestMultiModalConversation.test_qwen_asr()

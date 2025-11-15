@@ -136,26 +136,28 @@ class ImageSynthesis(BaseAsyncApi):
             raise InputRequired('prompt is required!')
         inputs = {PROMPT: prompt}
         has_upload = False
+        upload_certificate = None
+
         if negative_prompt is not None:
             inputs[NEGATIVE_PROMPT] = negative_prompt
         if images is not None and images and len(images) > 0:
             new_images = []
             for image in images:
-                is_upload, new_image = check_and_upload_local(
-                    model, image, api_key)
+                is_upload, new_image, upload_certificate = check_and_upload_local(
+                    model, image, api_key, upload_certificate)
                 if is_upload:
                     has_upload = True
                 new_images.append(new_image)
             inputs[IMAGES] = new_images
         if sketch_image_url is not None and sketch_image_url:
-            is_upload, sketch_image_url = check_and_upload_local(
-                model, sketch_image_url, api_key)
+            is_upload, sketch_image_url, upload_certificate = check_and_upload_local(
+                model, sketch_image_url, api_key, upload_certificate)
             if is_upload:
                 has_upload = True
             inputs['sketch_image_url'] = sketch_image_url
         if ref_img is not None and ref_img:
-            is_upload, ref_img = check_and_upload_local(
-                model, ref_img, api_key)
+            is_upload, ref_img, upload_certificate = check_and_upload_local(
+                model, ref_img, api_key, upload_certificate)
             if is_upload:
                 has_upload = True
             inputs['ref_img'] = ref_img
@@ -164,15 +166,15 @@ class ImageSynthesis(BaseAsyncApi):
             inputs['function'] = function
 
         if mask_image_url is not None and mask_image_url:
-            is_upload, res_mask_image_url = check_and_upload_local(
-                model, mask_image_url, api_key)
+            is_upload, res_mask_image_url, upload_certificate = check_and_upload_local(
+                model, mask_image_url, api_key, upload_certificate)
             if is_upload:
                 has_upload = True
             inputs['mask_image_url'] = res_mask_image_url
 
         if base_image_url is not None and base_image_url:
-            is_upload, res_base_image_url = check_and_upload_local(
-                model, base_image_url, api_key)
+            is_upload, res_base_image_url, upload_certificate = check_and_upload_local(
+                model, base_image_url, api_key, upload_certificate)
             if is_upload:
                 has_upload = True
             inputs['base_image_url'] = res_base_image_url

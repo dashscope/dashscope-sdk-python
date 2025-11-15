@@ -35,7 +35,8 @@ class OssUtils(GetMixin):
                model: str,
                file_path: str,
                api_key: str = None,
-               **kwargs) -> DashScopeAPIResponse:
+               upload_certificate: dict = None,
+               **kwargs):
         """Upload file for model fine-tune or other tasks.
 
         Args:
@@ -43,16 +44,24 @@ class OssUtils(GetMixin):
             purpose (str): The purpose of the file[fine-tune|inference]
             description (str, optional): The file description message.
             api_key (str, optional): The api key. Defaults to None.
+            upload_certificate (dict, optional): Reusable upload
+                certificate. Defaults to None.
 
         Returns:
-            DashScopeAPIResponse: The upload information
+            tuple: (file_url, upload_certificate) where file_url is the
+                OSS URL and upload_certificate is the certificate used
         """
-        upload_info = cls.get_upload_certificate(model=model, api_key=api_key, **kwargs)
-        if upload_info.status_code != HTTPStatus.OK:
-            raise UploadFileException(
-                'Get upload certificate failed, code: %s, message: %s' %
-                (upload_info.code, upload_info.message))
-        upload_info = upload_info.output
+        if upload_certificate is None:
+            upload_info = cls.get_upload_certificate(model=model,
+                                                     api_key=api_key,
+                                                     **kwargs)
+            if upload_info.status_code != HTTPStatus.OK:
+                raise UploadFileException(
+                    'Get upload certificate failed, code: %s, message: %s' %
+                    (upload_info.code, upload_info.message))
+            upload_info = upload_info.output
+        else:
+            upload_info = upload_certificate
         headers = {}
         headers = {'user-agent': get_user_agent()}
         headers['Accept'] = 'application/json'
@@ -77,7 +86,7 @@ class OssUtils(GetMixin):
                                     headers=headers,
                                     timeout=3600)
             if response.status_code == HTTPStatus.OK:
-                return 'oss://' + form_data['key']
+                return 'oss://' + form_data['key'], upload_info
             else:
                 msg = (
                     'Uploading file: %s to oss failed, error: %s' %
@@ -103,7 +112,8 @@ class OssUtils(GetMixin):
         return super().get(None, api_key, params=params, **kwargs)
 
 
-def upload_file(model: str, upload_path: str, api_key: str):
+def upload_file(model: str, upload_path: str, api_key: str,
+                upload_certificate: dict = None):
     if upload_path.startswith(FILE_PATH_SCHEMA):
         parse_result = urlparse(upload_path)
         if parse_result.netloc:
@@ -111,9 +121,10 @@ def upload_file(model: str, upload_path: str, api_key: str):
         else:
             file_path = unquote_plus(parse_result.path)
         if os.path.exists(file_path):
-            file_url = OssUtils.upload(model=model,
-                                       file_path=file_path,
-                                       api_key=api_key)
+            file_url, _ = OssUtils.upload(model=model,
+                                          file_path=file_path,
+                                          api_key=api_key,
+                                          upload_certificate=upload_certificate)
             if file_url is None:
                 raise UploadFileException('Uploading file: %s failed' %
                                           upload_path)
@@ -123,20 +134,26 @@ def upload_file(model: str, upload_path: str, api_key: str):
     return None
 
 
-def check_and_upload_local(model: str, content: str, api_key: str):
+def check_and_upload_local(model: str, content: str, api_key: str,
+                           upload_certificate: dict = None):
     """Check the content is local file path, upload and return the url
 
     Args:
         model (str): Which model to upload.
         content (str): The content.
         api_key (_type_): The api key.
+        upload_certificate (dict, optional): Reusable upload certificate.
+            Defaults to None.
 
     Raises:
         UploadFileException: Upload failed.
         InvalidInput: The input is invalid
 
     Returns:
-        _type_: if upload return True and file_url otherwise False, origin content.
+        tuple: (is_upload, file_url_or_content, upload_certificate)
+            where is_upload indicates if file was uploaded, file_url_or_content
+            is the result URL or original content, and upload_certificate
+            is the certificate (newly obtained or passed in)
     """
     if content.startswith(FILE_PATH_SCHEMA):
         parse_result = urlparse(content)
@@ -145,32 +162,50 @@ def check_and_upload_local(model: str, content: str, api_key: str):
         else:
             file_path = unquote_plus(parse_result.path)
         if os.path.isfile(file_path):
-            file_url = OssUtils.upload(model=model,
-                                       file_path=file_path,
-                                       api_key=api_key)
+            file_url, cert = OssUtils.upload(model=model,
+                                             file_path=file_path,
+                                             api_key=api_key,
+                                             upload_certificate=upload_certificate)
             if file_url is None:
                 raise UploadFileException('Uploading file: %s failed' %
                                           content)
-            return True, file_url
+            return True, file_url, cert
         else:
             raise InvalidInput('The file: %s is not exists!' % file_path)
     elif content.startswith('oss://'):
-        return True, content
+        return True, content, upload_certificate
     elif not content.startswith('http'):
         content = os.path.expanduser(content)
         if os.path.isfile(content):
-            file_url = OssUtils.upload(model=model,
-                                       file_path=content,
-                                       api_key=api_key)
+            file_url, cert = OssUtils.upload(model=model,
+                                            file_path=content,
+                                            api_key=api_key,
+                                            upload_certificate=upload_certificate)
             if file_url is None:
                 raise UploadFileException('Uploading file: %s failed' %
                                           content)
-            return True, file_url
-    return False, content
+            return True, file_url, cert
+    return False, content, upload_certificate
 
 
-def check_and_upload(model, elem: dict, api_key):
+def check_and_upload(model, elem: dict, api_key,
+                     upload_certificate: dict = None):
+    """Check and upload files in element.
+
+    Args:
+        model: Model name
+        elem: Element dict containing file references
+        api_key: API key
+        upload_certificate: Optional upload certificate to reuse
+
+    Returns:
+        tuple: (has_upload, upload_certificate) where has_upload is bool
+            indicating if any file was uploaded, and upload_certificate
+            is the certificate (newly obtained or passed in)
+    """
     has_upload = False
+    obtained_certificate = upload_certificate
+
     for key, content in elem.items():
         # support video:[images] for qwen2-vl
         is_list = isinstance(content, list)
@@ -178,16 +213,31 @@ def check_and_upload(model, elem: dict, api_key):
 
         if key in ['image', 'video', 'audio', 'text']:
             for i, content in enumerate(contents):
-                is_upload, file_url = check_and_upload_local(
-                    model, content, api_key)
+                is_upload, file_url, obtained_certificate = check_and_upload_local(
+                    model, content, api_key, obtained_certificate)
                 if is_upload:
                     contents[i] = file_url
                     has_upload = True
         elem[key] = contents if is_list else contents[0]
 
-    return has_upload
+    return has_upload, obtained_certificate
 
 
-def preprocess_message_element(model: str, elem: dict, api_key: str):
-    is_upload = check_and_upload(model, elem, api_key)
-    return is_upload
+def preprocess_message_element(model: str, elem: dict, api_key: str,
+                                upload_certificate: dict = None):
+    """Preprocess message element and upload files if needed.
+
+    Args:
+        model: Model name
+        elem: Element dict containing file references
+        api_key: API key
+        upload_certificate: Optional upload certificate to reuse
+
+    Returns:
+        tuple: (is_upload, upload_certificate) where is_upload is bool
+            indicating if any file was uploaded, and upload_certificate
+            is the certificate (newly obtained or passed in)
+    """
+    is_upload, cert = check_and_upload(model, elem, api_key,
+                                       upload_certificate)
+    return is_upload, cert
