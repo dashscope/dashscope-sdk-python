@@ -754,7 +754,7 @@ class SpeechSynthesizerObjectPool:
         while True:
             objects_need_to_connect = []
             objects_need_to_renew = []
-            print('scanning queue borr: {}/{} remain: {}/{}'.format(
+            logger.debug('scanning queue borr: {}/{} remain: {}/{}'.format(
                 self._borrowed_object_num, self._pool_size,
                 self._remain_object_num, self._pool_size))
             with self._lock:
