@@ -35,7 +35,13 @@ class TranslationParams:
     """
     TranslationParams
     """
+
+    @dataclass
+    class Corpus:
+        phrases: dict = field(default=None)
+
     language: str = field(default=None)
+    corpus: Corpus = field(default=None)
 
 
 @dataclass
@@ -262,8 +268,13 @@ class OmniRealtimeConversation:
             self.config['turn_detection'] = None
         if translation_params is not None:
             self.config['translation'] = {
-                'language': translation_params.language
+                'language': translation_params.language,
             }
+            if translation_params.corpus is not None:
+                if hasattr(translation_params.corpus, 'phrases') and translation_params.corpus.phrases is not None:
+                    self.config['translation']['corpus'] = {
+                        'phrases': translation_params.corpus.phrases
+                    }
         if transcription_params is not None:
             self.config['language'] = transcription_params.language
             if transcription_params.corpus is not None:
