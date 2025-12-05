@@ -95,6 +95,7 @@ class OmniRealtimeConversation:
         headers=None,
         workspace=None,
         url=None,
+        api_key: str = None,
         additional_params=None,
     ):
         """
@@ -124,7 +125,7 @@ class OmniRealtimeConversation:
         else:
             url = f'{url}?model={model}'
         self.url = url
-        self.apikey = dashscope.api_key
+        self.apikey = api_key or dashscope.api_key
         self.user_headers = headers
         self.user_workspace = workspace
         self.model = model
@@ -277,7 +278,8 @@ class OmniRealtimeConversation:
                     }
         if transcription_params is not None:
             self.config['input_audio_transcription'] = {}
-            self.config['input_audio_transcription'].update({'language': transcription_params.language})
+            if transcription_params.language is not None:
+                self.config['input_audio_transcription'].update({'language': transcription_params.language})
             if transcription_params.corpus_text is not None:
                 transcription_params.corpus = {
                     "text": transcription_params.corpus_text
