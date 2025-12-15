@@ -5,7 +5,7 @@ import platform
 import threading
 import time
 from dataclasses import field, dataclass
-from typing import List, Any
+from typing import List, Any, Dict
 import uuid
 from enum import Enum, unique
 
@@ -38,7 +38,7 @@ class TranslationParams:
 
     @dataclass
     class Corpus:
-        phrases: dict[str, Any] = field(default=None)
+        phrases: Dict[str, Any] = field(default=None)
 
     language: str = field(default=None)
     corpus: Corpus = field(default=None)
@@ -52,7 +52,7 @@ class TranscriptionParams:
     language: str = field(default=None)
     sample_rate: int = field(default=16000)
     input_audio_format: str = field(default="pcm")
-    corpus: dict = field(default=None)
+    corpus: Dict[str, Any] = field(default=None)
     corpus_text: str = field(default=None)
 
 
