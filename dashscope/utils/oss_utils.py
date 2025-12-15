@@ -5,7 +5,6 @@ import os
 from datetime import datetime
 from http import HTTPStatus
 from time import mktime
-from typing import List
 from urllib.parse import unquote_plus, urlparse
 from wsgiref.handlers import format_date_time
 
@@ -156,11 +155,8 @@ def check_and_upload_local(model: str, content: str, api_key: str,
             is the certificate (newly obtained or passed in)
     """
     if content.startswith(FILE_PATH_SCHEMA):
-        parse_result = urlparse(content)
-        if parse_result.netloc:
-            file_path = parse_result.netloc + unquote_plus(parse_result.path)
-        else:
-            file_path = unquote_plus(parse_result.path)
+        # 直接去掉 file:// 前缀，剩余即本地路径
+        file_path = content[len(FILE_PATH_SCHEMA):]
         if os.path.isfile(file_path):
             file_url, cert = OssUtils.upload(model=model,
                                              file_path=file_path,
