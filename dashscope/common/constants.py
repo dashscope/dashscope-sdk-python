@@ -25,6 +25,7 @@ NEGATIVE_PROMPT = 'negative_prompt'
 HISTORY = 'history'
 CUSTOMIZED_MODEL_ID = 'customized_model_id'
 IMAGES = 'images'
+REFERENCE_VIDEO_URLS = 'reference_video_urls'
 TEXT_EMBEDDING_INPUT_KEY = 'texts'
 SERVICE_503_MESSAGE = 'Service temporarily unavailable, possibly overloaded or not ready.'  # noqa E501
 WEBSOCKET_ERROR_CODE = 44

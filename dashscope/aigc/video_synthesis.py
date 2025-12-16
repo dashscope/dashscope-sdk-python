@@ -1,11 +1,11 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
-from typing import Any, Dict, Union
+from typing import Any, Dict, Union, List
 
 from dashscope.api_entities.dashscope_response import (DashScopeAPIResponse,
                                                        VideoSynthesisResponse)
 from dashscope.client.base_api import BaseAsyncApi, BaseAsyncAioApi
-from dashscope.common.constants import PROMPT
+from dashscope.common.constants import PROMPT, REFERENCE_VIDEO_URLS
 from dashscope.common.utils import _get_task_group_and_task
 from dashscope.utils.oss_utils import check_and_upload_local
 
@@ -39,6 +39,8 @@ class VideoSynthesis(BaseAsyncApi):
              template: str = None,
              img_url: str = None,
              audio_url: str = None,
+             reference_video_urls: List[str] = None,
+             reference_video_description: List[str] = None,
              api_key: str = None,
              extra_input: Dict = None,
              workspace: str = None,
@@ -58,6 +60,8 @@ class VideoSynthesis(BaseAsyncApi):
             template (str): LoRa input, such as gufeng, katong, etc.
             img_url (str): The input image url, Generate the URL of the image referenced by the video.
             audio_url (str): The input audio url
+            reference_video_urls (List[str]): list of character reference video file urls uploaded by the user
+            reference_video_description (List[str]): For the description information of the picture and sound of the reference video, corresponding to ref video, it needs to be in the order of the url. If the quantity is different, an error will be reported
             api_key (str, optional): The api api_key. Defaults to None.
             workspace (str): The dashscope workspace id.
             extra_input (Dict): The extra input parameters.
@@ -98,6 +102,8 @@ class VideoSynthesis(BaseAsyncApi):
                    prompt: Any = None,
                    img_url: str = None,
                    audio_url: str = None,
+                   reference_video_urls: List[str] = None,
+                   reference_video_description: List[str] = None,
                    # """@deprecated, use prompt_extend in parameters """
                    extend_prompt: bool = True,
                    negative_prompt: str = None,
@@ -119,6 +125,8 @@ class VideoSynthesis(BaseAsyncApi):
             inputs['template'] = template
         if function:
             inputs['function'] = function
+        if reference_video_description:
+            inputs['reference_video_description'] = reference_video_description
 
         has_upload = False
         upload_certificate = None
@@ -165,6 +173,17 @@ class VideoSynthesis(BaseAsyncApi):
                 has_upload = True
             inputs['last_frame_url'] = res_last_frame_url
 
+        if (reference_video_urls is not None
+                and reference_video_urls and len(reference_video_urls) > 0):
+            new_images = []
+            for image in reference_video_urls:
+                is_upload, new_image, upload_certificate = check_and_upload_local(
+                    model, image, api_key, upload_certificate)
+                if is_upload:
+                    has_upload = True
+                new_images.append(new_image)
+            inputs[REFERENCE_VIDEO_URLS] = new_images
+
         if extra_input is not None and extra_input:
             inputs = {**inputs, **extra_input}
         if has_upload:
@@ -185,6 +204,8 @@ class VideoSynthesis(BaseAsyncApi):
                    prompt: Any = None,
                    img_url: str = None,
                    audio_url: str = None,
+                   reference_video_urls: List[str] = None,
+                   reference_video_description: List[str] = None,
                    # """@deprecated, use prompt_extend in parameters """
                    extend_prompt: bool = True,
                    negative_prompt: str = None,
@@ -208,6 +229,8 @@ class VideoSynthesis(BaseAsyncApi):
             template (str): LoRa input, such as gufeng, katong, etc.
             img_url (str): The input image url, Generate the URL of the image referenced by the video.
             audio_url (str): The input audio url.
+            reference_video_urls (List[str]): list of character reference video file urls uploaded by the user
+            reference_video_description (List[str]): For the description information of the picture and sound of the reference video, corresponding to ref video, it needs to be in the order of the url. If the quantity is different, an error will be reported
             api_key (str, optional): The api api_key. Defaults to None.
             workspace (str): The dashscope workspace id.
             extra_input (Dict): The extra input parameters.
@@ -229,7 +252,8 @@ class VideoSynthesis(BaseAsyncApi):
         task_group, function = _get_task_group_and_task(__name__)
 
         inputs, kwargs, task = cls._get_input(
-            model, prompt, img_url, audio_url, extend_prompt, negative_prompt, template, api_key,
+            model, prompt, img_url, audio_url, reference_video_urls, reference_video_description,
+            extend_prompt, negative_prompt, template, api_key,
             extra_input, task, function, head_frame, tail_frame,
             first_frame_url, last_frame_url, **kwargs)
 
@@ -354,6 +378,8 @@ class AioVideoSynthesis(BaseAsyncAioApi):
                    prompt: Any = None,
                    img_url: str = None,
                    audio_url: str = None,
+                   reference_video_urls: List[str] = None,
+                   reference_video_description: List[str] = None,
                    # """@deprecated, use prompt_extend in parameters """
                    extend_prompt: bool = True,
                    negative_prompt: str = None,
@@ -377,6 +403,8 @@ class AioVideoSynthesis(BaseAsyncAioApi):
             template (str): LoRa input, such as gufeng, katong, etc.
             img_url (str): The input image url, Generate the URL of the image referenced by the video.
             audio_url (str): The input audio url.
+            reference_video_urls (List[str]): list of character reference video file urls uploaded by the user
+            reference_video_description (List[str]): For the description information of the picture and sound of the reference video, corresponding to ref video, it needs to be in the order of the url. If the quantity is different, an error will be reported
             api_key (str, optional): The api api_key. Defaults to None.
             workspace (str): The dashscope workspace id.
             extra_input (Dict): The extra input parameters.
@@ -396,7 +424,8 @@ class AioVideoSynthesis(BaseAsyncAioApi):
         """
         task_group, f = _get_task_group_and_task(__name__)
         inputs, kwargs, task = VideoSynthesis._get_input(
-            model, prompt, img_url, audio_url, extend_prompt, negative_prompt, template, api_key,
+            model, prompt, img_url, audio_url, reference_video_urls, reference_video_description,
+            extend_prompt, negative_prompt, template, api_key,
             extra_input, task, f, head_frame, tail_frame,
             first_frame_url, last_frame_url, **kwargs)
         response = await super().call(model, inputs, task_group, task, f, api_key, workspace, **kwargs)
@@ -408,6 +437,8 @@ class AioVideoSynthesis(BaseAsyncAioApi):
                    prompt: Any = None,
                    img_url: str = None,
                    audio_url: str = None,
+                   reference_video_urls: List[str] = None,
+                   reference_video_description: List[str] = None,
                    # """@deprecated, use prompt_extend in parameters """
                    extend_prompt: bool = True,
                    negative_prompt: str = None,
@@ -431,6 +462,8 @@ class AioVideoSynthesis(BaseAsyncAioApi):
             template (str): LoRa input, such as gufeng, katong, etc.
             img_url (str): The input image url, Generate the URL of the image referenced by the video.
             audio_url (str): The input audio url.
+            reference_video_urls (List[str]): list of character reference video file urls uploaded by the user
+            reference_video_description (List[str]): For the description information of the picture and sound of the reference video, corresponding to ref video, it needs to be in the order of the url. If the quantity is different, an error will be reported
             api_key (str, optional): The api api_key. Defaults to None.
             workspace (str): The dashscope workspace id.
             extra_input (Dict): The extra input parameters.
@@ -452,7 +485,8 @@ class AioVideoSynthesis(BaseAsyncAioApi):
         task_group, function = _get_task_group_and_task(__name__)
 
         inputs, kwargs, task = VideoSynthesis._get_input(
-            model, prompt, img_url, audio_url, extend_prompt, negative_prompt, template, api_key,
+            model, prompt, img_url, audio_url, reference_video_urls, reference_video_description,
+            extend_prompt, negative_prompt, template, api_key,
             extra_input, task, function, head_frame, tail_frame,
             first_frame_url, last_frame_url, **kwargs)
 
