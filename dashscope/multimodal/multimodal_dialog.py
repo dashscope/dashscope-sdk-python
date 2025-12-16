@@ -201,17 +201,18 @@ class MultiModalDialog:
     # def _on_pong(self, _):
     #     _log.debug("on pong")
 
-    def start(self, dialog_id, enable_voice_detection=False):
+    def start(self, dialog_id, enable_voice_detection=False, task_id=None):
         """
         初始化WebSocket连接并发送启动请求
         :param dialog_id: 上下位继承标志位。新对话无需设置。
                如果继承之前的对话历史，则需要记录之前的dialog_id并传入
         :param enable_voice_detection: 是否开启语音检测,可选参数 默认False
+        :param task_id: 百炼请求任务 Id，默认会自动生成。您可以指定此 ID 来跟踪请求。
         """
         self._voice_detection = enable_voice_detection
         self._connect(self.api_key)
         logger.debug("connected with server.")
-        self._send_start_request(dialog_id, self.request_params)
+        self._send_start_request(dialog_id, self.request_params, task_id=task_id)
 
     def start_speech(self):
         """开始上传语音数据"""
@@ -284,7 +285,7 @@ class MultiModalDialog:
 
     """内部方法"""
 
-    def _send_start_request(self, dialog_id: str, request_params: RequestParameters):
+    def _send_start_request(self, dialog_id: str, request_params: RequestParameters, task_id: str = None):
         """发送'Start'请求"""
         _start_json = self.request.generate_start_request(
             workspace_id=self.workspace_id,
@@ -292,13 +293,14 @@ class MultiModalDialog:
             dialog_id=dialog_id,
             app_id=self.app_id,
             request_params=request_params,
-            model=self.model
+            model=self.model,
+            task_id=task_id
         )
         # send start request
         self._send_text_frame(_start_json)
 
     def _run_forever(self):
-        self.ws.run_forever(ping_interval=5, ping_timeout=4)
+        self.ws.run_forever(ping_interval=10, ping_timeout=10)
 
     def _connect(self, api_key: str):
         """初始化WebSocket连接并发送启动请求。"""
@@ -386,7 +388,8 @@ class _Request:
                                app_id: str,
                                request_params: RequestParameters,
                                model: str = None,
-                               workspace_id: str = None
+                               workspace_id: str = None,
+                               task_id: str = None
                                ) -> str:
         """
         构建语音聊天服务的启动请求数据.
@@ -396,8 +399,10 @@ class _Request:
         :param dialog_id: 对话ID.
         :param workspace_id: 管控台工作空间id, 非必填字段。
         :param model: 模型
+        :param task_id: 百炼请求任务 Id，默认会自动生成。您可以指定此 ID 来跟踪请求。
         :return: 启动请求字典.
         """
+        self.task_id = task_id
         self._get_dash_request_header(ActionType.START)
         self._get_dash_request_payload(direction_name, dialog_id, app_id, workspace_id=workspace_id,
                                        request_params=request_params, model=model)
