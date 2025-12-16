@@ -139,6 +139,8 @@ class OmniRealtimeConversation:
         self.last_first_text_delay = None
         self.last_first_audio_delay = None
         self.metrics = []
+        # 添加用于同步等待连接关闭的事件
+        self.disconnect_event = None
 
     def _generate_event_id(self):
         '''
@@ -296,6 +298,49 @@ class OmniRealtimeConversation:
                 'session': self.config
             }))
 
+    def end_session(self, timeout: int = 20) -> None:
+        """
+        end session
+
+        Parameters:
+        -----------
+        timeout: int
+            Timeout in seconds to wait for the session to end. Default is 20 seconds.
+        """
+        if self.disconnect_event is not None:
+            # if the event is already set, do nothing
+            return
+
+        # create the event
+        self.disconnect_event = threading.Event()
+
+        self.__send_str(
+            json.dumps({
+                'event_id': self._generate_event_id(),
+                'type': 'session.finish'
+            }))
+
+        # wait for the event to be set
+        finish_success = self.disconnect_event.wait(timeout)
+        # clear the event
+        self.disconnect_event = None
+
+        # if the event is not set, close the connection
+        if not finish_success:
+            self.close()
+            raise TimeoutError("Session end timeout after {} seconds".format(timeout))
+
+    def end_session_async(self, ) -> None:
+        """
+        end session asynchronously. you need close the connection manually
+        """
+        # 发送结束会话消息
+        self.__send_str(
+            json.dumps({
+                'event_id': self._generate_event_id(),
+                'type': 'session.finish'
+            }))
+
     def append_audio(self, audio_b64: str) -> None:
         '''
         send audio in base64 format
@@ -414,7 +459,13 @@ class OmniRealtimeConversation:
                 self.callback.on_event(json_data)
                 if 'type' in message:
                     if 'session.created' == json_data['type']:
+                        logger.info('[omni realtime] session created')
                         self.session_id = json_data['session']['id']
+                    elif 'session.finished' == json_data['type']:
+                        # wait for the event to be set
+                        logger.info('[omni realtime] session finished')
+                        if self.disconnect_event is not None:
+                            self.disconnect_event.set()
                     if 'response.created' == json_data['type']:
                         self.last_response_id = json_data['response']['id']
                         self.last_response_create_time = time.time() * 1000
