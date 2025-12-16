@@ -4,7 +4,7 @@ import os
 
 prompt = "一只小猫在月光下奔跑"
 audio_url = 'https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250925/ozwpvi/rap.mp3'
-reference_video_urls = ["https://test-data-center.oss-accelerate.aliyuncs.com/wanx/video/resources/with_human_voice_11s.mov","https://test-data-center.oss-accelerate.aliyuncs.com/wanx/video/resources/with_human_voice_30s.avi"]
+reference_video_urls = ["https://test-data-center.oss-accelerate.aliyuncs.com/wanx/video/resources/with_human_voice_11s.mov"]
 api_key = os.getenv("DASHSCOPE_API_KEY")
 
 

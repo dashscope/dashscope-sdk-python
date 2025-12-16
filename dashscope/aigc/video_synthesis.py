@@ -83,6 +83,8 @@ class VideoSynthesis(BaseAsyncApi):
                             prompt,
                             img_url=img_url,
                             audio_url=audio_url,
+                            reference_video_urls=reference_video_urls,
+                            reference_video_description=reference_video_description,
                             api_key=api_key,
                             extend_prompt=extend_prompt,
                             negative_prompt=negative_prompt,
@@ -175,14 +177,14 @@ class VideoSynthesis(BaseAsyncApi):
 
         if (reference_video_urls is not None
                 and reference_video_urls and len(reference_video_urls) > 0):
-            new_images = []
-            for image in reference_video_urls:
-                is_upload, new_image, upload_certificate = check_and_upload_local(
-                    model, image, api_key, upload_certificate)
+            new_videos = []
+            for video in reference_video_urls:
+                is_upload, new_video, upload_certificate = check_and_upload_local(
+                    model, video, api_key, upload_certificate)
                 if is_upload:
                     has_upload = True
-                new_images.append(new_image)
-            inputs[REFERENCE_VIDEO_URLS] = new_images
+                new_videos.append(new_video)
+            inputs[REFERENCE_VIDEO_URLS] = new_videos
 
         if extra_input is not None and extra_input:
             inputs = {**inputs, **extra_input}
