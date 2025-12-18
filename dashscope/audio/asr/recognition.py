@@ -198,10 +198,11 @@ class Recognition(BaseApi):
                     usage: Dict[str, Any] = None
                     usages: List[Any] = None
                     if 'sentence' in part.output:
-                        if (self._first_package_timestamp < 0):
-                            self._first_package_timestamp = time.time() * 1000
-                            logger.debug('first package delay {}'.format(
-                                self.get_first_package_delay()))
+                        if 'text' in part.output['sentence'] and part.output['sentence']['text'] != '':
+                            if (self._first_package_timestamp < 0):
+                                self._first_package_timestamp = time.time() * 1000
+                                logger.debug('first package delay {}'.format(
+                                    self.get_first_package_delay()))
                         sentence = part.output['sentence']
                         if 'heartbeat' in sentence and sentence['heartbeat'] == True:
                             logger.debug('recv heartbeat')
@@ -388,11 +389,12 @@ class Recognition(BaseApi):
             for part in responses:
                 if part.status_code == HTTPStatus.OK:
                     if 'sentence' in part.output:
-                        if (self._first_package_timestamp < 0):
-                            self._first_package_timestamp = time.time() * 1000
-                            logger.debug('first package delay {}'.format(
-                                self._first_package_timestamp -
-                                self._start_stream_timestamp))
+                        if 'text' in part.output['sentence'] and part.output['sentence']['text'] != '':
+                            if (self._first_package_timestamp < 0):
+                                self._first_package_timestamp = time.time() * 1000
+                                logger.debug('first package delay {}'.format(
+                                    self._first_package_timestamp -
+                                    self._start_stream_timestamp))
                         sentence = part.output['sentence']
                         logger.debug(
                             'Recv Result [rid:{}]:{}, isEnd: {}'.format(
