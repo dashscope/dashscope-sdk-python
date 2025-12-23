@@ -165,6 +165,7 @@ class QwenTtsRealtime:
                        pitch_rate: float = None,
                        bit_rate: int = None,
                        language_type: str = None,
+                       enable_tn: bool = False,
                        **kwargs) -> None:
         '''
         update session configuration, should be used before create response
@@ -191,6 +192,8 @@ class QwenTtsRealtime:
             pitch_rate for tts, range [0.5~2.0] default is 1.0
         bit_rate: int
             bit_rate for tts, support 6~510,default is 128kbps. only work on format: opus/mp3
+        enable_tn: bool
+            enable text normalization for tts, default is FALSE
         '''
         self.config = {
             'voice': voice,
@@ -210,6 +213,8 @@ class QwenTtsRealtime:
             self.config['pitch_rate'] = pitch_rate
         if bit_rate is not None:
             self.config['bit_rate'] = bit_rate
+        if enable_tn:
+            self.config['enable_tn'] = enable_tn
 
         if language_type is not None:
             self.config['language_type'] = language_type
