@@ -182,7 +182,7 @@ class ImageGeneration(BaseApi, BaseAsyncApi):
             workspace (str): The dashscope workspace id.
 
         Returns:
-            GenerationResponse: The response data.
+            DashScopeAPIResponse: The response data.
         """
         return super().cancel(task, api_key, workspace=workspace)
 
@@ -375,7 +375,7 @@ class AioImageGeneration(BaseAioApi, BaseAsyncAioApi):
             else:
                 return cls._stream_responses(response)
         else:
-            return GenerationResponse.from_api_response(response)
+            return ImageGenerationResponse.from_api_response(response)
 
 
     @classmethod
@@ -386,7 +386,7 @@ class AioImageGeneration(BaseAioApi, BaseAsyncAioApi):
         messages: List[Message] = None,
         workspace: str = None,
         **kwargs
-    ) -> Union[ImageGenerationResponse, Generator[ImageGenerationResponse, None, None]]:
+    ) -> Union[ImageGenerationResponse, AsyncGenerator[ImageGenerationResponse, None]]:
         kwargs["is_async"] = True
         return await cls.call(model, api_key, messages, workspace, **kwargs)
 
@@ -447,7 +447,7 @@ class AioImageGeneration(BaseAioApi, BaseAsyncAioApi):
             workspace (str): The dashscope workspace id.
 
         Returns:
-            GenerationResponse: The response data.
+            DashScopeAPIResponse: The response data.
         """
         return await super().cancel(task, api_key, workspace=workspace)
 
