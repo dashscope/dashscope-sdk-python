@@ -119,7 +119,7 @@ class Message(DictMixin):
     role: str
     content: Union[str, List]
 
-    def __init__(self, role: str, content: str = None, **kwargs):
+    def __init__(self, role: str, content: Union[str, List] = None, **kwargs):
         super().__init__(role=role, content=content, **kwargs)
 
     @classmethod
@@ -144,11 +144,11 @@ class Choice(DictMixin):
                  finish_reason: str = None,
                  message: Message = None,
                  **kwargs):
-        msgObject = None
+        msg_object = None
         if message is not None and message:
-            msgObject = Message(**message)
+            msg_object = Message(**message)
         super().__init__(finish_reason=finish_reason,
-                         message=msgObject,
+                         message=msg_object,
                          **kwargs)
 
 
@@ -707,6 +707,76 @@ class TextToSpeechResponse(DashScopeAPIResponse):
                 usage=MultiModalConversationUsage(**usage))
         else:
             return TextToSpeechResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message)
+
+
+@dataclass(init=False)
+class ImageGenerationOutput(DictMixin):
+    choices: List[Choice]
+    audio: Audio
+
+    def __init__(self,
+                 text: str = None,
+                 finish_reason: str = None,
+                 choices: List[Choice] = None,
+                 audio: Audio = None,
+                 **kwargs):
+        chs = None
+        if choices is not None:
+            chs = []
+            for choice in choices:
+                chs.append(Choice(**choice))
+        if audio is not None:
+            audio = Audio(**audio)
+        super().__init__(text=text,
+                         finish_reason=finish_reason,
+                         choices=chs,
+                         audio=audio,
+                         **kwargs)
+
+
+@dataclass(init=False)
+class ImageGenerationUsage(DictMixin):
+    input_tokens: int
+    output_tokens: int
+    characters: int
+
+    # TODO add image usage info.
+
+    def __init__(self,
+                 input_tokens: int = 0,
+                 output_tokens: int = 0,
+                 characters: int = 0,
+                 **kwargs):
+        super().__init__(input_tokens=input_tokens,
+                         output_tokens=output_tokens,
+                         characters=characters,
+                         **kwargs)
+
+@dataclass(init=False)
+class ImageGenerationResponse(DashScopeAPIResponse):
+    output: ImageGenerationOutput
+    usage: ImageGenerationUsage
+
+    @staticmethod
+    def from_api_response(api_response: DashScopeAPIResponse):
+        if api_response.status_code == HTTPStatus.OK:
+            usage = {}
+            if api_response.usage:
+                usage = api_response.usage
+
+            return ImageGenerationResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+                output=ImageGenerationOutput(**api_response.output),
+                usage=ImageGenerationUsage(**usage))
+        else:
+            return ImageGenerationResponse(
                 status_code=api_response.status_code,
                 request_id=api_response.request_id,
                 code=api_response.code,
