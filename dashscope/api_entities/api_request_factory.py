@@ -18,7 +18,7 @@ def _get_protocol_params(kwargs):
     ws_stream_mode = kwargs.pop('ws_stream_mode', WebsocketStreamingMode.OUT)
     is_binary_input = kwargs.pop('is_binary_input', False)
     http_method = kwargs.pop('http_method', HTTPMethod.POST)
-    stream = kwargs.pop('stream', False)
+    stream = kwargs.get('stream', False)
     if not stream and ws_stream_mode == WebsocketStreamingMode.OUT:
         ws_stream_mode = WebsocketStreamingMode.NONE
 
