@@ -300,7 +300,7 @@ class MultiModalDialog:
         self._send_text_frame(_start_json)
 
     def _run_forever(self):
-        self.ws.run_forever(ping_interval=10, ping_timeout=10)
+        self.ws.run_forever(ping_interval=20, ping_timeout=10)
 
     def _connect(self, api_key: str):
         """初始化WebSocket连接并发送启动请求。"""
