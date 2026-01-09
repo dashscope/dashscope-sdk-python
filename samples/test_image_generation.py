@@ -88,3 +88,26 @@ if __name__ == '__main__':
     res = ImageGeneration.list()
     print("-----------async-task-list-res-----------")
     print(res)
+
+    print("-" * 100)
+
+    image_message = Message(
+        role=Role.USER,
+        # 支持本地文件 如 "image": "file://umbrella1.png"
+        content=[
+            {
+                "text": "给我一个3张图辣椒炒肉教程"
+            }
+        ]
+    )
+
+    image_stream_res = ImageGeneration.call(
+        model=image_model,
+        messages=[image_message],
+        stream=True,
+        enable_interleave=True,
+        max_images=3
+    )
+    print("-----------sync-image-stream-call-res-----------")
+    for stream_res in image_stream_res:
+        print(stream_res)
