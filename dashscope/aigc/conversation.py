@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import json
@@ -5,8 +6,11 @@ from copy import deepcopy
 from http import HTTPStatus
 from typing import Any, Dict, Generator, List, Union
 
-from dashscope.api_entities.dashscope_response import (ConversationResponse,
-                                                       Message, Role)
+from dashscope.api_entities.dashscope_response import (
+    ConversationResponse,
+    Message,
+    Role,
+)
 from dashscope.client.base_api import BaseApi
 from dashscope.common.constants import DEPRECATED_MESSAGE, HISTORY, PROMPT
 from dashscope.common.error import InputRequired, InvalidInput, ModelRequired
@@ -15,9 +19,8 @@ from dashscope.common.utils import _get_task_group_and_task
 
 
 class HistoryItem(dict):
-    """A conversation history item.
+    """A conversation history item."""
 
-    """
     def __init__(self, role: str, text: str = None, **kwargs):
         """Init a history item.
 
@@ -33,7 +36,7 @@ class HistoryItem(dict):
         self.role = role
         dict.__init__(self, {role: []})
         if text is not None:
-            self[self.role].append({'text': text})
+            self[self.role].append({"text": text})
         for k, v in kwargs.items():
             self[self.role].append({k: v})
 
@@ -48,9 +51,8 @@ class HistoryItem(dict):
 
 
 class History(list):
-    """Manage the conversation history.
+    """Manage the conversation history."""
 
-    """
     def __init__(self, items: List[HistoryItem] = None):
         """Init a history with list of HistoryItems.
 
@@ -66,43 +68,55 @@ class History(list):
 
 
 def _history_to_qwen_format(history: History, n_history: int):
-    """Convert history to simple format.
-       [{"user":"您好", "bot":"我是你的助手，很高兴为您服务"},
-        {"user":"user input", "bot":"bot output"}]
+    """Convert history to Qwen-compatible simple format.
+
+    Transforms conversation history into a simplified format where each
+    entry contains user and bot messages as key-value pairs.
+
+    Args:
+        history: The conversation history to convert.
+        n_history: Number of recent history items to include.
+                   -1 means include all history.
+
+    Returns:
+        list: Simplified history in format:
+              [{"user":"您好", "bot":"我是你的助手，很高兴为您服务"},
+               {"user":"user input", "bot":"bot output"}]
     """
     simple_history = []
     user = None
     bot = None
 
     if n_history != -1 and len(history) >= 2 * n_history:
-        history = history[len(history) - 2 * n_history:]
+        history = history[len(history) - 2 * n_history :]
 
     for item in history:
-        if 'user' in item:
-            user = item['user'][0]['text']
-        if 'bot' in item:
-            bot = item['bot'][0]['text']
+        if "user" in item:
+            user = item["user"][0]["text"]
+        if "bot" in item:
+            bot = item["bot"][0]["text"]
         if user is not None and bot is not None:
-            simple_history.append({'user': user, 'bot': bot})
+            simple_history.append({"user": user, "bot": bot})
             user = None
             bot = None
     return simple_history
 
 
 class Conversation(BaseApi):
-    """Conversational robot interface.
-    """
-    task = 'generation'
+    """Conversational robot interface."""
+
+    task = "generation"
 
     class Models:
         """@deprecated, use qwen_turbo instead"""
-        qwen_v1 = 'qwen-v1'
-        """@deprecated, use qwen_plus instead"""
-        qwen_plus_v1 = 'qwen-plus-v1'
 
-        qwen_turbo = 'qwen-turbo'
-        qwen_plus = 'qwen-plus'
-        qwen_max = 'qwen-max'
+        qwen_v1 = "qwen-v1"
+        """@deprecated, use qwen_plus instead"""
+        qwen_plus_v1 = "qwen-plus-v1"
+
+        qwen_turbo = "qwen-turbo"
+        qwen_plus = "qwen-plus"
+        qwen_max = "qwen-max"
 
     def __init__(self, history: History = None) -> None:
         """Init a chat.
@@ -117,9 +131,10 @@ class Conversation(BaseApi):
             self.history = History()
         else:
             logger.warning(DEPRECATED_MESSAGE)
-            self.history = history
+            self.history = history  # type: ignore[has-type]
 
-    def call(
+    # pylint: disable=arguments-renamed
+    def call(  # type: ignore[override]
         self,
         model: str,
         prompt: Any = None,
@@ -130,10 +145,24 @@ class Conversation(BaseApi):
         messages: List[Message] = None,
         plugins: Union[str, Dict[str, Any]] = None,
         workspace: str = None,
-        **kwargs
-    ) -> Union[ConversationResponse, Generator[ConversationResponse, None,
-                                               None]]:
+        **kwargs,
+    ) -> Union[
+        ConversationResponse,
+        Generator[
+            ConversationResponse,
+            None,
+            None,
+        ],
+    ]:
         """Call conversational robot generator a response.
+
+        Note: This method overrides BaseApi.call() as an instance method
+        instead of a classmethod because Conversation maintains instance
+        state (self.history). Pylint's arguments-renamed warning is
+        disabled because the first parameter changes from 'cls' (in the
+        classmethod) to 'self' (in the instance method). The type
+        checker is instructed to ignore the signature incompatibility
+        via type: ignore[override].
 
         Args:
             model (str): The request model.
@@ -157,7 +186,7 @@ class Conversation(BaseApi):
             plugins (Any): The plugin config, Can be plugins config str, or dict.
             **kwargs(qwen-turbo, qwen-plus):
                 stream(bool, `optional`): Enable server-sent events
-                    (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501
+                    (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501  # pylint: disable=line-too-long
                     the result will back partially.
                 temperature(float, `optional`): Used to control the degree
                     of randomness and diversity. Specifically, the temperature
@@ -175,8 +204,8 @@ class Conversation(BaseApi):
                     tokens with top_p probability mass. So 0.1 means only
                     the tokens comprising the top 10% probability mass are
                     considered.
-                top_k(int, `optional`): The size of the sample candidate set when generated.  # noqa E501
-                    For example, when the value is 50, only the 50 highest-scoring tokens  # noqa E501
+                top_k(int, `optional`): The size of the sample candidate set when generated.  # noqa E501  # pylint: disable=line-too-long
+                    For example, when the value is 50, only the 50 highest-scoring tokens  # noqa E501  # pylint: disable=line-too-long
                     in a single generation form a randomly sampled candidate set. # noqa E501
                     The larger the value, the higher the randomness generated;  # noqa E501
                     the smaller the value, the higher the certainty generated. # noqa E501
@@ -191,20 +220,20 @@ class Conversation(BaseApi):
                     large model product, support model: [bailian-v1].
                 result_format(str, `optional`): [message|text] Set result result format. # noqa E501
                     Default result is text
-                incremental_output(bool, `optional`): Used to control the streaming output mode. # noqa E501
-                    If true, the subsequent output will include the previously input content. # noqa E501
-                    Otherwise, the subsequent output will not include the previously output # noqa E501
+                incremental_output(bool, `optional`): Used to control the streaming output mode. # noqa E501  # pylint: disable=line-too-long
+                    If true, the subsequent output will include the previously input content. # noqa E501  # pylint: disable=line-too-long
+                    Otherwise, the subsequent output will not include the previously output # noqa E501  # pylint: disable=line-too-long
                     content. Default false.
-                stop(list[str] or list[list[int]], `optional`): Used to control the generation to stop  # noqa E501
-                    when encountering setting str or token ids, the result will not include # noqa E501
+                stop(list[str] or list[list[int]], `optional`): Used to control the generation to stop  # noqa E501  # pylint: disable=line-too-long
+                    when encountering setting str or token ids, the result will not include # noqa E501  # pylint: disable=line-too-long
                     stop words or tokens.
-                max_tokens(int, `optional`): The maximum token num expected to be output. It should be # noqa E501
-                    noted that the length generated by the model will only be less than max_tokens,  # noqa E501
-                    not necessarily equal to it. If max_tokens is set too large, the service will # noqa E501
+                max_tokens(int, `optional`): The maximum token num expected to be output. It should be # noqa E501  # pylint: disable=line-too-long
+                    noted that the length generated by the model will only be less than max_tokens,  # noqa E501  # pylint: disable=line-too-long
+                    not necessarily equal to it. If max_tokens is set too large, the service will # noqa E501  # pylint: disable=line-too-long
                     directly prompt that the length exceeds the limit. It is generally # noqa E501
                     not recommended to set this value.
-                repetition_penalty(float, `optional`): Used to control the repeatability when generating models.  # noqa E501
-                    Increasing repetition_penalty can reduce the duplication of model generation.  # noqa E501
+                repetition_penalty(float, `optional`): Used to control the repeatability when generating models.  # noqa E501  # pylint: disable=line-too-long
+                    Increasing repetition_penalty can reduce the duplication of model generation.  # noqa E501  # pylint: disable=line-too-long
                     1.0 means no punishment.
             workspace (str): The dashscope workspace id.
         Raises:
@@ -217,98 +246,165 @@ class Conversation(BaseApi):
             stream is True, return Generator, otherwise ConversationResponse.
 
         """
-        if ((prompt is None or not prompt)
-                and ((messages is None or not messages))):
-            raise InputRequired('prompt or messages is required!')
+        if (prompt is None or not prompt) and (
+            (messages is None or not messages)
+        ):
+            raise InputRequired("prompt or messages is required!")
         if model is None or not model:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         task_group, _ = _get_task_group_and_task(__name__)
         if plugins is not None:
-            headers = kwargs.pop('headers', {})
+            headers = kwargs.pop("headers", {})
             if isinstance(plugins, str):
-                headers['X-DashScope-Plugin'] = plugins
+                headers["X-DashScope-Plugin"] = plugins
             else:
-                headers['X-DashScope-Plugin'] = json.dumps(plugins)
-            kwargs['headers'] = headers
-        input, parameters = self._build_input_parameters(
-            model, prompt, history, auto_history, n_history, messages,
-            **kwargs)
-        response = super().call(model=model,
-                                task_group=task_group,
-                                task='text-generation',
-                                function='generation',
-                                api_key=api_key,
-                                input=input,
-                                workspace=workspace,
-                                **parameters)
-        is_stream = kwargs.get('stream', False)
+                headers["X-DashScope-Plugin"] = json.dumps(plugins)
+            kwargs["headers"] = headers
+        (
+            input,  # pylint: disable=redefined-builtin
+            parameters,
+        ) = self._build_input_parameters(
+            model,
+            prompt,
+            history,
+            auto_history,
+            n_history,
+            messages,
+            **kwargs,
+        )
+        response = super().call(
+            model=model,
+            task_group=task_group,
+            task="text-generation",
+            function="generation",
+            api_key=api_key,
+            input=input,
+            workspace=workspace,
+            **parameters,
+        )
+        is_stream = kwargs.get("stream", False)
         return self._handle_response(prompt, response, is_stream)
 
     def _handle_stream_response(self, prompt, responses):
+        """Handle streaming response and update conversation history.
+
+        Args:
+            prompt: The user's input prompt.
+            responses: Generator yielding response chunks.
+
+        Yields:
+            ConversationResponse: Parsed response objects.
+        """
         for rsp in responses:
             rsp = ConversationResponse.from_api_response(rsp)
             yield rsp
-        if rsp.status_code == HTTPStatus.OK and rsp.output.choices is None:
-            user_item = HistoryItem('user', text=prompt)
-            bot_history_item = HistoryItem('bot', text=rsp.output.text)
+        if (
+            # pylint: disable=undefined-loop-variable
+            rsp.status_code == HTTPStatus.OK
+            and rsp.output.choices  # pylint: disable=undefined-loop-variable
+            is None  # pylint: disable=undefined-loop-variable
+        ):  # pylint: disable=undefined-loop-variable
+            user_item = HistoryItem("user", text=prompt)
+            bot_history_item = HistoryItem("bot", text=rsp.output.text)
             self.history.append(user_item)
             self.history.append(bot_history_item)
 
     def _handle_response(self, prompt, response, is_stream):
+        """Handle API response and update conversation history.
+
+        Args:
+            prompt: The user's input prompt.
+            response: The API response or response generator.
+            is_stream: Whether the response is streaming.
+
+        Returns:
+            ConversationResponse or Generator: Parsed response.
+        """
         if is_stream:
-            return (rsp
-                    for rsp in self._handle_stream_response(prompt, response))
+            return (
+                rsp for rsp in self._handle_stream_response(prompt, response)
+            )
         else:
             response = ConversationResponse.from_api_response(response)
-            if (response.status_code == HTTPStatus.OK
-                    and response.output.choices is None):
-                user_item = HistoryItem('user', text=prompt)
-                bot_history_item = HistoryItem('bot',
-                                               text=response.output['text'])
+            if (
+                response.status_code == HTTPStatus.OK
+                and response.output.choices is None
+            ):
+                user_item = HistoryItem("user", text=prompt)
+                bot_history_item = HistoryItem(
+                    "bot",
+                    text=response.output["text"],
+                )
                 self.history.append(user_item)
                 self.history.append(bot_history_item)
             return response
 
-    def _build_input_parameters(self, model, prompt, history, auto_history,
-                                n_history, messages, **kwargs):
+    def _build_input_parameters(
+        self,
+        model,
+        prompt,
+        history,
+        auto_history,
+        n_history,
+        messages,
+        **kwargs,
+    ):
+        """Build input data and parameters for API call.
+
+        Args:
+            model: The model name.
+            prompt: The user's input prompt.
+            history: User-provided conversation history.
+            auto_history: Whether to use automatic history management.
+            n_history: Number of history items to include.
+            messages: List of message objects.
+            **kwargs: Additional parameters.
+
+        Returns:
+            tuple: (input, parameters) for API call.
+        """
         if model == Conversation.Models.qwen_v1:
             logger.warning(
-                'Model %s is deprecated, use %s instead!' %
-                (Conversation.Models.qwen_v1, Conversation.Models.qwen_turbo))
+                "Model %s is deprecated, use %s instead!",
+                Conversation.Models.qwen_v1,
+                Conversation.Models.qwen_turbo,
+            )
         if model == Conversation.Models.qwen_plus_v1:
-            logger.warning('Model %s is deprecated, use %s instead!' %
-                           (Conversation.Models.qwen_plus_v1,
-                            Conversation.Models.qwen_plus))
+            logger.warning(
+                "Model %s is deprecated, use %s instead!",
+                Conversation.Models.qwen_plus_v1,
+                Conversation.Models.qwen_plus,
+            )
         parameters = {}
         if history is not None and auto_history:
-            raise InvalidInput('auto_history is True, history must None')
+            raise InvalidInput("auto_history is True, history must None")
         if history is not None:  # use user provided history or system.
             logger.warning(DEPRECATED_MESSAGE)
-            input = {
-                PROMPT:
-                prompt,
-                HISTORY:
-                _history_to_qwen_format(history, n_history) if history else [],
+            input = {  # pylint: disable=redefined-builtin
+                PROMPT: prompt,
+                HISTORY: _history_to_qwen_format(history, n_history)
+                if history
+                else [],
             }
         elif auto_history:
             logger.warning(DEPRECATED_MESSAGE)
             input = {
                 PROMPT: prompt,
-                HISTORY: _history_to_qwen_format(self.history, n_history)
+                HISTORY: _history_to_qwen_format(self.history, n_history),
             }
         elif messages:
             msgs = deepcopy(messages)
             if prompt is not None and prompt:
-                msgs.append({'role': Role.USER, 'content': prompt})
-            input = {'messages': msgs}
+                msgs.append({"role": Role.USER, "content": prompt})
+            input = {"messages": msgs}
         else:
             input = {
                 PROMPT: prompt,
             }
         # parameters
-        if model.startswith('qwen'):
-            enable_search = kwargs.pop('enable_search', False)
+        if model.startswith("qwen"):
+            enable_search = kwargs.pop("enable_search", False)
             if enable_search:
-                parameters['enable_search'] = enable_search
+                parameters["enable_search"] = enable_search
 
         return input, {**parameters, **kwargs}

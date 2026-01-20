@@ -1,11 +1,11 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from collections.abc import Coroutine
 
 
 class _ContextManager(Coroutine):
-
-    __slots__ = ('_coro', '_obj')
+    __slots__ = ("_coro", "_obj")
 
     def __init__(self, coro):
         self._coro = coro

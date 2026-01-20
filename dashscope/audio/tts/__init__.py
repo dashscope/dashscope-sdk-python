@@ -1,6 +1,10 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
-from .speech_synthesizer import (ResultCallback, SpeechSynthesisResult,
-                                 SpeechSynthesizer)
+from .speech_synthesizer import (
+    ResultCallback,
+    SpeechSynthesisResult,
+    SpeechSynthesizer,
+)
 
-__all__ = [SpeechSynthesizer, ResultCallback, SpeechSynthesisResult]
+__all__ = ["SpeechSynthesizer", "ResultCallback", "SpeechSynthesisResult"]

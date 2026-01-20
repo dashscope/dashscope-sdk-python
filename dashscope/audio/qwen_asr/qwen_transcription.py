@@ -1,31 +1,35 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import asyncio
 import time
-from typing import List, Union
+from typing import Union
 
 import aiohttp
 
-from dashscope.api_entities.dashscope_response import (DashScopeAPIResponse,
-                                                       TranscriptionResponse)
+from dashscope.api_entities.dashscope_response import (
+    DashScopeAPIResponse,
+    TranscriptionResponse,
+)
 from dashscope.client.base_api import BaseAsyncApi
 from dashscope.common.constants import ApiProtocol, HTTPMethod
 from dashscope.common.logging import logger
 
 
 class QwenTranscription(BaseAsyncApi):
-    """API for File Transcription models.
-    """
+    """API for File Transcription models."""
 
     MAX_QUERY_TRY_COUNT = 3
 
     @classmethod
-    def call(cls,
-             model: str,
-             file_url: str,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> TranscriptionResponse:
+    def call(  # type: ignore[override]
+        cls,
+        model: str,
+        file_url: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> TranscriptionResponse:
         """Transcribe the given files synchronously.
 
         Args:
@@ -37,20 +41,24 @@ class QwenTranscription(BaseAsyncApi):
             TranscriptionResponse: The result of batch transcription.
         """
         kwargs = cls._tidy_kwargs(**kwargs)
-        response = super().call(model,
-                                file_url,
-                                api_key=api_key,
-                                workspace=workspace,
-                                **kwargs)
+        response = super().call(
+            model,
+            file_url,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return TranscriptionResponse.from_api_response(response)
 
     @classmethod
-    def async_call(cls,
-                   model: str,
-                   file_url: str,
-                   api_key: str = None,
-                   workspace: str = None,
-                   **kwargs) -> TranscriptionResponse:
+    def async_call(  # type: ignore[override]
+        cls,
+        model: str,
+        file_url: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> TranscriptionResponse:
         """Transcribe the given files asynchronously,
         return the status of task submission for querying results subsequently.
 
@@ -63,20 +71,24 @@ class QwenTranscription(BaseAsyncApi):
             TranscriptionResponse: The response including task_id.
         """
         kwargs = cls._tidy_kwargs(**kwargs)
-        response = cls._launch_request(model,
-                                       file_url,
-                                       api_key=api_key,
-                                       workspace=workspace,
-                                       **kwargs)
+        response = cls._launch_request(
+            model,
+            file_url,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return TranscriptionResponse.from_api_response(response)
 
     @classmethod
-    def fetch(cls,
-              task: Union[str, TranscriptionResponse],
-              api_key: str = None,
-              workspace: str = None,
-              **kwargs) -> TranscriptionResponse:
-        """Fetch the status of task, including results of batch transcription when task_status is SUCCEEDED.  # noqa: E501
+    def fetch(
+        cls,
+        task: Union[str, TranscriptionResponse],  # type: ignore[override]
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> TranscriptionResponse:
+        """Fetch the status of task, including results of batch transcription when task_status is SUCCEEDED.  # noqa: E501  # pylint: disable=line-too-long
 
         Args:
             task (Union[str, TranscriptionResponse]): The task_id or
@@ -90,10 +102,12 @@ class QwenTranscription(BaseAsyncApi):
         try_count: int = 0
         while True:
             try:
-                response = super().fetch(task,
-                                         api_key=api_key,
-                                         workspace=workspace,
-                                         **kwargs)
+                response = super().fetch(
+                    task,
+                    api_key=api_key,
+                    workspace=workspace,
+                    **kwargs,
+                )
             except (asyncio.TimeoutError, aiohttp.ClientConnectorError) as e:
                 logger.error(e)
                 try_count += 1
@@ -107,11 +121,13 @@ class QwenTranscription(BaseAsyncApi):
         return TranscriptionResponse.from_api_response(response)
 
     @classmethod
-    def wait(cls,
-             task: Union[str, TranscriptionResponse],
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> TranscriptionResponse:
+    def wait(
+        cls,
+        task: Union[str, TranscriptionResponse],  # type: ignore[override]
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> TranscriptionResponse:
         """Poll task until the final results of transcription is obtained.
 
         Args:
@@ -122,19 +138,23 @@ class QwenTranscription(BaseAsyncApi):
         Returns:
             TranscriptionResponse: The result of batch transcription.
         """
-        response = super().wait(task,
-                                api_key=api_key,
-                                workspace=workspace,
-                                **kwargs)
+        response = super().wait(
+            task,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return TranscriptionResponse.from_api_response(response)
 
     @classmethod
-    def _launch_request(cls,
-                        model: str,
-                        file: str,
-                        api_key: str = None,
-                        workspace: str = None,
-                        **kwargs) -> DashScopeAPIResponse:
+    def _launch_request(
+        cls,
+        model: str,
+        file: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Submit transcribe request.
 
         Args:
@@ -149,16 +169,18 @@ class QwenTranscription(BaseAsyncApi):
         try_count: int = 0
         while True:
             try:
-                response = super().async_call(model=model,
-                                              task_group='audio',
-                                              task='asr',
-                                              function='transcription',
-                                              input={'file_url': file},
-                                              api_protocol=ApiProtocol.HTTP,
-                                              http_method=HTTPMethod.POST,
-                                              api_key=api_key,
-                                              workspace=workspace,
-                                              **kwargs)
+                response = super().async_call(
+                    model=model,
+                    task_group="audio",
+                    task="asr",
+                    function="transcription",
+                    input={"file_url": file},
+                    api_protocol=ApiProtocol.HTTP,
+                    http_method=HTTPMethod.POST,
+                    api_key=api_key,
+                    workspace=workspace,
+                    **kwargs,
+                )
             except (asyncio.TimeoutError, aiohttp.ClientConnectorError) as e:
                 logger.error(e)
                 try_count += 1
@@ -173,11 +195,11 @@ class QwenTranscription(BaseAsyncApi):
     def _fill_resource_id(cls, phrase_id: str, **kwargs):
         resources_list: list = []
         if phrase_id is not None and len(phrase_id) > 0:
-            item = {'resource_id': phrase_id, 'resource_type': 'asr_phrase'}
+            item = {"resource_id": phrase_id, "resource_type": "asr_phrase"}
             resources_list.append(item)
 
             if len(resources_list) > 0:
-                kwargs['resources'] = resources_list
+                kwargs["resources"] = resources_list
 
         return kwargs
 

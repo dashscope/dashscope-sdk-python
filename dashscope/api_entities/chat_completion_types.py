@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 # adapter from openai sdk
@@ -17,7 +18,8 @@ class CompletionUsage(BaseObjectMixin):
 
     total_tokens: int
     """Total number of tokens used in the request (prompt + completion)."""
-    def __init__(self, **kwargs):
+
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -27,21 +29,22 @@ class TopLogprob(BaseObjectMixin):
     """The token."""
 
     bytes: Optional[List[int]] = None
-    """A list of integers representing the UTF-8 bytes representation of the token.
+    """A list of integers representing the UTF-8 bytes representation of the token.  # noqa: E501
 
     Useful in instances where characters are represented by multiple tokens and
     their byte representations must be combined to generate the correct text
     representation. Can be `null` if there is no bytes representation for the token.
     """
 
-    logprob: float
-    """The log probability of this token, if it is within the top 20 most likely
+    logprob: float  # type: ignore[misc]
+    """The log probability of this token, if it is within the top 20 most likely  # noqa: E501
     tokens.
 
     Otherwise, the value `-9999.0` is used to signify that the token is very
     unlikely.
     """
-    def __init__(self, **kwargs):
+
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -51,33 +54,37 @@ class ChatCompletionTokenLogprob(BaseObjectMixin):
     """The token."""
 
     bytes: Optional[List[int]] = None
-    """A list of integers representing the UTF-8 bytes representation of the token.
+    """A list of integers representing the UTF-8 bytes representation of the token.  # noqa: E501
 
     Useful in instances where characters are represented by multiple tokens and
     their byte representations must be combined to generate the correct text
     representation. Can be `null` if there is no bytes representation for the token.
     """
 
-    logprob: float
-    """The log probability of this token, if it is within the top 20 most likely
+    logprob: float  # type: ignore[misc]
+    """The log probability of this token, if it is within the top 20 most likely  # noqa: E501
     tokens.
 
     Otherwise, the value `-9999.0` is used to signify that the token is very
     unlikely.
     """
 
-    top_logprobs: List[TopLogprob]
+    top_logprobs: List[TopLogprob]  # type: ignore[misc]
     """List of the most likely tokens and their log probability, at this token
     position.
 
-    In rare cases, there may be fewer than the number of requested `top_logprobs`
+    In rare cases, there may be fewer than the number of requested `top_logprobs`  # noqa: E501
     returned.
     """
+
     def __init__(self, **kwargs):
-        if 'top_logprobs' in kwargs and kwargs[
-                'top_logprobs'] is not None and kwargs['top_logprobs']:
+        if (
+            "top_logprobs" in kwargs
+            and kwargs["top_logprobs"] is not None
+            and kwargs["top_logprobs"]
+        ):
             top_logprobs = []
-            for logprob in kwargs['top_logprobs']:
+            for logprob in kwargs["top_logprobs"]:
                 top_logprobs.append(ChatCompletionTokenLogprob(**logprob))
             self.top_logprobs = top_logprobs
         else:
@@ -90,11 +97,15 @@ class ChatCompletionTokenLogprob(BaseObjectMixin):
 class ChoiceLogprobs(BaseObjectMixin):
     content: Optional[List[ChatCompletionTokenLogprob]] = None
     """A list of message content tokens with log probability information."""
+
     def __init__(self, **kwargs):
-        if 'content' in kwargs and kwargs['content'] is not None and kwargs[
-                'content']:
+        if (
+            "content" in kwargs
+            and kwargs["content"] is not None
+            and kwargs["content"]
+        ):
             logprobs = []
-            for logprob in kwargs['content']:
+            for logprob in kwargs["content"]:
                 logprobs.append(ChatCompletionTokenLogprob(**logprob))
             self.content = logprobs
         else:
@@ -115,7 +126,8 @@ class FunctionCall(BaseObjectMixin):
 
     name: str
     """The name of the function to call."""
-    def __init__(self, **kwargs):
+
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -131,7 +143,8 @@ class Function(BaseObjectMixin):
 
     name: str
     """The name of the function to call."""
-    def __init__(self, **kwargs):
+
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -143,12 +156,16 @@ class ChatCompletionMessageToolCall(BaseObjectMixin):
     function: Function
     """The function that the model called."""
 
-    type: Literal['function']
+    type: Literal["function"]
     """The type of the tool. Currently, only `function` is supported."""
+
     def __init__(self, **kwargs):
-        if 'function' in kwargs and kwargs['function'] is not None and kwargs[
-                'function']:
-            self.function = Function(**kwargs.pop('function', {}))
+        if (
+            "function" in kwargs
+            and kwargs["function"] is not None
+            and kwargs["function"]
+        ):
+            self.function = Function(**kwargs.pop("function", {}))
         else:
             self.function = None
 
@@ -160,28 +177,36 @@ class ChatCompletionMessage(BaseObjectMixin):
     content: Optional[str] = None
     """The contents of the message."""
 
-    role: Literal['assistant']
+    role: Literal["assistant"]  # type: ignore[misc]
     """The role of the author of this message."""
 
     function_call: Optional[FunctionCall] = None
     """Deprecated and replaced by `tool_calls`.
 
-    The name and arguments of a function that should be called, as generated by the
+    The name and arguments of a function that should be called, as generated by the  # noqa: E501
     model.
     """
 
     tool_calls: Optional[List[ChatCompletionMessageToolCall]] = None
     """The tool calls generated by the model, such as function calls."""
-    def __init__(self, **kwargs):
-        if 'function_call' in kwargs and kwargs[
-                'function_call'] is not None and kwargs['function_call']:
-            self.function_call = FunctionCall(
-                **kwargs.pop('function_call', {}))
 
-        if 'tool_calls' in kwargs and kwargs[
-                'tool_calls'] is not None and kwargs['tool_calls']:
+    def __init__(self, **kwargs):
+        if (
+            "function_call" in kwargs
+            and kwargs["function_call"] is not None
+            and kwargs["function_call"]
+        ):
+            self.function_call = FunctionCall(
+                **kwargs.pop("function_call", {}),
+            )
+
+        if (
+            "tool_calls" in kwargs
+            and kwargs["tool_calls"] is not None
+            and kwargs["tool_calls"]
+        ):
             tool_calls = []
-            for tool_call in kwargs['tool_calls']:
+            for tool_call in kwargs["tool_calls"]:
                 tool_calls.append(ChatCompletionMessageToolCall(**tool_call))
             self.tool_calls = tool_calls
 
@@ -190,13 +215,18 @@ class ChatCompletionMessage(BaseObjectMixin):
 
 @dataclass(init=False)
 class Choice(BaseObjectMixin):
-    finish_reason: Literal['stop', 'length', 'tool_calls', 'content_filter',
-                           'function_call']
+    finish_reason: Literal[
+        "stop",
+        "length",
+        "tool_calls",
+        "content_filter",
+        "function_call",
+    ]
     """The reason the model stopped generating tokens.
 
-    This will be `stop` if the model hit a natural stop point or a provided stop
-    sequence, `length` if the maximum number of tokens specified in the request was
-    reached, `content_filter` if content was omitted due to a flag from our content
+    This will be `stop` if the model hit a natural stop point or a provided stop  # noqa: E501
+    sequence, `length` if the maximum number of tokens specified in the request was  # noqa: E501
+    reached, `content_filter` if content was omitted due to a flag from our content  # noqa: E501
     filters, `tool_calls` if the model called a tool, or `function_call`
     (deprecated) if the model called a function.
     """
@@ -207,18 +237,25 @@ class Choice(BaseObjectMixin):
     logprobs: Optional[ChoiceLogprobs] = None
     """Log probability information for the choice."""
 
-    message: ChatCompletionMessage
+    message: ChatCompletionMessage  # type: ignore[misc]
     """A chat completion message generated by the model."""
+
     def __init__(self, **kwargs):
-        if 'message' in kwargs and kwargs['message'] is not None and kwargs[
-                'message']:
-            self.message = ChatCompletionMessage(**kwargs.pop('message', {}))
+        if (
+            "message" in kwargs
+            and kwargs["message"] is not None
+            and kwargs["message"]
+        ):
+            self.message = ChatCompletionMessage(**kwargs.pop("message", {}))
         else:
             self.message = None
 
-        if 'logprobs' in kwargs and kwargs['logprobs'] is not None and kwargs[
-                'logprobs']:
-            self.logprobs = ChoiceLogprobs(**kwargs.pop('logprobs', {}))
+        if (
+            "logprobs" in kwargs
+            and kwargs["logprobs"] is not None
+            and kwargs["logprobs"]
+        ):
+            self.logprobs = ChoiceLogprobs(**kwargs.pop("logprobs", {}))
 
         super().__init__(**kwargs)
 
@@ -244,16 +281,16 @@ class ChatCompletion(BaseObjectMixin):
     """
 
     created: int
-    """The Unix timestamp (in seconds) of when the chat completion was created."""
+    """The Unix timestamp (in seconds) of when the chat completion was created."""  # noqa: E501
 
     model: str
     """The model used for the chat completion."""
 
-    object: Literal['chat.completion']
+    object: Literal["chat.completion"]
     """The object type, which is always `chat.completion`."""
 
     system_fingerprint: Optional[str] = None
-    """This fingerprint represents the backend configuration that the model runs with.
+    """This fingerprint represents the backend configuration that the model runs with.  # noqa: E501
 
     Can be used in conjunction with the `seed` request parameter to understand when
     backend changes have been made that might impact determinism.
@@ -261,17 +298,24 @@ class ChatCompletion(BaseObjectMixin):
 
     usage: Optional[CompletionUsage] = None
     """Usage statistics for the completion request."""
+
     def __init__(self, **kwargs):
-        if 'usage' in kwargs and kwargs['usage'] is not None and kwargs[
-                'usage']:
-            self.usage = CompletionUsage(**kwargs.pop('usage', {}))
+        if (
+            "usage" in kwargs
+            and kwargs["usage"] is not None
+            and kwargs["usage"]
+        ):
+            self.usage = CompletionUsage(**kwargs.pop("usage", {}))
         else:
             self.usage = None
 
-        if 'choices' in kwargs and kwargs['choices'] is not None and kwargs[
-                'choices']:
+        if (
+            "choices" in kwargs
+            and kwargs["choices"] is not None
+            and kwargs["choices"]
+        ):
             choices = []
-            for choice in kwargs.pop('choices', []):
+            for choice in kwargs.pop("choices", []):
                 choices.append(Choice(**choice))
             self.choices = choices
         else:
@@ -291,12 +335,12 @@ class ChatCompletionChunk(BaseObjectMixin):
     """The request failed, this is the error message.
     """
     id: str
-    """A unique identifier for the chat completion. Each chunk has the same ID."""
+    """A unique identifier for the chat completion. Each chunk has the same ID."""  # noqa: E501
 
     choices: List[Choice]
     """A list of chat completion choices.
 
-    Can contain more than one elements if `n` is greater than 1. Can also be empty
+    Can contain more than one elements if `n` is greater than 1. Can also be empty  # noqa: E501
     for the last chunk if you set `stream_options: {"include_usage": true}`.
     """
 
@@ -309,13 +353,13 @@ class ChatCompletionChunk(BaseObjectMixin):
     model: str
     """The model to generate the completion."""
 
-    object: Literal['chat.completion.chunk']
+    object: Literal["chat.completion.chunk"]
     """The object type, which is always `chat.completion.chunk`."""
 
     system_fingerprint: Optional[str] = None
     """
-    This fingerprint represents the backend configuration that the model runs with.
-    Can be used in conjunction with the `seed` request parameter to understand when
+    This fingerprint represents the backend configuration that the model runs with.  # noqa: E501
+    Can be used in conjunction with the `seed` request parameter to understand when  # noqa: E501
     backend changes have been made that might impact determinism.
     """
 
@@ -323,20 +367,27 @@ class ChatCompletionChunk(BaseObjectMixin):
     """
     An optional field that will only be present when you set
     `stream_options: {"include_usage": true}` in your request. When present, it
-    contains a null value except for the last chunk which contains the token usage
+    contains a null value except for the last chunk which contains the token usage  # noqa: E501
     statistics for the entire request.
     """
+
     def __init__(self, **kwargs):
-        if 'usage' in kwargs and kwargs['usage'] is not None and kwargs[
-                'usage']:
-            self.usage = CompletionUsage(**kwargs.pop('usage', {}))
+        if (
+            "usage" in kwargs
+            and kwargs["usage"] is not None
+            and kwargs["usage"]
+        ):
+            self.usage = CompletionUsage(**kwargs.pop("usage", {}))
         else:
             self.usage = None
 
-        if 'choices' in kwargs and kwargs['choices'] is not None and kwargs[
-                'choices']:
+        if (
+            "choices" in kwargs
+            and kwargs["choices"] is not None
+            and kwargs["choices"]
+        ):
             choices = []
-            for choice in kwargs.pop('choices', []):
+            for choice in kwargs.pop("choices", []):
                 choices.append(Choice(**choice))
             self.choices = choices
         else:

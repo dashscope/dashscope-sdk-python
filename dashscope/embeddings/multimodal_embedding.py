@@ -1,10 +1,13 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from dataclasses import dataclass
 from typing import List
 
-from dashscope.api_entities.dashscope_response import (DashScopeAPIResponse,
-                                                       DictMixin)
+from dashscope.api_entities.dashscope_response import (
+    DashScopeAPIResponse,
+    DictMixin,
+)
 from dashscope.client.base_api import BaseApi, BaseAioApi
 from dashscope.common.error import InputRequired, ModelRequired
 from dashscope.common.utils import _get_task_group_and_task
@@ -47,24 +50,27 @@ class MultiModalEmbeddingItemAudio(MultiModalEmbeddingItemBase):
 
 
 class MultiModalEmbedding(BaseApi):
-    task = 'multimodal-embedding'
+    task = "multimodal-embedding"
 
     class Models:
-        multimodal_embedding_one_peace_v1 = 'multimodal-embedding-one-peace-v1'
+        multimodal_embedding_one_peace_v1 = "multimodal-embedding-one-peace-v1"
 
     @classmethod
-    def call(cls,
-             model: str,
-             input: List[MultiModalEmbeddingItemBase],
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    def call(  # type: ignore[override]
+        cls,
+        model: str,
+        # pylint: disable=redefined-builtin
+        input: List[MultiModalEmbeddingItemBase],
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Get embedding multimodal contents..
 
         Args:
             model (str): The embedding model name.
-            input (List[MultiModalEmbeddingElement]): The embedding elements,
-                every element include data, modal, factor field.
+            input (List[MultiModalEmbeddingElement]): The embedding
+                elements, every element include data, modal, factor field.
             workspace (str): The dashscope workspace id.
             **kwargs:
                 auto_truncation(bool, `optional`): Automatically truncate
@@ -75,30 +81,40 @@ class MultiModalEmbedding(BaseApi):
             DashScopeAPIResponse: The embedding result.
         """
         if input is None or not input:
-            raise InputRequired('prompt is required!')
+            raise InputRequired("prompt is required!")
         if model is None or not model:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         embedding_input = {}
-        has_upload = cls._preprocess_message_inputs(model, input, api_key)
+        has_upload = cls._preprocess_message_inputs(
+            model,
+            input,  # type: ignore[arg-type]
+            api_key,
+        )  # noqa: E501
         if has_upload:
-            headers = kwargs.pop('headers', {})
-            headers['X-DashScope-OssResourceResolve'] = 'enable'
-            kwargs['headers'] = headers
-        embedding_input['contents'] = input
-        kwargs.pop('stream', False)  # not support streaming output.
+            headers = kwargs.pop("headers", {})
+            headers["X-DashScope-OssResourceResolve"] = "enable"
+            kwargs["headers"] = headers
+        embedding_input["contents"] = input
+        kwargs.pop("stream", False)  # not support streaming output.
         task_group, function = _get_task_group_and_task(__name__)
-        return super().call(model=model,
-                            input=embedding_input,
-                            task_group=task_group,
-                            task=MultiModalEmbedding.task,
-                            function=function,
-                            api_key=api_key,
-                            workspace=workspace,
-                            **kwargs)
+        return super().call(
+            model=model,
+            input=embedding_input,
+            task_group=task_group,
+            task=MultiModalEmbedding.task,
+            function=function,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
 
     @classmethod
-    def _preprocess_message_inputs(cls, model: str, input: List[dict],
-                                   api_key: str):
+    def _preprocess_message_inputs(
+        cls,
+        model: str,
+        input_data: List[dict],
+        api_key: str,
+    ):
         """preprocess following inputs
         input = [{'factor': 1, 'text': 'hello'},
                 {'factor': 2, 'audio': ''},
@@ -106,34 +122,41 @@ class MultiModalEmbedding(BaseApi):
         """
         has_upload = False
         upload_certificate = None
-        for elem in input:
+        for elem in input_data:
             if not isinstance(elem, (int, float, bool, str, bytes, bytearray)):
                 is_upload, upload_certificate = preprocess_message_element(
-                    model, elem, api_key, upload_certificate)
+                    model,
+                    elem,
+                    api_key,
+                    upload_certificate,  # type: ignore[arg-type]
+                )
                 if is_upload and not has_upload:
                     has_upload = True
         return has_upload
 
 
 class AioMultiModalEmbedding(BaseAioApi):
-    task = 'multimodal-embedding'
+    task = "multimodal-embedding"
 
     class Models:
-        multimodal_embedding_one_peace_v1 = 'multimodal-embedding-one-peace-v1'
+        multimodal_embedding_one_peace_v1 = "multimodal-embedding-one-peace-v1"
 
     @classmethod
-    async def call(cls,
-         model: str,
-         input: List[MultiModalEmbeddingItemBase],
-         api_key: str = None,
-         workspace: str = None,
-         **kwargs) -> DashScopeAPIResponse:
+    async def call(  # type: ignore[override]
+        cls,
+        model: str,
+        # pylint: disable=redefined-builtin
+        input: List[MultiModalEmbeddingItemBase],
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Get embedding multimodal contents..
 
         Args:
             model (str): The embedding model name.
-            input (List[MultiModalEmbeddingElement]): The embedding elements,
-                every element include data, modal, factor field.
+            input (List[MultiModalEmbeddingElement]): The embedding
+                elements, every element include data, modal, factor field.
             workspace (str): The dashscope workspace id.
             **kwargs:
                 auto_truncation(bool, `optional`): Automatically truncate
@@ -144,17 +167,21 @@ class AioMultiModalEmbedding(BaseAioApi):
             DashScopeAPIResponse: The embedding result.
         """
         if input is None or not input:
-            raise InputRequired('prompt is required!')
+            raise InputRequired("prompt is required!")
         if model is None or not model:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         embedding_input = {}
-        has_upload = cls._preprocess_message_inputs(model, input, api_key)
+        has_upload = cls._preprocess_message_inputs(
+            model,
+            input,  # type: ignore[arg-type]
+            api_key,
+        )  # noqa: E501
         if has_upload:
-            headers = kwargs.pop('headers', {})
-            headers['X-DashScope-OssResourceResolve'] = 'enable'
-            kwargs['headers'] = headers
-        embedding_input['contents'] = input
-        kwargs.pop('stream', False)  # not support streaming output.
+            headers = kwargs.pop("headers", {})
+            headers["X-DashScope-OssResourceResolve"] = "enable"
+            kwargs["headers"] = headers
+        embedding_input["contents"] = input
+        kwargs.pop("stream", False)  # not support streaming output.
         task_group, function = _get_task_group_and_task(__name__)
         response = await super().call(
             model=model,
@@ -164,12 +191,17 @@ class AioMultiModalEmbedding(BaseAioApi):
             function=function,
             api_key=api_key,
             workspace=workspace,
-            **kwargs)
+            **kwargs,
+        )
         return response
 
     @classmethod
-    def _preprocess_message_inputs(cls, model: str, input: List[dict],
-                                   api_key: str):
+    def _preprocess_message_inputs(
+        cls,
+        model: str,
+        input_data: List[dict],
+        api_key: str,
+    ):
         """preprocess following inputs
         input = [{'factor': 1, 'text': 'hello'},
                 {'factor': 2, 'audio': ''},
@@ -177,10 +209,14 @@ class AioMultiModalEmbedding(BaseAioApi):
         """
         has_upload = False
         upload_certificate = None
-        for elem in input:
+        for elem in input_data:
             if not isinstance(elem, (int, float, bool, str, bytes, bytearray)):
                 is_upload, upload_certificate = preprocess_message_element(
-                    model, elem, api_key, upload_certificate)
+                    model,
+                    elem,
+                    api_key,
+                    upload_certificate,  # type: ignore[arg-type]
+                )
                 if is_upload and not has_upload:
                     has_upload = True
         return has_upload

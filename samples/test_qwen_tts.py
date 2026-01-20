@@ -1,14 +1,16 @@
+# -*- coding: utf-8 -*-
 import os
 
 import dashscope
 import logging
 
-logger = logging.getLogger('dashscope')
+logger = logging.getLogger("dashscope")
 logger.setLevel(logging.DEBUG)
 console_handler = logging.StreamHandler()
 # create formatter
 formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 # add formatter to ch
 console_handler.setFormatter(formatter)
 
@@ -19,12 +21,12 @@ logger.addHandler(console_handler)
 use_stream = True
 
 response = dashscope.MultiModalConversation.call(
-    api_key=os.getenv('DASHSCOPE_API_KEY'),
+    api_key=os.getenv("DASHSCOPE_API_KEY"),
     model="qwen3-tts-flash",
     text="Today is a wonderful day to build something people love!",
     voice="Cherry",
     stream=use_stream,
-    language_type="English"
+    language_type="English",
 )
 if use_stream:
     # print the audio data in stream mode

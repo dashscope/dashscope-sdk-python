@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import json
@@ -9,14 +10,14 @@ from dashscope.common.constants import ApiProtocol
 from dashscope.io.input_output import InputResolver
 
 
-class ApiRequestData():
+class ApiRequestData:
     def __init__(
         self,
         model,
         task_group,
         task,
         function,
-        input,
+        input_data,
         form,
         is_binary_input,
         api_protocol,
@@ -25,7 +26,7 @@ class ApiRequestData():
         self.task = task
         self.task_group = task_group
         self.function = function
-        self._input = input
+        self._input = input_data
         self._input_type = {}
         self._input_generators = {}
         self.parameters = {}
@@ -37,8 +38,10 @@ class ApiRequestData():
         if api_protocol in [ApiProtocol.HTTP, ApiProtocol.HTTPS]:
             self._input_resolver = InputResolver(input_instance=self._input)
         else:
-            self._input_resolver = InputResolver(input_instance=self._input,
-                                                 is_encode_binary=False)
+            self._input_resolver = InputResolver(
+                input_instance=self._input,
+                is_encode_binary=False,
+            )
 
     def add_parameters(self, **params):
         for key, value in params.items():
@@ -56,10 +59,14 @@ class ApiRequestData():
         o = {
             k: v
             for k, v in self.__dict__.items()
-            if not (k.startswith('_') or k.startswith('task')
-                    or k.startswith('function') or v is None)
+            if not (
+                k.startswith("_")
+                or k.startswith("task")
+                or k.startswith("function")
+                or v is None
+            )
         }
-        return o
+        return o  # type: ignore[return-value]
 
     def get_aiohttp_payload(self):
         """Get http payload.
@@ -74,11 +81,12 @@ class ApiRequestData():
             form = aiohttp.FormData()
             for key, value in self._form.items():
                 form.add_field(key, value)
-            form.add_field('model', data['model'])
-            if 'input' in data:
-                form.add_field('input', json.dumps(data['input']))
-            form.add_field('parameters', json.dumps(data['parameters']))
+            form.add_field("model", data["model"])
+            if "input" in data:
+                form.add_field("input", json.dumps(data["input"]))
+            form.add_field("parameters", json.dumps(data["parameters"]))
             return True, form()
+            # pylint: disable=unreachable,pointless-string-statement
             """
             mp_writer = aiohttp.MultipartWriter('mixed')
             mp_writer.append('model=%s'%self.model)
@@ -121,7 +129,7 @@ class ApiRequestData():
         data = {
             k: v
             for k, v in self.__dict__.items()
-            if not (k.startswith('_') or v is None)
+            if not (k.startswith("_") or v is None)
         }
         return data
 
@@ -133,11 +141,11 @@ class ApiRequestData():
         o = {
             k: v
             for k, v in self.__dict__.items()
-            if not (k.startswith('_') or k.startswith('param'))
+            if not (k.startswith("_") or k.startswith("param"))
         }
         return json.dumps(o, default=lambda o: o.__dict__)
 
-    def get_batch_binary_data(self) -> bytes:
+    def get_batch_binary_data(self) -> bytes:  # type: ignore[return]
         """Get binary data. used in streaming mode none and
            out (input is not streaming), we send data in one package.
            In this case only has one field input.
@@ -149,21 +157,22 @@ class ApiRequestData():
             return content
 
     def _only_parameters(self) -> str:
-        obj = {'model': self.model, 'parameters': self.parameters, 'input': {}}
+        obj = {"model": self.model, "parameters": self.parameters, "input": {}}
         if self.task is not None:
-            obj['task'] = self.task
+            obj["task"] = self.task
         if self.task_group is not None:
-            obj['task_group'] = self.task_group
+            obj["task_group"] = self.task_group
         if self.function is not None:
-            obj['function'] = self.function
+            obj["function"] = self.function
         if self.resources is not None:
-            obj['resources'] = self.resources
-        return obj
+            obj["resources"] = self.resources
+        return obj  # type: ignore[return-value]
 
     def to_query_parameters(self) -> str:
-        query_string = '?'
+        # pylint: disable=not-an-iterable
+        query_string = "?"
         for key, value in self.parameters.items:
-            param = '%s/%s&' % (key, value)
+            param = f"{key}/{value}&"
             query_string += param
         query_string = query_string[0:-1]  # remove last #
-        return urlencode(query_string)
+        return urlencode(query_string)  # type: ignore[arg-type]

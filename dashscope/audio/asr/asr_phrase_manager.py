@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from http import HTTPStatus
@@ -11,15 +12,17 @@ from dashscope.customize.finetunes import FineTunes
 
 
 class AsrPhraseManager(BaseAsyncApi):
-    """Hot word management for speech recognition.
-    """
+    """Hot word management for speech recognition."""
+
     @classmethod
-    def create_phrases(cls,
-                       model: str,
-                       phrases: Dict[str, Any],
-                       training_type: str = 'compile_asr_phrase',
-                       workspace: str = None,
-                       **kwargs) -> DashScopeAPIResponse:
+    def create_phrases(
+        cls,
+        model: str,
+        phrases: Dict[str, Any],
+        training_type: str = "compile_asr_phrase",
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Create hot words.
 
         Args:
@@ -37,34 +40,38 @@ class AsrPhraseManager(BaseAsyncApi):
             DashScopeAPIResponse: The results of creating hot words.
         """
         if phrases is None or len(phrases) == 0:
-            raise InvalidParameter('phrases is empty!')
+            raise InvalidParameter("phrases is empty!")
         if training_type is None or len(training_type) == 0:
-            raise InvalidParameter('training_type is empty!')
+            raise InvalidParameter("training_type is empty!")
 
         original_ft_sub_path = FineTunes.SUB_PATH
-        FineTunes.SUB_PATH = 'fine-tunes'
-        response = FineTunes.call(model=model,
-                                  training_file_ids=[],
-                                  validation_file_ids=[],
-                                  mode=training_type,
-                                  hyper_parameters={'phrase_list': phrases},
-                                  workspace=workspace,
-                                  **kwargs)
+        FineTunes.SUB_PATH = "fine-tunes"
+        response = FineTunes.call(
+            model=model,
+            training_file_ids=[],
+            validation_file_ids=[],
+            mode=training_type,
+            hyper_parameters={"phrase_list": phrases},
+            workspace=workspace,
+            **kwargs,
+        )
         FineTunes.SUB_PATH = original_ft_sub_path
 
         if response.status_code != HTTPStatus.OK:
-            logger.error('Create phrase failed, ' + str(response))
+            logger.error("Create phrase failed, %s", response)
 
-        return response
+        return response  # type: ignore[return-value]
 
     @classmethod
-    def update_phrases(cls,
-                       model: str,
-                       phrase_id: str,
-                       phrases: Dict[str, Any],
-                       training_type: str = 'compile_asr_phrase',
-                       workspace: str = None,
-                       **kwargs) -> DashScopeAPIResponse:
+    def update_phrases(
+        cls,
+        model: str,
+        phrase_id: str,
+        phrases: Dict[str, Any],
+        training_type: str = "compile_asr_phrase",
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Update the hot words marked phrase_id.
 
         Args:
@@ -84,34 +91,38 @@ class AsrPhraseManager(BaseAsyncApi):
             DashScopeAPIResponse: The results of updating hot words.
         """
         if phrase_id is None or len(phrase_id) == 0:
-            raise InvalidParameter('phrase_id is empty!')
+            raise InvalidParameter("phrase_id is empty!")
         if phrases is None or len(phrases) == 0:
-            raise InvalidParameter('phrases is empty!')
+            raise InvalidParameter("phrases is empty!")
         if training_type is None or len(training_type) == 0:
-            raise InvalidParameter('training_type is empty!')
+            raise InvalidParameter("training_type is empty!")
 
         original_ft_sub_path = FineTunes.SUB_PATH
-        FineTunes.SUB_PATH = 'fine-tunes'
-        response = FineTunes.call(model=model,
-                                  training_file_ids=[],
-                                  validation_file_ids=[],
-                                  mode=training_type,
-                                  hyper_parameters={'phrase_list': phrases},
-                                  finetuned_output=phrase_id,
-                                  workspace=workspace,
-                                  **kwargs)
+        FineTunes.SUB_PATH = "fine-tunes"
+        response = FineTunes.call(
+            model=model,
+            training_file_ids=[],
+            validation_file_ids=[],
+            mode=training_type,
+            hyper_parameters={"phrase_list": phrases},
+            finetuned_output=phrase_id,
+            workspace=workspace,
+            **kwargs,
+        )
         FineTunes.SUB_PATH = original_ft_sub_path
 
         if response.status_code != HTTPStatus.OK:
-            logger.error('Update phrase failed, ' + str(response))
+            logger.error("Update phrase failed, %s", response)
 
-        return response
+        return response  # type: ignore[return-value]
 
     @classmethod
-    def query_phrases(cls,
-                      phrase_id: str,
-                      workspace: str = None,
-                      **kwargs) -> DashScopeAPIResponse:
+    def query_phrases(
+        cls,
+        phrase_id: str,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Query the hot words by phrase_id.
 
         Args:
@@ -126,26 +137,30 @@ class AsrPhraseManager(BaseAsyncApi):
             AsrPhraseManagerResult: The results of querying hot words.
         """
         if phrase_id is None or len(phrase_id) == 0:
-            raise InvalidParameter('phrase_id is empty!')
+            raise InvalidParameter("phrase_id is empty!")
 
         original_ft_sub_path = FineTunes.SUB_PATH
-        FineTunes.SUB_PATH = 'fine-tunes/outputs'
-        response = FineTunes.get(job_id=phrase_id,
-                                 workspace=workspace,
-                                 **kwargs)
+        FineTunes.SUB_PATH = "fine-tunes/outputs"
+        response = FineTunes.get(
+            job_id=phrase_id,
+            workspace=workspace,
+            **kwargs,
+        )
         FineTunes.SUB_PATH = original_ft_sub_path
 
         if response.status_code != HTTPStatus.OK:
-            logger.error('Query phrase failed, ' + str(response))
+            logger.error("Query phrase failed, %s", response)
 
-        return response
+        return response  # type: ignore[return-value]
 
     @classmethod
-    def list_phrases(cls,
-                     page: int = 1,
-                     page_size: int = 10,
-                     workspace: str = None,
-                     **kwargs) -> DashScopeAPIResponse:
+    def list_phrases(
+        cls,
+        page: int = 1,
+        page_size: int = 10,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """List all information of phrases.
 
         Args:
@@ -158,23 +173,27 @@ class AsrPhraseManager(BaseAsyncApi):
             DashScopeAPIResponse: The results of listing hot words.
         """
         original_ft_sub_path = FineTunes.SUB_PATH
-        FineTunes.SUB_PATH = 'fine-tunes/outputs'
-        response = FineTunes.list(page=page,
-                                  page_size=page_size,
-                                  workspace=workspace,
-                                  **kwargs)
+        FineTunes.SUB_PATH = "fine-tunes/outputs"
+        response = FineTunes.list(
+            page=page,
+            page_size=page_size,
+            workspace=workspace,
+            **kwargs,
+        )
         FineTunes.SUB_PATH = original_ft_sub_path
 
         if response.status_code != HTTPStatus.OK:
-            logger.error('List phrase failed, ' + str(response))
+            logger.error("List phrase failed, %s", response)
 
-        return response
+        return response  # type: ignore[return-value]
 
     @classmethod
-    def delete_phrases(cls,
-                       phrase_id: str,
-                       workspace: str = None,
-                       **kwargs) -> DashScopeAPIResponse:
+    def delete_phrases(
+        cls,
+        phrase_id: str,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Delete the hot words by phrase_id.
 
         Args:
@@ -188,16 +207,18 @@ class AsrPhraseManager(BaseAsyncApi):
             DashScopeAPIResponse: The results of deleting hot words.
         """
         if phrase_id is None or len(phrase_id) == 0:
-            raise InvalidParameter('phrase_id is empty!')
+            raise InvalidParameter("phrase_id is empty!")
 
         original_ft_sub_path = FineTunes.SUB_PATH
-        FineTunes.SUB_PATH = 'fine-tunes/outputs'
-        response = FineTunes.delete(job_id=phrase_id,
-                                    workspace=workspace,
-                                    **kwargs)
+        FineTunes.SUB_PATH = "fine-tunes/outputs"
+        response = FineTunes.delete(
+            job_id=phrase_id,
+            workspace=workspace,
+            **kwargs,
+        )
         FineTunes.SUB_PATH = original_ft_sub_path
 
         if response.status_code != HTTPStatus.OK:
-            logger.error('Delete phrase failed, ' + str(response))
+            logger.error("Delete phrase failed, %s", response)
 
-        return response
+        return response  # type: ignore[return-value]

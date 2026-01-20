@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
@@ -5,13 +6,15 @@ from dashscope.client.base_api import GetMixin, ListMixin
 
 
 class Models(ListMixin, GetMixin):
-    SUB_PATH = 'models'
+    SUB_PATH = "models"
 
     @classmethod
-    def get(cls,
-            name: str,
-            api_key: str = None,
-            **kwargs) -> DashScopeAPIResponse:
+    def get(  # type: ignore[override]
+        cls,
+        name: str,
+        api_key: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Get the model information.
 
         Args:
@@ -22,14 +25,16 @@ class Models(ListMixin, GetMixin):
         Returns:
             DashScopeAPIResponse: The model information.
         """
-        return super().get(name, api_key, **kwargs)
+        return super().get(name, api_key, **kwargs)  # type: ignore
 
     @classmethod
-    def list(cls,
-             page=1,
-             page_size=10,
-             api_key: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    def list(  # type: ignore[override]
+        cls,
+        page=1,
+        page_size=10,
+        api_key: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """List models.
 
         Args:
@@ -40,4 +45,5 @@ class Models(ListMixin, GetMixin):
         Returns:
             DashScopeAPIResponse: The models.
         """
-        return super().list(page, page_size, api_key=api_key, **kwargs)
+        # type: ignore
+        return super().list(page, page_size, api_key=api_key, **kwargs)  # type: ignore[return-value] # pylint: disable=line-too-long # noqa: E501

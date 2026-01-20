@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import os
@@ -19,11 +20,11 @@ class TestGeneration:
                         "text": "从1到1000选择一个数字",
                         "cache_control": {
                             "type": "ephemeral",
-                            "ttl": "5m"
-                        }
-                    }
-                ]
-            }
+                            "ttl": "5m",
+                        },
+                    },
+                ],
+            },
         ]
 
         # Call Generation API with streaming enabled
@@ -57,11 +58,11 @@ class TestGeneration:
                         "text": "1.1和0.9哪个大",
                         "cache_control": {
                             "type": "ephemeral",
-                            "ttl": "5m"
-                        }
-                    }
-                ]
-            }
+                            "ttl": "5m",
+                        },
+                    },
+                ],
+            },
         ]
 
         # Call Generation API with streaming enabled
@@ -71,7 +72,7 @@ class TestGeneration:
             messages=messages,
             result_format="message",
             enable_thinking=True,
-            incremental_output=False, # enable_thinking为true时，只能设置为true
+            incremental_output=False,  # enable_thinking为true时，只能设置为true
             stream=True,
         )
 
@@ -87,8 +88,8 @@ class TestGeneration:
                 "function": {
                     "name": "get_current_time",
                     "description": "当你想知道现在的时间时非常有用。",
-                    "parameters": {}
-                }
+                    "parameters": {},
+                },
             },
             {
                 "type": "function",
@@ -100,24 +101,24 @@ class TestGeneration:
                         "properties": {
                             "location": {
                                 "type": "string",
-                                "description": "城市或县区，比如北京市、杭州市、余杭区等。"
-                            }
-                        }
+                                "description": "城市或县区，比如北京市、杭州市、余杭区等。",
+                            },
+                        },
                     },
                     "required": [
-                        "location"
-                    ]
-                }
-            }
+                        "location",
+                    ],
+                },
+            },
         ]
         messages = [{"role": "user", "content": "杭州天气怎么样"}]
         response = Generation.call(
             # 若没有配置环境变量，请用百炼API Key将下行替换为：api_key="sk-xxx",
-            api_key=os.getenv('DASHSCOPE_API_KEY'),
-            model='qwen-plus',
+            api_key=os.getenv("DASHSCOPE_API_KEY"),
+            model="qwen-plus",
             messages=messages,
             tools=tools,
-            result_format='message',
+            result_format="message",
             incremental_output=False,
             stream=True,
         )
@@ -130,7 +131,7 @@ class TestGeneration:
     def test_response_with_search_info():
         # 配置API Key
         # 若没有配置环境变量，请用百炼API Key将下行替换为：API_KEY = "sk-xxx"
-        API_KEY = os.getenv('DASHSCOPE_API_KEY')
+        API_KEY = os.getenv("DASHSCOPE_API_KEY")
 
         def call_deep_research_model(messages, step_name):
             print(f"\n=== {step_name} ===")
@@ -168,27 +169,35 @@ class TestGeneration:
 
             for response in responses:
                 # 检查响应状态码
-                if hasattr(response, 'status_code') and response.status_code != 200:
+                if (
+                    hasattr(response, "status_code")
+                    and response.status_code != 200
+                ):
                     print(f"HTTP返回码：{response.status_code}")
-                    if hasattr(response, 'code'):
+                    if hasattr(response, "code"):
                         print(f"错误码：{response.code}")
-                    if hasattr(response, 'message'):
+                    if hasattr(response, "message"):
                         print(f"错误信息：{response.message}")
-                    print("请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code")
+                    print(
+                        "请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code",
+                    )
                     continue
 
-                if hasattr(response, 'output') and response.output:
-                    message = response.output.get('message', {})
-                    phase = message.get('phase')
-                    content = message.get('content', '')
-                    status = message.get('status')
-                    extra = message.get('extra', {})
+                if hasattr(response, "output") and response.output:
+                    message = response.output.get("message", {})
+                    phase = message.get("phase")
+                    content = message.get("content", "")
+                    status = message.get("status")
+                    extra = message.get("extra", {})
 
                     # 阶段变化检测
                     if phase != current_phase:
                         if current_phase and phase_content:
                             # 根据阶段名称和步骤名称来显示不同的完成描述
-                            if step_name == "第一步：模型反问确认" and current_phase == "answer":
+                            if (
+                                step_name == "第一步：模型反问确认"
+                                and current_phase == "answer"
+                            ):
                                 print(f"\n 模型反问阶段完成")
                             else:
                                 print(f"\n {current_phase} 阶段完成")
@@ -204,35 +213,49 @@ class TestGeneration:
 
                     # 处理WebResearch阶段的特殊信息
                     if phase == "WebResearch":
-                        if extra.get('deep_research', {}).get('research'):
-                            research_info = extra['deep_research']['research']
+                        if extra.get("deep_research", {}).get("research"):
+                            research_info = extra["deep_research"]["research"]
 
                             # 处理streamingQueries状态
                             if status == "streamingQueries":
-                                if 'researchGoal' in research_info:
-                                    goal = research_info['researchGoal']
+                                if "researchGoal" in research_info:
+                                    goal = research_info["researchGoal"]
                                     if goal:
                                         research_goal += goal
-                                        print(f"\n   研究目标: {goal}", end='', flush=True)
+                                        print(
+                                            f"\n   研究目标: {goal}",
+                                            end="",
+                                            flush=True,
+                                        )
 
                             # 处理streamingWebResult状态
                             elif status == "streamingWebResult":
-                                if 'webSites' in research_info:
-                                    sites = research_info['webSites']
+                                if "webSites" in research_info:
+                                    sites = research_info["webSites"]
                                     if sites and sites != web_sites:  # 避免重复显示
                                         web_sites = sites
                                         print(f"\n   找到 {len(sites)} 个相关网站:")
                                         for i, site in enumerate(sites, 1):
-                                            print(f"     {i}. {site.get('title', '无标题')}")
-                                            print(f"        描述: {site.get('description', '无描述')[:100]}...")
-                                            print(f"        URL: {site.get('url', '无链接')}")
-                                            if site.get('favicon'):
-                                                print(f"        图标: {site['favicon']}")
+                                            print(
+                                                f"     {i}. {site.get('title', '无标题')}",
+                                            )
+                                            print(
+                                                f"        描述: {site.get('description', '无描述')[:100]}...",
+                                            )
+                                            print(
+                                                f"        URL: {site.get('url', '无链接')}",
+                                            )
+                                            if site.get("favicon"):
+                                                print(
+                                                    f"        图标: {site['favicon']}",
+                                                )
                                             print()
 
                             # 处理WebResultFinished状态
                             elif status == "WebResultFinished":
-                                print(f"\n   网络搜索完成，共找到 {len(web_sites)} 个参考信息源")
+                                print(
+                                    f"\n   网络搜索完成，共找到 {len(web_sites)} 个参考信息源",
+                                )
                                 if research_goal:
                                     print(f"   研究目标: {research_goal}")
 
@@ -240,7 +263,7 @@ class TestGeneration:
                     if content:
                         phase_content += content
                         # 实时显示内容
-                        print(content, end='', flush=True)
+                        print(content, end="", flush=True)
 
                     # 显示阶段状态变化
                     if status and status != "typing":
@@ -256,12 +279,18 @@ class TestGeneration:
 
                     # 当状态为finished时，显示token消耗情况
                     if status == "finished":
-                        if hasattr(response, 'usage') and response.usage:
+                        if hasattr(response, "usage") and response.usage:
                             usage = response.usage
                             print(f"\n    Token消耗统计:")
-                            print(f"      输入tokens: {usage.get('input_tokens', 0)}")
-                            print(f"      输出tokens: {usage.get('output_tokens', 0)}")
-                            print(f"      请求ID: {response.get('request_id', '未知')}")
+                            print(
+                                f"      输入tokens: {usage.get('input_tokens', 0)}",
+                            )
+                            print(
+                                f"      输出tokens: {usage.get('output_tokens', 0)}",
+                            )
+                            print(
+                                f"      请求ID: {response.get('request_id', '未知')}",
+                            )
 
                     if phase == "KeepAlive":
                         # 只在第一次进入KeepAlive阶段时显示提示
@@ -288,19 +317,20 @@ class TestGeneration:
 
         # 第一步：模型反问确认
         # 模型会分析用户问题，提出细化问题来明确研究方向
-        messages = [{'role': 'user', 'content': '研究一下人工智能在教育中的应用'}]
+        messages = [{"role": "user", "content": "研究一下人工智能在教育中的应用"}]
         step1_content = call_deep_research_model(messages, "第一步：模型反问确认")
 
         # 第二步：深入研究
         # 基于第一步的反问内容，模型会执行完整的研究流程
         messages = [
-            {'role': 'user', 'content': '研究一下人工智能在教育中的应用'},
-            {'role': 'assistant', 'content': step1_content},  # 包含模型的反问内容
-            {'role': 'user', 'content': '我主要关注个性化学习和智能评估这两个方面'}
+            {"role": "user", "content": "研究一下人工智能在教育中的应用"},
+            {"role": "assistant", "content": step1_content},  # 包含模型的反问内容
+            {"role": "user", "content": "我主要关注个性化学习和智能评估这两个方面"},
         ]
 
         call_deep_research_model(messages, "第二步：深入研究")
         print("\n 研究完成！")
+
 
 if __name__ == "__main__":
     TestGeneration.test_response_with_content()

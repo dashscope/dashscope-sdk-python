@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import json
@@ -39,7 +40,7 @@ class DictMixin(dict):
     def setdefault(self, key, default=None):
         return super().setdefault(key, default)
 
-    def pop(self, key, default: Any):
+    def pop(self, key, default: Any):  # type: ignore[override]
         return super().pop(key, default)
 
     def update(self, **kwargs):
@@ -64,7 +65,7 @@ class DictMixin(dict):
         self[attr] = value
 
     def __repr__(self):
-        return '{0}({1})'.format(type(self).__name__, super().__repr__())
+        return f"{type(self).__name__}({super().__repr__()})"
 
     def __str__(self):
         return json.dumps(self, ensure_ascii=False)
@@ -83,6 +84,7 @@ class DashScopeAPIResponse(DictMixin):
         output (Any): The request output.
         usage (Any): The request usage information.
     """
+
     status_code: int
     request_id: str
     code: str
@@ -90,29 +92,33 @@ class DashScopeAPIResponse(DictMixin):
     output: Any
     usage: Any
 
-    def __init__(self,
-                 status_code: int,
-                 request_id: str = '',
-                 code: str = '',
-                 message: str = '',
-                 output: Any = None,
-                 usage: Any = None,
-                 **kwargs):
-        super().__init__(status_code=status_code,
-                         request_id=request_id,
-                         code=code,
-                         message=message,
-                         output=output,
-                         usage=usage,
-                         **kwargs)
+    def __init__(
+        self,
+        status_code: int,
+        request_id: str = "",
+        code: str = "",
+        message: str = "",
+        output: Any = None,
+        usage: Any = None,
+        **kwargs,
+    ):
+        super().__init__(
+            status_code=status_code,
+            request_id=request_id,
+            code=code,
+            message=message,
+            output=output,
+            usage=usage,
+            **kwargs,
+        )
 
 
 class Role:
-    USER = 'user'
-    SYSTEM = 'system'
-    BOT = 'bot'
-    ASSISTANT = 'assistant'
-    ATTACHMENT = 'attachment'
+    USER = "user"
+    SYSTEM = "system"
+    BOT = "bot"
+    ASSISTANT = "assistant"
+    ATTACHMENT = "attachment"
 
 
 class Message(DictMixin):
@@ -124,11 +130,11 @@ class Message(DictMixin):
 
     @classmethod
     def from_generation_response(cls, response: DictMixin):
-        if 'text' in response.output and response.output['text'] is not None:
-            content = response.output['text']
+        if "text" in response.output and response.output["text"] is not None:
+            content = response.output["text"]
             return Message(role=Role.ASSISTANT, content=content)
         else:
-            return response.output.choices[0]['message']
+            return response.output.choices[0]["message"]
 
     @classmethod
     def from_conversation_response(cls, response: DictMixin):
@@ -140,16 +146,20 @@ class Choice(DictMixin):
     finish_reason: str
     message: Message
 
-    def __init__(self,
-                 finish_reason: str = None,
-                 message: Message = None,
-                 **kwargs):
+    def __init__(
+        self,
+        finish_reason: str = None,
+        message: Message = None,
+        **kwargs,
+    ):
         msg_object = None
         if message is not None and message:
             msg_object = Message(**message)
-        super().__init__(finish_reason=finish_reason,
-                         message=msg_object,
-                         **kwargs)
+        super().__init__(
+            finish_reason=finish_reason,
+            message=msg_object,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -159,17 +169,22 @@ class Audio(DictMixin):
     id: str
     expires_at: int
 
-    def __init__(self,
-                 data: str = None,
-                 url: str = None,
-                 id: str = None,
-                 expires_at: int = None,
-                 **kwargs):
-        super().__init__(data=data,
-                         url=url,
-                         id=id,
-                         expires_at=expires_at,
-                         **kwargs)
+    def __init__(
+        self,
+        data: str = None,
+        url: str = None,
+        # pylint: disable=redefined-builtin
+        id: str = None,
+        expires_at: int = None,
+        **kwargs,
+    ):
+        super().__init__(
+            data=data,
+            url=url,
+            id=id,
+            expires_at=expires_at,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -178,20 +193,24 @@ class GenerationOutput(DictMixin):
     choices: List[Choice]
     finish_reason: str
 
-    def __init__(self,
-                 text: str = None,
-                 finish_reason: str = None,
-                 choices: List[Choice] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        text: str = None,
+        finish_reason: str = None,
+        choices: List[Choice] = None,
+        **kwargs,
+    ):
         chs = None
         if choices is not None:
             chs = []
             for choice in choices:
                 chs.append(Choice(**choice))
-        super().__init__(text=text,
-                         finish_reason=finish_reason,
-                         choices=chs,
-                         **kwargs)
+        super().__init__(
+            text=text,
+            finish_reason=finish_reason,
+            choices=chs,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -199,13 +218,17 @@ class GenerationUsage(DictMixin):
     input_tokens: int
     output_tokens: int
 
-    def __init__(self,
-                 input_tokens: int = 0,
-                 output_tokens: int = 0,
-                 **kwargs):
-        super().__init__(input_tokens=input_tokens,
-                         output_tokens=output_tokens,
-                         **kwargs)
+    def __init__(
+        self,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        **kwargs,
+    ):
+        super().__init__(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -226,12 +249,15 @@ class GenerationResponse(DashScopeAPIResponse):
                 code=api_response.code,
                 message=api_response.message,
                 output=GenerationOutput(**api_response.output),
-                usage=GenerationUsage(**usage))
+                usage=GenerationUsage(**usage),
+            )
         else:
-            return GenerationResponse(status_code=api_response.status_code,
-                                      request_id=api_response.request_id,
-                                      code=api_response.code,
-                                      message=api_response.message)
+            return GenerationResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+            )
 
 
 @dataclass(init=False)
@@ -239,12 +265,14 @@ class MultiModalConversationOutput(DictMixin):
     choices: List[Choice]
     audio: Audio
 
-    def __init__(self,
-                 text: str = None,
-                 finish_reason: str = None,
-                 choices: List[Choice] = None,
-                 audio: Audio = None,
-                 **kwargs):
+    def __init__(
+        self,
+        text: str = None,
+        finish_reason: str = None,
+        choices: List[Choice] = None,
+        audio: Audio = None,
+        **kwargs,
+    ):
         chs = None
         if choices is not None:
             chs = []
@@ -252,11 +280,13 @@ class MultiModalConversationOutput(DictMixin):
                 chs.append(Choice(**choice))
         if audio is not None:
             audio = Audio(**audio)
-        super().__init__(text=text,
-                         finish_reason=finish_reason,
-                         choices=chs,
-                         audio=audio,
-                         **kwargs)
+        super().__init__(
+            text=text,
+            finish_reason=finish_reason,
+            choices=chs,
+            audio=audio,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -267,15 +297,19 @@ class MultiModalConversationUsage(DictMixin):
 
     # TODO add image usage info.
 
-    def __init__(self,
-                 input_tokens: int = 0,
-                 output_tokens: int = 0,
-                 characters: int = 0,
-                 **kwargs):
-        super().__init__(input_tokens=input_tokens,
-                         output_tokens=output_tokens,
-                         characters=characters,
-                         **kwargs)
+    def __init__(
+        self,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        characters: int = 0,
+        **kwargs,
+    ):
+        super().__init__(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            characters=characters,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -296,13 +330,15 @@ class MultiModalConversationResponse(DashScopeAPIResponse):
                 code=api_response.code,
                 message=api_response.message,
                 output=MultiModalConversationOutput(**api_response.output),
-                usage=MultiModalConversationUsage(**usage))
+                usage=MultiModalConversationUsage(**usage),
+            )
         else:
             return MultiModalConversationResponse(
                 status_code=api_response.status_code,
                 request_id=api_response.request_id,
                 code=api_response.code,
-                message=api_response.message)
+                message=api_response.message,
+            )
 
 
 @dataclass(init=False)
@@ -340,18 +376,22 @@ class TranscriptionResponse(DashScopeAPIResponse):
             if api_response.usage is not None:
                 usage = TranscriptionUsage(**api_response.usage)
 
-            return TranscriptionResponse(status_code=api_response.status_code,
-                                         request_id=api_response.request_id,
-                                         code=api_response.code,
-                                         message=api_response.message,
-                                         output=output,
-                                         usage=usage)
+            return TranscriptionResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+                output=output,
+                usage=usage,
+            )
 
         else:
-            return TranscriptionResponse(status_code=api_response.status_code,
-                                         request_id=api_response.request_id,
-                                         code=api_response.code,
-                                         message=api_response.message)
+            return TranscriptionResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+            )
 
 
 @dataclass(init=False)
@@ -381,32 +421,39 @@ class RecognitionResponse(DashScopeAPIResponse):
             output = None
             usage = None
             if api_response.output is not None:
-                if 'sentence' in api_response.output:
+                if "sentence" in api_response.output:
                     output = RecognitionOutput(**api_response.output)
             if api_response.usage is not None:
                 usage = RecognitionUsage(**api_response.usage)
 
-            return RecognitionResponse(status_code=api_response.status_code,
-                                       request_id=api_response.request_id,
-                                       code=api_response.code,
-                                       message=api_response.message,
-                                       output=output,
-                                       usage=usage)
+            return RecognitionResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+                output=output,
+                usage=usage,
+            )
 
         else:
-            return RecognitionResponse(status_code=api_response.status_code,
-                                       request_id=api_response.request_id,
-                                       code=api_response.code,
-                                       message=api_response.message)
+            return RecognitionResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+            )
 
     @staticmethod
     def is_sentence_end(sentence: Dict[str, Any]) -> bool:
-        """Determine whether the speech recognition result is the end of a sentence.
-           This is a static method.
+        """Determine whether the speech recognition result is the end of a sentence.  # noqa: E501
+        This is a static method.
         """
         result = False
-        if sentence is not None and 'end_time' in sentence and sentence[
-            'end_time'] is not None:
+        if (
+            sentence is not None
+            and "end_time" in sentence
+            and sentence["end_time"] is not None
+        ):
             result = True
         return result
 
@@ -448,21 +495,23 @@ class SpeechSynthesisResponse(DashScopeAPIResponse):
                 code=api_response.code,
                 message=api_response.message,
                 output=output,
-                usage=usage)
+                usage=usage,
+            )
 
         else:
             return SpeechSynthesisResponse(
                 status_code=api_response.status_code,
                 request_id=api_response.request_id,
                 code=api_response.code,
-                message=api_response.message)
+                message=api_response.message,
+            )
 
 
 @dataclass(init=False)
 class ImageSynthesisResult(DictMixin):
     url: str
 
-    def __init__(self, url: str = '', **kwargs) -> None:
+    def __init__(self, url: str = "", **kwargs) -> None:
         super().__init__(url=url, **kwargs)
 
 
@@ -471,21 +520,26 @@ class ImageSynthesisOutput(DictMixin):
     task_id: str
     task_status: str
     results: List[ImageSynthesisResult]
+    # pylint: disable=dangerous-default-value
 
-    def __init__(self,
-                 task_id: str = None,
-                 task_status: str = None,
-                 results: List[ImageSynthesisResult] = [],
-                 **kwargs):
+    def __init__(
+        self,
+        task_id: str = None,
+        task_status: str = None,
+        results: List[ImageSynthesisResult] = [],
+        **kwargs,
+    ):
         res = []
         if len(results) > 0:
             for result in results:
                 res.append(ImageSynthesisResult(**result))
-        super().__init__(self,
-                         task_id=task_id,
-                         task_status=task_status,
-                         results=res,
-                         **kwargs)
+        super().__init__(
+            self,
+            task_id=task_id,
+            task_status=task_status,
+            results=res,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -494,16 +548,20 @@ class VideoSynthesisOutput(DictMixin):
     task_status: str
     video_url: str
 
-    def __init__(self,
-                 task_id: str,
-                 task_status: str,
-                 video_url: str = '',
-                 **kwargs):
-        super().__init__(self,
-                         task_id=task_id,
-                         task_status=task_status,
-                         video_url=video_url,
-                         **kwargs)
+    def __init__(
+        self,
+        task_id: str,
+        task_status: str,
+        video_url: str = "",
+        **kwargs,
+    ):
+        super().__init__(
+            self,
+            task_id=task_id,
+            task_status=task_status,
+            video_url=video_url,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -520,15 +578,19 @@ class VideoSynthesisUsage(DictMixin):
     video_duration: int
     video_ratio: str
 
-    def __init__(self,
-                 video_count: int = 1,
-                 video_duration: int = 0,
-                 video_ratio: str = '',
-                 **kwargs):
-        super().__init__(video_count=video_count,
-                         video_duration=video_duration,
-                         video_ratio=video_ratio,
-                         **kwargs)
+    def __init__(
+        self,
+        video_count: int = 1,
+        video_duration: int = 0,
+        video_ratio: str = "",
+        **kwargs,
+    ):
+        super().__init__(
+            video_count=video_count,
+            video_duration=video_duration,
+            video_ratio=video_ratio,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -546,18 +608,22 @@ class ImageSynthesisResponse(DashScopeAPIResponse):
             if api_response.usage is not None:
                 usage = ImageSynthesisUsage(**api_response.usage)
 
-            return ImageSynthesisResponse(status_code=api_response.status_code,
-                                          request_id=api_response.request_id,
-                                          code=api_response.code,
-                                          message=api_response.message,
-                                          output=output,
-                                          usage=usage)
+            return ImageSynthesisResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+                output=output,
+                usage=usage,
+            )
 
         else:
-            return ImageSynthesisResponse(status_code=api_response.status_code,
-                                          request_id=api_response.request_id,
-                                          code=api_response.code,
-                                          message=api_response.message)
+            return ImageSynthesisResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+            )
 
 
 @dataclass(init=False)
@@ -575,18 +641,22 @@ class VideoSynthesisResponse(DashScopeAPIResponse):
             if api_response.usage is not None:
                 usage = VideoSynthesisUsage(**api_response.usage)
 
-            return VideoSynthesisResponse(status_code=api_response.status_code,
-                                          request_id=api_response.request_id,
-                                          code=api_response.code,
-                                          message=api_response.message,
-                                          output=output,
-                                          usage=usage)
+            return VideoSynthesisResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+                output=output,
+                usage=usage,
+            )
 
         else:
-            return VideoSynthesisResponse(status_code=api_response.status_code,
-                                          request_id=api_response.request_id,
-                                          code=api_response.code,
-                                          message=api_response.message)
+            return VideoSynthesisResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+            )
 
 
 @dataclass(init=False)
@@ -595,15 +665,19 @@ class ReRankResult(DictMixin):
     relevance_score: float
     document: Dict = None
 
-    def __init__(self,
-                 index: int,
-                 relevance_score: float,
-                 document: Dict = None,
-                 **kwargs):
-        super().__init__(index=index,
-                         relevance_score=relevance_score,
-                         document=document,
-                         **kwargs)
+    def __init__(
+        self,
+        index: int,
+        relevance_score: float,
+        document: Dict = None,
+        **kwargs,
+    ):
+        super().__init__(
+            index=index,
+            relevance_score=relevance_score,
+            document=document,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -639,17 +713,21 @@ class ReRankResponse(DashScopeAPIResponse):
             if api_response.usage:
                 usage = api_response.usage
 
-            return ReRankResponse(status_code=api_response.status_code,
-                                  request_id=api_response.request_id,
-                                  code=api_response.code,
-                                  message=api_response.message,
-                                  output=ReRankOutput(**api_response.output),
-                                  usage=ReRankUsage(**usage))
+            return ReRankResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+                output=ReRankOutput(**api_response.output),
+                usage=ReRankUsage(**usage),
+            )
         else:
-            return ReRankResponse(status_code=api_response.status_code,
-                                  request_id=api_response.request_id,
-                                  code=api_response.code,
-                                  message=api_response.message)
+            return ReRankResponse(
+                status_code=api_response.status_code,
+                request_id=api_response.request_id,
+                code=api_response.code,
+                message=api_response.message,
+            )
 
 
 @dataclass(init=False)
@@ -659,17 +737,22 @@ class TextToSpeechAudio(DictMixin):
     data: str
     url: str
 
-    def __init__(self,
-                 expires_at: int,
-                 id: str,
-                 data: str = None,
-                 url: str = None,
-                 **kwargs):
-        super().__init__(expires_at=expires_at,
-                         id=id,
-                         data=data,
-                         url=url,
-                         **kwargs)
+    def __init__(
+        # pylint: disable=redefined-builtin
+        self,
+        expires_at: int,
+        id: str,
+        data: str = None,
+        url: str = None,
+        **kwargs,
+    ):
+        super().__init__(
+            expires_at=expires_at,
+            id=id,
+            data=data,
+            url=url,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -677,13 +760,17 @@ class TextToSpeechOutput(DictMixin):
     finish_reason: str
     audio: TextToSpeechAudio
 
-    def __init__(self,
-                 finish_reason: str = None,
-                 audio: TextToSpeechAudio = None,
-                 **kwargs):
-        super().__init__(finish_reason=finish_reason,
-                         audio=audio,
-                         **kwargs)
+    def __init__(
+        self,
+        finish_reason: str = None,
+        audio: TextToSpeechAudio = None,
+        **kwargs,
+    ):
+        super().__init__(
+            finish_reason=finish_reason,
+            audio=audio,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -704,13 +791,15 @@ class TextToSpeechResponse(DashScopeAPIResponse):
                 code=api_response.code,
                 message=api_response.message,
                 output=TextToSpeechOutput(**api_response.output),
-                usage=MultiModalConversationUsage(**usage))
+                usage=MultiModalConversationUsage(**usage),
+            )
         else:
             return TextToSpeechResponse(
                 status_code=api_response.status_code,
                 request_id=api_response.request_id,
                 code=api_response.code,
-                message=api_response.message)
+                message=api_response.message,
+            )
 
 
 @dataclass(init=False)
@@ -718,12 +807,14 @@ class ImageGenerationOutput(DictMixin):
     choices: List[Choice]
     audio: Audio
 
-    def __init__(self,
-                 text: str = None,
-                 finish_reason: str = None,
-                 choices: List[Choice] = None,
-                 audio: Audio = None,
-                 **kwargs):
+    def __init__(
+        self,
+        text: str = None,
+        finish_reason: str = None,
+        choices: List[Choice] = None,
+        audio: Audio = None,
+        **kwargs,
+    ):
         chs = None
         if choices is not None:
             chs = []
@@ -731,11 +822,13 @@ class ImageGenerationOutput(DictMixin):
                 chs.append(Choice(**choice))
         if audio is not None:
             audio = Audio(**audio)
-        super().__init__(text=text,
-                         finish_reason=finish_reason,
-                         choices=chs,
-                         audio=audio,
-                         **kwargs)
+        super().__init__(
+            text=text,
+            finish_reason=finish_reason,
+            choices=chs,
+            audio=audio,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -746,15 +839,20 @@ class ImageGenerationUsage(DictMixin):
 
     # TODO add image usage info.
 
-    def __init__(self,
-                 input_tokens: int = 0,
-                 output_tokens: int = 0,
-                 characters: int = 0,
-                 **kwargs):
-        super().__init__(input_tokens=input_tokens,
-                         output_tokens=output_tokens,
-                         characters=characters,
-                         **kwargs)
+    def __init__(
+        self,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        characters: int = 0,
+        **kwargs,
+    ):
+        super().__init__(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            characters=characters,
+            **kwargs,
+        )
+
 
 @dataclass(init=False)
 class ImageGenerationResponse(DashScopeAPIResponse):
@@ -774,10 +872,12 @@ class ImageGenerationResponse(DashScopeAPIResponse):
                 code=api_response.code,
                 message=api_response.message,
                 output=ImageGenerationOutput(**api_response.output),
-                usage=ImageGenerationUsage(**usage))
+                usage=ImageGenerationUsage(**usage),
+            )
         else:
             return ImageGenerationResponse(
                 status_code=api_response.status_code,
                 request_id=api_response.request_id,
                 code=api_response.code,
-                message=api_response.message)
+                message=api_response.message,
+            )

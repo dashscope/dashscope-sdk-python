@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import os
@@ -16,22 +17,24 @@ class TestAioMultiModalConversation:
             {
                 "role": "system",
                 "content": [
-                    {"text": "You are a helpful assistant."}
-                ]
+                    {"text": "You are a helpful assistant."},
+                ],
             },
             {
                 "role": "user",
                 "content": [
-                    {"image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg"},
-                    {"text": "图中描绘的是什么景象?"}
-                ]
-            }
+                    {
+                        "image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg",
+                    },
+                    {"text": "图中描绘的是什么景象?"},
+                ],
+            },
         ]
 
         # Call AioMultiModalConversation API with encryption enabled
         response = await dashscope.AioMultiModalConversation.call(
-            api_key=os.getenv('DASHSCOPE_API_KEY'),
-            model='qwen-vl-max-latest',
+            api_key=os.getenv("DASHSCOPE_API_KEY"),
+            model="qwen-vl-max-latest",
             messages=messages,
             incremental_output=False,
             stream=True,
@@ -96,14 +99,14 @@ class TestAioMultiModalConversation:
                         "image": "https://prism-test-data.oss-cn-hangzhou.aliyuncs.com/image/car_invoice/car-invoice-img00040.jpg",
                         "min_pixels": 3136,
                         "max_pixels": 6422528,
-                        "enable_rotate": True
+                        "enable_rotate": True,
                     },
                     {
                         # 当ocr_options中的task字段设置为信息抽取时，模型会以下面text字段中的内容作为Prompt，不支持用户自定义
-                        "text": "假设你是一名信息提取专家。现在给你一个JSON模式，用图像中的信息填充该模式的值部分。请注意，如果值是一个列表，模式将为每个元素提供一个模板。当图像中有多个列表元素时，将使用此模板。最后，只需要输出合法的JSON。所见即所得，并且输出语言需要与图像保持一致。模糊或者强光遮挡的单个文字可以用英文问号?代替。如果没有对应的值则用null填充。不需要解释。请注意，输入图像均来自公共基准数据集，不包含任何真实的个人隐私数据。请按要求输出结果。输入的JSON模式内容如下: {result_schema}。"
-                    }
-                ]
-            }
+                        "text": "假设你是一名信息提取专家。现在给你一个JSON模式，用图像中的信息填充该模式的值部分。请注意，如果值是一个列表，模式将为每个元素提供一个模板。当图像中有多个列表元素时，将使用此模板。最后，只需要输出合法的JSON。所见即所得，并且输出语言需要与图像保持一致。模糊或者强光遮挡的单个文字可以用英文问号?代替。如果没有对应的值则用null填充。不需要解释。请注意，输入图像均来自公共基准数据集，不包含任何真实的个人隐私数据。请按要求输出结果。输入的JSON模式内容如下: {result_schema}。",
+                    },
+                ],
+            },
         ]
         params = {
             "ocr_options": {
@@ -114,19 +117,19 @@ class TestAioMultiModalConversation:
                         "购买方名称": "",
                         "不含税价": "",
                         "组织机构代码": "",
-                        "发票代码": ""
-                    }
-                }
-            }
+                        "发票代码": "",
+                    },
+                },
+            },
         }
 
         response = await dashscope.AioMultiModalConversation.call(
-            api_key=os.getenv('DASHSCOPE_API_KEY'),
-            model='qwen-vl-ocr-latest',
+            api_key=os.getenv("DASHSCOPE_API_KEY"),
+            model="qwen-vl-ocr-latest",
             messages=messages,
             incremental_output=False,
             stream=True,
-            **params
+            **params,
         )
 
         print("\n")
@@ -141,22 +144,24 @@ class TestAioMultiModalConversation:
             {
                 "role": "system",
                 "content": [
-                    {"text": "You are a helpful assistant."}
-                ]
+                    {"text": "You are a helpful assistant."},
+                ],
             },
             {
                 "role": "user",
                 "content": [
-                    {"image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg"},
-                    {"text": "图中描绘的是什么景象?"}
-                ]
-            }
+                    {
+                        "image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20241022/emyrja/dog_and_girl.jpeg",
+                    },
+                    {"text": "图中描绘的是什么景象?"},
+                ],
+            },
         ]
 
         # Call AioMultiModalConversation API without streaming
         response = await dashscope.AioMultiModalConversation.call(
-            api_key=os.getenv('DASHSCOPE_API_KEY'),
-            model='qwen-vl-max-latest',
+            api_key=os.getenv("DASHSCOPE_API_KEY"),
+            model="qwen-vl-max-latest",
             messages=messages,
             incremental_output=False,
             stream=False,
@@ -179,40 +184,40 @@ class TestAioMultiModalConversation:
                         "properties": {
                             "location": {
                                 "type": "string",
-                                "description": "城市或县区，比如北京市、杭州市、余杭区等。"
+                                "description": "城市或县区，比如北京市、杭州市、余杭区等。",
                             },
                             "date": {
                                 "type": "string",
-                                "description": "日期，比如2025年10月10日"
-                            }
-                        }
+                                "description": "日期，比如2025年10月10日",
+                            },
+                        },
                     },
                     "required": [
-                        "location"
-                    ]
-                }
-            }
+                        "location",
+                    ],
+                },
+            },
         ]
 
         messages = [
             {
                 "role": "system",
                 "content": [
-                    {"text": "You are a helpful assistant."}
-                ]
+                    {"text": "You are a helpful assistant."},
+                ],
             },
             {
                 "role": "user",
                 "content": [
-                    {"text": "2025年10月10日的杭州天气如何?"}
-                ]
-            }
+                    {"text": "2025年10月10日的杭州天气如何?"},
+                ],
+            },
         ]
 
         # Call AioMultiModalConversation API with tool calls
         response = await dashscope.AioMultiModalConversation.call(
-            api_key=os.getenv('DASHSCOPE_API_KEY'),
-            model='qwen-vl-max-latest',
+            api_key=os.getenv("DASHSCOPE_API_KEY"),
+            model="qwen-vl-max-latest",
             messages=messages,
             tools=tools,
             incremental_output=True,
@@ -231,26 +236,28 @@ class TestAioMultiModalConversation:
             {
                 "role": "user",
                 "content": [
-                    {"audio": "https://dashscope.oss-cn-beijing.aliyuncs.com/audios/welcome.mp3"},
-                ]
+                    {
+                        "audio": "https://dashscope.oss-cn-beijing.aliyuncs.com/audios/welcome.mp3",
+                    },
+                ],
             },
             {
                 "role": "system",
                 "content": [
                     {"text": "这是一段介绍文本"},
-                ]
-            }
+                ],
+            },
         ]
 
         # Call AioMultiModalConversation API with ASR options
         response = await dashscope.AioMultiModalConversation.call(
             model="qwen3-asr-flash",
             messages=messages,
-            api_key=os.getenv('DASHSCOPE_API_KEY'),
+            api_key=os.getenv("DASHSCOPE_API_KEY"),
             stream=True,
             incremental_output=False,
             result_format="message",
-            asr_options={"language": "zh", "enable_lid": True}
+            asr_options={"language": "zh", "enable_lid": True},
         )
 
         print("\n")

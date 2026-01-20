@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 # from: https://github.com/aio-libs/aiohttp-sse/blob/master/aiohttp_sse/__init__.py  # noqa E501
@@ -11,7 +12,7 @@ from aiohttp.web import HTTPMethodNotAllowed, StreamResponse
 
 from .helper import _ContextManager
 
-__all__ = ['EventSourceResponse', 'sse_response']
+__all__ = ["EventSourceResponse", "sse_response"]
 
 
 class EventSourceResponse(StreamResponse):
@@ -28,8 +29,8 @@ class EventSourceResponse(StreamResponse):
     """
 
     DEFAULT_PING_INTERVAL = 60
-    DEFAULT_SEPARATOR = '\r\n'
-    LINE_SEP_EXPR = re.compile(r'\r\n|\r|\n')
+    DEFAULT_SEPARATOR = "\r\n"
+    LINE_SEP_EXPR = re.compile(r"\r\n|\r|\n")
 
     def __init__(self, status=200, reason=None, headers=None, sep=None):
         super().__init__(status=status, reason=reason)
@@ -37,10 +38,10 @@ class EventSourceResponse(StreamResponse):
             self.headers.extend(headers)
 
         # mandatory for servers-sent events headers
-        self.headers['Content-Type'] = 'text/event-stream'
-        self.headers['Cache-Control'] = 'no-cache'
-        self.headers['Connection'] = 'keep-alive'
-        self.headers['X-Accel-Buffering'] = 'no'
+        self.headers["Content-Type"] = "text/event-stream"
+        self.headers["Cache-Control"] = "no-cache"
+        self.headers["Connection"] = "keep-alive"
+        self.headers["X-Accel-Buffering"] = "no"
 
         self._ping_interval = self.DEFAULT_PING_INTERVAL
         self._ping_task = None
@@ -55,15 +56,15 @@ class EventSourceResponse(StreamResponse):
 
         :param request: regular aiohttp.web.Request.
         """
-        if request.method not in ['GET', 'POST']:
-            raise HTTPMethodNotAllowed(request.method, ['GET', 'POST'])
+        if request.method not in ["GET", "POST"]:
+            raise HTTPMethodNotAllowed(request.method, ["GET", "POST"])
 
         if not self.prepared:
             writer = await super().prepare(request)
             self._ping_task = asyncio.create_task(self._ping())
-            if request.method == 'POST':
+            if request.method == "POST":
                 request_str = await request.json()
-                print('Request content: %s' % request_str)
+                print("Request content: %s" % request_str)
             # explicitly enabling chunked encoding, since content length
             # usually not known beforehand.
             self.enable_chunked_encoding()
@@ -93,25 +94,25 @@ class EventSourceResponse(StreamResponse):
         """
         buffer = io.StringIO()
         if id is not None:
-            buffer.write(self.LINE_SEP_EXPR.sub('', f'id: {id}'))
+            buffer.write(self.LINE_SEP_EXPR.sub("", f"id: {id}"))
             buffer.write(self._sep)
 
         if event is not None:
-            buffer.write(self.LINE_SEP_EXPR.sub('', f'event: {event}'))
+            buffer.write(self.LINE_SEP_EXPR.sub("", f"event: {event}"))
             buffer.write(self._sep)
 
         for chunk in self.LINE_SEP_EXPR.split(data):
-            buffer.write(f'data: {chunk}')
+            buffer.write(f"data: {chunk}")
             buffer.write(self._sep)
 
         if retry is not None:
             if not isinstance(retry, int):
-                raise TypeError('retry argument must be int')
-            buffer.write(f'retry: {retry}')
+                raise TypeError("retry argument must be int")
+            buffer.write(f"retry: {retry}")
             buffer.write(self._sep)
 
         buffer.write(self._sep)
-        await self.write(buffer.getvalue().encode('utf-8'))
+        await self.write(buffer.getvalue().encode("utf-8"))
 
     async def wait(self):
         """EventSourceResponse object is used for streaming data to the client,
@@ -119,7 +120,7 @@ class EventSourceResponse(StreamResponse):
         be closed or other task explicitly call ``stop_streaming`` method.
         """
         if self._ping_task is None:
-            raise RuntimeError('Response is not started')
+            raise RuntimeError("Response is not started")
         with contextlib.suppress(asyncio.CancelledError):
             await self._ping_task
 
@@ -128,7 +129,7 @@ class EventSourceResponse(StreamResponse):
         to notify client that server no longer wants to stream anything.
         """
         if self._ping_task is None:
-            raise RuntimeError('Response is not started')
+            raise RuntimeError("Response is not started")
         self._ping_task.cancel()
 
     def enable_compression(self, force=False):
@@ -147,9 +148,9 @@ class EventSourceResponse(StreamResponse):
         """
 
         if not isinstance(value, int):
-            raise TypeError('ping interval must be int')
+            raise TypeError("ping interval must be int")
         if value < 0:
-            raise ValueError('ping interval must be greater then 0')
+            raise ValueError("ping interval must be greater then 0")
 
         self._ping_interval = value
 
@@ -159,7 +160,7 @@ class EventSourceResponse(StreamResponse):
         # as ping message.
         while True:
             await asyncio.sleep(self._ping_interval)
-            await self.write(': ping{0}{0}'.format(self._sep).encode('utf-8'))
+            await self.write(": ping{0}{0}".format(self._sep).encode("utf-8"))
 
     async def __aenter__(self):
         return self
@@ -182,8 +183,9 @@ def sse_response(
 ):
     if not issubclass(response_cls, EventSourceResponse):
         raise TypeError(
-            'response_cls must be subclass of '
-            'aiohttp_sse.EventSourceResponse, got {}'.format(response_cls))
+            "response_cls must be subclass of "
+            "aiohttp_sse.EventSourceResponse, got {}".format(response_cls),
+        )
 
     sse = response_cls(status=status, reason=reason, headers=headers, sep=sep)
     return _ContextManager(sse._prepare(request))

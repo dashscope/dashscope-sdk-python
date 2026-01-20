@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import dataclasses
@@ -9,20 +10,20 @@ import dashscope
 
 def get_object_type(name: str):
     dashscope_objects = {
-        'assistant': dashscope.Assistant,
-        'assistant.deleted': dashscope.DeleteResponse,
-        'thread.message': dashscope.ThreadMessage,
-        'thread.run': dashscope.Run,
-        'thread.run.step': dashscope.RunStep,
-        'thread.message.file': dashscope.MessageFile,
-        'assistant.file': dashscope.AssistantFile,
-        'thread': dashscope.Thread,
+        "assistant": dashscope.Assistant,
+        "assistant.deleted": dashscope.DeleteResponse,
+        "thread.message": dashscope.ThreadMessage,
+        "thread.run": dashscope.Run,
+        "thread.run.step": dashscope.RunStep,
+        "thread.message.file": dashscope.MessageFile,
+        "assistant.file": dashscope.AssistantFile,
+        "thread": dashscope.Thread,
     }
     return dashscope_objects.get(name, None)
 
 
 @dataclass(init=False)
-class BaseObjectMixin(object):
+class BaseObjectMixin(object):  # pylint: disable=useless-object-inheritance
     __slots__ = ()
 
     def __init__(self, **kwargs):
@@ -35,7 +36,7 @@ class BaseObjectMixin(object):
                     continue
 
             if isinstance(v, dict):
-                object_name = v.get('object', None)
+                object_name = v.get("object", None)
                 if object_name:
                     object_type = get_object_type(object_name)
                     if object_type:
@@ -62,7 +63,7 @@ class BaseObjectMixin(object):
                     continue
 
             if isinstance(item, dict):
-                object_name = item.get('object', None)
+                object_name = item.get("object", None)
                 if object_name:
                     object_type = get_object_type(object_name)
                     if object_type:
@@ -72,7 +73,9 @@ class BaseObjectMixin(object):
                 else:
                     obj_list.append(item)
             elif isinstance(item, list):
-                obj_list.append(self._init_list_element_recursive(item))
+                # Recursively initialize nested list elements
+                # pylint: disable=no-value-for-parameter
+                obj_list.append(self._init_list_element_recursive(item))  # type: ignore[call-arg]  # pylint: disable=line-too-long # noqa: E501
             else:
                 obj_list.append(item)
         return obj_list
@@ -106,8 +109,9 @@ class BaseObjectMixin(object):
             output_object = {}
             for field in dataclasses.fields(input_object):
                 if hasattr(input_object, field.name):
-                    output_object[field.name] = self._recursive_to_str__(
-                        getattr(input_object, field.name))
+                    output_object[field.name] = self._recursive_to_str__(  # type: ignore[call-overload] # pylint: disable=line-too-long # noqa: E501
+                        getattr(input_object, field.name),
+                    )
             return output_object
         else:
             return input_object
@@ -131,5 +135,5 @@ class BaseList(BaseObjectMixin):
     last_id: str
     first_id: str
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)

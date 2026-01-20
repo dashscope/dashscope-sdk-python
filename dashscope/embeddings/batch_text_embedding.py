@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from typing import Union
@@ -6,26 +7,30 @@ from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.client.base_api import BaseAsyncApi
 from dashscope.common.error import InputRequired
 from dashscope.common.utils import _get_task_group_and_task
-from dashscope.embeddings.batch_text_embedding_response import \
-    BatchTextEmbeddingResponse
+from dashscope.embeddings.batch_text_embedding_response import (
+    BatchTextEmbeddingResponse,
+)
 
 
 class BatchTextEmbedding(BaseAsyncApi):
-    task = 'text-embedding'
-    function = 'text-embedding'
+    task = "text-embedding"
+    function = "text-embedding"
     """API for async text embedding.
     """
+
     class Models:
-        text_embedding_async_v1 = 'text-embedding-async-v1'
-        text_embedding_async_v2 = 'text-embedding-async-v2'
+        text_embedding_async_v1 = "text-embedding-async-v1"
+        text_embedding_async_v2 = "text-embedding-async-v2"
 
     @classmethod
-    def call(cls,
-             model: str,
-             url: str,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> BatchTextEmbeddingResponse:
+    def call(  # type: ignore[override]
+        cls,
+        model: str,
+        url: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> BatchTextEmbeddingResponse:
         """Call async text embedding service and get result.
 
         Args:
@@ -51,19 +56,23 @@ class BatchTextEmbedding(BaseAsyncApi):
         Returns:
             AsyncTextEmbeddingResponse: The async text embedding task result.
         """
-        return super().call(model,
-                            url,
-                            api_key=api_key,
-                            workspace=workspace,
-                            **kwargs)
+        return super().call(  # type: ignore[return-value]
+            model,
+            url,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
 
     @classmethod
-    def async_call(cls,
-                   model: str,
-                   url: str,
-                   api_key: str = None,
-                   workspace: str = None,
-                   **kwargs) -> BatchTextEmbeddingResponse:
+    def async_call(  # type: ignore[override]
+        cls,
+        model: str,
+        url: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> BatchTextEmbeddingResponse:
         """Create a async text embedding task, and return task information.
 
         Args:
@@ -92,24 +101,28 @@ class BatchTextEmbedding(BaseAsyncApi):
                 task id in the response.
         """
         if url is None or not url:
-            raise InputRequired('url is required!')
-        input = {'url': url}
+            raise InputRequired("url is required!")
+        input = {"url": url}  # pylint: disable=redefined-builtin
         task_group, _ = _get_task_group_and_task(__name__)
-        response = super().async_call(model=model,
-                                      task_group=task_group,
-                                      task=BatchTextEmbedding.task,
-                                      function=BatchTextEmbedding.function,
-                                      api_key=api_key,
-                                      input=input,
-                                      workspace=workspace,
-                                      **kwargs)
+        response = super().async_call(
+            model=model,
+            task_group=task_group,
+            task=BatchTextEmbedding.task,
+            function=BatchTextEmbedding.function,
+            api_key=api_key,
+            input=input,
+            workspace=workspace,
+            **kwargs,
+        )
         return BatchTextEmbeddingResponse.from_api_response(response)
 
     @classmethod
-    def fetch(cls,
-              task: Union[str, BatchTextEmbeddingResponse],
-              api_key: str = None,
-              workspace: str = None) -> BatchTextEmbeddingResponse:
+    def fetch(  # type: ignore[override]
+        cls,
+        task: Union[str, BatchTextEmbeddingResponse],
+        api_key: str = None,
+        workspace: str = None,
+    ) -> BatchTextEmbeddingResponse:
         """Fetch async text embedding task status or result.
 
         Args:
@@ -125,11 +138,13 @@ class BatchTextEmbedding(BaseAsyncApi):
         return BatchTextEmbeddingResponse.from_api_response(response)
 
     @classmethod
-    def wait(cls,
-             task: Union[str, BatchTextEmbeddingResponse],
-             api_key: str = None,
-             workspace: str = None) -> BatchTextEmbeddingResponse:
-        """Wait for async text embedding task to complete, and return the result.
+    def wait(  # type: ignore[override]
+        cls,
+        task: Union[str, BatchTextEmbeddingResponse],
+        api_key: str = None,
+        workspace: str = None,
+    ) -> BatchTextEmbeddingResponse:
+        """Wait for async text embedding task to complete, and return the result.  # noqa: E501
 
         Args:
             task (Union[str, AsyncTextEmbeddingResponse]): The task_id or
@@ -144,10 +159,12 @@ class BatchTextEmbedding(BaseAsyncApi):
         return BatchTextEmbeddingResponse.from_api_response(response)
 
     @classmethod
-    def cancel(cls,
-               task: Union[str, BatchTextEmbeddingResponse],
-               api_key: str = None,
-               workspace: str = None) -> DashScopeAPIResponse:
+    def cancel(  # type: ignore[override]
+        cls,
+        task: Union[str, BatchTextEmbeddingResponse],
+        api_key: str = None,
+        workspace: str = None,
+    ) -> DashScopeAPIResponse:
         """Cancel async text embedding task.
         Only tasks whose status is PENDING can be canceled.
 
@@ -163,18 +180,20 @@ class BatchTextEmbedding(BaseAsyncApi):
         return super().cancel(task, api_key, workspace=workspace)
 
     @classmethod
-    def list(cls,
-             start_time: str = None,
-             end_time: str = None,
-             model_name: str = None,
-             api_key_id: str = None,
-             region: str = None,
-             status: str = None,
-             page_no: int = 1,
-             page_size: int = 10,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    def list(
+        cls,
+        start_time: str = None,
+        end_time: str = None,
+        model_name: str = None,
+        api_key_id: str = None,
+        region: str = None,
+        status: str = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """List async tasks.
 
         Args:
@@ -195,14 +214,16 @@ class BatchTextEmbedding(BaseAsyncApi):
         Returns:
             DashScopeAPIResponse: The response data.
         """
-        return super().list(start_time=start_time,
-                            end_time=end_time,
-                            model_name=model_name,
-                            api_key_id=api_key_id,
-                            region=region,
-                            status=status,
-                            page_no=page_no,
-                            page_size=page_size,
-                            api_key=api_key,
-                            workspace=workspace,
-                            **kwargs)
+        return super().list(
+            start_time=start_time,
+            end_time=end_time,
+            model_name=model_name,
+            api_key_id=api_key_id,
+            region=region,
+            status=status,
+            page_no=page_no,
+            page_size=page_size,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )

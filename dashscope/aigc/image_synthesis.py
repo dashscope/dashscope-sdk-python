@@ -1,10 +1,18 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from typing import Any, Dict, List, Union
 
-from dashscope.api_entities.dashscope_response import (DashScopeAPIResponse,
-                                                       ImageSynthesisResponse)
-from dashscope.client.base_api import BaseAsyncApi, BaseApi, BaseAsyncAioApi, BaseAioApi
+from dashscope.api_entities.dashscope_response import (
+    DashScopeAPIResponse,
+    ImageSynthesisResponse,
+)
+from dashscope.client.base_api import (
+    BaseAsyncApi,
+    BaseApi,
+    BaseAsyncAioApi,
+    BaseAioApi,
+)
 from dashscope.common.constants import IMAGES, NEGATIVE_PROMPT, PROMPT
 from dashscope.common.error import InputRequired
 from dashscope.common.utils import _get_task_group_and_task
@@ -12,31 +20,34 @@ from dashscope.utils.oss_utils import check_and_upload_local
 
 
 class ImageSynthesis(BaseAsyncApi):
-    task = 'text2image'
+    task = "text2image"
     """API for image synthesis.
     """
-    class Models:
-        wanx_v1 = 'wanx-v1'
-        wanx_sketch_to_image_v1 = 'wanx-sketch-to-image-v1'
 
-        wanx_2_1_imageedit = 'wanx2.1-imageedit'
+    class Models:
+        wanx_v1 = "wanx-v1"
+        wanx_sketch_to_image_v1 = "wanx-sketch-to-image-v1"
+
+        wanx_2_1_imageedit = "wanx2.1-imageedit"
 
     @classmethod
-    def call(cls,
-             model: str,
-             prompt: Any,
-             negative_prompt: Any = None,
-             images: List[str] = None,
-             api_key: str = None,
-             sketch_image_url: str = None,
-             ref_img: str = None,
-             workspace: str = None,
-             extra_input: Dict = None,
-             task: str = None,
-             function: str = None,
-             mask_image_url: str = None,
-             base_image_url: str = None,
-             **kwargs) -> ImageSynthesisResponse:
+    def call(  # type: ignore[override]
+        cls,
+        model: str,
+        prompt: Any,
+        negative_prompt: Any = None,
+        images: List[str] = None,
+        api_key: str = None,
+        sketch_image_url: str = None,
+        ref_img: str = None,
+        workspace: str = None,
+        extra_input: Dict = None,
+        task: str = None,
+        function: str = None,
+        mask_image_url: str = None,
+        base_image_url: str = None,
+        **kwargs,
+    ) -> ImageSynthesisResponse:
         """Call image(s) synthesis service and get result.
 
         Args:
@@ -56,7 +67,7 @@ class ImageSynthesis(BaseAsyncApi):
                 colorization,super_resolution,expand,remove_watermaker,doodle,
                 description_edit_with_mask,description_edit,stylization_local,stylization_all
             base_image_url (str): Enter the URL address of the target edited image.
-            mask_image_url (str): Provide the URL address of the image of the marked area by the user. It should be consistent with the image resolution of the base_image_url.
+            mask_image_url (str): Provide the URL address of the image of the marked area by the user. It should be consistent with the image resolution of the base_image_url.  # pylint: disable=line-too-long
             **kwargs:
                 n(int, `optional`): Number of images to synthesis.
                 size(str, `optional`): The output image(s) size(width*height).
@@ -74,66 +85,92 @@ class ImageSynthesis(BaseAsyncApi):
         Returns:
             ImageSynthesisResponse: The image(s) synthesis result.
         """
-        return super().call(model,
-                            prompt,
-                            negative_prompt,
-                            images,
-                            api_key=api_key,
-                            sketch_image_url=sketch_image_url,
-                            ref_img=ref_img,
-                            workspace=workspace,
-                            extra_input=extra_input,
-                            task=task,
-                            function=function,
-                            mask_image_url=mask_image_url,
-                            base_image_url=base_image_url,
-                            **kwargs)
+        return super().call(  # type: ignore[return-value]
+            model,
+            prompt,
+            negative_prompt,
+            images,
+            api_key=api_key,
+            sketch_image_url=sketch_image_url,
+            ref_img=ref_img,
+            workspace=workspace,
+            extra_input=extra_input,
+            task=task,
+            function=function,
+            mask_image_url=mask_image_url,
+            base_image_url=base_image_url,
+            **kwargs,
+        )
 
     @classmethod
-    def sync_call(cls,
-                   model: str,
-                   prompt: Any,
-                   negative_prompt: Any = None,
-                   images: List[str] = None,
-                   api_key: str = None,
-                   sketch_image_url: str = None,
-                   ref_img: str = None,
-                   workspace: str = None,
-                   extra_input: Dict = None,
-                   task: str = None,
-                   function: str = None,
-                   mask_image_url: str = None,
-                   base_image_url: str = None,
-                   **kwargs) -> ImageSynthesisResponse:
+    def sync_call(
+        cls,
+        model: str,
+        prompt: Any,
+        negative_prompt: Any = None,
+        images: List[str] = None,
+        api_key: str = None,
+        sketch_image_url: str = None,
+        ref_img: str = None,
+        workspace: str = None,
+        extra_input: Dict = None,
+        task: str = None,
+        function: str = None,
+        mask_image_url: str = None,
+        base_image_url: str = None,
+        **kwargs,
+    ) -> ImageSynthesisResponse:
         """
-        Note: This method currently now only supports wan2.2-t2i-flash and wan2.2-t2i-plus.
-            Using other models will result in an error，More raw image models may be added for use later
+        Note: This method currently now only supports wan2.2-t2i-flash and wan2.2-t2i-plus.  # noqa: E501  # pylint: disable=line-too-long
+            Using other models will result in an error，More raw image models may be added for use later  # pylint: disable=line-too-long
         """
         task_group, f = _get_task_group_and_task(__name__)
-        inputs, kwargs, task = cls._get_input(model, prompt, negative_prompt,
-                                             images, api_key, sketch_image_url,
-                                             ref_img, extra_input, task, function,
-                                             mask_image_url, base_image_url, **kwargs)
-        response = BaseApi.call(model, inputs, task_group, task, f, api_key, workspace, **kwargs)
+        inputs, kwargs, task = cls._get_input(
+            model,
+            prompt,
+            negative_prompt,
+            images,
+            api_key,
+            sketch_image_url,
+            ref_img,
+            extra_input,
+            task,
+            function,
+            mask_image_url,
+            base_image_url,
+            **kwargs,
+        )
+        response = BaseApi.call(
+            model,
+            inputs,
+            task_group,
+            task,
+            f,
+            api_key,
+            workspace,
+            **kwargs,
+        )
         return ImageSynthesisResponse.from_api_response(response)
 
     @classmethod
-    def _get_input(cls,
-                    model: str,
-                    prompt: Any,
-                    negative_prompt: Any = None,
-                    images: List[str] = None,
-                    api_key: str = None,
-                    sketch_image_url: str = None,
-                    ref_img: str = None,
-                    extra_input: Dict = None,
-                    task: str = None,
-                    function: str = None,
-                    mask_image_url: str = None,
-                    base_image_url: str = None,
-                    **kwargs):
+    def _get_input(  # pylint: disable=too-many-branches
+        cls,
+        model: str,
+        prompt: Any,
+        negative_prompt: Any = None,
+        images: List[str] = None,
+        api_key: str = None,
+        sketch_image_url: str = None,
+        ref_img: str = None,
+        extra_input: Dict = None,
+        task: str = None,
+        function: str = None,
+        mask_image_url: str = None,
+        base_image_url: str = None,
+        **kwargs,
+    ):
         if prompt is None or not prompt:
-            raise InputRequired('prompt is required!')
+            raise InputRequired("prompt is required!")
         inputs = {PROMPT: prompt}
         has_upload = False
         upload_certificate = None
@@ -143,49 +180,85 @@ class ImageSynthesis(BaseAsyncApi):
         if images is not None and images and len(images) > 0:
             new_images = []
             for image in images:
-                is_upload, new_image, upload_certificate = check_and_upload_local(
-                    model, image, api_key, upload_certificate)
+                (
+                    is_upload,
+                    new_image,
+                    upload_certificate,
+                ) = check_and_upload_local(
+                    model,
+                    image,
+                    api_key,
+                    upload_certificate,  # type: ignore[arg-type]
+                )
                 if is_upload:
                     has_upload = True
                 new_images.append(new_image)
             inputs[IMAGES] = new_images
         if sketch_image_url is not None and sketch_image_url:
-            is_upload, sketch_image_url, upload_certificate = check_and_upload_local(
-                model, sketch_image_url, api_key, upload_certificate)
+            (
+                is_upload,
+                sketch_image_url,
+                upload_certificate,
+            ) = check_and_upload_local(
+                model,
+                sketch_image_url,
+                api_key,
+                upload_certificate,  # type: ignore[arg-type]
+            )
             if is_upload:
                 has_upload = True
-            inputs['sketch_image_url'] = sketch_image_url
+            inputs["sketch_image_url"] = sketch_image_url
         if ref_img is not None and ref_img:
             is_upload, ref_img, upload_certificate = check_and_upload_local(
-                model, ref_img, api_key, upload_certificate)
+                model,
+                ref_img,
+                api_key,
+                upload_certificate,  # type: ignore[arg-type]
+            )
             if is_upload:
                 has_upload = True
-            inputs['ref_img'] = ref_img
+            inputs["ref_img"] = ref_img
 
         if function is not None and function:
-            inputs['function'] = function
+            inputs["function"] = function
 
         if mask_image_url is not None and mask_image_url:
-            is_upload, res_mask_image_url, upload_certificate = check_and_upload_local(
-                model, mask_image_url, api_key, upload_certificate)
+            (
+                is_upload,
+                res_mask_image_url,
+                upload_certificate,
+            ) = check_and_upload_local(
+                model,
+                mask_image_url,
+                api_key,
+                upload_certificate,  # type: ignore[arg-type]
+            )
             if is_upload:
                 has_upload = True
-            inputs['mask_image_url'] = res_mask_image_url
+            inputs["mask_image_url"] = res_mask_image_url
 
         if base_image_url is not None and base_image_url:
-            is_upload, res_base_image_url, upload_certificate = check_and_upload_local(
-                model, base_image_url, api_key, upload_certificate)
+            (
+                is_upload,
+                res_base_image_url,
+                upload_certificate,
+            ) = check_and_upload_local(
+                model,
+                base_image_url,
+                api_key,
+                upload_certificate,  # type: ignore[arg-type]
+            )
             if is_upload:
                 has_upload = True
-            inputs['base_image_url'] = res_base_image_url
+            inputs["base_image_url"] = res_base_image_url
 
         if extra_input is not None and extra_input:
             inputs = {**inputs, **extra_input}
 
         if has_upload:
-            headers = kwargs.pop('headers', {})
-            headers['X-DashScope-OssResourceResolve'] = 'enable'
-            kwargs['headers'] = headers
+            headers = kwargs.pop("headers", {})
+            headers["X-DashScope-OssResourceResolve"] = "enable"
+            kwargs["headers"] = headers
 
         def __get_i2i_task(task, model) -> str:
             # 处理task参数：优先使用有效的task值
@@ -194,8 +267,8 @@ class ImageSynthesis(BaseAsyncApi):
 
             # 根据model确定任务类型
             if model is not None and model != "":
-                if 'imageedit' in model or "wan2.5-i2i" in model:
-                    return 'image2image'
+                if "imageedit" in model or "wan2.5-i2i" in model:
+                    return "image2image"
 
             # 默认返回文本到图像任务
             return ImageSynthesis.task
@@ -205,21 +278,24 @@ class ImageSynthesis(BaseAsyncApi):
         return inputs, kwargs, task
 
     @classmethod
-    def async_call(cls,
-                   model: str,
-                   prompt: Any,
-                   negative_prompt: Any = None,
-                   images: List[str] = None,
-                   api_key: str = None,
-                   sketch_image_url: str = None,
-                   ref_img: str = None,
-                   workspace: str = None,
-                   extra_input: Dict = None,
-                   task: str = None,
-                   function: str = None,
-                   mask_image_url: str = None,
-                   base_image_url: str = None,
-                   **kwargs) -> ImageSynthesisResponse:
+    # type: ignore[override]
+    def async_call(  # pylint: disable=arguments-renamed  # type: ignore[override] # noqa: E501
+        cls,
+        model: str,
+        prompt: Any,
+        negative_prompt: Any = None,
+        images: List[str] = None,
+        api_key: str = None,
+        sketch_image_url: str = None,
+        ref_img: str = None,
+        workspace: str = None,
+        extra_input: Dict = None,
+        task: str = None,
+        function: str = None,
+        mask_image_url: str = None,
+        base_image_url: str = None,
+        **kwargs,
+    ) -> ImageSynthesisResponse:
         """Create a image(s) synthesis task, and return task information.
 
         Args:
@@ -237,7 +313,7 @@ class ImageSynthesis(BaseAsyncApi):
                 colorization,super_resolution,expand,remove_watermaker,doodle,
                 description_edit_with_mask,description_edit,stylization_local,stylization_all
             base_image_url (str): Enter the URL address of the target edited image.
-            mask_image_url (str): Provide the URL address of the image of the marked area by the user. It should be consistent with the image resolution of the base_image_url.
+            mask_image_url (str): Provide the URL address of the image of the marked area by the user. It should be consistent with the image resolution of the base_image_url.  # pylint: disable=line-too-long
             **kwargs(wanx-v1):
                 n(int, `optional`): Number of images to synthesis.
                 size: The output image(s) size, Default 1024*1024
@@ -257,10 +333,21 @@ class ImageSynthesis(BaseAsyncApi):
                 task id in the response.
         """
         task_group, f = _get_task_group_and_task(__name__)
-        inputs, kwargs, task = cls._get_input(model, prompt, negative_prompt,
-                                             images, api_key, sketch_image_url,
-                                             ref_img, extra_input, task, function,
-                                             mask_image_url, base_image_url, **kwargs)
+        inputs, kwargs, task = cls._get_input(
+            model,
+            prompt,
+            negative_prompt,
+            images,
+            api_key,
+            sketch_image_url,
+            ref_img,
+            extra_input,
+            task,
+            function,
+            mask_image_url,
+            base_image_url,
+            **kwargs,
+        )
         response = super().async_call(
             model=model,
             task_group=task_group,
@@ -269,14 +356,17 @@ class ImageSynthesis(BaseAsyncApi):
             api_key=api_key,
             input=inputs,
             workspace=workspace,
-            **kwargs)
+            **kwargs,
+        )
         return ImageSynthesisResponse.from_api_response(response)
 
     @classmethod
-    def fetch(cls,
-              task: Union[str, ImageSynthesisResponse],
-              api_key: str = None,
-              workspace: str = None) -> ImageSynthesisResponse:
+    def fetch(  # type: ignore[override]
+        cls,
+        task: Union[str, ImageSynthesisResponse],
+        api_key: str = None,
+        workspace: str = None,
+    ) -> ImageSynthesisResponse:
         """Fetch image(s) synthesis task status or result.
 
         Args:
@@ -292,10 +382,12 @@ class ImageSynthesis(BaseAsyncApi):
         return ImageSynthesisResponse.from_api_response(response)
 
     @classmethod
-    def wait(cls,
-             task: Union[str, ImageSynthesisResponse],
-             api_key: str = None,
-             workspace: str = None) -> ImageSynthesisResponse:
+    def wait(  # type: ignore[override]
+        cls,
+        task: Union[str, ImageSynthesisResponse],
+        api_key: str = None,
+        workspace: str = None,
+    ) -> ImageSynthesisResponse:
         """Wait for image(s) synthesis task to complete, and return the result.
 
         Args:
@@ -311,10 +403,12 @@ class ImageSynthesis(BaseAsyncApi):
         return ImageSynthesisResponse.from_api_response(response)
 
     @classmethod
-    def cancel(cls,
-               task: Union[str, ImageSynthesisResponse],
-               api_key: str = None,
-               workspace: str = None) -> DashScopeAPIResponse:
+    def cancel(  # type: ignore[override]
+        cls,
+        task: Union[str, ImageSynthesisResponse],
+        api_key: str = None,
+        workspace: str = None,
+    ) -> DashScopeAPIResponse:
         """Cancel image synthesis task.
         Only tasks whose status is PENDING can be canceled.
 
@@ -330,18 +424,20 @@ class ImageSynthesis(BaseAsyncApi):
         return super().cancel(task, api_key, workspace=workspace)
 
     @classmethod
-    def list(cls,
-             start_time: str = None,
-             end_time: str = None,
-             model_name: str = None,
-             api_key_id: str = None,
-             region: str = None,
-             status: str = None,
-             page_no: int = 1,
-             page_size: int = 10,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    def list(
+        cls,
+        start_time: str = None,
+        end_time: str = None,
+        model_name: str = None,
+        api_key_id: str = None,
+        region: str = None,
+        status: str = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """List async tasks.
 
         Args:
@@ -363,35 +459,42 @@ class ImageSynthesis(BaseAsyncApi):
         Returns:
             DashScopeAPIResponse: The response data.
         """
-        return super().list(start_time=start_time,
-                            end_time=end_time,
-                            model_name=model_name,
-                            api_key_id=api_key_id,
-                            region=region,
-                            status=status,
-                            page_no=page_no,
-                            page_size=page_size,
-                            api_key=api_key,
-                            workspace=workspace,
-                            **kwargs)
+        return super().list(
+            start_time=start_time,
+            end_time=end_time,
+            model_name=model_name,
+            api_key_id=api_key_id,
+            region=region,
+            status=status,
+            page_no=page_no,
+            page_size=page_size,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
+
 
 class AioImageSynthesis(BaseAsyncAioApi):
+    # type: ignore[override]
     @classmethod
-    async def call(cls,
-                  model: str,
-                  prompt: Any,
-                  negative_prompt: Any = None,
-                  images: List[str] = None,
-                  api_key: str = None,
-                  sketch_image_url: str = None,
-                  ref_img: str = None,
-                  workspace: str = None,
-                  extra_input: Dict = None,
-                  task: str = None,
-                  function: str = None,
-                  mask_image_url: str = None,
-                  base_image_url: str = None,
-                  **kwargs) -> ImageSynthesisResponse:
+    async def call(  # type: ignore[override] # pylint: disable=arguments-renamed # noqa: E501
+        # type: ignore[override]
+        cls,
+        model: str,
+        prompt: Any,
+        negative_prompt: Any = None,
+        images: List[str] = None,
+        api_key: str = None,
+        sketch_image_url: str = None,
+        ref_img: str = None,
+        workspace: str = None,
+        extra_input: Dict = None,
+        task: str = None,
+        function: str = None,
+        mask_image_url: str = None,
+        base_image_url: str = None,
+        **kwargs,
+    ) -> ImageSynthesisResponse:
         """Call image(s) synthesis service and get result.
 
         Args:
@@ -411,7 +514,7 @@ class AioImageSynthesis(BaseAsyncAioApi):
                 colorization,super_resolution,expand,remove_watermaker,doodle,
                 description_edit_with_mask,description_edit,stylization_local,stylization_all
             base_image_url (str): Enter the URL address of the target edited image.
-            mask_image_url (str): Provide the URL address of the image of the marked area by the user. It should be consistent with the image resolution of the base_image_url.
+            mask_image_url (str): Provide the URL address of the image of the marked area by the user. It should be consistent with the image resolution of the base_image_url.  # pylint: disable=line-too-long
             **kwargs:
                 n(int, `optional`): Number of images to synthesis.
                 size(str, `optional`): The output image(s) size(width*height).
@@ -430,58 +533,110 @@ class AioImageSynthesis(BaseAsyncAioApi):
             ImageSynthesisResponse: The image(s) synthesis result.
         """
         task_group, f = _get_task_group_and_task(__name__)
-        inputs, kwargs, task = ImageSynthesis._get_input(model, prompt, negative_prompt,
-                                               images, api_key, sketch_image_url,
-                                               ref_img, extra_input, task, function,
-                                               mask_image_url, base_image_url, **kwargs)
-        response = await super().call(model, inputs, task_group, task, f, api_key, workspace, **kwargs)
+        # pylint: disable=protected-access
+        inputs, kwargs, task = ImageSynthesis._get_input(
+            model,
+            prompt,
+            negative_prompt,
+            images,
+            api_key,
+            sketch_image_url,
+            ref_img,
+            extra_input,
+            task,
+            function,
+            mask_image_url,
+            base_image_url,
+            **kwargs,
+        )
+        response = await super().call(
+            model,
+            inputs,
+            task_group,
+            task,
+            f,
+            api_key,
+            workspace,
+            **kwargs,
+        )
         return ImageSynthesisResponse.from_api_response(response)
 
     @classmethod
-    async def sync_call(cls,
-                   model: str,
-                   prompt: Any,
-                   negative_prompt: Any = None,
-                   images: List[str] = None,
-                   api_key: str = None,
-                   sketch_image_url: str = None,
-                   ref_img: str = None,
-                   workspace: str = None,
-                   extra_input: Dict = None,
-                   task: str = None,
-                   function: str = None,
-                   mask_image_url: str = None,
-                   base_image_url: str = None,
-                   **kwargs) -> ImageSynthesisResponse:
+    async def sync_call(
+        cls,
+        model: str,
+        prompt: Any,
+        negative_prompt: Any = None,
+        images: List[str] = None,
+        api_key: str = None,
+        sketch_image_url: str = None,
+        ref_img: str = None,
+        workspace: str = None,
+        extra_input: Dict = None,
+        task: str = None,
+        function: str = None,
+        mask_image_url: str = None,
+        base_image_url: str = None,
+        **kwargs,
+    ) -> ImageSynthesisResponse:
         """
-        Note: This method currently now only supports wan2.2-t2i-flash and wan2.2-t2i-plus.
-            Using other models will result in an error，More raw image models may be added for use later
+        Note: This method currently now only supports wan2.2-t2i-flash and wan2.2-t2i-plus.  # noqa: E501  # pylint: disable=line-too-long
+            Using other models will result in an error，More raw image models may be added for use later  # pylint: disable=line-too-long
         """
         task_group, f = _get_task_group_and_task(__name__)
-        inputs, kwargs, task = ImageSynthesis._get_input(model, prompt, negative_prompt,
-                                             images, api_key, sketch_image_url,
-                                             ref_img, extra_input, task, function,
-                                             mask_image_url, base_image_url, **kwargs)
-        response = await BaseAioApi.call(model, inputs, task_group, task, f, api_key, workspace, **kwargs)
+        # pylint: disable=protected-access
+        inputs, kwargs, task = ImageSynthesis._get_input(
+            model,
+            prompt,
+            negative_prompt,
+            images,
+            api_key,
+            sketch_image_url,
+            ref_img,
+            extra_input,
+            task,
+            function,
+            mask_image_url,
+            base_image_url,
+            **kwargs,
+        )
+        response = await BaseAioApi.call(
+            model,
+            inputs,
+            task_group,
+            task,
+            f,
+            api_key,
+            workspace,
+            **kwargs,
+        )
         return ImageSynthesisResponse.from_api_response(response)
 
     @classmethod
-    async def async_call(cls,
-                  model: str,
-                  prompt: Any,
-                  negative_prompt: Any = None,
-                  images: List[str] = None,
-                  api_key: str = None,
-                  sketch_image_url: str = None,
-                  ref_img: str = None,
-                  workspace: str = None,
-                  extra_input: Dict = None,
-                  task: str = None,
-                  function: str = None,
-                  mask_image_url: str = None,
-                  base_image_url: str = None,
-                  **kwargs) -> ImageSynthesisResponse:
+    async def async_call(  # type: ignore[override]  # pylint: disable=arguments-renamed  # noqa: E501
+        cls,
+        model: str,
+        prompt: Any,
+        negative_prompt: Any = None,
+        images: List[str] = None,
+        api_key: str = None,
+        sketch_image_url: str = None,
+        ref_img: str = None,
+        workspace: str = None,
+        extra_input: Dict = None,
+        task: str = None,
+        function: str = None,
+        mask_image_url: str = None,
+        base_image_url: str = None,
+        **kwargs,
+    ) -> ImageSynthesisResponse:
         """Create a image(s) synthesis task, and return task information.
+
+        Note: This method overrides BaseAsyncAioApi.async_call() with
+        renamed parameters to provide a more user-friendly API. The
+        generic parameters (input_data, task_group) are replaced with
+        domain-specific ones (prompt, negative_prompt, images, etc.).
+        Pylint's arguments-renamed warning is disabled for this reason.
 
         Args:
             model (str): The model, reference ``Models``.
@@ -498,7 +653,7 @@ class AioImageSynthesis(BaseAsyncAioApi):
                 colorization,super_resolution,expand,remove_watermaker,doodle,
                 description_edit_with_mask,description_edit,stylization_local,stylization_all
             base_image_url (str): Enter the URL address of the target edited image.
-            mask_image_url (str): Provide the URL address of the image of the marked area by the user. It should be consistent with the image resolution of the base_image_url.
+            mask_image_url (str): Provide the URL address of the image of the marked area by the user. It should be consistent with the image resolution of the base_image_url.  # pylint: disable=line-too-long
             **kwargs(wanx-v1):
                 n(int, `optional`): Number of images to synthesis.
                 size: The output image(s) size, Default 1024*1024
@@ -518,19 +673,42 @@ class AioImageSynthesis(BaseAsyncAioApi):
                 task id in the response.
         """
         task_group, f = _get_task_group_and_task(__name__)
-        inputs, kwargs, task = ImageSynthesis._get_input(model, prompt, negative_prompt,
-                                               images, api_key, sketch_image_url,
-                                               ref_img, extra_input, task, function,
-                                               mask_image_url, base_image_url, **kwargs)
-        response = await super().async_call(model, inputs, task_group, task, f, api_key, workspace, **kwargs)
+        # pylint: disable=protected-access
+        inputs, kwargs, task = ImageSynthesis._get_input(
+            model,
+            prompt,
+            negative_prompt,
+            images,
+            api_key,
+            sketch_image_url,
+            ref_img,
+            extra_input,
+            task,
+            function,
+            mask_image_url,
+            base_image_url,
+            **kwargs,
+        )
+        response = await super().async_call(
+            model,
+            inputs,
+            task_group,
+            task,
+            f,
+            api_key,
+            workspace,
+            **kwargs,
+        )
         return ImageSynthesisResponse.from_api_response(response)
 
     @classmethod
-    async def fetch(cls,
-              task: Union[str, ImageSynthesisResponse],
-              api_key: str = None,
-              workspace: str = None,
-              **kwargs,) -> ImageSynthesisResponse:
+    async def fetch(
+        cls,
+        task: Union[str, ImageSynthesisResponse],  # type: ignore[override]
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> ImageSynthesisResponse:
         """Fetch image(s) synthesis task status or result.
 
         Args:
@@ -542,15 +720,21 @@ class AioImageSynthesis(BaseAsyncAioApi):
         Returns:
             ImageSynthesisResponse: The task status or result.
         """
-        response = await super().fetch(task, api_key=api_key, workspace=workspace)
+        response = await super().fetch(
+            task,
+            api_key=api_key,
+            workspace=workspace,
+        )
         return ImageSynthesisResponse.from_api_response(response)
 
     @classmethod
-    async def wait(cls,
-             task: Union[str, ImageSynthesisResponse],
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> ImageSynthesisResponse:
+    async def wait(
+        cls,
+        task: Union[str, ImageSynthesisResponse],  # type: ignore[override]
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> ImageSynthesisResponse:
         """Wait for image(s) synthesis task to complete, and return the result.
 
         Args:
@@ -566,11 +750,13 @@ class AioImageSynthesis(BaseAsyncAioApi):
         return ImageSynthesisResponse.from_api_response(response)
 
     @classmethod
-    async def cancel(cls,
-                task: Union[str, ImageSynthesisResponse],
-                api_key: str = None,
-                workspace: str = None,
-                **kwargs,) -> DashScopeAPIResponse:
+    async def cancel(
+        cls,
+        task: Union[str, ImageSynthesisResponse],  # type: ignore[override]
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Cancel image synthesis task.
         Only tasks whose status is PENDING can be canceled.
 
@@ -586,18 +772,20 @@ class AioImageSynthesis(BaseAsyncAioApi):
         return await super().cancel(task, api_key, workspace=workspace)
 
     @classmethod
-    async def list(cls,
-             start_time: str = None,
-             end_time: str = None,
-             model_name: str = None,
-             api_key_id: str = None,
-             region: str = None,
-             status: str = None,
-             page_no: int = 1,
-             page_size: int = 10,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    async def list(
+        cls,
+        start_time: str = None,
+        end_time: str = None,
+        model_name: str = None,
+        api_key_id: str = None,
+        region: str = None,
+        status: str = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """List async tasks.
 
         Args:
@@ -619,14 +807,16 @@ class AioImageSynthesis(BaseAsyncAioApi):
         Returns:
             DashScopeAPIResponse: The response data.
         """
-        return await super().list(start_time=start_time,
-                            end_time=end_time,
-                            model_name=model_name,
-                            api_key_id=api_key_id,
-                            region=region,
-                            status=status,
-                            page_no=page_no,
-                            page_size=page_size,
-                            api_key=api_key,
-                            workspace=workspace,
-                            **kwargs)
+        return await super().list(
+            start_time=start_time,
+            end_time=end_time,
+            model_name=model_name,
+            api_key_id=api_key_id,
+            region=region,
+            status=status,
+            page_no=page_no,
+            page_size=page_size,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )

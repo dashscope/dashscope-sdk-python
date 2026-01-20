@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import json
@@ -12,15 +13,19 @@ from typing import Any, Dict, List
 
 from dashscope.client.base_api import BaseApi
 from dashscope.common.constants import ApiProtocol
-from dashscope.common.error import (InputDataRequired, InputRequired,
-                                    InvalidParameter, InvalidTask,
-                                    ModelRequired)
+from dashscope.common.error import (
+    InputDataRequired,
+    InputRequired,
+    InvalidParameter,
+    InvalidTask,
+    ModelRequired,
+)
 from dashscope.common.logging import logger
 from dashscope.common.utils import _get_task_group_and_task
 from dashscope.protocol.websocket import WebsocketStreamingMode
 
-DASHSCOPE_TRANSLATION_KEY = 'translations'
-DASHSCOPE_TRANSCRIPTION_KEY = 'transcription'
+DASHSCOPE_TRANSLATION_KEY = "translations"
+DASHSCOPE_TRANSCRIPTION_KEY = "transcription"
 
 
 class ThreadSafeBool:
@@ -37,8 +42,8 @@ class ThreadSafeBool:
             return self._value
 
 
-class WordObj():
-    def __init__(self, ) -> None:
+class WordObj:
+    def __init__(self) -> None:
         self.text: str = None
         self.begin_time: int = None
         self.end_time: int = None
@@ -47,25 +52,24 @@ class WordObj():
 
     @staticmethod
     def from_json(json_data: Dict[str, Any]):
-        """Create a Word object from a JSON dictionary.
-        """
+        """Create a Word object from a JSON dictionary."""
         word = WordObj()
-        word.text = json_data['text']
-        word.begin_time = json_data['begin_time']
-        word.end_time = json_data['end_time']
-        word.fixed = json_data['fixed']
-        word._raw_data = json_data
+        word.text = json_data["text"]
+        word.begin_time = json_data["begin_time"]
+        word.end_time = json_data["end_time"]
+        word.fixed = json_data["fixed"]
+        word._raw_data = json_data  # pylint: disable=protected-access
         return word
 
     def __str__(self) -> str:
-        return 'Word: ' + json.dumps(self._raw_data, ensure_ascii=False)
+        return "Word: " + json.dumps(self._raw_data, ensure_ascii=False)
 
     def __repr__(self):
         return self.__str__()
 
 
-class SentenceBaseObj():
-    def __init__(self, ) -> None:
+class SentenceBaseObj:
+    def __init__(self) -> None:
         self.sentence_id: int = -1
         self.text: str = None
         self.begin_time: int = None
@@ -75,20 +79,19 @@ class SentenceBaseObj():
 
     @staticmethod
     def from_json(json_data: Dict[str, Any]):
-        """Create a SentenceBase object from a JSON dictionary.
-        """
+        """Create a SentenceBase object from a JSON dictionary."""
         sentence = SentenceBaseObj()
-        sentence.sentence_id = json_data['sentence_id']
-        sentence.text = json_data['text']
-        sentence.begin_time = json_data['begin_time']
-        if json_data.get('end_time') is not None:
-            sentence.end_time = json_data['end_time']
+        sentence.sentence_id = json_data["sentence_id"]
+        sentence.text = json_data["text"]
+        sentence.begin_time = json_data["begin_time"]
+        if json_data.get("end_time") is not None:
+            sentence.end_time = json_data["end_time"]
         else:
-            sentence.end_time = json_data['current_time']
+            sentence.end_time = json_data["current_time"]
         sentence.words = [
-            WordObj.from_json(word) for word in json_data['words']
+            WordObj.from_json(word) for word in json_data["words"]
         ]
-        sentence._raw_data = json_data
+        sentence._raw_data = json_data  # pylint: disable=protected-access
         return sentence
 
     def __str__(self) -> str:
@@ -99,7 +102,7 @@ class SentenceBaseObj():
 
 
 class TranscriptionResult(SentenceBaseObj):
-    def __init__(self, ) -> None:
+    def __init__(self) -> None:
         self.stash: SentenceBaseObj = None
         self.is_sentence_end = False
         # vad related
@@ -112,44 +115,46 @@ class TranscriptionResult(SentenceBaseObj):
 
     @staticmethod
     def from_json(json_data: Dict[str, Any]):
-        """Create a TranscriptionResult object from a JSON dictionary.
-        """
+        """Create a TranscriptionResult object from a JSON dictionary."""
         transcription = TranscriptionResult()
-        transcription.sentence_id = json_data['sentence_id']
-        transcription.text = json_data['text']
-        transcription.begin_time = json_data['begin_time']
-        if json_data.get('end_time') is not None:
-            transcription.end_time = json_data['end_time']
+        transcription.sentence_id = json_data["sentence_id"]
+        transcription.text = json_data["text"]
+        transcription.begin_time = json_data["begin_time"]
+        if json_data.get("end_time") is not None:
+            transcription.end_time = json_data["end_time"]
         else:
-            transcription.end_time = json_data['current_time']
+            transcription.end_time = json_data["current_time"]
         transcription.words = [
-            WordObj.from_json(word) for word in json_data['words']
+            WordObj.from_json(word) for word in json_data["words"]
         ]
-        transcription._raw_data = json_data
-        transcription.is_sentence_end = json_data.get('sentence_end')
-        if 'stash' in json_data:
-            transcription.stash = SentenceBaseObj.from_json(json_data['stash'])
-        if 'vad_pre_end' in json_data:
-            transcription.vad_pre_end = json_data['vad_pre_end']
-        if 'pre_end_failed' in json_data:
-            transcription.pre_end_failed = json_data['pre_end_failed']
-        if 'pre_end_start_time' in json_data:
-            transcription.pre_end_start_time = json_data['pre_end_start_time']
-        if 'pre_end_end_time' in json_data:
-            transcription.pre_end_end_time = json_data['pre_end_end_time']
-        transcription._raw_data = json_data
+        # Store raw JSON data for later use
+        transcription._raw_data = json_data  # pylint: disable=protected-access
+        transcription.is_sentence_end = json_data.get("sentence_end")
+        if "stash" in json_data:
+            transcription.stash = SentenceBaseObj.from_json(json_data["stash"])
+        if "vad_pre_end" in json_data:
+            transcription.vad_pre_end = json_data["vad_pre_end"]
+        if "pre_end_failed" in json_data:
+            transcription.pre_end_failed = json_data["pre_end_failed"]
+        if "pre_end_start_time" in json_data:
+            transcription.pre_end_start_time = json_data["pre_end_start_time"]
+        if "pre_end_end_time" in json_data:
+            transcription.pre_end_end_time = json_data["pre_end_end_time"]
+        transcription._raw_data = json_data  # pylint: disable=protected-access
         return transcription
 
     def __str__(self) -> str:
-        return 'Transcriptions: ' + json.dumps(self._raw_data,
-                                               ensure_ascii=False)
+        return "Transcriptions: " + json.dumps(
+            self._raw_data,
+            ensure_ascii=False,
+        )
 
     def __repr__(self):
         return self.__str__()
 
 
 class Translation(SentenceBaseObj):
-    def __init__(self, ) -> None:
+    def __init__(self) -> None:
         self.language: str = None
         self.stash: SentenceBaseObj = None
         self.is_sentence_end = False
@@ -163,85 +168,87 @@ class Translation(SentenceBaseObj):
 
     @staticmethod
     def from_json(json_data: Dict[str, Any]):
-        """Create a Translation object from a JSON dictionary.
-        """
+        """Create a Translation object from a JSON dictionary."""
         translation = Translation()
-        translation.sentence_id = json_data['sentence_id']
-        translation.text = json_data['text']
-        translation.begin_time = json_data['begin_time']
-        if json_data.get('end_time') is not None:
-            translation.end_time = json_data['end_time']
+        translation.sentence_id = json_data["sentence_id"]
+        translation.text = json_data["text"]
+        translation.begin_time = json_data["begin_time"]
+        if json_data.get("end_time") is not None:
+            translation.end_time = json_data["end_time"]
         else:
-            translation.end_time = json_data['current_time']
+            translation.end_time = json_data["current_time"]
         translation.words = [
-            WordObj.from_json(word) for word in json_data['words']
+            WordObj.from_json(word) for word in json_data["words"]
         ]
-        translation._raw_data = json_data
+        # Store raw JSON data for later use
+        translation._raw_data = json_data  # pylint: disable=protected-access
 
-        translation.language = json_data['lang']
-        translation.is_sentence_end = json_data.get('sentence_end')
-        if 'stash' in json_data:
-            translation.stash = SentenceBaseObj.from_json(json_data['stash'])
-        if 'vad_pre_end' in json_data:
-            translation.vad_pre_end = json_data['vad_pre_end']
-        if 'pre_end_failed' in json_data:
-            translation.pre_end_failed = json_data['pre_end_failed']
-        if 'pre_end_start_time' in json_data:
-            translation.pre_end_start_time = json_data['pre_end_start_time']
-        if 'pre_end_end_time' in json_data:
-            translation.pre_end_end_time = json_data['pre_end_end_time']
-        translation._raw_data = json_data
+        translation.language = json_data["lang"]
+        translation.is_sentence_end = json_data.get("sentence_end")
+        if "stash" in json_data:
+            translation.stash = SentenceBaseObj.from_json(json_data["stash"])
+        if "vad_pre_end" in json_data:
+            translation.vad_pre_end = json_data["vad_pre_end"]
+        if "pre_end_failed" in json_data:
+            translation.pre_end_failed = json_data["pre_end_failed"]
+        if "pre_end_start_time" in json_data:
+            translation.pre_end_start_time = json_data["pre_end_start_time"]
+        if "pre_end_end_time" in json_data:
+            translation.pre_end_end_time = json_data["pre_end_end_time"]
+        translation._raw_data = json_data  # pylint: disable=protected-access
         return translation
 
     def __str__(self) -> str:
-        return 'Translation: ' + json.dumps(self._raw_data, ensure_ascii=False)
+        return "Translation: " + json.dumps(self._raw_data, ensure_ascii=False)
 
     def __repr__(self):
         return self.__str__()
 
 
-class TranslationResult():
-    def __init__(self, ) -> None:
-        self.translations: Dict[str:Translation] = {}
+class TranslationResult:
+    def __init__(self) -> None:
+        self.translations: Dict[str, Translation] = {}
         self.is_sentence_end = False
         self._raw_data = None
 
     def get_translation(self, language) -> Translation:
         if self.translations is None:
             return None
-        return self.translations.get(language)
+        return self.translations.get(language)  # type: ignore[return-value]
 
-    def get_language_list(self, ) -> List[str]:
+    def get_language_list(self) -> List[str]:
         if self.translations is None:
             return None
         return list(self.translations.keys())
 
     @staticmethod
     def from_json(json_data: List):
-        """Create a TranslationResult object from a JSON dictionary.
-        """
+        """Create a TranslationResult object from a JSON dictionary."""
         result = TranslationResult()
-        result._raw_data = json_data
+        # Store raw JSON data for later use
+        result._raw_data = json_data  # pylint: disable=protected-access
         for translation_json in json_data:
             if not isinstance(translation_json, dict):
                 raise InvalidParameter(
-                    f'Invalid translation json data: {translation_json}')
-            else:
-                translation = Translation.from_json(translation_json)
-                result.translations[translation.language] = translation
-                if translation.is_sentence_end:
-                    result.is_sentence_end = True
+                    f"Invalid translation json data: {translation_json}",
+                )
+            translation = Translation.from_json(translation_json)
+            result.translations[translation.language] = translation
+            if translation.is_sentence_end:
+                result.is_sentence_end = True
         return result
 
     def __str__(self) -> str:
-        return 'TranslationList: ' + json.dumps(self._raw_data,
-                                                ensure_ascii=False)
+        return "TranslationList: " + json.dumps(
+            self._raw_data,
+            ensure_ascii=False,
+        )
 
     def __repr__(self):
         return self.__str__()
 
 
-class TranslationRecognizerResultPack():
+class TranslationRecognizerResultPack:
     def __init__(self) -> None:
         self.transcription_result_list: List[TranscriptionResult] = []
         self.translation_result_list: List[TranslationResult] = []
@@ -250,10 +257,11 @@ class TranslationRecognizerResultPack():
         self.error_message = None
 
 
-class TranslationRecognizerCallback():
-    """An interface that defines callback methods for getting translation recognizer results. # noqa E501
-       Derive from this class and implement its function to provide your own data.
+class TranslationRecognizerCallback:
+    """An interface that defines callback methods for getting translation recognizer results. # noqa E501  # pylint: disable=line-too-long
+    Derive from this class and implement its function to provide your own data.
     """
+
     def on_open(self) -> None:
         pass
 
@@ -266,8 +274,13 @@ class TranslationRecognizerCallback():
     def on_close(self) -> None:
         pass
 
-    def on_event(self, request_id, transcription_result: TranscriptionResult,
-                 translation_result: TranslationResult, usage) -> None:
+    def on_event(
+        self,
+        request_id,
+        transcription_result: TranscriptionResult,
+        translation_result: TranslationResult,
+        usage,
+    ) -> None:
         pass
 
 
@@ -301,22 +314,24 @@ class TranslationRecognizerRealtime(BaseApi):
 
     SILENCE_TIMEOUT_S = 23
 
-    def __init__(self,
-                 model: str,
-                 callback: TranslationRecognizerCallback,
-                 format: str,
-                 sample_rate: int,
-                 transcription_enabled: bool = True,
-                 source_language: str = None,
-                 translation_enabled: bool = False,
-                 workspace: str = None,
-                 **kwargs):
+    def __init__(
+        self,
+        model: str,
+        callback: TranslationRecognizerCallback,
+        format: str,  # pylint: disable=redefined-builtin
+        sample_rate: int,
+        transcription_enabled: bool = True,
+        source_language: str = None,
+        translation_enabled: bool = False,
+        workspace: str = None,
+        **kwargs,
+    ):
         if model is None:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         if format is None:
-            raise InputRequired('format is required!')
+            raise InputRequired("format is required!")
         if sample_rate is None:
-            raise InputRequired('sample_rate is required!')
+            raise InputRequired("sample_rate is required!")
 
         self.model = model
         self.format = format
@@ -346,7 +361,9 @@ class TranslationRecognizerRealtime(BaseApi):
             self._stream_data = Queue()
             if self._worker is not None and self._worker.is_alive():
                 self._worker.join()
-            if self._silence_timer is not None and self._silence_timer.is_alive(  # noqa E501
+            if (
+                self._silence_timer is not None
+                and self._silence_timer.is_alive()  # noqa E501
             ):
                 self._silence_timer.cancel()
                 self._silence_timer = None
@@ -354,18 +371,23 @@ class TranslationRecognizerRealtime(BaseApi):
                 self._callback.on_close()
 
     def __receive_worker(self):
-        """Asynchronously, initiate a real-time transltion recognizer request and
-           obtain the result for parsing.
+        """Asynchronously, initiate a real-time transltion recognizer request and  # noqa: E501
+        obtain the result for parsing.
         """
         responses = self.__launch_request()
         for part in responses:
             if part.status_code == HTTPStatus.OK:
-                logger.debug('Received response request_id: {} {}'.format(
-                    part.request_id, part.output))
+                logger.debug(
+                    "Received response request_id: %s %s",
+                    part.request_id,
+                    part.output,
+                )
                 if len(part.output) == 0:
                     self._on_complete_timestamp = time.time() * 1000
-                    logger.debug('last package delay {}'.format(
-                        self.get_last_package_delay()))
+                    logger.debug(
+                        "last package delay %s",
+                        self.get_last_package_delay(),
+                    )
                     self._callback.on_complete()
                 else:
                     usage = None
@@ -373,23 +395,34 @@ class TranslationRecognizerRealtime(BaseApi):
                     translations = None
                     if DASHSCOPE_TRANSCRIPTION_KEY in part.output:
                         transcription = TranscriptionResult.from_json(
-                            part.output[DASHSCOPE_TRANSCRIPTION_KEY])
+                            part.output[DASHSCOPE_TRANSCRIPTION_KEY],
+                        )
                     if DASHSCOPE_TRANSLATION_KEY in part.output:
                         translations = TranslationResult.from_json(
-                            part.output[DASHSCOPE_TRANSLATION_KEY])
+                            part.output[DASHSCOPE_TRANSLATION_KEY],
+                        )
                     if transcription is not None or translations is not None:
-                        if (self._first_package_timestamp < 0):
+                        if self._first_package_timestamp < 0:
                             self._first_package_timestamp = time.time() * 1000
-                            logger.debug('first package delay {}'.format(
-                                self.get_first_package_delay()))
+                            logger.debug(
+                                "first package delay %s",
+                                self.get_first_package_delay(),
+                            )
 
                     if part.usage is not None:
                         usage = part.usage
-                    if self.request_id_confirmed is False and part.request_id is not None:
+                    if (
+                        self.request_id_confirmed is False
+                        and part.request_id is not None
+                    ):
                         self.last_request_id = part.request_id
                         self.request_id_confirmed = True
-                    self._callback.on_event(part.request_id, transcription,
-                                            translations, usage)
+                    self._callback.on_event(
+                        part.request_id,
+                        transcription,
+                        translations,
+                        usage,
+                    )
             else:
                 self._running = False
                 self._stream_data = Queue()
@@ -398,16 +431,15 @@ class TranslationRecognizerRealtime(BaseApi):
                 break
 
     def __launch_request(self):
-        """Initiate real-time translation recognizer requests.
-        """
+        """Initiate real-time translation recognizer requests."""
 
         self._tidy_kwargs()
         task_name, _ = _get_task_group_and_task(__name__)
         responses = super().call(
             model=self.model,
-            task_group='audio',
+            task_group="audio",
             task=task_name,
-            function='recognition',
+            function="recognition",
             input=self._input_stream_cycle(),
             api_protocol=ApiProtocol.WEBSOCKET,
             ws_stream_mode=WebsocketStreamingMode.DUPLEX,
@@ -420,12 +452,13 @@ class TranslationRecognizerRealtime(BaseApi):
             translation_enabled=self.translation_enabled,
             workspace=self._workspace,
             pre_task_id=self.last_request_id,
-            **self._kwargs)
+            **self._kwargs,
+        )
         return responses
 
     def start(self, **kwargs):
         """Real-time translation recognizer in asynchronous mode.
-           Please call 'stop()' after you have completed translation & recognition.
+           Please call 'stop()' after you have completed translation & recognition.  # noqa: E501
 
         Args:
             phrase_id (str, `optional`): The ID of phrase.
@@ -447,11 +480,14 @@ class TranslationRecognizerRealtime(BaseApi):
                 if it has already been started.
             InvalidTask: Task create failed.
         """
-        assert self._callback is not None, 'Please set the callback to get the translation & recognition result.'  # noqa E501
+        assert (
+            self._callback is not None
+        ), "Please set the callback to get the translation & recognition result."  # noqa E501
 
         if self._running:
             raise InvalidParameter(
-                'TranslationRecognizerRealtime has started.')
+                "TranslationRecognizerRealtime has started.",
+            )
 
         self._start_stream_timestamp = -1
         self._first_package_timestamp = -1
@@ -468,16 +504,20 @@ class TranslationRecognizerRealtime(BaseApi):
             # If audio data is not received for 23 seconds, the timeout exits
             self._silence_timer = Timer(
                 TranslationRecognizerRealtime.SILENCE_TIMEOUT_S,
-                self._silence_stop_timer)
+                self._silence_stop_timer,
+            )
             self._silence_timer.start()
         else:
             self._running = False
-            raise InvalidTask('Invalid task, task create failed.')
+            raise InvalidTask("Invalid task, task create failed.")
 
-    def call(self,
-             file: str,
-             phrase_id: str = None,
-             **kwargs) -> TranslationRecognizerResultPack:
+    # pylint: disable=too-many-branches,too-many-statements
+    def call(  # type: ignore[override]
+        self,
+        file: str,
+        phrase_id: str = None,
+        **kwargs,
+    ) -> TranslationRecognizerResultPack:
         """TranslationRecognizerRealtime in synchronous mode.
 
         Args:
@@ -502,18 +542,19 @@ class TranslationRecognizerRealtime(BaseApi):
             InputDataRequired: The supplied file was empty.
 
         Returns:
-            TranslationRecognizerResultPack: The result of speech translation & recognition.
+            TranslationRecognizerResultPack: The result of speech translation & recognition.  # noqa: E501  # pylint: disable=line-too-long
         """
         self._start_stream_timestamp = time.time() * 1000
         if self._running:
             raise InvalidParameter(
-                'TranslationRecognizerRealtime has been called.')
+                "TranslationRecognizerRealtime has been called.",
+            )
 
         if os.path.exists(file):
             if os.path.isdir(file):
-                raise IsADirectoryError('Is a directory: ' + file)
+                raise IsADirectoryError("Is a directory: " + file)
         else:
-            raise FileNotFoundError('No such file or directory: ' + file)
+            raise FileNotFoundError("No such file or directory: " + file)
 
         self._recognition_once = True
         self._stream_data = Queue()
@@ -524,17 +565,20 @@ class TranslationRecognizerRealtime(BaseApi):
 
         try:
             audio_data: bytes = None
-            f = open(file, 'rb')
+            # pylint: disable=consider-using-with
+            f = open(file, "rb")
             if os.path.getsize(file):
                 while True:
                     audio_data = f.read(12800)
                     if not audio_data:
                         break
-                    else:
-                        self._stream_data.put(audio_data)
+                    self._stream_data.put(
+                        audio_data,
+                    )  # pylint: disable=no-else-break
             else:
                 raise InputDataRequired(
-                    'The supplied file was empty (zero bytes long)')
+                    "The supplied file was empty (zero bytes long)",
+                )
             f.close()
             self._stop_stream_timestamp = time.time() * 1000
         except Exception as e:
@@ -546,36 +590,47 @@ class TranslationRecognizerRealtime(BaseApi):
             responses = self.__launch_request()
             for part in responses:
                 if part.status_code == HTTPStatus.OK:
-                    logger.debug('received data: {}'.format(part.output))
+                    logger.debug("received data: %s", part.output)
                     # debug log cal fpd
                     transcription = None
                     translation = None
                     usage = None
-                    if ('translation' in part.output) or ('transcription'
-                                                          in part.output):
-                        if (self._first_package_timestamp < 0):
+                    if ("translation" in part.output) or (
+                        "transcription" in part.output
+                    ):
+                        if self._first_package_timestamp < 0:
                             self._first_package_timestamp = time.time() * 1000
-                            logger.debug('first package delay {}'.format(
-                                self._first_package_timestamp -
-                                self._start_stream_timestamp))
+                            logger.debug(
+                                "first package delay %s",
+                                self._first_package_timestamp
+                                - self._start_stream_timestamp,
+                            )
                         if part.usage is not None:
                             usage = part.usage
 
                     if DASHSCOPE_TRANSCRIPTION_KEY in part.output:
                         transcription = TranscriptionResult.from_json(
-                            part.output[DASHSCOPE_TRANSCRIPTION_KEY])
+                            part.output[DASHSCOPE_TRANSCRIPTION_KEY],
+                        )
 
                     if DASHSCOPE_TRANSLATION_KEY in part.output:
                         translation = TranslationResult.from_json(
-                            part.output[DASHSCOPE_TRANSLATION_KEY])
+                            part.output[DASHSCOPE_TRANSLATION_KEY],
+                        )
 
-                    if (transcription is not None
-                            and transcription.is_sentence_end) or (
-                                translation is not None
-                                and translation.is_sentence_end):
+                    if (
+                        transcription is not None
+                        and transcription.is_sentence_end
+                    ) or (
+                        translation is not None and translation.is_sentence_end
+                    ):
                         results.request_id = part.request_id
-                        results.transcription_result_list.append(transcription)
-                        results.translation_result_list.append(translation)
+                        results.transcription_result_list.append(
+                            transcription,  # type: ignore[arg-type]
+                        )  # noqa: E501
+                        results.translation_result_list.append(
+                            translation,  # type: ignore[arg-type]
+                        )  # noqa: E501
                         results.usage_list.append(usage)
                 else:
                     error_message = part
@@ -583,8 +638,10 @@ class TranslationRecognizerRealtime(BaseApi):
                     break
 
         self._on_complete_timestamp = time.time() * 1000
-        logger.debug('last package delay {}'.format(
-            self.get_last_package_delay()))
+        logger.debug(
+            "last package delay %s",
+            self.get_last_package_delay(),
+        )
 
         self._stream_data = Queue()
         self._recognition_once = False
@@ -596,11 +653,12 @@ class TranslationRecognizerRealtime(BaseApi):
         """End asynchronous TranslationRecognizerRealtime.
 
         Raises:
-            InvalidParameter: Cannot stop an uninitiated TranslationRecognizerRealtime.
+            InvalidParameter: Cannot stop an uninitiated TranslationRecognizerRealtime.  # noqa: E501  # pylint: disable=line-too-long
         """
         if self._running is False:
             raise InvalidParameter(
-                'TranslationRecognizerRealtime has stopped.')
+                "TranslationRecognizerRealtime has stopped.",
+            )
 
         self._stop_stream_timestamp = time.time() * 1000
 
@@ -618,15 +676,16 @@ class TranslationRecognizerRealtime(BaseApi):
         """Push audio to TranslationRecognizerRealtime.
 
         Raises:
-            InvalidParameter: Cannot send data to an uninitiated TranslationRecognizerRealtime.
+            InvalidParameter: Cannot send data to an uninitiated TranslationRecognizerRealtime.  # noqa: E501  # pylint: disable=line-too-long
         """
         if self._running is False:
             raise InvalidParameter(
-                'TranslationRecognizerRealtime has stopped.')
+                "TranslationRecognizerRealtime has stopped.",
+            )
 
-        if (self._start_stream_timestamp < 0):
+        if self._start_stream_timestamp < 0:
             self._start_stream_timestamp = time.time() * 1000
-        logger.debug('send_audio_frame: {}'.format(len(buffer)))
+        logger.debug("send_audio_frame: %s", len(buffer))
         self._stream_data.put(buffer)
 
     def _tidy_kwargs(self):
@@ -640,16 +699,18 @@ class TranslationRecognizerRealtime(BaseApi):
                 if self._running:
                     time.sleep(0.01)
                     continue
-                else:
-                    break
+                break
 
             # Reset silence_timer when getting stream.
-            if self._silence_timer is not None and self._silence_timer.is_alive(  # noqa E501
+            if (
+                self._silence_timer is not None
+                and self._silence_timer.is_alive()  # noqa E501
             ):
                 self._silence_timer.cancel()
                 self._silence_timer = Timer(
                     TranslationRecognizerRealtime.SILENCE_TIMEOUT_S,
-                    self._silence_stop_timer)
+                    self._silence_stop_timer,
+                )
                 self._silence_timer.start()
 
             while not self._stream_data.empty():
@@ -666,8 +727,7 @@ class TranslationRecognizerRealtime(BaseApi):
                 yield bytes(frame)
 
     def _silence_stop_timer(self):
-        """If audio data is not received for a long time, exit worker.
-        """
+        """If audio data is not received for a long time, exit worker."""
         self._running = False
         if self._silence_timer is not None and self._silence_timer.is_alive():
             self._silence_timer.cancel()
@@ -677,13 +737,11 @@ class TranslationRecognizerRealtime(BaseApi):
         self._stream_data = Queue()
 
     def get_first_package_delay(self):
-        """First Package Delay is the time between start sending audio and receive first words package
-        """
+        """First Package Delay is the time between start sending audio and receive first words package"""  # noqa: E501  # pylint: disable=line-too-long
         return self._first_package_timestamp - self._start_stream_timestamp
 
     def get_last_package_delay(self):
-        """Last Package Delay is the time between stop sending audio and receive last words package
-        """
+        """Last Package Delay is the time between stop sending audio and receive last words package"""  # noqa: E501  # pylint: disable=line-too-long
         return self._on_complete_timestamp - self._stop_stream_timestamp
 
     # 获取上一个任务的taskId
@@ -721,22 +779,24 @@ class TranslationRecognizerChat(BaseApi):
 
     SILENCE_TIMEOUT_S = 23
 
-    def __init__(self,
-                 model: str,
-                 callback: TranslationRecognizerCallback,
-                 format: str,
-                 sample_rate: int,
-                 transcription_enabled: bool = True,
-                 source_language: str = None,
-                 translation_enabled: bool = False,
-                 workspace: str = None,
-                 **kwargs):
+    def __init__(
+        self,
+        model: str,
+        callback: TranslationRecognizerCallback,
+        format: str,  # pylint: disable=redefined-builtin
+        sample_rate: int,
+        transcription_enabled: bool = True,
+        source_language: str = None,
+        translation_enabled: bool = False,
+        workspace: str = None,
+        **kwargs,
+    ):
         if model is None:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         if format is None:
-            raise InputRequired('format is required!')
+            raise InputRequired("format is required!")
         if sample_rate is None:
-            raise InputRequired('sample_rate is required!')
+            raise InputRequired("sample_rate is required!")
 
         self.model = model
         self.format = format
@@ -767,26 +827,33 @@ class TranslationRecognizerChat(BaseApi):
             self._stream_data = Queue()
             if self._worker is not None and self._worker.is_alive():
                 self._worker.join()
-            if self._silence_timer is not None and self._silence_timer.is_alive(  # noqa E501
+            if (
+                self._silence_timer is not None
+                and self._silence_timer.is_alive()  # noqa E501
             ):
                 self._silence_timer.cancel()
                 self._silence_timer = None
             if self._callback:
                 self._callback.on_close()
 
-    def __receive_worker(self):
-        """Asynchronously, initiate a real-time transltion recognizer request and
-           obtain the result for parsing.
+    def __receive_worker(self):  # pylint: disable=too-many-branches
+        """Asynchronously, initiate a real-time transltion recognizer request and  # noqa: E501
+        obtain the result for parsing.
         """
         responses = self.__launch_request()
         for part in responses:
             if part.status_code == HTTPStatus.OK:
-                logger.debug('Received response request_id: {} {}'.format(
-                    part.request_id, part.output))
+                logger.debug(
+                    "Received response request_id: %s %s",
+                    part.request_id,
+                    part.output,
+                )
                 if len(part.output) == 0:
                     self._on_complete_timestamp = time.time() * 1000
-                    logger.debug('last package delay {}'.format(
-                        self.get_last_package_delay()))
+                    logger.debug(
+                        "last package delay %s",
+                        self.get_last_package_delay(),
+                    )
                     self._callback.on_complete()
                 else:
                     usage = None
@@ -794,33 +861,50 @@ class TranslationRecognizerChat(BaseApi):
                     translations = None
                     if DASHSCOPE_TRANSCRIPTION_KEY in part.output:
                         transcription = TranscriptionResult.from_json(
-                            part.output[DASHSCOPE_TRANSCRIPTION_KEY])
+                            part.output[DASHSCOPE_TRANSCRIPTION_KEY],
+                        )
                     if DASHSCOPE_TRANSLATION_KEY in part.output:
                         translations = TranslationResult.from_json(
-                            part.output[DASHSCOPE_TRANSLATION_KEY])
+                            part.output[DASHSCOPE_TRANSLATION_KEY],
+                        )
                     if transcription is not None or translations is not None:
-                        if (self._first_package_timestamp < 0):
+                        if self._first_package_timestamp < 0:
                             self._first_package_timestamp = time.time() * 1000
-                            logger.debug('first package delay {}'.format(
-                                self.get_first_package_delay()))
+                            logger.debug(
+                                "first package delay %s",
+                                self.get_first_package_delay(),
+                            )
 
                     if part.usage is not None:
                         usage = part.usage
-                    if self.request_id_confirmed is False and part.request_id is not None:
+                    if (
+                        self.request_id_confirmed is False
+                        and part.request_id is not None
+                    ):
                         self.last_request_id = part.request_id
                         self.request_id_confirmed = True
-                    if transcription is not None and transcription.is_sentence_end:
+                    if (
+                        transcription is not None
+                        and transcription.is_sentence_end
+                    ):
                         logger.debug(
-                            '[Chat] recv sentence end in transcription, stop asr'
+                            "[Chat] recv sentence end in transcription, stop asr",  # noqa: E501
                         )
                         self._is_sentence_end.set(True)
-                    if translations is not None and translations.is_sentence_end:
+                    if (
+                        translations is not None
+                        and translations.is_sentence_end
+                    ):
                         logger.debug(
-                            '[Chat] recv sentence end in translation, stop asr'
+                            "[Chat] recv sentence end in translation, stop asr",  # noqa: E501
                         )
                         self._is_sentence_end.set(True)
-                    self._callback.on_event(part.request_id, transcription,
-                                            translations, usage)
+                    self._callback.on_event(
+                        part.request_id,
+                        transcription,
+                        translations,
+                        usage,
+                    )
             else:
                 self._running = False
                 self._stream_data = Queue()
@@ -829,16 +913,15 @@ class TranslationRecognizerChat(BaseApi):
                 break
 
     def __launch_request(self):
-        """Initiate real-time translation recognizer requests.
-        """
+        """Initiate real-time translation recognizer requests."""
 
         self._tidy_kwargs()
         task_name, _ = _get_task_group_and_task(__name__)
         responses = super().call(
             model=self.model,
-            task_group='audio',
+            task_group="audio",
             task=task_name,
-            function='recognition',
+            function="recognition",
             input=self._input_stream_cycle(),
             api_protocol=ApiProtocol.WEBSOCKET,
             ws_stream_mode=WebsocketStreamingMode.DUPLEX,
@@ -851,12 +934,13 @@ class TranslationRecognizerChat(BaseApi):
             translation_enabled=self.translation_enabled,
             workspace=self._workspace,
             pre_task_id=self.last_request_id,
-            **self._kwargs)
+            **self._kwargs,
+        )
         return responses
 
     def start(self, **kwargs):
         """Real-time translation recognizer in asynchronous mode.
-           Please call 'stop()' after you have completed translation & recognition.
+           Please call 'stop()' after you have completed translation & recognition.  # noqa: E501
 
         Args:
             phrase_id (str, `optional`): The ID of phrase.
@@ -878,10 +962,12 @@ class TranslationRecognizerChat(BaseApi):
                 if it has already been started.
             InvalidTask: Task create failed.
         """
-        assert self._callback is not None, 'Please set the callback to get the translation & recognition result.'  # noqa E501
+        assert (
+            self._callback is not None
+        ), "Please set the callback to get the translation & recognition result."  # noqa E501
 
         if self._running:
-            raise InvalidParameter('TranslationRecognizerChat has started.')
+            raise InvalidParameter("TranslationRecognizerChat has started.")
 
         self._start_stream_timestamp = -1
         self._first_package_timestamp = -1
@@ -898,23 +984,24 @@ class TranslationRecognizerChat(BaseApi):
             # If audio data is not received for 23 seconds, the timeout exits
             self._silence_timer = Timer(
                 TranslationRecognizerChat.SILENCE_TIMEOUT_S,
-                self._silence_stop_timer)
+                self._silence_stop_timer,
+            )
             self._silence_timer.start()
         else:
             self._running = False
-            raise InvalidTask('Invalid task, task create failed.')
+            raise InvalidTask("Invalid task, task create failed.")
 
     def stop(self):
         """End asynchronous TranslationRecognizerChat.
 
         Raises:
-            InvalidParameter: Cannot stop an uninitiated TranslationRecognizerChat.
+            InvalidParameter: Cannot stop an uninitiated TranslationRecognizerChat.  # noqa: E501
         """
         if self._running is False:
-            raise InvalidParameter('TranslationRecognizerChat has stopped.')
+            raise InvalidParameter("TranslationRecognizerChat has stopped.")
 
         self._stop_stream_timestamp = time.time() * 1000
-        logger.debug('stop TranslationRecognizerChat')
+        logger.debug("stop TranslationRecognizerChat")
         self._running = False
         if self._worker is not None and self._worker.is_alive():
             self._worker.join()
@@ -929,18 +1016,18 @@ class TranslationRecognizerChat(BaseApi):
         """Push audio to TranslationRecognizerChat.
 
         Raises:
-            InvalidParameter: Cannot send data to an uninitiated TranslationRecognizerChat.
+            InvalidParameter: Cannot send data to an uninitiated TranslationRecognizerChat.  # noqa: E501  # pylint: disable=line-too-long
         """
         if self._is_sentence_end.get():
-            logger.debug('skip audio due to has sentence end.')
+            logger.debug("skip audio due to has sentence end.")
             return False
 
         if self._running is False:
-            raise InvalidParameter('TranslationRecognizerChat has stopped.')
+            raise InvalidParameter("TranslationRecognizerChat has stopped.")
 
-        if (self._start_stream_timestamp < 0):
+        if self._start_stream_timestamp < 0:
             self._start_stream_timestamp = time.time() * 1000
-        logger.debug('send_audio_frame: {}'.format(len(buffer)))
+        logger.debug("send_audio_frame: %s", len(buffer))
         self._stream_data.put(buffer)
         return True
 
@@ -955,16 +1042,18 @@ class TranslationRecognizerChat(BaseApi):
                 if self._running:
                     time.sleep(0.01)
                     continue
-                else:
-                    break
+                break
 
             # Reset silence_timer when getting stream.
-            if self._silence_timer is not None and self._silence_timer.is_alive(  # noqa E501
+            if (
+                self._silence_timer is not None
+                and self._silence_timer.is_alive()  # noqa E501
             ):
                 self._silence_timer.cancel()
                 self._silence_timer = Timer(
                     TranslationRecognizerChat.SILENCE_TIMEOUT_S,
-                    self._silence_stop_timer)
+                    self._silence_stop_timer,
+                )
                 self._silence_timer.start()
 
             while not self._stream_data.empty():
@@ -981,8 +1070,7 @@ class TranslationRecognizerChat(BaseApi):
                 yield bytes(frame)
 
     def _silence_stop_timer(self):
-        """If audio data is not received for a long time, exit worker.
-        """
+        """If audio data is not received for a long time, exit worker."""
         self._running = False
         if self._silence_timer is not None and self._silence_timer.is_alive():
             self._silence_timer.cancel()
@@ -992,13 +1080,11 @@ class TranslationRecognizerChat(BaseApi):
         self._stream_data = Queue()
 
     def get_first_package_delay(self):
-        """First Package Delay is the time between start sending audio and receive first words package
-        """
+        """First Package Delay is the time between start sending audio and receive first words package"""  # noqa: E501  # pylint: disable=line-too-long
         return self._first_package_timestamp - self._start_stream_timestamp
 
     def get_last_package_delay(self):
-        """Last Package Delay is the time between stop sending audio and receive last words package
-        """
+        """Last Package Delay is the time between stop sending audio and receive last words package"""  # noqa: E501  # pylint: disable=line-too-long
         return self._on_complete_timestamp - self._stop_stream_timestamp
 
     # 获取上一个任务的taskId

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from typing import List, Union
@@ -9,21 +10,23 @@ from dashscope.common.utils import _get_task_group_and_task
 
 
 class TextEmbedding(BaseApi):
-    task = 'text-embedding'
+    task = "text-embedding"
 
     class Models:
-        text_embedding_v1 = 'text-embedding-v1'
-        text_embedding_v2 = 'text-embedding-v2'
-        text_embedding_v3 = 'text-embedding-v3'
-        text_embedding_v4 = 'text-embedding-v4'
+        text_embedding_v1 = "text-embedding-v1"
+        text_embedding_v2 = "text-embedding-v2"
+        text_embedding_v3 = "text-embedding-v3"
+        text_embedding_v4 = "text-embedding-v4"
 
     @classmethod
-    def call(cls,
-             model: str,
-             input: Union[str, List[str]],
-             workspace: str = None,
-             api_key: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    def call(  # type: ignore[override]
+        cls,
+        model: str,
+        input: Union[str, List[str]],  # pylint: disable=redefined-builtin
+        workspace: str = None,
+        api_key: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Get embedding of text input.
 
         Args:
@@ -44,13 +47,15 @@ class TextEmbedding(BaseApi):
             embedding_input[TEXT_EMBEDDING_INPUT_KEY] = [input]
         else:
             embedding_input[TEXT_EMBEDDING_INPUT_KEY] = input
-        kwargs.pop('stream', False)  # not support streaming output.
+        kwargs.pop("stream", False)  # not support streaming output.
         task_group, function = _get_task_group_and_task(__name__)
-        return super().call(model=model,
-                            input=embedding_input,
-                            task_group=task_group,
-                            task=TextEmbedding.task,
-                            function=function,
-                            api_key=api_key,
-                            workspace=workspace,
-                            **kwargs)
+        return super().call(
+            model=model,
+            input=embedding_input,
+            task_group=task_group,
+            task=TextEmbedding.task,
+            function=function,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )

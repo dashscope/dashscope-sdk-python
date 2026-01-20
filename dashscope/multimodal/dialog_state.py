@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # dialog_state.py
 
 from enum import Enum
@@ -13,10 +14,11 @@ class DialogState(Enum):
         THINKING (str): 表示机器人正在思考。
         RESPONDING (str): 表示机器人正在生成或回复中。
     """
-    IDLE = 'Idle'
-    LISTENING = 'Listening'
-    THINKING = 'Thinking'
-    RESPONDING = 'Responding'
+
+    IDLE = "Idle"
+    LISTENING = "Listening"
+    THINKING = "Thinking"
+    RESPONDING = "Responding"
 
 
 class StateMachine:

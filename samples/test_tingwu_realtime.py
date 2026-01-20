@@ -1,11 +1,15 @@
+# -*- coding: utf-8 -*-
 import logging
 import os
 import time
 import sys
-from dashscope.multimodal.tingwu.tingwu_realtime import TingWuRealtime, TingWuRealtimeCallback
+from dashscope.multimodal.tingwu.tingwu_realtime import (
+    TingWuRealtime,
+    TingWuRealtimeCallback,
+)
 
 # 配置日志 - 关键改进
-logger = logging.getLogger('dashscope')
+logger = logging.getLogger("dashscope")
 logger.setLevel(logging.DEBUG)
 
 # 创建控制台处理器并设置级别为debug
@@ -14,7 +18,8 @@ console_handler.setLevel(logging.DEBUG)
 
 # 创建格式化器
 formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 # 添加格式化器到处理器
 console_handler.setFormatter(formatter)
 
@@ -33,49 +38,55 @@ class TestCallback(TingWuRealtimeCallback):
         print("TestCallback initialized")  # 添加调试输出
 
     def on_open(self) -> None:
-        logger.info('TingWuClient:: on websocket open.')
+        logger.info("TingWuClient:: on websocket open.")
 
     def on_started(self, task_id: str) -> None:
-        logger.info('TingWuClient:: on task started. task_id: %s', task_id)
+        logger.info("TingWuClient:: on task started. task_id: %s", task_id)
 
     def on_speech_listen(self, result: dict):
-        logger.info('TingWuClient:: on speech listen. result: %s', result)
+        logger.info("TingWuClient:: on speech listen. result: %s", result)
         self.can_send_audio = True  # 标记可以发送语音数据
 
     def on_recognize_result(self, result: dict):
-        logger.info('TingWuClient:: on recognize result. result: %s', result)
+        logger.info("TingWuClient:: on recognize result. result: %s", result)
 
     def on_ai_result(self, result: dict):
-        print(f'TingWuClient:: on ai result. result: {result}')
-        logger.info('TingWuClient:: on ai result. result: %s', result)
+        print(f"TingWuClient:: on ai result. result: {result}")
+        logger.info("TingWuClient:: on ai result. result: %s", result)
 
     def on_stopped(self) -> None:
-        logger.info('TingWuClient:: on task stopped.')
+        logger.info("TingWuClient:: on task stopped.")
         self.can_send_audio = False  # 标记不能发送语音数据
         self.task_completed = True
 
     def on_error(self, error_code: str, error_msg: str) -> None:
-        logger.info('TingWuClient:: on error. error_code: %s, error_msg: %s',
-                    error_code, error_msg)
+        logger.info(
+            "TingWuClient:: on error. error_code: %s, error_msg: %s",
+            error_code,
+            error_msg,
+        )
         self.task_completed = True
 
     def on_close(self, close_status_code, close_msg):
-        logger.info('TingWuClient:: on websocket close. close_status_code: %s, close_msg: %s',
-                    close_status_code, close_msg)
+        logger.info(
+            "TingWuClient:: on websocket close. close_status_code: %s, close_msg: %s",
+            close_status_code,
+            close_msg,
+        )
         self.task_completed = True
 
 
-class TestTingWuRealtime():
+class TestTingWuRealtime:
     @classmethod
     def setup_class(cls):
-        cls.model = 'tingwu-industrial-instruction'  # replace model name
-        cls.format = 'pcm'
+        cls.model = "tingwu-industrial-instruction"  # replace model name
+        cls.format = "pcm"
         cls.sample_rate = 16000
-        cls.file = './data/tingwu_test_audio.wav'
-        cls.appId = 'your-app-id'
-        cls.base_address = 'wss://dashscope.aliyuncs.com/api-ws/v1/inference'
-        cls.api_key = os.getenv('DASHSCOPE_API_KEY')
-        cls.terminology = 'your-terminology-id'
+        cls.file = "./data/tingwu_test_audio.wav"
+        cls.appId = "your-app-id"
+        cls.base_address = "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+        cls.api_key = os.getenv("DASHSCOPE_API_KEY")
+        cls.terminology = "your-terminology-id"
 
     def test_async_start_with_stream(self):
         print("开始测试...")
@@ -95,7 +106,7 @@ class TestTingWuRealtime():
             api_key=self.api_key,
             terminology=self.terminology,
             callback=callback,
-            max_end_silence=3000
+            max_end_silence=3000,
         )
 
         print("启动 TingWu 连接...")
@@ -109,7 +120,7 @@ class TestTingWuRealtime():
             print(f"打开文件: {self.file}")
             sys.stdout.flush()
 
-            with open(self.file, 'rb') as f:
+            with open(self.file, "rb") as f:
                 chunk_count = 0
                 while True:
                     chunk = f.read(3200)
@@ -161,12 +172,12 @@ class TestTingWuRealtime():
             print("TingWu 连接已关闭")
 
 
-if __name__ == '__main__':
-    logger.debug('Start test_tingwu_realtime.')
+if __name__ == "__main__":
+    logger.debug("Start test_tingwu_realtime.")
 
     tingwu_realtime = TestTingWuRealtime()
     tingwu_realtime.setup_class()
     tingwu_realtime.test_async_start_with_stream()
 
-    print('End test_tingwu_realtime.')
+    print("End test_tingwu_realtime.")
     sys.stdout.flush()

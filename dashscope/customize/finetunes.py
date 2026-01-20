@@ -1,32 +1,54 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import time
 from http import HTTPStatus
 from typing import Iterator, Union
 
-from dashscope.client.base_api import (CancelMixin, CreateMixin, DeleteMixin,
-                                       GetStatusMixin, ListMixin, LogMixin,
-                                       StreamEventMixin)
+from dashscope.client.base_api import (
+    CancelMixin,
+    CreateMixin,
+    DeleteMixin,
+    GetStatusMixin,
+    ListMixin,
+    LogMixin,
+    StreamEventMixin,
+)
 from dashscope.common.constants import TaskStatus
-from dashscope.customize.customize_types import (FineTune, FineTuneCancel,
-                                                 FineTuneDelete, FineTuneEvent,
-                                                 FineTuneList)
+from dashscope.customize.customize_types import (
+    FineTune,
+    FineTuneCancel,
+    FineTuneDelete,
+    FineTuneEvent,
+    FineTuneList,
+)
 
 
-class FineTunes(CreateMixin, CancelMixin, DeleteMixin, ListMixin,
-                GetStatusMixin, StreamEventMixin, LogMixin):
-    SUB_PATH = 'fine-tunes'
+class FineTunes(
+    CreateMixin,
+    CancelMixin,
+    DeleteMixin,
+    ListMixin,
+    GetStatusMixin,
+    StreamEventMixin,
+    LogMixin,
+):
+    SUB_PATH = "fine-tunes"
 
     @classmethod
-    def call(cls,
-             model: str,
-             training_file_ids: Union[list, str],
-             validation_file_ids: Union[list, str] = None,
-             mode: str = None,
-             hyper_parameters: dict = {},
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> FineTune:
+    # type: ignore[override]
+    # pylint: disable=arguments-renamed,dangerous-default-value
+    def call(  # noqa: E501  # type: ignore[override]
+        cls,
+        model: str,
+        training_file_ids: Union[list, str],
+        validation_file_ids: Union[list, str] = None,
+        mode: str = None,
+        hyper_parameters: dict = {},
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> FineTune:
         """Create fine-tune job
 
         Args:
@@ -49,27 +71,31 @@ class FineTunes(CreateMixin, CancelMixin, DeleteMixin, ListMixin,
         if validation_file_ids and isinstance(validation_file_ids, str):
             validation_file_ids = [validation_file_ids]
         request = {
-            'model': model,
-            'training_file_ids': training_file_ids,
-            'validation_file_ids': validation_file_ids,
-            'hyper_parameters': hyper_parameters if hyper_parameters else {},
+            "model": model,
+            "training_file_ids": training_file_ids,
+            "validation_file_ids": validation_file_ids,
+            "hyper_parameters": hyper_parameters if hyper_parameters else {},
         }
         if mode is not None:
-            request['training_type'] = mode
-        if 'finetuned_output' in kwargs:
-            request['finetuned_output'] = kwargs['finetuned_output']
-        resp = super().call(request,
-                            api_key=api_key,
-                            workspace=workspace,
-                            **kwargs)
+            request["training_type"] = mode
+        if "finetuned_output" in kwargs:
+            request["finetuned_output"] = kwargs["finetuned_output"]
+        resp = super().call(
+            request,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return FineTune(**resp)
 
     @classmethod
-    def cancel(cls,
-               job_id: str,
-               api_key: str = None,
-               workspace: str = None,
-               **kwargs) -> FineTuneCancel:
+    def cancel(  # type: ignore[override]
+        cls,
+        job_id: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> FineTuneCancel:
         """Cancel a running fine-tune job.
 
         Args:
@@ -81,19 +107,23 @@ class FineTunes(CreateMixin, CancelMixin, DeleteMixin, ListMixin,
         Returns:
             FineTune: The request result.
         """
-        rsp = super().cancel(job_id,
-                             api_key=api_key,
-                             workspace=workspace,
-                             **kwargs)
+        rsp = super().cancel(
+            job_id,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return FineTuneCancel(**rsp)
 
     @classmethod
-    def list(cls,
-             page_no=1,
-             page_size=10,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> FineTuneList:
+    def list(  # type: ignore[override]
+        cls,
+        page_no=1,
+        page_size=10,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> FineTuneList:
         """List fine-tune job.
 
         Args:
@@ -105,19 +135,23 @@ class FineTunes(CreateMixin, CancelMixin, DeleteMixin, ListMixin,
         Returns:
             FineTune: The fine-tune jobs in the result.
         """
-        response = super().list(page_no=page_no,
-                                page_size=page_size,
-                                api_key=api_key,
-                                workspace=workspace,
-                                **kwargs)
+        response = super().list(
+            page_no=page_no,
+            page_size=page_size,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return FineTuneList(**response)
 
     @classmethod
-    def get(cls,
-            job_id: str,
-            api_key: str = None,
-            workspace: str = None,
-            **kwargs) -> FineTune:
+    def get(  # type: ignore[override]
+        cls,
+        job_id: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> FineTune:
         """Get fine-tune job information.
 
         Args:
@@ -128,18 +162,22 @@ class FineTunes(CreateMixin, CancelMixin, DeleteMixin, ListMixin,
         Returns:
             FineTune: The job info
         """
-        response = super().get(job_id,
-                               api_key=api_key,
-                               workspace=workspace,
-                               **kwargs)
+        response = super().get(
+            job_id,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return FineTune(**response)
 
     @classmethod
-    def delete(cls,
-               job_id: str,
-               api_key: str = None,
-               workspace: str = None,
-               **kwargs) -> FineTuneDelete:
+    def delete(  # type: ignore[override]
+        cls,
+        job_id: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> FineTuneDelete:
         """Delete a fine-tune job.
 
         Args:
@@ -150,18 +188,23 @@ class FineTunes(CreateMixin, CancelMixin, DeleteMixin, ListMixin,
         Returns:
             FineTune: The delete result.
         """
-        rsp = super().delete(job_id,
-                             api_key=api_key,
-                             workspace=workspace,
-                             **kwargs)
+        rsp = super().delete(
+            job_id,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return FineTuneDelete(**rsp)
 
     @classmethod
-    def stream_events(cls,
-                      job_id: str,
-                      api_key: str = None,
-                      workspace: str = None,
-                      **kwargs) -> Iterator[FineTuneEvent]:
+    def stream_events(  # type: ignore[override] # pylint: disable=arguments-renamed  # noqa: E501
+        # type: ignore[override]
+        cls,
+        job_id: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> Iterator[FineTuneEvent]:
         """Get fine-tune job events.
 
         Args:
@@ -172,22 +215,26 @@ class FineTunes(CreateMixin, CancelMixin, DeleteMixin, ListMixin,
         Returns:
             FineTune: The job log events.
         """
-        responses = super().stream_events(job_id,
-                                          api_key=api_key,
-                                          workspace=workspace,
-                                          **kwargs)
+        responses = super().stream_events(
+            job_id,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         for rsp in responses:
             yield FineTuneEvent(**rsp)
 
     @classmethod
-    def logs(cls,
-             job_id: str,
-             *,
-             offset=1,
-             line=1000,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> FineTune:
+    def logs(  # type: ignore[override]
+        cls,
+        job_id: str,
+        *,
+        offset=1,
+        line=1000,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> FineTune:
         """Get log of the job.
 
         Args:
@@ -200,28 +247,35 @@ class FineTunes(CreateMixin, CancelMixin, DeleteMixin, ListMixin,
         Returns:
             FineTune: The response
         """
-        return super().logs(job_id,
-                            offset=offset,
-                            line=line,
-                            workspace=workspace,
-                            api_key=api_key)
+        return super().logs(  # type: ignore[return-value]
+            job_id,
+            offset=offset,
+            line=line,
+            workspace=workspace,
+            api_key=api_key,
+        )
 
     @classmethod
-    def wait(cls,
-             job_id: str,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs):
+    def wait(
+        cls,
+        job_id: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ):
         try:
             while True:
-                rsp = FineTunes.get(job_id,
-                                    api_key=api_key,
-                                    workspace=workspace,
-                                    **kwargs)
+                rsp = FineTunes.get(
+                    job_id,
+                    api_key=api_key,
+                    workspace=workspace,
+                    **kwargs,
+                )
                 if rsp.status_code == HTTPStatus.OK:
-                    if rsp.output['status'] in [
-                            TaskStatus.FAILED, TaskStatus.CANCELED,
-                            TaskStatus.SUCCEEDED
+                    if rsp.output["status"] in [
+                        TaskStatus.FAILED,
+                        TaskStatus.CANCELED,
+                        TaskStatus.SUCCEEDED,
                     ]:
                         return rsp
                     else:
@@ -229,6 +283,8 @@ class FineTunes(CreateMixin, CancelMixin, DeleteMixin, ListMixin,
                 else:
                     return rsp
         except Exception:
+            # pylint: disable=broad-exception-raised,raise-missing-from
             raise Exception(
-                'You can stream output via: dashscope fine_tunes.stream -j %s'
-                % job_id)
+                f"You can stream output via: dashscope fine_tunes.stream -j "
+                f"{job_id}",
+            )

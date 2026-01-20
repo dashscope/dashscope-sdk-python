@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import json
@@ -13,9 +14,15 @@ import websocket
 import dashscope
 from dashscope.common.error import InputRequired, InvalidTask, ModelRequired
 from dashscope.common.logging import logger
-from dashscope.protocol.websocket import (ACTION_KEY, EVENT_KEY, HEADER,
-                                          TASK_ID, ActionType, EventType,
-                                          WebsocketStreamingMode)
+from dashscope.protocol.websocket import (
+    ACTION_KEY,
+    EVENT_KEY,
+    HEADER,
+    TASK_ID,
+    ActionType,
+    EventType,
+    WebsocketStreamingMode,
+)
 
 
 class ResultCallback:
@@ -23,6 +30,7 @@ class ResultCallback:
     An interface that defines callback methods for getting speech synthesis results. # noqa E501
     Derive from this class and implement its function to provide your own data.
     """
+
     def on_open(self) -> None:
         pass
 
@@ -44,27 +52,27 @@ class ResultCallback:
 
 @unique
 class AudioFormat(Enum):
-    DEFAULT = ('Default', 0, '0', 0)
-    WAV_8000HZ_MONO_16BIT = ('wav', 8000, 'mono', 0)
-    WAV_16000HZ_MONO_16BIT = ('wav', 16000, 'mono', 16)
-    WAV_22050HZ_MONO_16BIT = ('wav', 22050, 'mono', 16)
-    WAV_24000HZ_MONO_16BIT = ('wav', 24000, 'mono', 16)
-    WAV_44100HZ_MONO_16BIT = ('wav', 44100, 'mono', 16)
-    WAV_48000HZ_MONO_16BIT = ('wav', 48000, 'mono', 16)
+    DEFAULT = ("Default", 0, "0", 0)
+    WAV_8000HZ_MONO_16BIT = ("wav", 8000, "mono", 0)
+    WAV_16000HZ_MONO_16BIT = ("wav", 16000, "mono", 16)
+    WAV_22050HZ_MONO_16BIT = ("wav", 22050, "mono", 16)
+    WAV_24000HZ_MONO_16BIT = ("wav", 24000, "mono", 16)
+    WAV_44100HZ_MONO_16BIT = ("wav", 44100, "mono", 16)
+    WAV_48000HZ_MONO_16BIT = ("wav", 48000, "mono", 16)
 
-    MP3_8000HZ_MONO_128KBPS = ('mp3', 8000, 'mono', 128)
-    MP3_16000HZ_MONO_128KBPS = ('mp3', 16000, 'mono', 128)
-    MP3_22050HZ_MONO_256KBPS = ('mp3', 22050, 'mono', 256)
-    MP3_24000HZ_MONO_256KBPS = ('mp3', 24000, 'mono', 256)
-    MP3_44100HZ_MONO_256KBPS = ('mp3', 44100, 'mono', 256)
-    MP3_48000HZ_MONO_256KBPS = ('mp3', 48000, 'mono', 256)
+    MP3_8000HZ_MONO_128KBPS = ("mp3", 8000, "mono", 128)
+    MP3_16000HZ_MONO_128KBPS = ("mp3", 16000, "mono", 128)
+    MP3_22050HZ_MONO_256KBPS = ("mp3", 22050, "mono", 256)
+    MP3_24000HZ_MONO_256KBPS = ("mp3", 24000, "mono", 256)
+    MP3_44100HZ_MONO_256KBPS = ("mp3", 44100, "mono", 256)
+    MP3_48000HZ_MONO_256KBPS = ("mp3", 48000, "mono", 256)
 
-    PCM_8000HZ_MONO_16BIT = ('pcm', 8000, 'mono', 16)
-    PCM_16000HZ_MONO_16BIT = ('pcm', 16000, 'mono', 16)
-    PCM_22050HZ_MONO_16BIT = ('pcm', 22050, 'mono', 16)
-    PCM_24000HZ_MONO_16BIT = ('pcm', 24000, 'mono', 16)
-    PCM_44100HZ_MONO_16BIT = ('pcm', 44100, 'mono', 16)
-    PCM_48000HZ_MONO_16BIT = ('pcm', 48000, 'mono', 16)
+    PCM_8000HZ_MONO_16BIT = ("pcm", 8000, "mono", 16)
+    PCM_16000HZ_MONO_16BIT = ("pcm", 16000, "mono", 16)
+    PCM_22050HZ_MONO_16BIT = ("pcm", 22050, "mono", 16)
+    PCM_24000HZ_MONO_16BIT = ("pcm", 24000, "mono", 16)
+    PCM_44100HZ_MONO_16BIT = ("pcm", 44100, "mono", 16)
+    PCM_48000HZ_MONO_16BIT = ("pcm", 48000, "mono", 16)
 
     OGG_OPUS_8KHZ_MONO_32KBPS = ("opus", 8000, "mono", 32)
     OGG_OPUS_8KHZ_MONO_16KBPS = ("opus", 8000, "mono", 16)
@@ -77,23 +85,30 @@ class AudioFormat(Enum):
     OGG_OPUS_48KHZ_MONO_16KBPS = ("opus", 48000, "mono", 16)
     OGG_OPUS_48KHZ_MONO_32KBPS = ("opus", 48000, "mono", 32)
     OGG_OPUS_48KHZ_MONO_64KBPS = ("opus", 48000, "mono", 64)
-    def __init__(self, format, sample_rate, channels, bit_rate):
+
+    def __init__(  # pylint: disable=redefined-builtin
+        self,
+        format,
+        sample_rate,
+        channels,
+        bit_rate,
+    ):
         self.format = format
         self.sample_rate = sample_rate
         self.channels = channels
         self.bit_rate = bit_rate
 
     def __str__(self):
-        return f'{self.format.upper()} with {self.sample_rate}Hz sample rate, {self.channels} channel, {self.bit_rate}'
+        return f"{self.format.upper()} with {self.sample_rate}Hz sample rate, {self.channels} channel, {self.bit_rate}"  # noqa: E501  # pylint: disable=line-too-long
 
 
 class Request:
-    def __init__(
+    def __init__(  # pylint: disable=redefined-builtin
         self,
         apikey,
         model,
         voice,
-        format='wav',
+        format="wav",
         sample_rate=16000,
         bit_rate=64000,
         volume=50,
@@ -124,60 +139,60 @@ class Request:
         return uuid.uuid4().hex
 
     def getWebsocketHeaders(self, headers, workspace):
-        ua = 'dashscope/%s; python/%s; platform/%s; processor/%s' % (
-            '1.18.0',  # dashscope version
-            platform.python_version(),
-            platform.platform(),
-            platform.processor(),
+        ua = (
+            f"dashscope/1.18.0; python/{platform.python_version()}; "
+            f"platform/{platform.platform()}; "
+            f"processor/{platform.processor()}"
         )
         self.headers = {
-            'user-agent': ua,
-            'Authorization': 'bearer ' + self.apikey,
+            "user-agent": ua,
+            "Authorization": "bearer " + self.apikey,
         }
         if headers:
             self.headers = {**self.headers, **headers}
         if workspace:
             self.headers = {
                 **self.headers,
-                'X-DashScope-WorkSpace': workspace,
+                "X-DashScope-WorkSpace": workspace,
             }
         return self.headers
 
     def getStartRequest(self, additional_params=None):
-
         cmd = {
             HEADER: {
                 ACTION_KEY: ActionType.START,
                 TASK_ID: self.task_id,
-                'streaming': WebsocketStreamingMode.DUPLEX,
+                "streaming": WebsocketStreamingMode.DUPLEX,
             },
-            'payload': {
-                'model': self.model,
-                'task_group': 'audio',
-                'task': 'tts',
-                'function': 'SpeechSynthesizer',
-                'input': {},
-                'parameters': {
-                    'voice': self.voice,
-                    'volume': self.volume,
-                    'text_type': 'PlainText',
-                    'sample_rate': self.sample_rate,
-                    'rate': self.speech_rate,
-                    'format': self.format,
-                    'pitch': self.pitch_rate,
-                    'seed': self.seed,
-                    'type': self.synthesis_type
+            "payload": {
+                "model": self.model,
+                "task_group": "audio",
+                "task": "tts",
+                "function": "SpeechSynthesizer",
+                "input": {},
+                "parameters": {
+                    "voice": self.voice,
+                    "volume": self.volume,
+                    "text_type": "PlainText",
+                    "sample_rate": self.sample_rate,
+                    "rate": self.speech_rate,
+                    "format": self.format,
+                    "pitch": self.pitch_rate,
+                    "seed": self.seed,
+                    "type": self.synthesis_type,
                 },
             },
         }
-        if self.format == 'opus':
-            cmd['payload']['parameters']['bit_rate'] = self.bit_rate
+        if self.format == "opus":
+            cmd["payload"]["parameters"]["bit_rate"] = self.bit_rate
         if additional_params:
-            cmd['payload']['parameters'].update(additional_params)
+            cmd["payload"]["parameters"].update(additional_params)
         if self.instruction is not None:
-            cmd['payload']['parameters']['instruction'] = self.instruction
+            cmd["payload"]["parameters"]["instruction"] = self.instruction
         if self.language_hints is not None:
-            cmd['payload']['parameters']['language_hints'] = self.language_hints
+            cmd["payload"]["parameters"][
+                "language_hints"
+            ] = self.language_hints
         return json.dumps(cmd)
 
     def getContinueRequest(self, text):
@@ -185,15 +200,15 @@ class Request:
             HEADER: {
                 ACTION_KEY: ActionType.CONTINUE,
                 TASK_ID: self.task_id,
-                'streaming': WebsocketStreamingMode.DUPLEX,
+                "streaming": WebsocketStreamingMode.DUPLEX,
             },
-            'payload': {
-                'model': self.model,
-                'task_group': 'audio',
-                'task': 'tts',
-                'function': 'SpeechSynthesizer',
-                'input': {
-                    'text': text
+            "payload": {
+                "model": self.model,
+                "task_group": "audio",
+                "task": "tts",
+                "function": "SpeechSynthesizer",
+                "input": {
+                    "text": text,
                 },
             },
         }
@@ -204,17 +219,17 @@ class Request:
             HEADER: {
                 ACTION_KEY: ActionType.FINISHED,
                 TASK_ID: self.task_id,
-                'streaming': WebsocketStreamingMode.DUPLEX,
+                "streaming": WebsocketStreamingMode.DUPLEX,
             },
-            'payload': {
-                'input': {},
+            "payload": {
+                "input": {},
             },
         }
         return json.dumps(cmd)
 
 
 class SpeechSynthesizer:
-    def __init__(
+    def __init__(  # pylint: disable=redefined-builtin
         self,
         model,
         voice,
@@ -245,9 +260,9 @@ class SpeechSynthesizer:
         volume: int
             The volume of the synthesized audio, with a range from 0 to 100. Default is 50.
         rate: float
-            The speech rate of the synthesized audio, with a range from 0.5 to 2. Default is 1.0.
+            The speech rate of the synthesized audio, with a range from 0.5 to 2. Default is 1.0.  # noqa: E501  # pylint: disable=line-too-long
         pitch: float
-            The pitch of the synthesized audio, with a range from 0.5 to 2. Default is 1.0.
+            The pitch of the synthesized audio, with a range from 0.5 to 2. Default is 1.0.  # noqa: E501  # pylint: disable=line-too-long
         headers: Dict
             User-defined headers.
         callback: ResultCallback
@@ -284,29 +299,45 @@ class SpeechSynthesizer:
         self._recv_audio_length = 0
         self.last_response = None
         self._close_ws_after_use = True
-        self.__update_params(model, voice, format, volume, speech_rate,
-                             pitch_rate, seed, synthesis_type, instruction, language_hints, headers, callback, workspace, url,
-                             additional_params)
+        self.__update_params(
+            model,
+            voice,
+            format,
+            volume,
+            speech_rate,
+            pitch_rate,
+            seed,
+            synthesis_type,
+            instruction,
+            language_hints,
+            headers,
+            callback,
+            workspace,
+            url,
+            additional_params,
+        )
 
     def __send_str(self, data: str):
-        logger.debug('>>>send {}'.format(data))
+        logger.debug(">>>send %s", data)
         self.ws.send(data)
 
     def __connect(self, timeout_seconds=5) -> None:
         """
         Establish a connection to the Bailian WebSocket server,
-        which can be used to pre-establish the connection and reduce interaction latency.
+        which can be used to pre-establish the connection and reduce interaction latency.  # noqa: E501  # pylint: disable=line-too-long
         If this function is not used to create the connection,
-        it will be established when you first send text via call or streaming_call.
+        it will be established when you first send text via call or streaming_call.  # noqa: E501
         Parameters:
         -----------
         timeout: int
-            Throws TimeoutError exception if the connection is not established after times out seconds.
+            Throws TimeoutError exception if the connection is not established after times out seconds.  # noqa: E501  # pylint: disable=line-too-long
         """
         self.ws = websocket.WebSocketApp(
             self.url,
-            header=self.request.getWebsocketHeaders(headers=self.headers,
-                                                    workspace=self.workspace),
+            header=self.request.getWebsocketHeaders(
+                headers=self.headers,
+                workspace=self.workspace,
+            ),
             on_message=self.on_message,
             on_error=self.on_error,
             on_close=self.on_close,
@@ -316,13 +347,15 @@ class SpeechSynthesizer:
         self.thread.start()
         # 等待连接建立
         start_time = time.time()
-        while (not (self.ws.sock and self.ws.sock.connected)
-               and (time.time() - start_time) < timeout_seconds):
+        while (
+            not (self.ws.sock and self.ws.sock.connected)
+            and (time.time() - start_time) < timeout_seconds
+        ):
             time.sleep(0.1)  # 短暂休眠，避免密集轮询
         if not (self.ws.sock and self.ws.sock.connected):
             raise TimeoutError(
-                'websocket connection could not established within 5s. '
-                'Please check your network connection, firewall settings, or server status.'
+                "websocket connection could not established within 5s. "
+                "Please check your network connection, firewall settings, or server status.",  # noqa: E501  # pylint: disable=line-too-long
             )
 
     def __is_connected(self) -> bool:
@@ -336,7 +369,7 @@ class SpeechSynthesizer:
             return False
         return True
 
-    def __reset(self):
+    def __reset(self):  # pylint: disable=unused-private-member
         self.start_event.clear()
         self.complete_event.clear()
         self._stopped.clear()
@@ -352,7 +385,7 @@ class SpeechSynthesizer:
         self._recv_audio_length = 0
         self.last_response = None
 
-    def __update_params(
+    def __update_params(  # pylint: disable=redefined-builtin
         self,
         model,
         voice,
@@ -372,25 +405,25 @@ class SpeechSynthesizer:
         close_ws_after_use=True,
     ):
         if model is None:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         if format is None:
-            raise InputRequired('format is required!')
+            raise InputRequired("format is required!")
         if url is None:
             url = dashscope.base_websocket_api_url
         self.url = url
         self.apikey = dashscope.api_key
         if self.apikey is None:
-            raise InputRequired('apikey is required!')
+            raise InputRequired("apikey is required!")
         self.headers = headers
         self.workspace = workspace
         self.additional_params = additional_params
         self.model = model
         self.voice = voice
         self.aformat = format.format
-        if (self.aformat == 'DEFAULT'):
-            self.aformat = 'mp3'
+        if self.aformat == "DEFAULT":
+            self.aformat = "mp3"
         self.sample_rate = format.sample_rate
-        if (self.sample_rate == 0):
+        if self.sample_rate == 0:
             self.sample_rate = 22050
 
         self.callback = callback
@@ -402,37 +435,41 @@ class SpeechSynthesizer:
             voice=voice,
             format=format.format,
             sample_rate=format.sample_rate,
-            bit_rate = format.bit_rate,
+            bit_rate=format.bit_rate,
             volume=volume,
             speech_rate=speech_rate,
             pitch_rate=pitch_rate,
             seed=seed,
             synthesis_type=synthesis_type,
             instruction=instruction,
-            language_hints=language_hints
+            language_hints=language_hints,
         )
         self.last_request_id = self.request.task_id
         self._close_ws_after_use = close_ws_after_use
 
     def __str__(self):
-        return '[SpeechSynthesizer {} desc] model:{}, voice:{}, format:{}, sample_rate:{}, connected:{}'.format(
-            self.__hash__(), self.model, self.voice, self.aformat,
-            self.sample_rate, self.__is_connected())
+        # pylint: disable=line-too-long
+        return (
+            f"[SpeechSynthesizer {self.__hash__()} desc] "
+            f"model:{self.model}, voice:{self.voice}, "
+            f"format:{self.aformat}, sample_rate:{self.sample_rate}, "
+            f"connected:{self.__is_connected()}"
+        )
 
-    def __start_stream(self, ):
+    def __start_stream(self):
         self._start_stream_timestamp = time.time() * 1000
         self._first_package_timestamp = -1
         self._recv_audio_length = 0
         if self.callback is None:
-            raise InputRequired('callback is required!')
+            raise InputRequired("callback is required!")
         # reset inner params
         self._stopped.clear()
-        self._stream_data = ['']
+        self._stream_data = [""]
         self._worker = None
         self._audio_data: bytes = None
 
         if self._is_started:
-            raise InvalidTask('task has already started.')
+            raise InvalidTask("task has already started.")
         # 建立ws连接
         if self.ws is None:
             self.__connect(5)
@@ -440,23 +477,24 @@ class SpeechSynthesizer:
         request = self.request.getStartRequest(self.additional_params)
         self.__send_str(request)
         if not self.start_event.wait(10):
-            raise TimeoutError('start speech synthesizer failed within 5s.')
+            raise TimeoutError("start speech synthesizer failed within 5s.")
         self._is_started = True
         if self.callback:
             self.callback.on_open()
 
     def __submit_text(self, text):
         if not self._is_started:
-            raise InvalidTask('speech synthesizer has not been started.')
+            raise InvalidTask("speech synthesizer has not been started.")
 
         if self._stopped.is_set():
-            raise InvalidTask('speech synthesizer task has stopped.')
+            raise InvalidTask("speech synthesizer task has stopped.")
         request = self.request.getContinueRequest(text)
         self.__send_str(request)
 
+    # pylint: disable=useless-return
     def streaming_call(self, text: str):
         """
-        Streaming input mode: You can call the stream_call function multiple times to send text.
+        Streaming input mode: You can call the stream_call function multiple times to send text.  # noqa: E501  # pylint: disable=line-too-long
         A session will be created on the first call.
         The session ends after calling streaming_complete.
         Parameters:
@@ -478,22 +516,24 @@ class SpeechSynthesizer:
         Parameters:
         -----------
         complete_timeout_millis: int
-            Throws TimeoutError exception if it times out. If the timeout is not None
+            Throws TimeoutError exception if it times out. If the timeout is not None  # noqa: E501
             and greater than zero, it will wait for the corresponding number of
             milliseconds; otherwise, it will wait indefinitely.
         """
         if not self._is_started:
-            raise InvalidTask('speech synthesizer has not been started.')
+            raise InvalidTask("speech synthesizer has not been started.")
         if self._stopped.is_set():
-            raise InvalidTask('speech synthesizer task has stopped.')
+            raise InvalidTask("speech synthesizer task has stopped.")
         request = self.request.getFinishRequest()
         self.__send_str(request)
         if complete_timeout_millis is not None and complete_timeout_millis > 0:
-            if not self.complete_event.wait(timeout=complete_timeout_millis /
-                                            1000):
+            if not self.complete_event.wait(
+                timeout=complete_timeout_millis / 1000,
+            ):
                 raise TimeoutError(
-                    'speech synthesizer wait for complete timeout {}ms'.format(
-                        complete_timeout_millis))
+                    f"speech synthesizer wait for complete timeout "
+                    f"{complete_timeout_millis}ms",
+                )
         else:
             self.complete_event.wait()
         if self._close_ws_after_use:
@@ -505,7 +545,7 @@ class SpeechSynthesizer:
         if timeout is not None and timeout > 0:
             if not self.complete_event.wait(timeout=timeout / 1000):
                 raise TimeoutError(
-                    f'speech synthesizer wait for complete timeout {timeout}ms'
+                    f"speech synthesizer wait for complete timeout {timeout}ms",  # noqa: E501
                 )
         else:
             self.complete_event.wait()
@@ -516,26 +556,28 @@ class SpeechSynthesizer:
 
     def async_streaming_complete(self, complete_timeout_millis=600000):
         """
-        Asynchronously stop the streaming input speech synthesis task, returns immediately.
-        You need to listen and handle the STREAM_INPUT_TTS_EVENT_SYNTHESIS_COMPLETE event in the on_event callback.
+        Asynchronously stop the streaming input speech synthesis task, returns immediately.  # noqa: E501  # pylint: disable=line-too-long
+        You need to listen and handle the STREAM_INPUT_TTS_EVENT_SYNTHESIS_COMPLETE event in the on_event callback.  # noqa: E501  # pylint: disable=line-too-long
         Do not destroy the object and callback before this event.
 
         Parameters:
         -----------
         complete_timeout_millis: int
-            Throws TimeoutError exception if it times out. If the timeout is not None
+            Throws TimeoutError exception if it times out. If the timeout is not None  # noqa: E501
             and greater than zero, it will wait for the corresponding number of
             milliseconds; otherwise, it will wait indefinitely.
         """
 
         if not self._is_started:
-            raise InvalidTask('speech synthesizer has not been started.')
+            raise InvalidTask("speech synthesizer has not been started.")
         if self._stopped.is_set():
-            raise InvalidTask('speech synthesizer task has stopped.')
+            raise InvalidTask("speech synthesizer task has stopped.")
         request = self.request.getFinishRequest()
         self.__send_str(request)
-        thread = threading.Thread(target=self.__waiting_for_complete,
-                                  args=(complete_timeout_millis, ))
+        thread = threading.Thread(
+            target=self.__waiting_for_complete,
+            args=(complete_timeout_millis,),
+        )
         thread.start()
 
     def streaming_cancel(self):
@@ -545,7 +587,7 @@ class SpeechSynthesizer:
         """
 
         if not self._is_started:
-            raise InvalidTask('speech synthesizer has not been started.')
+            raise InvalidTask("speech synthesizer has not been started.")
         if self._stopped.is_set():
             return
         request = self.request.getFinishRequest()
@@ -555,14 +597,18 @@ class SpeechSynthesizer:
         self.complete_event.set()
 
     # 监听消息的回调函数
-    def on_message(self, ws, message):
+    def on_message(  # pylint: disable=unused-argument,too-many-branches
+        self,
+        ws,
+        message,
+    ):
         if isinstance(message, str):
-            logger.debug('<<<recv {}'.format(message))
+            logger.debug("<<<recv %s", message)
             try:
                 # 尝试将消息解析为JSON
                 json_data = json.loads(message)
                 self.last_response = json_data
-                event = json_data['header'][EVENT_KEY]
+                event = json_data["header"][EVENT_KEY]
                 # 调用JSON回调
                 if EventType.STARTED == event:
                     self.start_event.set()
@@ -578,31 +624,40 @@ class SpeechSynthesizer:
                         self.callback.on_error(message)
                         self.callback.on_close()
                     else:
-                        logger.error(f'TaskFailed: {message}')
-                        raise Exception(f'TaskFailed: {message}')
+                        logger.error(f"TaskFailed: {message}")
+                        # pylint: disable=broad-exception-raised
+                        raise Exception(f"TaskFailed: {message}")
                 elif EventType.GENERATED == event:
                     if self.callback:
                         self.callback.on_event(message)
                 else:
                     pass
             except json.JSONDecodeError:
-                logger.error('Failed to parse message as JSON.')
-                raise Exception('Failed to parse message as JSON.')
+                logger.error("Failed to parse message as JSON.")
+                # pylint: disable=broad-exception-raised,raise-missing-from
+                raise Exception("Failed to parse message as JSON.")
         elif isinstance(message, (bytes, bytearray)):
             # 如果失败，认为是二进制消息
-            logger.debug('<<<recv binary {}'.format(len(message)))
-            if (self._recv_audio_length == 0):
+            logger.debug("<<<recv binary %s", len(message))
+            if self._recv_audio_length == 0:
                 self._first_package_timestamp = time.time() * 1000
-                logger.debug('first package delay {}'.format(
-                    self._first_package_timestamp -
-                    self._start_stream_timestamp))
-            self._recv_audio_length += len(message) / (2 * self.sample_rate /
-                                                       1000)
+                logger.debug(
+                    "first package delay %s",
+                    self._first_package_timestamp
+                    - self._start_stream_timestamp,
+                )
+            self._recv_audio_length += len(message) / (
+                2 * self.sample_rate / 1000
+            )
             current = time.time() * 1000
-            current_rtf = (current - self._start_stream_timestamp
-                           ) / self._recv_audio_length
-            logger.debug('total audio {} ms, current_rtf: {}'.format(
-                self._recv_audio_length, current_rtf))
+            current_rtf = (
+                current - self._start_stream_timestamp
+            ) / self._recv_audio_length
+            logger.debug(
+                "total audio %s ms, current_rtf: %s",
+                self._recv_audio_length,
+                current_rtf,
+            )
             # 只有在非异步调用的时候保存音频
             if not self.async_call:
                 if self._audio_data is None:
@@ -615,8 +670,8 @@ class SpeechSynthesizer:
     def call(self, text: str, timeout_millis=None):
         """
         Speech synthesis.
-        If callback is set, the audio will be returned in real-time through the on_event interface.
-        Otherwise, this function blocks until all audio is received and then returns the complete audio data.
+        If callback is set, the audio will be returned in real-time through the on_event interface.  # noqa: E501  # pylint: disable=line-too-long
+        Otherwise, this function blocks until all audio is received and then returns the complete audio data.  # noqa: E501  # pylint: disable=line-too-long
 
         Parameters:
         -----------
@@ -625,15 +680,15 @@ class SpeechSynthesizer:
         timeoutMillis:
             Integer or None
         return: bytes
-            If a callback is not set during initialization, the complete audio is returned
-            as the function's return value. Otherwise, the return value is null.
+            If a callback is not set during initialization, the complete audio is returned  # noqa: E501  # pylint: disable=line-too-long
+            as the function's return value. Otherwise, the return value is null.  # noqa: E501
             If the timeout is set to a value greater than zero and not None,
             it will wait for the corresponding number of milliseconds;
             otherwise, it will wait indefinitely.
         """
         # print('还不支持非流式语音合成sdk调用大模型，使用流式模拟')
         if self.additional_params is None:
-            self.additional_params = {"enable_ssml":True}
+            self.additional_params = {"enable_ssml": True}
         else:
             self.additional_params["enable_ssml"] = True
         if not self.callback:
@@ -648,13 +703,19 @@ class SpeechSynthesizer:
             return self._audio_data
 
     # WebSocket关闭的回调函数
-    def on_close(self, ws, close_status_code, close_msg):
+    def on_close(  # pylint: disable=unused-argument
+        self,
+        ws,
+        close_status_code,
+        close_msg,
+    ):
         pass
 
     # WebSocket发生错误的回调函数
-    def on_error(self, ws, error):
-        print(f'websocket closed due to {error}')
-        raise Exception(f'websocket closed due to {error}')
+    def on_error(self, ws, error):  # pylint: disable=unused-argument
+        print(f"websocket closed due to {error}")
+        # pylint: disable=broad-exception-raised
+        raise Exception(f"websocket closed due to {error}")
 
     # 关闭WebSocket连接
     def close(self):
@@ -665,8 +726,7 @@ class SpeechSynthesizer:
         return self.last_request_id
 
     def get_first_package_delay(self):
-        """First Package Delay is the time between start sending text and receive first audio package
-        """
+        """First Package Delay is the time between start sending text and receive first audio package"""  # noqa: E501  # pylint: disable=line-too-long
         return self._first_package_timestamp - self._start_stream_timestamp
 
     def get_response(self):
@@ -677,9 +737,9 @@ class SpeechSynthesizerObjectPool:
     _instance_lock = threading.Lock()
 
     def __new__(cls, *args, **kwargs):
-        if not hasattr(SpeechSynthesizerObjectPool, '_instance'):
+        if not hasattr(SpeechSynthesizerObjectPool, "_instance"):
             with SpeechSynthesizerObjectPool._instance_lock:
-                if not hasattr(SpeechSynthesizerObjectPool, '_instance'):
+                if not hasattr(SpeechSynthesizerObjectPool, "_instance"):
                     SpeechSynthesizerObjectPool._instance = object.__new__(cls)
         return SpeechSynthesizerObjectPool._instance
 
@@ -689,17 +749,19 @@ class SpeechSynthesizerObjectPool:
             self.connect_time = -1
 
         def __str__(self):
-            return f'synthesizer: {self.synthesizer}, connect_time: {self.connect_time}'
+            return f"synthesizer: {self.synthesizer}, connect_time: {self.connect_time}"  # noqa: E501  # pylint: disable=line-too-long
 
-    def __init__(self,
-                 max_size: int = 20,
-                 url=None,
-                 headers=None,
-                 workspace=None):
+    def __init__(
+        self,
+        max_size: int = 20,
+        url=None,
+        headers=None,
+        workspace=None,
+    ):
         """
         Speech synthesis object pool that follows the singleton pattern,
-        establishes WebSocket connections in advance to avoid connection overhead.
-        The connection pool will maintain a number of pre-created synthesizer objects
+        establishes WebSocket connections in advance to avoid connection overhead.  # noqa: E501
+        The connection pool will maintain a number of pre-created synthesizer objects  # noqa: E501
         up to max_size; objects taken from the pool do not need to be returned,
         and the pool will automatically replenish them.
 
@@ -708,21 +770,21 @@ class SpeechSynthesizerObjectPool:
         max_size: int
             Size of the object pool, with a value range of 1 to 100.
         """
-        self.DEFAULT_MODEL = 'cosyvoice-v1'
-        self.DEFAULT_VOICE = 'longxiaochun'
+        self.DEFAULT_MODEL = "cosyvoice-v1"
+        self.DEFAULT_VOICE = "longxiaochun"
         self.DEFAULT_RECONNECT_INTERVAL = 30
         self.DEFAULT_URL = url
         self.DEFAUTL_HEADERS = headers
         self.DEFAULT_WORKSPACE = workspace
         if max_size <= 0:
-            raise ValueError('max_size must be greater than 0')
+            raise ValueError("max_size must be greater than 0")
         if max_size > 100:
-            raise ValueError('max_size must be less than 100')
+            raise ValueError("max_size must be less than 100")
         self._pool = []
         # 如果重连中，则会将avaliable置为False，避免被使用
         self._avaliable = []
         self._pool_size = max_size
-        for i in range(self._pool_size):
+        for i in range(self._pool_size):  # pylint: disable=unused-variable
             synthesizer = self.__get_default_synthesizer()
             tmpPoolObject = self.PoolObject(synthesizer)
             tmpPoolObject.synthesizer._SpeechSynthesizer__connect()
@@ -734,29 +796,38 @@ class SpeechSynthesizerObjectPool:
         self._lock = threading.Lock()
         self._stop = False
         self._stop_lock = threading.Lock()
-        self._working_thread = threading.Thread(target=self.__auto_reconnect,
-                                                args=())
+        self._working_thread = threading.Thread(
+            target=self.__auto_reconnect,
+            args=(),
+        )
         self._working_thread.start()
 
     def __get_default_synthesizer(self) -> SpeechSynthesizer:
-        return SpeechSynthesizer(model=self.DEFAULT_MODEL,
-                                 voice=self.DEFAULT_VOICE,
-                                 url=self.DEFAULT_URL,
-                                 headers=self.DEFAUTL_HEADERS,
-                                 workspace=self.DEFAULT_WORKSPACE)
+        return SpeechSynthesizer(
+            model=self.DEFAULT_MODEL,
+            voice=self.DEFAULT_VOICE,
+            url=self.DEFAULT_URL,
+            headers=self.DEFAUTL_HEADERS,
+            workspace=self.DEFAULT_WORKSPACE,
+        )
 
     def __get_reconnect_interval(self):
         return self.DEFAULT_RECONNECT_INTERVAL + random.random() * 10 - 5
 
     def __auto_reconnect(self):
         logger.debug(
-            'speech synthesizer object pool auto reconnect thread start')
+            "speech synthesizer object pool auto reconnect thread start",
+        )
         while True:
             objects_need_to_connect = []
             objects_need_to_renew = []
-            logger.debug('scanning queue borr: {}/{} remain: {}/{}'.format(
-                self._borrowed_object_num, self._pool_size,
-                self._remain_object_num, self._pool_size))
+            logger.debug(
+                "scanning queue borr: %s/%s remain: %s/%s",
+                self._borrowed_object_num,
+                self._pool_size,
+                self._remain_object_num,
+                self._pool_size,
+            )
             with self._lock:
                 if self._stop:
                     return
@@ -767,26 +838,34 @@ class SpeechSynthesizerObjectPool:
                     if poolObject.connect_time == -1:
                         objects_need_to_connect.append(poolObject)
                         self._avaliable[idx] = False
-                    elif (not poolObject.synthesizer.
-                          _SpeechSynthesizer__is_connected()) or (
-                              current_time - poolObject.connect_time >
-                              self.__get_reconnect_interval()):
+                    elif (
+                        # Access private method for connection check
+                        not poolObject.synthesizer._SpeechSynthesizer__is_connected()  # pylint: disable=protected-access  # noqa: E501
+                    ) or (
+                        current_time - poolObject.connect_time
+                        > self.__get_reconnect_interval()
+                    ):
                         objects_need_to_renew.append(poolObject)
                         self._avaliable[idx] = False
             for poolObject in objects_need_to_connect:
                 logger.info(
-                    '[SpeechSynthesizerObjectPool] pre-connect new synthesizer'
+                    "[SpeechSynthesizerObjectPool] pre-connect new synthesizer",  # noqa: E501
                 )
-                poolObject.synthesizer._SpeechSynthesizer__connect()
+                # Access private method to establish connection
+                poolObject.synthesizer._SpeechSynthesizer__connect()  # pylint: disable=protected-access # noqa: E501
                 poolObject.connect_time = time.time()
             for poolObject in objects_need_to_renew:
+                # pylint: disable=line-too-long
                 logger.info(
-                    '[SpeechSynthesizerObjectPool] renew synthesizer after {} s'
-                    .format(current_time - poolObject.connect_time))
+                    "[SpeechSynthesizerObjectPool] renew synthesizer after %s s",  # noqa: E501
+                    current_time - poolObject.connect_time,
+                )
                 poolObject.synthesizer = self.__get_default_synthesizer()
-                poolObject.synthesizer._SpeechSynthesizer__connect()
+                # Access private method to establish connection
+                poolObject.synthesizer._SpeechSynthesizer__connect()  # pylint: disable=protected-access # noqa: E501
                 poolObject.connect_time = time.time()
             with self._lock:
+                # pylint: disable=consider-using-enumerate
                 for i in range(len(self._avaliable)):
                     self._avaliable[i] = True
             time.sleep(1)
@@ -796,14 +875,14 @@ class SpeechSynthesizerObjectPool:
         This is a ThreadSafe Method.
         destroy the object pool
         """
-        logger.debug('[SpeechSynthesizerObjectPool] start shutdown')
+        logger.debug("[SpeechSynthesizerObjectPool] start shutdown")
         with self._lock:
             self._stop = True
             self._pool = []
         self._working_thread.join()
-        logger.debug('[SpeechSynthesizerObjectPool] shutdown complete')
+        logger.debug("[SpeechSynthesizerObjectPool] shutdown complete")
 
-    def borrow_synthesizer(
+    def borrow_synthesizer(  # pylint: disable=unused-argument,redefined-builtin # noqa: E501
         self,
         model,
         voice,
@@ -829,14 +908,16 @@ class SpeechSynthesizerObjectPool:
         If there is no synthesizer object in the pool,
         a new synthesizer object will be created and returned.
         """
-        logger.debug('[SpeechSynthesizerObjectPool] get synthesizer')
+        logger.debug("[SpeechSynthesizerObjectPool] get synthesizer")
         synthesizer: SpeechSynthesizer = None
         with self._lock:
             # 遍历对象池，如果存在预建连的对象，则返回
             for idx, poolObject in enumerate(self._pool):
-                if self._avaliable[
-                        idx] and poolObject.synthesizer._SpeechSynthesizer__is_connected(
-                        ):
+                if (
+                    self._avaliable[idx]
+                    # Access private method for connection check
+                    and poolObject.synthesizer._SpeechSynthesizer__is_connected()  # pylint: disable=protected-access  # noqa: E501
+                ):
                     synthesizer = poolObject.synthesizer
                     self._borrowed_object_num += 1
                     self._remain_object_num -= 1
@@ -848,31 +929,45 @@ class SpeechSynthesizerObjectPool:
         if synthesizer is None:
             synthesizer = self.__get_default_synthesizer()
             logger.warning(
-                '[SpeechSynthesizerObjectPool] object pool is exausted, create new synthesizer'
+                "[SpeechSynthesizerObjectPool] object pool is exausted, create new synthesizer",  # noqa: E501  # pylint: disable=line-too-long
             )
-        synthesizer._SpeechSynthesizer__reset()
-        synthesizer._SpeechSynthesizer__update_params(model, voice, format,
-                                                      volume, speech_rate,
-                                                      pitch_rate, seed, synthesis_type, instruction, 
-                                                      language_hints, self.DEFAUTL_HEADERS,
-                                                      callback, self.DEFAULT_WORKSPACE, self.DEFAULT_URL,
-                                                      additional_params, False)
+        # Access private methods to reset and update synthesizer params
+        synthesizer._SpeechSynthesizer__reset()  # pylint: disable=protected-access # noqa: E501
+        synthesizer._SpeechSynthesizer__update_params(  # pylint: disable=protected-access # noqa: E501
+            model,
+            voice,
+            format,
+            volume,
+            speech_rate,
+            pitch_rate,
+            seed,
+            synthesis_type,
+            instruction,
+            language_hints,
+            self.DEFAUTL_HEADERS,
+            callback,
+            self.DEFAULT_WORKSPACE,
+            self.DEFAULT_URL,
+            additional_params,
+            False,
+        )
         return synthesizer
 
-    def return_synthesizer(self, synthesizer) -> bool:
+    # pylint: disable=inconsistent-return-statements
+    def return_synthesizer(self, synthesizer) -> bool:  # type: ignore[return]
         """
         This is a ThreadSafe Method.
         return a synthesizer object back to the pool.
         """
         if not isinstance(synthesizer, SpeechSynthesizer):
             logger.error(
-                '[SpeechSynthesizerObjectPool] return_synthesizer: synthesizer is not a SpeechSynthesizer object'
+                "[SpeechSynthesizerObjectPool] return_synthesizer: synthesizer is not a SpeechSynthesizer object",  # noqa: E501  # pylint: disable=line-too-long
             )
             return False
         with self._lock:
             if self._borrowed_object_num <= 0:
                 logger.debug(
-                    '[SpeechSynthesizerObjectPool] pool is full, drop returned object'
+                    "[SpeechSynthesizerObjectPool] pool is full, drop returned object",  # noqa: E501  # pylint: disable=line-too-long
                 )
                 return False
             poolObject = self.PoolObject(synthesizer)
@@ -882,5 +977,5 @@ class SpeechSynthesizerObjectPool:
             self._borrowed_object_num -= 1
             self._remain_object_num += 1
             logger.debug(
-                '[SpeechSynthesizerObjectPool] return synthesizer back to pool'
+                "[SpeechSynthesizerObjectPool] return synthesizer back to pool",  # noqa: E501
             )

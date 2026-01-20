@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from dataclasses import dataclass
@@ -6,7 +7,7 @@ from typing import Dict, List
 
 from dashscope.common.base_type import BaseObjectMixin
 
-__all__ = ['Deployment', 'FineTune', 'DeploymentList', 'FineTuneList']
+__all__ = ["Deployment", "FineTune", "DeploymentList", "FineTuneList"]
 
 
 @dataclass(init=False)
@@ -15,7 +16,7 @@ class DashScopeBaseList(BaseObjectMixin):
     page_size: int
     total: int
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -26,7 +27,7 @@ class DashScopeBase(BaseObjectMixin):
     code: str
     message: str
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -50,7 +51,7 @@ class FineTuneOutput(BaseObjectMixin):
     group: str
     usage: int
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -60,9 +61,9 @@ class FineTune(DashScopeBase):
     usage: Dict
 
     def __init__(self, **kwargs):
-        status_code = kwargs.get('status_code', None)
+        status_code = kwargs.get("status_code", None)
         if status_code == HTTPStatus.OK:
-            self.output = FineTuneOutput(**kwargs.pop('output', {}))
+            self.output = FineTuneOutput(**kwargs.pop("output", {}))
         super().__init__(**kwargs)
 
 
@@ -72,7 +73,7 @@ class FineTuneListOutput(DashScopeBaseList):
 
     def __init__(self, **kwargs):
         self.jobs = []
-        for job in kwargs.pop('jobs', []):
+        for job in kwargs.pop("jobs", []):
             self.jobs.append(FineTuneOutput(**job))
         super().__init__(**kwargs)
 
@@ -82,9 +83,9 @@ class FineTuneList(DashScopeBase):
     output: FineTuneListOutput
 
     def __init__(self, **kwargs):
-        status_code = kwargs.get('status_code', None)
+        status_code = kwargs.get("status_code", None)
         if status_code == HTTPStatus.OK:
-            self.output = FineTuneListOutput(**kwargs.pop('output', {}))
+            self.output = FineTuneListOutput(**kwargs.pop("output", {}))
         super().__init__(**kwargs)
 
 
@@ -98,9 +99,9 @@ class FineTuneCancel(DashScopeBase):
     output: CancelDeleteStatus
 
     def __init__(self, **kwargs):
-        status_code = kwargs.get('status_code', None)
+        status_code = kwargs.get("status_code", None)
         if status_code == HTTPStatus.OK:
-            self.output = CancelDeleteStatus(**kwargs.pop('output', {}))
+            self.output = CancelDeleteStatus(**kwargs.pop("output", {}))
         super().__init__(**kwargs)
 
 
@@ -109,9 +110,9 @@ class FineTuneDelete(DashScopeBase):
     output: CancelDeleteStatus
 
     def __init__(self, **kwargs):
-        status_code = kwargs.get('status_code', None)
+        status_code = kwargs.get("status_code", None)
         if status_code == HTTPStatus.OK:
-            self.output = CancelDeleteStatus(**kwargs.pop('output', {}))
+            self.output = CancelDeleteStatus(**kwargs.pop("output", {}))
         super().__init__(**kwargs)
 
 
@@ -120,9 +121,9 @@ class FineTuneEvent(DashScopeBase):
     output: str
 
     def __init__(self, **kwargs):
-        status_code = kwargs.get('status_code', None)
+        status_code = kwargs.get("status_code", None)
         if status_code == HTTPStatus.OK:
-            self.output = kwargs.pop('output', {})
+            self.output = kwargs.pop("output", {})
         super().__init__(**kwargs)
 
 
@@ -142,7 +143,7 @@ class DeploymentOutput(BaseObjectMixin):
     modifier: str
     creator: str
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -151,7 +152,7 @@ class Deployment(DashScopeBase):
     output: DeploymentOutput
 
     def __init__(self, **kwargs):
-        output = kwargs.pop('output', {})
+        output = kwargs.pop("output", {})
         if output:
             self.output = DeploymentOutput(**output)
         else:
@@ -165,7 +166,7 @@ class DeploymentListOutput(DashScopeBaseList):
 
     def __init__(self, **kwargs):
         self.deployments = []
-        for job in kwargs.pop('deployments', []):
+        for job in kwargs.pop("deployments", []):
             self.deployments.append(DeploymentOutput(**job))
         super().__init__(**kwargs)
 
@@ -175,9 +176,9 @@ class DeploymentList(BaseObjectMixin):
     output: DeploymentListOutput
 
     def __init__(self, **kwargs):
-        status_code = kwargs.get('status_code', None)
+        status_code = kwargs.get("status_code", None)
         if status_code == HTTPStatus.OK:
-            self.output = DeploymentListOutput(**kwargs.pop('output', {}))
+            self.output = DeploymentListOutput(**kwargs.pop("output", {}))
         super().__init__(**kwargs)
 
 
@@ -186,7 +187,7 @@ class DeploymentDelete(DashScopeBase):
     output: CancelDeleteStatus
 
     def __init__(self, **kwargs):
-        status_code = kwargs.get('status_code', None)
+        status_code = kwargs.get("status_code", None)
         if status_code == HTTPStatus.OK:
-            self.output = CancelDeleteStatus(**kwargs.pop('output', {}))
+            self.output = CancelDeleteStatus(**kwargs.pop("output", {}))
         super().__init__(**kwargs)

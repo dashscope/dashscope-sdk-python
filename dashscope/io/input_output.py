@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import base64
@@ -8,28 +9,35 @@ from dashscope.common.error import UnsupportedDataType
 
 
 class InputResolver:
-    def __init__(self,
-                 input_instance,
-                 is_encode_binary: bool = True,
-                 custom_type_resolver: dict = {}):
+    # pylint: disable=dangerous-default-value
+    def __init__(
+        self,
+        input_instance,
+        is_encode_binary: bool = True,
+        custom_type_resolver: dict = {},
+    ):
         self._instance = input_instance
         self._is_encode_binary = is_encode_binary
         self._custom_type_resolver = custom_type_resolver
 
     def __next__(self):
         while True:
-            return resolve_input(self._instance, self._is_encode_binary,
-                                 self._custom_type_resolver)
+            return resolve_input(
+                self._instance,
+                self._is_encode_binary,
+                self._custom_type_resolver,
+            )
 
     def __iter__(self):
         return self
 
 
-def _is_binary_file(bytes):
+def _is_binary_file(bytes):  # pylint: disable=redefined-builtin
     # solution from: https://stackoverflow.com/questions/898669/
     # how-can-i-detect-if-a-file-is-binary-non-text-in-python/7392391#7392391
-    text_chars = bytearray({7, 8, 9, 10, 12, 13, 27}
-                           | set(range(0x20, 0x100)) - {0x7f})
+    text_chars = bytearray(
+        {7, 8, 9, 10, 12, 13, 27} | set(range(0x20, 0x100)) - {0x7F},
+    )
     if len(bytes) > 1024:
         temp_bytes = bytes[:1024]
     else:
@@ -37,7 +45,12 @@ def _is_binary_file(bytes):
     return bool(temp_bytes.translate(None, text_chars))
 
 
-def resolve_input(input, is_encode_binary, custom_type_resolver: dict = {}):
+# pylint: disable=too-many-branches,dangerous-default-value,too-many-return-statements # noqa: E501
+def resolve_input(
+    input,
+    is_encode_binary,
+    custom_type_resolver: dict = {},
+):  # pylint: disable=redefined-builtin  # noqa: E501
     """Resolve input data, if same field is file, generator, we can get data.
 
     Args:
@@ -61,14 +74,18 @@ def resolve_input(input, is_encode_binary, custom_type_resolver: dict = {}):
     if isinstance(input, dict):
         out_input = {}
         for key, value in input.items():
-            out_input[key] = resolve_input(value, is_encode_binary,
-                                           custom_type_resolver)
+            out_input[key] = resolve_input(
+                value,
+                is_encode_binary,
+                custom_type_resolver,
+            )
         return out_input
     elif isinstance(input, (list, tuple, set)):
         out_input = []
         for item in input:
             out_input.append(
-                resolve_input(item, is_encode_binary, custom_type_resolver))
+                resolve_input(item, is_encode_binary, custom_type_resolver),
+            )
         return out_input
     elif isinstance(input, str):
         return input
@@ -78,7 +95,7 @@ def resolve_input(input, is_encode_binary, custom_type_resolver: dict = {}):
         return input
     elif isinstance(input, (bytearray, bytes, memoryview)):
         if is_encode_binary:
-            return base64.b64encode(input).decode('ascii')
+            return base64.b64encode(input).decode("ascii")
         else:
             return input
     elif isinstance(input, io.IOBase):
@@ -93,11 +110,11 @@ def resolve_input(input, is_encode_binary, custom_type_resolver: dict = {}):
             is_binary_file = _is_binary_file(content)
             if is_binary_file:
                 if is_encode_binary:
-                    return base64.b64encode(content).decode('ascii')
+                    return base64.b64encode(content).decode("ascii")
                 else:
                     return content
             else:  # split line by line.
-                return content.decode('utf-8').splitlines()
+                return content.decode("utf-8").splitlines()
         else:
             if is_encode_binary:
                 return content.splitlines()
@@ -110,5 +127,6 @@ def resolve_input(input, is_encode_binary, custom_type_resolver: dict = {}):
     elif type(input) in custom_type_resolver:
         return custom_type_resolver[type(input)](input)
     else:
-        raise UnsupportedDataType('Unsupported atom data type: %s' %
-                                  type(input))
+        raise UnsupportedDataType(
+            f"Unsupported atom data type: {type(input)}",
+        )

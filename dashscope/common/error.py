@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 
@@ -45,7 +46,7 @@ class UnsupportedApiProtocol(DashScopeException):
     pass
 
 
-class NotImplemented(DashScopeException):
+class NotImplemented(DashScopeException):  # pylint: disable=redefined-builtin
     pass
 
 
@@ -66,37 +67,46 @@ class AssistantError(DashScopeException):
         self.message = None
         self.code = None
         self.request_id = None
-        if 'message' in kwargs:
+        if "message" in kwargs:
             import json
-            msg = json.loads(kwargs['message'])
-            if 'request_id' in msg:
-                self.request_id = msg['request_id']
-            if 'code' in msg:
-                self.code = msg['code']
-            if 'message' in msg:
-                self.message = msg['message']
+
+            msg = json.loads(kwargs["message"])
+            if "request_id" in msg:
+                self.request_id = msg["request_id"]
+            if "code" in msg:
+                self.code = msg["code"]
+            if "message" in msg:
+                self.message = msg["message"]
 
     def __str__(self):
-        msg = 'Request failed, request_id: %s, code: %s, message: %s' % (  # noqa E501
-            self.request_id, self.code, self.message)
+        msg = (
+            f"Request failed, request_id: {self.request_id}, "
+            f"code: {self.code}, message: {self.message}"
+        )
         return msg
 
 
 # for server send generation or inference error.
 class RequestFailure(DashScopeException):
-    def __init__(self,
-                 request_id=None,
-                 message=None,
-                 name=None,
-                 http_code=None):
+    def __init__(
+        self,
+        request_id=None,
+        message=None,
+        name=None,
+        http_code=None,
+    ):
         self.request_id = request_id
         self.message = message
         self.name = name
         self.http_code = http_code
 
     def __str__(self):
-        msg = 'Request failed, request_id: %s, http_code: %s error_name: %s, error_message: %s' % (  # noqa E501
-            self.request_id, self.http_code, self.name, self.message)
+        # pylint: disable=line-too-long
+        msg = (
+            f"Request failed, request_id: {self.request_id}, "
+            f"http_code: {self.http_code} error_name: {self.name}, "
+            f"error_message: {self.message}"
+        )
         return msg
 
 

@@ -1,4 +1,5 @@
-from dataclasses import dataclass, field, asdict
+# -*- coding: utf-8 -*-
+from dataclasses import dataclass, field
 import uuid
 
 
@@ -18,7 +19,7 @@ class DashHeader:
             "action": self.action,
             "task_id": self.task_id,
             "request_id": self.task_id,
-            "streaming": self.streaming
+            "streaming": self.streaming,
         }
 
 
@@ -50,9 +51,11 @@ class DashPayload:
         }
 
         if self.parameters is not None:
+            # pylint: disable=assignment-from-no-return
             payload["parameters"] = self.parameters.to_dict()
 
         if self.input is not None:
+            # pylint: disable=assignment-from-no-return
             payload["input"] = self.input.to_dict()
 
         return payload
@@ -70,11 +73,13 @@ class RequestBodyInput(DashPayloadInput):
             "workspace_id": self.workspace_id,
             "app_id": self.app_id,
             "directive": self.directive,
-            "dialog_id": self.dialog_id
+            "dialog_id": self.dialog_id,
         }
+
+
 @dataclass
 class AsrPostProcessing:
-    replace_words: list = field(default=None)
+    replace_words: list = field(default=None)  # type: ignore[arg-type]
 
     def to_dict(self):
         if self.replace_words is None:
@@ -82,8 +87,9 @@ class AsrPostProcessing:
         if len(self.replace_words) == 0:
             return None
         return {
-            "replace_words":  [word.to_dict() for word in self.replace_words]
+            "replace_words": [word.to_dict() for word in self.replace_words],
         }
+
 
 @dataclass
 class ReplaceWord:
@@ -95,19 +101,23 @@ class ReplaceWord:
         return {
             "source": self.source,
             "target": self.target,
-            "match_mode": self.match_mode
+            "match_mode": self.match_mode,
         }
+
 
 @dataclass
 class Upstream:
     """struct for upstream"""
+
     audio_format: str = field(default="pcm")  # 上行语音格式，默认pcm.支持pcm/opus
-    type: str = field(default="AudioOnly")  # 上行类型：AudioOnly 仅语音通话; AudioAndVideo 上传视频
+    type: str = field(
+        default="AudioOnly",
+    )  # 上行类型：AudioOnly 仅语音通话; AudioAndVideo 上传视频
     mode: str = field(default="tap2talk")  # 客户端交互模式 push2talk/tap2talk/duplex
     sample_rate: int = field(default=16000)  # 音频采样率
     vocabulary_id: str = field(default=None)
     asr_post_processing: AsrPostProcessing = field(default=None)
-    pass_through_params: dict = field(default=None)
+    pass_through_params: dict = field(default=None)  # type: ignore[arg-type]
 
     def to_dict(self):
         upstream: dict = {
@@ -118,7 +128,9 @@ class Upstream:
             "vocabulary_id": self.vocabulary_id,
         }
         if self.asr_post_processing is not None:
-            upstream["asr_post_processing"] = self.asr_post_processing.to_dict()
+            upstream[
+                "asr_post_processing"
+            ] = self.asr_post_processing.to_dict()
 
         if self.pass_through_params is not None:
             upstream.update(self.pass_through_params)
@@ -134,12 +146,12 @@ class Downstream:
     sample_rate: int = field(default=0)  # 语音音色 # 合成音频采样率
     intermediate_text: str = field(default="transcript")  # 控制返回给用户那些中间文本：
     debug: bool = field(default=False)  # 控制是否返回debug信息
-    # type_: str = field(default="Audio", metadata={"alias": "type"})  # 下行类型：Text：不需要下发语音;Audio：输出语音，默认值
+    # type_: str = field(default="Audio", metadata={"alias": "type"})  # 下行类型：Text：不需要下发语音;Audio：输出语音，默认值  # noqa: E501  # pylint: disable=line-too-long
     audio_format: str = field(default="pcm")  # 下行语音格式，默认pcm 。支持pcm/mp3
     volume: int = field(default=50)  # 语音音量 0-100
     pitch_rate: int = field(default=100)  # 语音语调 50-200
     speech_rate: int = field(default=100)  # 语音语速 50-200
-    pass_through_params: dict = field(default=None)
+    pass_through_params: dict = field(default=None)  # type: ignore[arg-type]
 
     def to_dict(self):
         stream: dict = {
@@ -149,7 +161,7 @@ class Downstream:
             "audio_format": self.audio_format,
             "volume": self.volume,
             "pitch_rate": self.pitch_rate,
-            "speech_rate": self.speech_rate
+            "speech_rate": self.speech_rate,
         }
         if self.voice != "":
             stream["voice"] = self.voice
@@ -170,7 +182,7 @@ class DialogAttributes:
         return {
             "agent_id": self.agent_id,
             "prompt": self.prompt,
-            "vocabulary_id": self.vocabulary_id
+            "vocabulary_id": self.vocabulary_id,
         }
 
 
@@ -184,7 +196,7 @@ class Locations:
         return {
             "city_name": self.city_name,
             "latitude": self.latitude,
-            "longitude": self.longitude
+            "longitude": self.longitude,
         }
 
 
@@ -194,7 +206,7 @@ class Network:
 
     def to_dict(self):
         return {
-            "ip": self.ip
+            "ip": self.ip,
         }
 
 
@@ -204,7 +216,7 @@ class Device:
 
     def to_dict(self):
         return {
-            "uuid": self.uuid
+            "uuid": self.uuid,
         }
 
 
@@ -218,7 +230,7 @@ class ClientInfo:
     def to_dict(self):
         info = {
             "user_id": self.user_id,
-            "sdk": "python"
+            "sdk": "python",
         }
         if self.device is not None:
             info["device"] = self.device.to_dict()
@@ -231,13 +243,13 @@ class ClientInfo:
 
 @dataclass
 class BizParams:
-    user_defined_params: dict = field(default=None)
-    user_defined_tokens: dict = field(default=None)
-    tool_prompts: dict = field(default=None)
-    user_prompt_params: dict = field(default=None)
-    user_query_params: dict = field(default=None)
-    videos: list = field(default=None)
-    pass_through_params: dict = field(default=None)
+    user_defined_params: dict = field(default=None)  # type: ignore[arg-type]
+    user_defined_tokens: dict = field(default=None)  # type: ignore[arg-type]
+    tool_prompts: dict = field(default=None)  # type: ignore[arg-type]
+    user_prompt_params: dict = field(default=None)  # type: ignore[arg-type]
+    user_query_params: dict = field(default=None)  # type: ignore[arg-type]
+    videos: list = field(default=None)  # type: ignore[arg-type]
+    pass_through_params: dict = field(default=None)  # type: ignore[arg-type]
 
     def to_dict(self):
         params = {}
@@ -282,12 +294,11 @@ class RequestParameters(DashPayloadParameters):
 
 @dataclass
 class RequestToRespondParameters(DashPayloadParameters):
-    images: list = field(default=None)
+    images: list = field(default=None)  # type: ignore[arg-type]
     biz_params: BizParams = field(default=None)
 
     def to_dict(self):
-        params = {
-        }
+        params = {}
         if self.images is not None:
             params["images"] = self.images
         if self.biz_params is not None:
@@ -300,7 +311,7 @@ class RequestToRespondBodyInput(DashPayloadInput):
     app_id: str
     directive: str
     dialog_id: str
-    type_: str = field(metadata={"alias": "type"}, default= None)
+    type_: str = field(metadata={"alias": "type"}, default=None)
     text: str = field(default="")
 
     def to_dict(self):
@@ -309,5 +320,5 @@ class RequestToRespondBodyInput(DashPayloadInput):
             "directive": self.directive,
             "dialog_id": self.dialog_id,
             "type": self.type_,
-            "text": self.text
+            "text": self.text,
         }

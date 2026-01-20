@@ -1,15 +1,16 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from typing import List
 
 
 class Tokenizer:
-    """Base tokenizer interface for local tokenizers.
-    """
+    """Base tokenizer interface for local tokenizers."""
+
     def __init__(self):
         pass
 
-    def encode(self, text: str, **kwargs) -> List[int]:
+    def encode(self, text: str, **kwargs) -> List[int]:  # type: ignore[empty-body] # noqa: E501
         """Encode input text string to token ids.
 
         Args:
@@ -18,9 +19,8 @@ class Tokenizer:
         Returns:
             List[int]: The token ids.
         """
-        pass
 
-    def decode(self, token_ids: List[int], **kwargs) -> str:
+    def decode(self, token_ids: List[int], **kwargs) -> str:  # type: ignore[empty-body] # pylint: disable=line-too-long # noqa: E501
         """Decode token ids to string.
 
         Args:
@@ -29,4 +29,3 @@ class Tokenizer:
         Returns:
             str: The string of the token ids.
         """
-        pass

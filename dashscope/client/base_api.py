@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import asyncio
 import collections
@@ -11,38 +12,60 @@ import dashscope
 from dashscope.api_entities.api_request_factory import _build_api_request
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.common.api_key import get_default_api_key
-from dashscope.common.constants import (DEFAULT_REQUEST_TIMEOUT_SECONDS,
-                                        REPEATABLE_STATUS,
-                                        REQUEST_TIMEOUT_KEYWORD,
-                                        SSE_CONTENT_TYPE, TaskStatus, HTTPMethod)
+from dashscope.common.constants import (
+    DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    REPEATABLE_STATUS,
+    REQUEST_TIMEOUT_KEYWORD,
+    SSE_CONTENT_TYPE,
+    TaskStatus,
+    HTTPMethod,
+)
 from dashscope.common.error import InvalidParameter, InvalidTask, ModelRequired
 from dashscope.common.logging import logger
-from dashscope.common.utils import (_handle_http_failed_response,
-                                    _handle_http_response,
-                                    _handle_http_stream_response,
-                                    default_headers, join_url)
+from dashscope.common.utils import (
+    _handle_http_failed_response,
+    _handle_http_response,
+    _handle_http_stream_response,
+    default_headers,
+    join_url,
+)
+
 
 class AsyncAioTaskGetMixin:
     @classmethod
-    async def _get(cls,
-             task_id: str,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
-        base_url = kwargs.pop('base_address', None)
-        url = _normalization_url(base_url, 'tasks', task_id)
+    async def _get(
+        cls,
+        task_id: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
+        base_url = kwargs.pop("base_address", None)
+        url = _normalization_url(base_url, "tasks", task_id)
         kwargs = cls._handle_kwargs(api_key, workspace, **kwargs)
         kwargs["base_address"] = url
         if not api_key:
             api_key = get_default_api_key()
-        request = _build_api_request("", "", "",
-                                     "", "", api_key=api_key,
-                                     is_service=False, **kwargs)
+        request = _build_api_request(
+            "",
+            "",
+            "",
+            "",
+            "",
+            api_key=api_key,
+            is_service=False,
+            **kwargs,
+        )
         return await cls._handle_request(request)
 
     @classmethod
-    def _handle_kwargs(cls, api_key: str = None ,workspace: str = None, **kwargs):
-        custom_headers = kwargs.pop('headers', None)
+    def _handle_kwargs(
+        cls,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ):
+        custom_headers = kwargs.pop("headers", None)
         headers = {
             **_workspace_header(workspace),
             **default_headers(api_key),
@@ -54,11 +77,11 @@ class AsyncAioTaskGetMixin:
             }
         if workspace is not None:
             headers = {
-                'X-DashScope-WorkSpace': workspace,
-                **kwargs.pop('headers', {})
+                "X-DashScope-WorkSpace": workspace,
+                **kwargs.pop("headers", {}),
             }
-        kwargs['headers'] = headers
-        kwargs['http_method'] = HTTPMethod.GET
+        kwargs["headers"] = headers
+        kwargs["http_method"] = HTTPMethod.GET
         return kwargs
 
     @classmethod
@@ -74,66 +97,80 @@ class AsyncAioTaskGetMixin:
         else:
             return response
 
-class BaseAsyncAioApi(AsyncAioTaskGetMixin):
-    """BaseApi, internal use only.
 
-    """
+class BaseAsyncAioApi(AsyncAioTaskGetMixin):
+    """BaseApi, internal use only."""
+
     @classmethod
     def _validate_params(cls, api_key, model):
         if api_key is None:
             api_key = get_default_api_key()
         if model is None or not model:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         return api_key, model
 
     @classmethod
-    async def async_call(cls,
-                   model: str,
-                   input: object,
-                   task_group: str,
-                   task: str = None,
-                   function: str = None,
-                   api_key: str = None,
-                   workspace: str = None,
-                   **kwargs) -> DashScopeAPIResponse:
+    async def async_call(
+        cls,
+        model: str,
+        input: object,  # pylint: disable=redefined-builtin
+        task_group: str,
+        task: str = None,
+        function: str = None,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         api_key, model = cls._validate_params(api_key, model)
         if workspace is not None:
             headers = {
-                'X-DashScope-WorkSpace': workspace,
-                **kwargs.pop('headers', {})
+                "X-DashScope-WorkSpace": workspace,
+                **kwargs.pop("headers", {}),
             }
-            kwargs['headers'] = headers
-        kwargs['async_request'] = True
-        request = _build_api_request(model=model,
-                                     input=input,
-                                     task_group=task_group,
-                                     task=task,
-                                     function=function,
-                                     api_key=api_key,
-                                     **kwargs)
+            kwargs["headers"] = headers
+        kwargs["async_request"] = True
+        request = _build_api_request(
+            model=model,
+            input=input,
+            task_group=task_group,
+            task=task,
+            function=function,
+            api_key=api_key,
+            **kwargs,
+        )
         # call request service.
         return await request.aio_call()
 
     @classmethod
-    async def call(cls,
-                  model: str,
-                  input: object,
-                  task_group: str,
-                  task: str = None,
-                  function: str = None,
-                  api_key: str = None,
-                  workspace: str = None,
-                  **kwargs) -> DashScopeAPIResponse:
+    async def call(
+        cls,
+        model: str,
+        input: object,  # pylint: disable=redefined-builtin
+        task_group: str,
+        task: str = None,
+        function: str = None,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         # call request service.
-        response = await BaseAsyncAioApi.async_call(model, input, task_group, task,
-                                        function, api_key, workspace,
-                                        **kwargs)
-        response = await BaseAsyncAioApi.wait(response,
-                                  api_key=api_key,
-                                  workspace=workspace,
-                                  **kwargs)
+        response = await BaseAsyncAioApi.async_call(
+            model,
+            input,
+            task_group,
+            task,
+            function,
+            api_key,
+            workspace,
+            **kwargs,
+        )
+        response = await BaseAsyncAioApi.wait(
+            response,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return response
-
 
     @classmethod
     def _get_task_id(cls, task):
@@ -141,22 +178,25 @@ class BaseAsyncAioApi(AsyncAioTaskGetMixin):
             task_id = task
         elif isinstance(task, DashScopeAPIResponse):
             if task.status_code == HTTPStatus.OK:
-                task_id = task.output['task_id']
+                task_id = task.output["task_id"]
             else:
-                raise InvalidTask('Invalid task, task create failed: %s' %
-                                  task)
+                raise InvalidTask(
+                    f"Invalid task, task create failed: {task}",
+                )
         else:
-            raise InvalidParameter('Task invalid!')
-        if task_id is None or task_id == '':
-            raise InvalidParameter('Task id required!')
+            raise InvalidParameter("Task invalid!")
+        if task_id is None or task_id == "":
+            raise InvalidParameter("Task id required!")
         return task_id
 
     @classmethod
-    async def wait(cls,
-             task: Union[str, DashScopeAPIResponse],
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    async def wait(
+        cls,
+        task: Union[str, DashScopeAPIResponse],
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Wait for async task completion and return task result.
 
         Args:
@@ -181,25 +221,36 @@ class BaseAsyncAioApi(AsyncAioTaskGetMixin):
             # (server side return immediately when ready)
             if wait_seconds < max_wait_seconds and step % increment_steps == 0:
                 wait_seconds = min(wait_seconds * 2, max_wait_seconds)
-            rsp = await cls._get(task_id, api_key, workspace=workspace, **kwargs)
+            rsp = await cls._get(
+                task_id,
+                api_key,
+                workspace=workspace,
+                **kwargs,
+            )
             if rsp.status_code == HTTPStatus.OK:
                 if rsp.output is None:
                     return rsp
 
-                task_status = rsp.output['task_status']
+                task_status = rsp.output["task_status"]
                 if task_status in [
-                        TaskStatus.FAILED, TaskStatus.CANCELED,
-                        TaskStatus.SUCCEEDED, TaskStatus.UNKNOWN
+                    TaskStatus.FAILED,
+                    TaskStatus.CANCELED,
+                    TaskStatus.SUCCEEDED,
+                    TaskStatus.UNKNOWN,
                 ]:
                     return rsp
                 else:
-                    logger.info('The task %s is  %s' % (task_id, task_status))
+                    logger.info("The task %s is  %s", task_id, task_status)
                     await asyncio.sleep(wait_seconds)  # 异步等待
             elif rsp.status_code in REPEATABLE_STATUS:
-                logger.warn(
-                    ('Get task: %s temporary failure, \
-                        status_code: %s, code: %s message: %s, will try again.'
-                     ) % (task_id, rsp.status_code, rsp.code, rsp.message))
+                logger.warning(
+                    "Get task: %s temporary failure, "
+                    "status_code: %s, code: %s message: %s, will try again.",
+                    task_id,
+                    rsp.status_code,
+                    rsp.code,
+                    rsp.message,
+                )
                 await asyncio.sleep(wait_seconds)  # 异步等待
             else:
                 return rsp
@@ -223,30 +274,39 @@ class BaseAsyncAioApi(AsyncAioTaskGetMixin):
             DashScopeAPIResponse: The cancel result.
         """
         task_id = cls._get_task_id(task)
-        base_url = kwargs.pop('base_address', None)
-        url = _normalization_url(base_url, 'tasks', task_id, 'cancel')
+        base_url = kwargs.pop("base_address", None)
+        url = _normalization_url(base_url, "tasks", task_id, "cancel")
         kwargs = cls._handle_kwargs(api_key, workspace, **kwargs)
         kwargs["base_address"] = url
         if not api_key:
             api_key = get_default_api_key()
-        request = _build_api_request("", "", "",
-                                     "", "",api_key=api_key,
-                                     is_service=False, **kwargs)
+        request = _build_api_request(
+            "",
+            "",
+            "",
+            "",
+            "",
+            api_key=api_key,
+            is_service=False,
+            **kwargs,
+        )
         return await cls._handle_request(request)
 
     @classmethod
-    async def list(cls,
-             start_time: str = None,
-             end_time: str = None,
-             model_name: str = None,
-             api_key_id: str = None,
-             region: str = None,
-             status: str = None,
-             page_no: int = 1,
-             page_size: int = 10,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    async def list(
+        cls,
+        start_time: str = None,
+        end_time: str = None,
+        model_name: str = None,
+        api_key_id: str = None,
+        region: str = None,
+        status: str = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """List async tasks.
 
         Args:
@@ -269,37 +329,46 @@ class BaseAsyncAioApi(AsyncAioTaskGetMixin):
         Returns:
             DashScopeAPIResponse: The response data.
         """
-        base_url = kwargs.pop('base_address', None)
-        url = _normalization_url(base_url, 'tasks')
-        params = {'page_no': page_no, 'page_size': page_size}
+        base_url = kwargs.pop("base_address", None)
+        url = _normalization_url(base_url, "tasks")
+        params = {"page_no": page_no, "page_size": page_size}
         if start_time is not None:
-            params['start_time'] = start_time
+            params["start_time"] = start_time
         if end_time is not None:
-            params['end_time'] = end_time
+            params["end_time"] = end_time
         if model_name is not None:
-            params['model_name'] = model_name
+            params["model_name"] = model_name
         if api_key_id is not None:
-            params['api_key_id'] = api_key_id
+            params["api_key_id"] = api_key_id
         if region is not None:
-            params['region'] = region
+            params["region"] = region
         if status is not None:
-            params['status'] = status
+            params["status"] = status
         kwargs = cls._handle_kwargs(api_key, workspace, **kwargs)
         kwargs["base_address"] = url
         if not api_key:
             api_key = get_default_api_key()
-        request = _build_api_request(model_name, "", "",
-                                     "", "", api_key=api_key,
-                                     is_service=False, extra_url_parameters=params,
-                                     **kwargs)
+        request = _build_api_request(
+            model_name,
+            "",
+            "",
+            "",
+            "",
+            api_key=api_key,
+            is_service=False,
+            extra_url_parameters=params,
+            **kwargs,
+        )
         return await cls._handle_request(request)
 
     @classmethod
-    async def fetch(cls,
-                    task: Union[str, DashScopeAPIResponse],
-                    api_key: str = None,
-                    workspace: str = None,
-                    **kwargs) -> DashScopeAPIResponse:
+    async def fetch(
+        cls,
+        task: Union[str, DashScopeAPIResponse],
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Query async task status.
 
         Args:
@@ -315,27 +384,28 @@ class BaseAsyncAioApi(AsyncAioTaskGetMixin):
 
 
 class BaseAioApi:
-    """BaseApi, internal use only.
+    """BaseApi, internal use only."""
 
-    """
     @classmethod
     def _validate_params(cls, api_key, model):
         if api_key is None:
             api_key = get_default_api_key()
         if model is None or not model:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         return api_key, model
 
     @classmethod
-    async def call(cls,
-                   model: str,
-                   input: object,
-                   task_group: str,
-                   task: str = None,
-                   function: str = None,
-                   api_key: str = None,
-                   workspace: str = None,
-                   **kwargs) -> DashScopeAPIResponse:
+    async def call(
+        cls,
+        model: str,
+        input: object,  # pylint: disable=redefined-builtin
+        task_group: str,
+        task: str = None,
+        function: str = None,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Call service and get result.
 
         Args:
@@ -362,43 +432,46 @@ class BaseAioApi:
         api_key, model = BaseAioApi._validate_params(api_key, model)
         if workspace is not None:
             headers = {
-                'X-DashScope-WorkSpace': workspace,
-                **kwargs.pop('headers', {})
+                "X-DashScope-WorkSpace": workspace,
+                **kwargs.pop("headers", {}),
             }
-            kwargs['headers'] = headers
-        request = _build_api_request(model=model,
-                                     input=input,
-                                     task_group=task_group,
-                                     task=task,
-                                     function=function,
-                                     api_key=api_key,
-                                     **kwargs)
+            kwargs["headers"] = headers
+        request = _build_api_request(
+            model=model,
+            input=input,
+            task_group=task_group,
+            task=task,
+            function=function,
+            api_key=api_key,
+            **kwargs,
+        )
         # call request service.
         return await request.aio_call()
 
 
-class BaseApi():
-    """BaseApi, internal use only.
+class BaseApi:
+    """BaseApi, internal use only."""
 
-    """
     @classmethod
     def _validate_params(cls, api_key, model):
         if api_key is None:
             api_key = get_default_api_key()
         if model is None or not model:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         return api_key, model
 
     @classmethod
-    def call(cls,
-             model: str,
-             input: object,
-             task_group: str,
-             task: str = None,
-             function: str = None,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    def call(
+        cls,
+        model: str,
+        input: object,  # pylint: disable=redefined-builtin
+        task_group: str,
+        task: str = None,
+        function: str = None,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Call service and get result.
 
         Args:
@@ -425,24 +498,26 @@ class BaseApi():
         api_key, model = BaseApi._validate_params(api_key, model)
         if workspace is not None:
             headers = {
-                'X-DashScope-WorkSpace': workspace,
-                **kwargs.pop('headers', {})
+                "X-DashScope-WorkSpace": workspace,
+                **kwargs.pop("headers", {}),
             }
-            kwargs['headers'] = headers
-        request = _build_api_request(model=model,
-                                     input=input,
-                                     task_group=task_group,
-                                     task=task,
-                                     function=function,
-                                     api_key=api_key,
-                                     **kwargs)
+            kwargs["headers"] = headers
+        request = _build_api_request(
+            model=model,
+            input=input,
+            task_group=task_group,
+            task=task,
+            function=function,
+            api_key=api_key,
+            **kwargs,
+        )
         # call request service.
         return request.call()
 
 
 def _workspace_header(workspace) -> Dict:
     if workspace is not None:
-        headers = {'X-DashScope-WorkSpace': workspace}
+        headers = {"X-DashScope-WorkSpace": workspace}
     else:
         headers = {}
     return headers
@@ -456,16 +531,18 @@ def _normalization_url(base_address, *args):
     return join_url(url, *args)
 
 
-class AsyncTaskGetMixin():
+class AsyncTaskGetMixin:
     @classmethod
-    def _get(cls,
-             task_id: str,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
-        base_url = kwargs.pop('base_address', None)
-        status_url = _normalization_url(base_url, 'tasks', task_id)
-        custom_headers = kwargs.pop('headers', None)
+    def _get(
+        cls,
+        task_id: str,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
+        base_url = kwargs.pop("base_address", None)
+        status_url = _normalization_url(base_url, "tasks", task_id)
+        custom_headers = kwargs.pop("headers", None)
         headers = {
             **_workspace_header(workspace),
             **default_headers(api_key),
@@ -476,41 +553,47 @@ class AsyncTaskGetMixin():
                 **headers,
             }
         with requests.Session() as session:
-            logger.debug('Starting request: %s' % status_url)
-            response = session.get(status_url,
-                                   headers=headers,
-                                   timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS)
-            logger.debug('Starting processing response: %s' % status_url)
+            logger.debug("Starting request: %s", status_url)
+            response = session.get(
+                status_url,
+                headers=headers,
+                timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS,
+            )
+            logger.debug("Starting processing response: %s", status_url)
             return _handle_http_response(response)
 
 
 class BaseAsyncApi(AsyncTaskGetMixin):
-    """BaseAsyncApi,for async task, internal use only.
+    """BaseAsyncApi,for async task, internal use only."""
 
-    """
     @classmethod
     def _validate_params(cls, api_key, model):
         if api_key is None:
             api_key = get_default_api_key()
         if model is None or not model:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         return api_key, model
 
     @classmethod
-    def call(cls,
-             *args,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
-        """Call service and get result.
-        """
-        task_response = cls.async_call(*args,
-                                       api_key=api_key,
-                                       workspace=workspace,
-                                       **kwargs)
-        response = cls.wait(task_response,
-                            api_key=api_key,
-                            workspace=workspace)
+    def call(
+        cls,
+        *args,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
+        """Call service and get result."""
+        task_response = cls.async_call(  # type: ignore[misc]
+            *args,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
+        response = cls.wait(
+            task_response,
+            api_key=api_key,
+            workspace=workspace,
+        )
         return response
 
     @classmethod
@@ -519,14 +602,15 @@ class BaseAsyncApi(AsyncTaskGetMixin):
             task_id = task
         elif isinstance(task, DashScopeAPIResponse):
             if task.status_code == HTTPStatus.OK:
-                task_id = task.output['task_id']
+                task_id = task.output["task_id"]
             else:
-                raise InvalidTask('Invalid task, task create failed: %s' %
-                                  task)
+                raise InvalidTask(
+                    f"Invalid task, task create failed: {task}",
+                )
         else:
-            raise InvalidParameter('Task invalid!')
-        if task_id is None or task_id == '':
-            raise InvalidParameter('Task id required!')
+            raise InvalidParameter("Task invalid!")
+        if task_id is None or task_id == "":
+            raise InvalidParameter("Task id required!")
         return task_id
 
     @classmethod
@@ -548,29 +632,33 @@ class BaseAsyncApi(AsyncTaskGetMixin):
             DashScopeAPIResponse: The cancel result.
         """
         task_id = cls._get_task_id(task)
-        base_url = kwargs.pop('base_address', None)
-        url = _normalization_url(base_url, 'tasks', task_id, 'cancel')
+        base_url = kwargs.pop("base_address", None)
+        url = _normalization_url(base_url, "tasks", task_id, "cancel")
         with requests.Session() as session:
-            response = session.post(url,
-                                    headers={
-                                        **_workspace_header(workspace),
-                                        **default_headers(api_key),
-                                    })
+            response = session.post(
+                url,
+                headers={
+                    **_workspace_header(workspace),
+                    **default_headers(api_key),
+                },
+            )
             return _handle_http_response(response)
 
     @classmethod
-    def list(cls,
-             start_time: str = None,
-             end_time: str = None,
-             model_name: str = None,
-             api_key_id: str = None,
-             region: str = None,
-             status: str = None,
-             page_no: int = 1,
-             page_size: int = 10,
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    def list(
+        cls,
+        start_time: str = None,
+        end_time: str = None,
+        model_name: str = None,
+        api_key_id: str = None,
+        region: str = None,
+        status: str = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """List async tasks.
 
         Args:
@@ -593,41 +681,45 @@ class BaseAsyncApi(AsyncTaskGetMixin):
         Returns:
             DashScopeAPIResponse: The response data.
         """
-        base_url = kwargs.pop('base_address', None)
-        url = _normalization_url(base_url, 'tasks')
-        params = {'page_no': page_no, 'page_size': page_size}
+        base_url = kwargs.pop("base_address", None)
+        url = _normalization_url(base_url, "tasks")
+        params = {"page_no": page_no, "page_size": page_size}
         if start_time is not None:
-            params['start_time'] = start_time
+            params["start_time"] = start_time
         if end_time is not None:
-            params['end_time'] = end_time
+            params["end_time"] = end_time
         if model_name is not None:
-            params['model_name'] = model_name
+            params["model_name"] = model_name
         if api_key_id is not None:
-            params['api_key_id'] = api_key_id
+            params["api_key_id"] = api_key_id
         if region is not None:
-            params['region'] = region
+            params["region"] = region
         if status is not None:
-            params['status'] = status
+            params["status"] = status
 
         with requests.Session() as session:
-            response = session.get(url,
-                                   params=params,
-                                   headers={
-                                       **_workspace_header(workspace),
-                                       **default_headers(api_key),
-                                   })
+            response = session.get(
+                url,
+                params=params,
+                headers={
+                    **_workspace_header(workspace),
+                    **default_headers(api_key),
+                },
+            )
             if response.status_code == HTTPStatus.OK:
                 json_content = response.json()
-                request_id = ''
-                if 'request_id' in json_content:
-                    request_id = json_content['request_id']
-                    json_content.pop('request_id')
-                return DashScopeAPIResponse(request_id=request_id,
-                                            status_code=response.status_code,
-                                            code=None,
-                                            output=json_content,
-                                            usage=None,
-                                            message='')
+                request_id = ""
+                if "request_id" in json_content:
+                    request_id = json_content["request_id"]
+                    json_content.pop("request_id")
+                return DashScopeAPIResponse(
+                    request_id=request_id,
+                    status_code=response.status_code,
+                    code=None,  # type: ignore[arg-type]
+                    output=json_content,
+                    usage=None,
+                    message="",
+                )
             else:
                 return _handle_http_failed_response(response)
 
@@ -653,11 +745,13 @@ class BaseAsyncApi(AsyncTaskGetMixin):
         return cls._get(task_id, api_key, workspace, **kwargs)
 
     @classmethod
-    def wait(cls,
-             task: Union[str, DashScopeAPIResponse],
-             api_key: str = None,
-             workspace: str = None,
-             **kwargs) -> DashScopeAPIResponse:
+    def wait(
+        cls,
+        task: Union[str, DashScopeAPIResponse],
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Wait for async task completion and return task result.
 
         Args:
@@ -688,34 +782,42 @@ class BaseAsyncApi(AsyncTaskGetMixin):
                 if rsp.output is None:
                     return rsp
 
-                task_status = rsp.output['task_status']
+                task_status = rsp.output["task_status"]
                 if task_status in [
-                        TaskStatus.FAILED, TaskStatus.CANCELED,
-                        TaskStatus.SUCCEEDED, TaskStatus.UNKNOWN
+                    TaskStatus.FAILED,
+                    TaskStatus.CANCELED,
+                    TaskStatus.SUCCEEDED,
+                    TaskStatus.UNKNOWN,
                 ]:
                     return rsp
                 else:
-                    logger.info('The task %s is  %s' % (task_id, task_status))
+                    logger.info("The task %s is  %s", task_id, task_status)
                     time.sleep(wait_seconds)
             elif rsp.status_code in REPEATABLE_STATUS:
-                logger.warn(
-                    ('Get task: %s temporary failure, \
-                        status_code: %s, code: %s message: %s, will try again.'
-                     ) % (task_id, rsp.status_code, rsp.code, rsp.message))
+                logger.warning(
+                    "Get task: %s temporary failure, "
+                    "status_code: %s, code: %s message: %s, will try again.",
+                    task_id,
+                    rsp.status_code,
+                    rsp.code,
+                    rsp.message,
+                )
                 time.sleep(wait_seconds)
             else:
                 return rsp
 
     @classmethod
-    def async_call(cls,
-                   model: str,
-                   input: object,
-                   task_group: str,
-                   task: str = None,
-                   function: str = None,
-                   api_key: str = None,
-                   workspace: str = None,
-                   **kwargs) -> DashScopeAPIResponse:
+    def async_call(
+        cls,
+        model: str,
+        input: object,  # pylint: disable=redefined-builtin
+        task_group: str,
+        task: str = None,
+        function: str = None,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> DashScopeAPIResponse:
         """Call async service return async task information.
 
         Args:
@@ -733,47 +835,63 @@ class BaseAsyncApi(AsyncTaskGetMixin):
                 which contains the task id, you can use the task id
                 to query the task status.
         """
-        is_stream = kwargs.pop('stream', None)  # async api not support stream.
+        is_stream = kwargs.pop("stream", None)  # async api not support stream.
         if is_stream:
-            logger.warn('async_call do not support stream argument')
-        api_key, model = BaseApi._validate_params(api_key, model)
+            logger.warning("async_call do not support stream argument")
+        # Access BaseApi's validation method for consistency
+        (
+            api_key,
+            model,
+        ) = BaseApi._validate_params(  # pylint: disable=protected-access
+            api_key,
+            model,
+        )
         if workspace is not None:
             headers = {
-                'X-DashScope-WorkSpace': workspace,
-                **kwargs.pop('headers', {})
+                "X-DashScope-WorkSpace": workspace,
+                **kwargs.pop("headers", {}),
             }
-            kwargs['headers'] = headers
-        request = _build_api_request(model=model,
-                                     input=input,
-                                     task_group=task_group,
-                                     task=task,
-                                     function=function,
-                                     api_key=api_key,
-                                     async_request=True,
-                                     query=False,
-                                     **kwargs)
+            kwargs["headers"] = headers
+        request = _build_api_request(
+            model=model,
+            input=input,
+            task_group=task_group,
+            task=task,
+            function=function,
+            api_key=api_key,
+            async_request=True,
+            query=False,
+            **kwargs,
+        )
         return request.call()
 
 
-def _get(url,
-         params={},
-         api_key=None,
-         flattened_output=False,
-         workspace: str = None,
-         **kwargs) -> Union[DashScopeAPIResponse, Dict]:
-    timeout = kwargs.pop(REQUEST_TIMEOUT_KEYWORD,
-                         DEFAULT_REQUEST_TIMEOUT_SECONDS)
+# pylint: disable=dangerous-default-value
+def _get(
+    url,
+    params={},
+    api_key=None,
+    flattened_output=False,
+    workspace: str = None,
+    **kwargs,
+) -> Union[DashScopeAPIResponse, Dict]:
+    timeout = kwargs.pop(
+        REQUEST_TIMEOUT_KEYWORD,
+        DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    )
     with requests.Session() as session:
-        logger.debug('Starting request: %s' % url)
-        response = session.get(url,
-                               headers={
-                                   **_workspace_header(workspace),
-                                   **default_headers(api_key),
-                                   **kwargs.pop('headers', {})
-                               },
-                               params=params,
-                               timeout=timeout)
-        logger.debug('Starting processing response: %s' % url)
+        logger.debug("Starting request: %s", url)
+        response = session.get(
+            url,
+            headers={
+                **_workspace_header(workspace),
+                **default_headers(api_key),
+                **kwargs.pop("headers", {}),
+            },
+            params=params,
+            timeout=timeout,
+        )
+        logger.debug("Starting processing response: %s", url)
         return _handle_http_response(response, flattened_output)
 
 
@@ -789,60 +907,66 @@ def _get_url(custom_base_url, default_path, path):
     return url
 
 
-class ListObjectMixin():
+class ListObjectMixin:
     @classmethod
-    def list(cls,
-             limit: int = None,
-             order: str = None,
-             after: str = None,
-             before: str = None,
-             path: str = None,
-             workspace: str = None,
-             api_key: str = None,
-             **kwargs) -> Any:
+    def list(
+        cls,
+        limit: int = None,
+        order: str = None,
+        after: str = None,
+        before: str = None,
+        path: str = None,
+        workspace: str = None,
+        api_key: str = None,
+        **kwargs,
+    ) -> Any:
         """List object
 
         Args:
             limit (int, optional): How many object to list. Defaults to None.
             order (str, optional): The order of result. Defaults to None.
-            after (str, optional): The id of the object begin. Defaults to None.
+            after (str, optional): The id of the object begin. Defaults to None.  # noqa: E501
             before (str, optional): The if of the object end. Defaults to None.
             path (str, optional): The request path. Defaults to None.
-            workspace (str, optional): The DashScope workspace id. Defaults to None.
+            workspace (str, optional): The DashScope workspace id. Defaults to None.  # noqa: E501
             api_key (str, optional): The DashScope api_key. Defaults to None.
 
         Returns:
             Any: The object list.
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         url = _get_url(custom_base_url, cls.SUB_PATH.lower(), path)
         params = {}
         if limit is not None:
             if limit < 0:
-                raise InvalidParameter('limit should >= 0')
-            params['limit'] = limit
+                raise InvalidParameter("limit should >= 0")
+            params["limit"] = limit
         if order is not None:
-            params['order'] = order
+            params["order"] = order
         if after is not None:
-            params['after'] = after
+            params["after"] = after
         if before is not None:
-            params['before'] = before
-        return _get(url,
-                    params=params,
-                    api_key=api_key,
-                    workspace=workspace,
-                    **kwargs)
+            params["before"] = before
+        return _get(
+            url,
+            params=params,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
 
 
-class ListMixin():
+class ListMixin:
     @classmethod
-    def list(cls,
-             page_no=1,
-             page_size=10,
-             api_key: str = None,
-             path: str = None,
-             workspace: str = None,
-             **kwargs) -> Union[DashScopeAPIResponse, Dict]:
+    def list(
+        cls,
+        page_no=1,
+        page_size=10,
+        api_key: str = None,
+        path: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> Union[DashScopeAPIResponse, Dict]:
         """list objects
 
         Args:
@@ -855,26 +979,30 @@ class ListMixin():
         Returns:
             DashScopeAPIResponse: The object list in output.
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         url = _get_url(custom_base_url, cls.SUB_PATH.lower(), path)
-        params = {'page_no': page_no, 'page_size': page_size}
-        return _get(url,
-                    params=params,
-                    api_key=api_key,
-                    workspace=workspace,
-                    **kwargs)
+        params = {"page_no": page_no, "page_size": page_size}
+        return _get(
+            url,
+            params=params,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
 
 
-class LogMixin():
+class LogMixin:
     @classmethod
-    def logs(cls,
-             job_id: str,
-             offset=1,
-             line=1000,
-             api_key: str = None,
-             path: str = None,
-             workspace: str = None,
-             **kwargs) -> Union[DashScopeAPIResponse, Dict]:
+    def logs(  # pylint: disable=unused-argument
+        cls,
+        job_id: str,
+        offset=1,
+        line=1000,
+        api_key: str = None,
+        path: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> Union[DashScopeAPIResponse, Dict]:
         """Get log of the job.
 
         Args:
@@ -886,29 +1014,38 @@ class LogMixin():
         Returns:
             DashScopeAPIResponse: The response
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         if not custom_base_url:
-            url = join_url(dashscope.base_http_api_url, cls.SUB_PATH.lower(),
-                           job_id, 'logs')
+            url = join_url(
+                dashscope.base_http_api_url,
+                cls.SUB_PATH.lower(),
+                job_id,
+                "logs",
+            )
         else:
             url = custom_base_url
-        params = {'offset': offset, 'line': line}
-        return _get(url,
-                    params=params,
-                    api_key=api_key,
-                    workspace=workspace,
-                    **kwargs)
+        params = {"offset": offset, "line": line}
+        return _get(
+            url,
+            params=params,
+            api_key=api_key,
+            workspace=workspace,
+            **kwargs,
+        )
 
 
-class GetMixin():
+class GetMixin:
     @classmethod
-    def get(cls,
-            target,
-            api_key: str = None,
-            params: dict = {},
-            path: str = None,
-            workspace: str = None,
-            **kwargs) -> Union[DashScopeAPIResponse, Dict]:
+    # pylint: disable=dangerous-default-value
+    def get(
+        cls,
+        target,
+        api_key: str = None,
+        params: dict = {},
+        path: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> Union[DashScopeAPIResponse, Dict]:
         """Get object information.
 
         Args:
@@ -919,7 +1056,7 @@ class GetMixin():
         Returns:
             DashScopeAPIResponse: The object information in output.
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         if custom_base_url:
             base_url = custom_base_url
         else:
@@ -929,23 +1066,27 @@ class GetMixin():
             url = join_url(base_url, path)
         else:
             url = join_url(base_url, cls.SUB_PATH.lower(), target)
-        flattened_output = kwargs.pop('flattened_output', False)
-        return _get(url,
-                    api_key=api_key,
-                    params=params,
-                    flattened_output=flattened_output,
-                    workspace=workspace,
-                    **kwargs)
+        flattened_output = kwargs.pop("flattened_output", False)
+        return _get(
+            url,
+            api_key=api_key,
+            params=params,
+            flattened_output=flattened_output,
+            workspace=workspace,
+            **kwargs,
+        )
 
 
-class GetStatusMixin():
+class GetStatusMixin:
     @classmethod
-    def get(cls,
-            target,
-            api_key: str = None,
-            path: str = None,
-            workspace: str = None,
-            **kwargs) -> Union[DashScopeAPIResponse, Dict]:
+    def get(
+        cls,
+        target,
+        api_key: str = None,
+        path: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> Union[DashScopeAPIResponse, Dict]:
         """Get object information.
 
         Args:
@@ -956,7 +1097,7 @@ class GetStatusMixin():
         Returns:
             DashScopeAPIResponse: The object information in output.
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         if custom_base_url:
             base_url = custom_base_url
         else:
@@ -965,23 +1106,27 @@ class GetStatusMixin():
             url = join_url(base_url, path)
         else:
             url = join_url(base_url, cls.SUB_PATH.lower(), target)
-        flattened_output = kwargs.pop('flattened_output', False)
-        return _get(url,
-                    api_key=api_key,
-                    flattened_output=flattened_output,
-                    workspace=workspace,
-                    **kwargs)
+        flattened_output = kwargs.pop("flattened_output", False)
+        return _get(
+            url,
+            api_key=api_key,
+            flattened_output=flattened_output,
+            workspace=workspace,
+            **kwargs,
+        )
 
 
-class DeleteMixin():
+class DeleteMixin:
     @classmethod
-    def delete(cls,
-               target: str,
-               api_key: str = None,
-               path: str = None,
-               workspace: str = None,
-               flattened_output=False,
-               **kwargs) -> Union[DashScopeAPIResponse, Dict]:
+    def delete(
+        cls,
+        target: str,
+        api_key: str = None,
+        path: str = None,
+        workspace: str = None,
+        flattened_output=False,
+        **kwargs,
+    ) -> Union[DashScopeAPIResponse, Dict]:
         """Delete object.
 
         Args:
@@ -992,7 +1137,7 @@ class DeleteMixin():
         Returns:
             DashScopeAPIResponse: The delete result.
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         if custom_base_url:
             base_url = custom_base_url
         else:
@@ -1001,30 +1146,36 @@ class DeleteMixin():
             url = join_url(base_url, path)
         else:
             url = join_url(base_url, cls.SUB_PATH.lower(), target)
-        timeout = kwargs.pop(REQUEST_TIMEOUT_KEYWORD,
-                             DEFAULT_REQUEST_TIMEOUT_SECONDS)
+        timeout = kwargs.pop(
+            REQUEST_TIMEOUT_KEYWORD,
+            DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
         with requests.Session() as session:
-            logger.debug('Starting request: %s' % url)
-            response = session.delete(url,
-                                      headers={
-                                          **_workspace_header(workspace),
-                                          **default_headers(api_key),
-                                          **kwargs.pop('headers', {})
-                                      },
-                                      timeout=timeout)
-            logger.debug('Starting processing response: %s' % url)
+            logger.debug("Starting request: %s", url)
+            response = session.delete(
+                url,
+                headers={
+                    **_workspace_header(workspace),
+                    **default_headers(api_key),
+                    **kwargs.pop("headers", {}),
+                },
+                timeout=timeout,
+            )
+            logger.debug("Starting processing response: %s", url)
             return _handle_http_response(response, flattened_output)
 
 
-class CreateMixin():
+class CreateMixin:
     @classmethod
-    def call(cls,
-             data: object,
-             api_key: str = None,
-             path: str = None,
-             stream: bool = False,
-             workspace: str = None,
-             **kwargs) -> Union[DashScopeAPIResponse, Dict]:
+    def call(
+        cls,
+        data: object,
+        api_key: str = None,
+        path: str = None,
+        stream: bool = False,
+        workspace: str = None,
+        **kwargs,
+    ) -> Union[DashScopeAPIResponse, Dict]:
         """Create a object
 
         Args:
@@ -1035,26 +1186,33 @@ class CreateMixin():
         Returns:
             DashScopeAPIResponse: The created object in output.
         """
-        url = _get_url(kwargs.pop('base_address', None), cls.SUB_PATH.lower(),
-                       path)
-        timeout = kwargs.pop(REQUEST_TIMEOUT_KEYWORD,
-                             DEFAULT_REQUEST_TIMEOUT_SECONDS)
-        flattened_output = kwargs.pop('flattened_output', False)
+        url = _get_url(
+            kwargs.pop("base_address", None),
+            cls.SUB_PATH.lower(),
+            path,
+        )
+        timeout = kwargs.pop(
+            REQUEST_TIMEOUT_KEYWORD,
+            DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
+        flattened_output = kwargs.pop("flattened_output", False)
         with requests.Session() as session:
-            logger.debug('Starting request: %s' % url)
-            response = session.post(url,
-                                    json=data,
-                                    stream=stream,
-                                    headers={
-                                        **_workspace_header(workspace),
-                                        **default_headers(api_key),
-                                        **kwargs.pop('headers', {})
-                                    },
-                                    timeout=timeout)
-            logger.debug('Starting processing response: %s' % url)
+            logger.debug("Starting request: %s", url)
+            response = session.post(
+                url,
+                json=data,
+                stream=stream,
+                headers={
+                    **_workspace_header(workspace),
+                    **default_headers(api_key),
+                    **kwargs.pop("headers", {}),
+                },
+                timeout=timeout,
+            )
+            logger.debug("Starting processing response: %s", url)
             response = _handle_http_stream_response(response, flattened_output)
             if stream:
-                return (item for item in response)
+                return (item for item in response)  # type: ignore
             else:
                 _, output = next(response)
                 try:
@@ -1064,16 +1222,18 @@ class CreateMixin():
                 return output
 
 
-class UpdateMixin():
+class UpdateMixin:
     @classmethod
-    def update(cls,
-               target: str,
-               json: object,
-               api_key: str = None,
-               path: str = None,
-               workspace: str = None,
-               method: str = 'patch',
-               **kwargs) -> Union[DashScopeAPIResponse, Dict]:
+    def update(
+        cls,
+        target: str,
+        json: object,
+        api_key: str = None,
+        path: str = None,
+        workspace: str = None,
+        method: str = "patch",
+        **kwargs,
+    ) -> Union[DashScopeAPIResponse, Dict]:
         """Async update a object
 
         Args:
@@ -1085,7 +1245,7 @@ class UpdateMixin():
         Returns:
             DashScopeAPIResponse: The updated object information in output.
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         if custom_base_url:
             base_url = custom_base_url
         else:
@@ -1094,42 +1254,50 @@ class UpdateMixin():
             url = join_url(base_url, path)
         else:
             url = join_url(base_url, cls.SUB_PATH.lower(), target)
-        timeout = kwargs.pop(REQUEST_TIMEOUT_KEYWORD,
-                             DEFAULT_REQUEST_TIMEOUT_SECONDS)
-        flattened_output = kwargs.pop('flattened_output', False)
+        timeout = kwargs.pop(
+            REQUEST_TIMEOUT_KEYWORD,
+            DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
+        flattened_output = kwargs.pop("flattened_output", False)
         with requests.Session() as session:
-            logger.debug('Starting request: %s' % url)
-            if method == 'post':
-                response = session.post(url,
-                                        json=json,
-                                        headers={
-                                            **_workspace_header(workspace),
-                                            **default_headers(api_key),
-                                            **kwargs.pop('headers', {})
-                                        },
-                                        timeout=timeout)
+            logger.debug("Starting request: %s", url)
+            if method == "post":
+                response = session.post(
+                    url,
+                    json=json,
+                    headers={
+                        **_workspace_header(workspace),
+                        **default_headers(api_key),
+                        **kwargs.pop("headers", {}),
+                    },
+                    timeout=timeout,
+                )
             else:
-                response = session.patch(url,
-                                         json=json,
-                                         headers={
-                                             **_workspace_header(workspace),
-                                             **default_headers(api_key),
-                                             **kwargs.pop('headers', {})
-                                         },
-                                         timeout=timeout)
-            logger.debug('Starting processing response: %s' % url)
+                response = session.patch(
+                    url,
+                    json=json,
+                    headers={
+                        **_workspace_header(workspace),
+                        **default_headers(api_key),
+                        **kwargs.pop("headers", {}),
+                    },
+                    timeout=timeout,
+                )
+            logger.debug("Starting processing response: %s", url)
             return _handle_http_response(response, flattened_output)
 
 
-class PutMixin():
+class PutMixin:
     @classmethod
-    def put(cls,
-            target: str,
-            json: object,
-            path: str = None,
-            api_key: str = None,
-            workspace: str = None,
-            **kwargs) -> Union[DashScopeAPIResponse, Dict]:
+    def put(
+        cls,
+        target: str,
+        json: object,
+        path: str = None,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> Union[DashScopeAPIResponse, Dict]:
         """Async update a object
 
         Args:
@@ -1141,7 +1309,7 @@ class PutMixin():
         Returns:
             DashScopeAPIResponse: The updated object information in output.
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         if custom_base_url:
             base_url = custom_base_url
         else:
@@ -1150,31 +1318,37 @@ class PutMixin():
             url = join_url(base_url, cls.SUB_PATH.lower(), target)
         else:
             url = join_url(base_url, path)
-        timeout = kwargs.pop(REQUEST_TIMEOUT_KEYWORD,
-                             DEFAULT_REQUEST_TIMEOUT_SECONDS)
+        timeout = kwargs.pop(
+            REQUEST_TIMEOUT_KEYWORD,
+            DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
         with requests.Session() as session:
-            logger.debug('Starting request: %s' % url)
-            response = session.put(url,
-                                   json=json,
-                                   headers={
-                                       **_workspace_header(workspace),
-                                       **default_headers(api_key),
-                                       **kwargs.pop('headers', {})
-                                   },
-                                   timeout=timeout)
-            logger.debug('Starting processing response: %s' % url)
+            logger.debug("Starting request: %s", url)
+            response = session.put(
+                url,
+                json=json,
+                headers={
+                    **_workspace_header(workspace),
+                    **default_headers(api_key),
+                    **kwargs.pop("headers", {}),
+                },
+                timeout=timeout,
+            )
+            logger.debug("Starting processing response: %s", url)
             return _handle_http_response(response)
 
 
-class FileUploadMixin():
+class FileUploadMixin:
     @classmethod
-    def upload(cls,
-               files: list,
-               descriptions: List[str] = None,
-               params: dict = None,
-               api_key: str = None,
-               workspace: str = None,
-               **kwargs) -> Union[DashScopeAPIResponse, Dict]:
+    def upload(  # pylint: disable=unused-argument
+        cls,
+        files: list,
+        descriptions: List[str] = None,
+        params: dict = None,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> Union[DashScopeAPIResponse, Dict]:
         """Upload files
 
         Args:
@@ -1187,7 +1361,7 @@ class FileUploadMixin():
         Returns:
             DashScopeAPIResponse: The uploaded file information in the output.
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         if custom_base_url:
             base_url = custom_base_url
         else:
@@ -1195,32 +1369,38 @@ class FileUploadMixin():
         url = join_url(base_url, cls.SUB_PATH.lower())
         js = None
         if descriptions:
-            js = {'descriptions': descriptions}
-        timeout = kwargs.pop(REQUEST_TIMEOUT_KEYWORD,
-                             DEFAULT_REQUEST_TIMEOUT_SECONDS)
+            js = {"descriptions": descriptions}
+        timeout = kwargs.pop(
+            REQUEST_TIMEOUT_KEYWORD,
+            DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
         with requests.Session() as session:
-            logger.debug('Starting request: %s' % url)
-            response = session.post(url,
-                                    data=js,
-                                    headers={
-                                        **_workspace_header(workspace),
-                                        **default_headers(api_key),
-                                        **kwargs.pop('headers', {})
-                                    },
-                                    files=files,
-                                    timeout=timeout)
-            logger.debug('Starting processing response: %s' % url)
+            logger.debug("Starting request: %s", url)
+            response = session.post(
+                url,
+                data=js,
+                headers={
+                    **_workspace_header(workspace),
+                    **default_headers(api_key),
+                    **kwargs.pop("headers", {}),
+                },
+                files=files,
+                timeout=timeout,
+            )
+            logger.debug("Starting processing response: %s", url)
             return _handle_http_response(response)
 
 
-class CancelMixin():
+class CancelMixin:
     @classmethod
-    def cancel(cls,
-               target: str,
-               path: str = None,
-               api_key: str = None,
-               workspace: str = None,
-               **kwargs) -> Union[DashScopeAPIResponse, Dict]:
+    def cancel(
+        cls,
+        target: str,
+        path: str = None,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> Union[DashScopeAPIResponse, Dict]:
         """Cancel a job.
 
         Args:
@@ -1231,32 +1411,36 @@ class CancelMixin():
         Returns:
             DashScopeAPIResponse: The cancel result.
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         if custom_base_url:
             base_url = custom_base_url
         else:
             base_url = dashscope.base_http_api_url
         if not path:
-            url = join_url(base_url, cls.SUB_PATH.lower(), target, 'cancel')
+            url = join_url(base_url, cls.SUB_PATH.lower(), target, "cancel")
         else:
             url = join_url(base_url, path)
-        timeout = kwargs.pop(REQUEST_TIMEOUT_KEYWORD,
-                             DEFAULT_REQUEST_TIMEOUT_SECONDS)
-        flattened_output = kwargs.pop('flattened_output', False)
+        timeout = kwargs.pop(
+            REQUEST_TIMEOUT_KEYWORD,
+            DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
+        flattened_output = kwargs.pop("flattened_output", False)
         with requests.Session() as session:
-            logger.debug('Starting request: %s' % url)
-            response = session.post(url,
-                                    headers={
-                                        **_workspace_header(workspace),
-                                        **default_headers(api_key),
-                                        **kwargs.pop('headers', {})
-                                    },
-                                    timeout=timeout)
-            logger.debug('Starting processing response: %s' % url)
+            logger.debug("Starting request: %s", url)
+            response = session.post(
+                url,
+                headers={
+                    **_workspace_header(workspace),
+                    **default_headers(api_key),
+                    **kwargs.pop("headers", {}),
+                },
+                timeout=timeout,
+            )
+            logger.debug("Starting processing response: %s", url)
             return _handle_http_response(response, flattened_output)
 
 
-class StreamEventMixin():
+class StreamEventMixin:
     @classmethod
     def _handle_stream(cls, response: requests.Response):
         # TODO define done message.
@@ -1264,15 +1448,15 @@ class StreamEventMixin():
         status_code = HTTPStatus.INTERNAL_SERVER_ERROR
         for line in response.iter_lines():
             if line:
-                line = line.decode('utf8')
-                line = line.rstrip('\n').rstrip('\r')
-                if line.startswith('event:error'):
+                line = line.decode("utf8")
+                line = line.rstrip("\n").rstrip("\r")
+                if line.startswith("event:error"):
                     is_error = True
-                elif line.startswith('status:'):
-                    status_code = line[len('status:'):]
+                elif line.startswith("status:"):
+                    status_code = line[len("status:") :]
                     status_code = int(status_code.strip())
-                elif line.startswith('data:'):
-                    line = line[len('data:'):]
+                elif line.startswith("data:"):
+                    line = line[len("data:") :]
                     yield (is_error, status_code, line)
                     if is_error:
                         break
@@ -1281,40 +1465,53 @@ class StreamEventMixin():
 
     @classmethod
     def _handle_response(cls, response: requests.Response):
-        request_id = ''
-        if (response.status_code == HTTPStatus.OK
-                and SSE_CONTENT_TYPE in response.headers.get(
-                    'content-type', '')):
+        request_id = ""
+        if (
+            response.status_code == HTTPStatus.OK
+            and SSE_CONTENT_TYPE
+            in response.headers.get(
+                "content-type",
+                "",
+            )
+        ):
             for is_error, status_code, data in cls._handle_stream(response):
                 if is_error:
-                    yield DashScopeAPIResponse(request_id=request_id,
-                                               status_code=status_code,
-                                               output=None,
-                                               code='',
-                                               message='')  # noqa E501
+                    yield DashScopeAPIResponse(
+                        request_id=request_id,
+                        status_code=status_code,
+                        output=None,
+                        code="",
+                        message="",
+                    )  # noqa E501
                 else:
-                    yield DashScopeAPIResponse(request_id=request_id,
-                                               status_code=HTTPStatus.OK,
-                                               output=data,
-                                               usage=None)
+                    yield DashScopeAPIResponse(
+                        request_id=request_id,
+                        status_code=HTTPStatus.OK,
+                        output=data,
+                        usage=None,
+                    )
         elif response.status_code == HTTPStatus.OK:
             json_content = response.json()
-            request_id = ''
-            if 'request_id' in json_content:
-                request_id = json_content['request_id']
-            yield DashScopeAPIResponse(request_id=request_id,
-                                       status_code=HTTPStatus.OK,
-                                       output=json_content,
-                                       usage=None)
+            request_id = ""
+            if "request_id" in json_content:
+                request_id = json_content["request_id"]
+            yield DashScopeAPIResponse(
+                request_id=request_id,
+                status_code=HTTPStatus.OK,
+                output=json_content,
+                usage=None,
+            )
         else:
             yield _handle_http_failed_response(response)
 
     @classmethod
-    def stream_events(cls,
-                      target,
-                      api_key: str = None,
-                      workspace: str = None,
-                      **kwargs) -> Iterator[DashScopeAPIResponse]:
+    def stream_events(
+        cls,
+        target,
+        api_key: str = None,
+        workspace: str = None,
+        **kwargs,
+    ) -> Iterator[DashScopeAPIResponse]:
         """Get job log.
 
         Args:
@@ -1325,24 +1522,28 @@ class StreamEventMixin():
         Returns:
             DashScopeAPIResponse: The target outputs.
         """
-        custom_base_url = kwargs.pop('base_address', None)
+        custom_base_url = kwargs.pop("base_address", None)
         if custom_base_url:
             base_url = custom_base_url
         else:
             base_url = dashscope.base_http_api_url
-        url = join_url(base_url, cls.SUB_PATH.lower(), target, 'stream')
-        timeout = kwargs.pop(REQUEST_TIMEOUT_KEYWORD,
-                             DEFAULT_REQUEST_TIMEOUT_SECONDS)
+        url = join_url(base_url, cls.SUB_PATH.lower(), target, "stream")
+        timeout = kwargs.pop(
+            REQUEST_TIMEOUT_KEYWORD,
+            DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
         with requests.Session() as session:
-            logger.debug('Starting request: %s' % url)
-            response = session.get(url,
-                                   headers={
-                                       **_workspace_header(workspace),
-                                       **default_headers(api_key),
-                                       **kwargs.pop('headers', {})
-                                   },
-                                   stream=True,
-                                   timeout=timeout)
-            logger.debug('Starting processing response: %s' % url)
+            logger.debug("Starting request: %s", url)
+            response = session.get(
+                url,
+                headers={
+                    **_workspace_header(workspace),
+                    **default_headers(api_key),
+                    **kwargs.pop("headers", {}),
+                },
+                stream=True,
+                timeout=timeout,
+            )
+            logger.debug("Starting processing response: %s", url)
             for rsp in cls._handle_response(response):
                 yield rsp

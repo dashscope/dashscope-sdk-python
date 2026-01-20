@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import json
@@ -18,7 +19,8 @@ class TestFineTuneRequest(MockServerBase):
     @classmethod
     def setup_class(cls):
         cls.case_data = json.load(
-            open('tests/data/fine_tune.json', 'r', encoding='utf-8'))
+            open('tests/data/fine_tune.json', 'r', encoding='utf-8'),
+        )
         super().setup_class()
 
     def test_create_fine_tune_job(self, mock_server: MockServer):
@@ -27,13 +29,16 @@ class TestFineTuneRequest(MockServerBase):
         model = 'gpt'
         training_file_ids = 'training_001'
         validation_file_ids = 'validation_001'
-        hyper_parameters = {'epochs': 10,
-                            'learning_rate': 0.001
-                            }
-        resp = FineTunes.call(model=model,
-                              training_file_ids=training_file_ids,
-                              validation_file_ids=validation_file_ids,
-                              hyper_parameters=hyper_parameters)
+        hyper_parameters = {
+            'epochs': 10,
+            'learning_rate': 0.001,
+        }
+        resp = FineTunes.call(
+            model=model,
+            training_file_ids=training_file_ids,
+            validation_file_ids=validation_file_ids,
+            hyper_parameters=hyper_parameters,
+        )
         req = mock_server.requests.get(block=True)
         assert req['path'] == '/api/v1/fine-tunes'
         assert req['body']['model'] == model
@@ -52,12 +57,14 @@ class TestFineTuneRequest(MockServerBase):
         validation_file_ids = ['validation_001', 'validation_002']
         hyper_parameters = {
                                   'epochs': 10,
-                                  'learning_rate': 0.001
-                              }
-        resp = FineTunes.call(model=model,
-                              training_file_ids=training_file_ids,
-                              validation_file_ids=validation_file_ids,
-                              hyper_parameters=hyper_parameters)
+                                  'learning_rate': 0.001,
+        }
+        resp = FineTunes.call(
+            model=model,
+            training_file_ids=training_file_ids,
+            validation_file_ids=validation_file_ids,
+            hyper_parameters=hyper_parameters,
+        )
         req = mock_server.requests.get(block=True)
         assert req['path'] == '/api/v1/fine-tunes'
         assert req['body']['model'] == model
@@ -73,8 +80,10 @@ class TestFineTuneRequest(MockServerBase):
     def test_list_fine_tune_job(self, mock_server: MockServer):
         response_body = self.case_data['list_response']
         mock_server.responses.put(json.dumps(response_body))
-        response = FineTunes.list(page_no=10,
-                                  page_size=101)
+        response = FineTunes.list(
+            page_no=10,
+            page_size=101,
+        )
         req = mock_server.requests.get(block=True)
         assert req['path'] == '/api/v1/fine-tunes?page_no=10&page_size=101'
         assert len(response.output.jobs) == 2

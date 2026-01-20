@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 # adapter from openai sdk
@@ -6,7 +7,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Literal, Optional, Union
 
 from dashscope.assistants.assistant_types import (
-    Tool, convert_tools_dict_to_objects)
+    Tool, convert_tools_dict_to_objects,
+)
 from dashscope.common.base_type import BaseList, BaseObjectMixin
 
 __all__ = [
@@ -18,7 +20,7 @@ __all__ = [
     'MessageCreationStepDetails', 'CodeInterpreterOutputLogs',
     'CodeInterpreterOutputImageImage', 'CodeInterpreterOutputImage',
     'CodeInterpreter', 'CodeToolCall', 'RetrievalToolCall', 'FunctionToolCall',
-    'ToolCallsStepDetails', 'RunStep', 'RunStepList'
+    'ToolCallsStepDetails', 'RunStep', 'RunStepList',
 ]
 
 
@@ -29,7 +31,7 @@ class MessageFile(BaseObjectMixin):
     created_at: int
     object: str
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -37,7 +39,7 @@ class MessageFile(BaseObjectMixin):
 class MessageFileList(BaseList):
     data: List[MessageFile]
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -58,7 +60,7 @@ class Usage(BaseObjectMixin):
     output_tokens: int
     """Output tokens used (completion)."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -66,14 +68,16 @@ class Usage(BaseObjectMixin):
 class ImageFile(BaseObjectMixin):
     file_id: str
 
-    def __init__(self, file_id, **kwargs):
+    def __init__(  # pylint: disable=unused-argument
+        self, file_id, **kwargs,
+    ):
         super().__init__(**kwargs)
 
 
 @dataclass(init=False)
 class MessageContentImageFile(BaseObjectMixin):
     type: str = 'image_file'
-    image_file: ImageFile
+    image_file: ImageFile  # type: ignore[misc]
 
     def __init__(self, **kwargs):
         self.image_file = ImageFile(**kwargs.pop(self.type, {}))
@@ -144,7 +148,7 @@ class ThreadMessageDelta(BaseObjectMixin):
     status_code: int
     id: str
     object: str = 'thread.message.delta'
-    delta: ThreadMessageDeltaContent
+    delta: ThreadMessageDeltaContent  # type: ignore[misc]
 
     def __init__(self, **kwargs):
         content = kwargs.pop('delta', None)
@@ -176,7 +180,8 @@ class ThreadMessage(BaseObjectMixin):
             for content in input_content:
                 if 'type' in content:
                     content_type = MESSAGE_SUPPORT_CONTENT.get(
-                        content['type'], None)
+                        content['type'], None,
+                    )
                     if content_type:
                         content_list.append(content_type(**content))
                     else:
@@ -194,17 +199,22 @@ class ThreadMessage(BaseObjectMixin):
 class ThreadMessageList(BaseList):
     data: List[ThreadMessage]
 
-    def __init__(self,
-                 has_more: bool = None,
-                 last_id: Optional[str] = None,
-                 first_id: Optional[str] = None,
-                 data: List[ThreadMessage] = [],
-                 **kwargs):
-        super().__init__(has_more=has_more,
-                         last_id=last_id,
-                         first_id=first_id,
-                         data=data,
-                         **kwargs)
+    # pylint: disable=dangerous-default-value
+    def __init__(
+        self,
+        has_more: bool = None,
+        last_id: Optional[str] = None,
+        first_id: Optional[str] = None,
+        data: List[ThreadMessage] = [],
+        **kwargs,
+    ):
+        super().__init__(
+            has_more=has_more,
+            last_id=last_id,
+            first_id=first_id,
+            data=data,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -215,6 +225,7 @@ class Thread(BaseObjectMixin):
     metadata: Optional[object] = None
     object: str = 'thread'
 
+    # pylint: disable=useless-parent-delegation
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -225,6 +236,7 @@ class Function(BaseObjectMixin):
     name: str
     output: Optional[str] = None
 
+    # pylint: disable=useless-parent-delegation
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -265,7 +277,8 @@ class RequiredAction(BaseObjectMixin):
 
     def __init__(self, **kwargs):
         self.submit_tool_outputs = RequiredActionSubmitToolOutputs(
-            **kwargs.pop('submit_tool_outputs', {}))
+            **kwargs.pop('submit_tool_outputs', {}),
+        )
         super().__init__(**kwargs)
 
 
@@ -274,6 +287,7 @@ class LastError(BaseObjectMixin):
     code: Literal['server_error', 'rate_limit_exceeded']
     message: str
 
+    # pylint: disable=useless-parent-delegation
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -302,12 +316,14 @@ class Run(BaseObjectMixin):
 
     started_at: Optional[int] = None
 
-    status: Literal['queued', 'in_progress', 'requires_action', 'cancelling',
-                    'cancelled', 'failed', 'completed', 'expired']
+    status: Literal[  # type: ignore[misc]
+        'queued', 'in_progress', 'requires_action', 'cancelling',
+        'cancelled', 'failed', 'completed', 'expired',
+    ]
 
-    thread_id: str
+    thread_id: str  # type: ignore[misc]
 
-    tools: List[Tool]
+    tools: List[Tool]  # type: ignore[misc]
 
     top_p: Optional[float] = None
     top_k: Optional[int] = None
@@ -331,23 +347,30 @@ class Run(BaseObjectMixin):
 class RunList(BaseObjectMixin):
     data: List[Run]
 
-    def __init__(self,
-                 has_more: bool = None,
-                 last_id: Optional[str] = None,
-                 first_id: Optional[str] = None,
-                 data: List[Run] = [],
-                 **kwargs):
-        super().__init__(has_more=has_more,
-                         last_id=last_id,
-                         first_id=first_id,
-                         data=data,
-                         **kwargs)
+    # pylint: disable=dangerous-default-value
+    def __init__(
+        self,
+        has_more: bool = None,
+        last_id: Optional[str] = None,
+        first_id: Optional[str] = None,
+        data: List[Run] = [],
+        **kwargs,
+    ):
+        super().__init__(
+            has_more=has_more,
+            last_id=last_id,
+            first_id=first_id,
+            data=data,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
 class MessageCreation(BaseObjectMixin):
     message_id: str
     """The ID of the message that was created by this run step."""
+
+    # pylint: disable=useless-parent-delegation
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -358,6 +381,8 @@ class MessageCreationStepDetails(BaseObjectMixin):
 
     type: Literal['message_creation']
     """Always `message_creation`."""
+
+    # pylint: disable=useless-parent-delegation
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -369,6 +394,8 @@ class CodeInterpreterOutputLogs(BaseObjectMixin):
 
     type: Literal['logs']
     """Always `logs`."""
+
+    # pylint: disable=useless-parent-delegation
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -380,6 +407,8 @@ class CodeInterpreterOutputImageImage(BaseObjectMixin):
     The [file](https://platform.openai.com/docs/api-reference/files) ID of the
     image.
     """
+
+    # pylint: disable=useless-parent-delegation
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -395,8 +424,10 @@ class CodeInterpreterOutputImage(BaseObjectMixin):
         super().__init__(**kwargs)
 
 
-CodeInterpreterOutput = Union[CodeInterpreterOutputLogs,
-                              CodeInterpreterOutputImage]
+CodeInterpreterOutput = Union[
+    CodeInterpreterOutputLogs,
+    CodeInterpreterOutputImage,
+]
 
 
 @dataclass(init=False)
@@ -407,7 +438,7 @@ class CodeInterpreter(BaseObjectMixin):
     outputs: List[CodeInterpreterOutput]
     """The outputs from the Code Interpreter tool call.
 
-    Code Interpreter can output one or more items, including text (`logs`) or images
+    Code Interpreter can output one or more items, including text (`logs`) or images  # noqa: E501
     (`image`). Each of these are represented by a different object type.
     """
     def __init__(self, **kwargs):
@@ -433,7 +464,8 @@ class CodeToolCall(BaseObjectMixin):
     """
     def __init__(self, **kwargs):
         self.code_interpreter = CodeInterpreter(
-            **kwargs.pop('code_interpreter', {}))
+            **kwargs.pop('code_interpreter', {}),
+        )
         super().__init__(**kwargs)
 
 
@@ -450,6 +482,8 @@ class RetrievalToolCall(BaseObjectMixin):
 
     This is always going to be `quark_search` for this type of tool call.
     """
+
+    # pylint: disable=useless-parent-delegation
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -500,7 +534,7 @@ class ToolCallsStepDetails(BaseObjectMixin):
     tool_calls: List[ToolCall]
     """An array of tool calls the run step was involved in.
 
-    These can be associated with one of three types of tools: `code_interpreter`,
+    These can be associated with one of three types of tools: `code_interpreter`,  # noqa: E501
     `retrieval`, or `function`.
     """
 
@@ -508,7 +542,8 @@ class ToolCallsStepDetails(BaseObjectMixin):
     """Always `tool_calls`."""
     def __init__(self, **kwargs):
         self.tool_calls = convert_tool_calls_dict_to_object(
-            kwargs.pop('tool_calls', []))
+            kwargs.pop('tool_calls', []),
+        )
         super().__init__(**kwargs)
 
 
@@ -533,7 +568,8 @@ class RunStepDeltaContent(BaseObjectMixin):
 
     def __init__(self, **kwargs):
         self.step_details = convert_step_details_dict_to_objects(
-            kwargs.pop('step_details', {}))
+            kwargs.pop('step_details', {}),
+        )
         super().__init__(**kwargs)
 
 
@@ -541,7 +577,7 @@ class RunStepDeltaContent(BaseObjectMixin):
 class RunStepDelta(BaseObjectMixin):
     id: str
     object: str = 'thread.run.step.delta'
-    delta: RunStepDeltaContent
+    delta: RunStepDeltaContent  # type: ignore[misc]
 
     def __init__(self, **kwargs):
         delta = kwargs.pop('delta', None)
@@ -555,10 +591,10 @@ class RunStepDelta(BaseObjectMixin):
 @dataclass(init=False)
 class RunStep(BaseObjectMixin):
     status_code: int = None
-    id: str
-    """The identifier of the run step, which can be referenced in API endpoints."""
+    id: str  # type: ignore[misc]
+    """The identifier of the run step, which can be referenced in API endpoints."""  # noqa: E501
 
-    assistant_id: str
+    assistant_id: str  # type: ignore[misc]
     """
     The ID of the
     [assistant](https://platform.openai.com/docs/api-reference/assistants)
@@ -571,7 +607,7 @@ class RunStep(BaseObjectMixin):
     completed_at: Optional[int] = None
     """The Unix timestamp (in seconds) for when the run step completed."""
 
-    created_at: int
+    created_at: int  # type: ignore[misc]
     """The Unix timestamp (in seconds) for when the run step was created."""
 
     expired_at: Optional[int] = None
@@ -593,52 +629,54 @@ class RunStep(BaseObjectMixin):
     """Set of 16 key-value pairs that can be attached to an object.
 
     This can be useful for storing additional information about the object in a
-    structured format. Keys can be a maximum of 64 characters long and values can be
+    structured format. Keys can be a maximum of 64 characters long and values can be  # noqa: E501
     a maxium of 512 characters long.
     """
 
-    object: Literal['thread.run.step']
+    object: Literal['thread.run.step']  # type: ignore[misc]
     """The object type, which is always `thread.run.step`."""
 
-    run_id: str
+    run_id: str  # type: ignore[misc]
     """
-    The ID of the [run](https://platform.openai.com/docs/api-reference/runs) that
+    The ID of the [run](https://platform.openai.com/docs/api-reference/runs) that  # noqa: E501
     this run step is a part of.
     """
 
-    status: Literal['in_progress', 'cancelled', 'failed', 'completed',
-                    'expired']
+    status: Literal[  # type: ignore[misc]
+        'in_progress', 'cancelled', 'failed', 'completed',
+        'expired',
+    ]
     """
     The status of the run step, which can be either `in_progress`, `cancelled`,
     `failed`, `completed`, or `expired`.
     """
 
-    step_details: StepDetails
+    step_details: StepDetails  # type: ignore[misc]
     """The details of the run step."""
 
-    thread_id: str
+    thread_id: str  # type: ignore[misc]
     """
-    The ID of the [thread](https://platform.openai.com/docs/api-reference/threads)
+    The ID of the [thread](https://platform.openai.com/docs/api-reference/threads)  # noqa: E501
     that was run.
     """
 
-    type: Literal['message_creation', 'tool_calls']
-    """The type of run step, which can be either `message_creation` or `tool_calls`."""
+    type: Literal['message_creation', 'tool_calls']  # type: ignore[misc]
+    """The type of run step, which can be either `message_creation` or `tool_calls`."""  # noqa: E501  # pylint: disable=line-too-long
 
     usage: Optional[Usage] = None
 
     def __init__(self, **kwargs):
         self.step_details = convert_step_details_dict_to_objects(
-            kwargs.pop('step_details', {}))
-        if 'usage' in kwargs and kwargs['usage'] is not None and kwargs['usage']:
+            kwargs.pop('step_details', {}),
+        )
+        if 'usage' in kwargs and kwargs['usage'] is not None and kwargs['usage']:  # noqa: E501
             self.usage = Usage(**kwargs.pop('usage', {}))
         else:
             self.usage = None
         last_error = kwargs.pop('last_error', None)
         if last_error:
             self.last_error = LastError(**last_error)
-        else:
-            last_error = last_error
+
         super().__init__(**kwargs)
 
 
@@ -646,20 +684,25 @@ class RunStep(BaseObjectMixin):
 class RunStepList(BaseList):
     data: List[RunStep]
 
-    def __init__(self,
-                 has_more: bool = None,
-                 last_id: Optional[str] = None,
-                 first_id: Optional[str] = None,
-                 data: List[RunStep] = [],
-                 **kwargs):
+    # pylint: disable=dangerous-default-value
+    def __init__(
+        self,
+        has_more: bool = None,
+        last_id: Optional[str] = None,
+        first_id: Optional[str] = None,
+        data: List[RunStep] = [],
+        **kwargs,
+    ):
         if data:
             steps = []
             for step in data:
-                steps.append(RunStep(**step))
+                steps.append(RunStep(**step))  # type: ignore[arg-type]
             self.data = steps
         else:
             self.data = []
-        super().__init__(has_more=has_more,
-                         last_id=last_id,
-                         first_id=first_id,
-                         **kwargs)
+        super().__init__(
+            has_more=has_more,
+            last_id=last_id,
+            first_id=first_id,
+            **kwargs,
+        )

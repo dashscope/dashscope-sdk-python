@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import json
@@ -9,9 +10,10 @@ from typing import List, Any, Dict
 import uuid
 from enum import Enum, unique
 
+import websocket  # pylint: disable=wrong-import-order
+
 import dashscope
-import websocket
-from dashscope.common.error import InputRequired, ModelRequired
+from dashscope.common.error import ModelRequired
 from dashscope.common.logging import logger
 
 
@@ -20,6 +22,7 @@ class OmniRealtimeCallback:
     An interface that defines callback methods for getting omni-realtime results. # noqa E501
     Derive from this class and implement its function to provide your own data.
     """
+
     def on_open(self) -> None:
         pass
 
@@ -38,7 +41,7 @@ class TranslationParams:
 
     @dataclass
     class Corpus:
-        phrases: Dict[str, Any] = field(default=None)
+        phrases: Dict[str, Any] = field(default=None)  # type: ignore[arg-type]
 
     language: str = field(default=None)
     corpus: Corpus = field(default=None)
@@ -49,20 +52,28 @@ class TranscriptionParams:
     """
     TranscriptionParams
     """
+
     language: str = field(default=None)
     sample_rate: int = field(default=16000)
     input_audio_format: str = field(default="pcm")
-    corpus: Dict[str, Any] = field(default=None)
+    corpus: Dict[str, Any] = field(default=None)  # type: ignore[arg-type]
     corpus_text: str = field(default=None)
 
 
 @unique
 class AudioFormat(Enum):
     # format, sample_rate, channels, bit_rate, name
-    PCM_16000HZ_MONO_16BIT = ('pcm', 16000, 'mono', '16bit', 'pcm16')
-    PCM_24000HZ_MONO_16BIT = ('pcm', 24000, 'mono', '16bit', 'pcm16')
+    PCM_16000HZ_MONO_16BIT = ("pcm", 16000, "mono", "16bit", "pcm16")
+    PCM_24000HZ_MONO_16BIT = ("pcm", 24000, "mono", "16bit", "pcm16")
 
-    def __init__(self, format, sample_rate, channels, bit_rate, format_str):
+    def __init__(  # pylint: disable=redefined-builtin
+        self,
+        format,
+        sample_rate,
+        channels,
+        bit_rate,
+        format_str,
+    ):
         self.format = format
         self.sample_rate = sample_rate
         self.channels = channels
@@ -73,15 +84,16 @@ class AudioFormat(Enum):
         return self.format_str
 
     def __str__(self):
-        return f'{self.format.upper()} with {self.sample_rate}Hz sample rate, {self.channels} channel, {self.bit_rate} bit rate:  {self.format_str}'
+        return f"{self.format.upper()} with {self.sample_rate}Hz sample rate, {self.channels} channel, {self.bit_rate} bit rate:  {self.format_str}"  # noqa: E501  # pylint: disable=line-too-long
 
 
 class MultiModality(Enum):
     """
     MultiModality
     """
-    TEXT = 'text'
-    AUDIO = 'audio'
+
+    TEXT = "text"
+    AUDIO = "audio"
 
     def __str__(self):
         return self.name
@@ -96,7 +108,7 @@ class OmniRealtimeConversation:
         workspace=None,
         url=None,
         api_key: str = None,
-        additional_params=None,
+        additional_params=None,  # pylint: disable=unused-argument
     ):
         """
         Qwen Omni Realtime SDK
@@ -117,13 +129,13 @@ class OmniRealtimeConversation:
         """
 
         if model is None:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         if callback is None:
-            raise ModelRequired('Callback is required!')
+            raise ModelRequired("Callback is required!")
         if url is None:
-            url = f'wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model={model}'
+            url = f"wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model={model}"  # noqa: E501
         else:
-            url = f'{url}?model={model}'
+            url = f"{url}?model={model}"
         self.url = url
         self.apikey = api_key or dashscope.api_key
         self.user_headers = headers
@@ -143,35 +155,34 @@ class OmniRealtimeConversation:
         self.disconnect_event = None
 
     def _generate_event_id(self):
-        '''
+        """
         generate random event id: event_xxxx
-        '''
-        return 'event_' + uuid.uuid4().hex
+        """
+        return "event_" + uuid.uuid4().hex
 
-    def _get_websocket_header(self, ):
-        ua = 'dashscope/%s; python/%s; platform/%s; processor/%s' % (
-            '1.18.0',  # dashscope version
-            platform.python_version(),
-            platform.platform(),
-            platform.processor(),
+    def _get_websocket_header(self):
+        ua = (
+            f"dashscope/1.18.0; python/{platform.python_version()}; "
+            f"platform/{platform.platform()}; "
+            f"processor/{platform.processor()}"
         )
         headers = {
-            'user-agent': ua,
-            'Authorization': 'bearer ' + self.apikey,
+            "user-agent": ua,
+            "Authorization": "bearer " + self.apikey,
         }
         if self.user_headers:
             headers = {**self.user_headers, **headers}
         if self.user_workspace:
             headers = {
                 **headers,
-                'X-DashScope-WorkSpace': self.user_workspace,
+                "X-DashScope-WorkSpace": self.user_workspace,
             }
         return headers
 
     def connect(self) -> None:
-        '''
-        connect to server, create session and return default session configuration
-        '''
+        """
+        connect to server, create session and return default session configuration  # noqa: E501
+        """
         self.ws = websocket.WebSocketApp(
             self.url,
             header=self._get_websocket_header(),
@@ -184,40 +195,42 @@ class OmniRealtimeConversation:
         self.thread.start()
         timeout = 5  # 最长等待时间（秒）
         start_time = time.time()
-        while (not (self.ws.sock and self.ws.sock.connected)
-               and (time.time() - start_time) < timeout):
+        while (
+            not (self.ws.sock and self.ws.sock.connected)
+            and (time.time() - start_time) < timeout
+        ):
             time.sleep(0.1)  # 短暂休眠，避免密集轮询
         if not (self.ws.sock and self.ws.sock.connected):
             raise TimeoutError(
-                'websocket connection could not established within 5s. '
-                'Please check your network connection, firewall settings, or server status.'
+                "websocket connection could not established within 5s. "
+                "Please check your network connection, firewall settings, or server status.",  # noqa: E501  # pylint: disable=line-too-long
             )
         self.callback.on_open()
 
     def __send_str(self, data: str, enable_log: bool = True):
         if enable_log:
-            logger.debug('[omni realtime] send string: {}'.format(data))
+            logger.debug("[omni realtime] send string: %s", data)
         self.ws.send(data)
 
-    def update_session(self,
-                       output_modalities: List[MultiModality],
-                       voice: str = None,
-                       input_audio_format: AudioFormat = AudioFormat.
-                       PCM_16000HZ_MONO_16BIT,
-                       output_audio_format: AudioFormat = AudioFormat.
-                       PCM_24000HZ_MONO_16BIT,
-                       enable_input_audio_transcription: bool = True,
-                       input_audio_transcription_model: str = None,
-                       enable_turn_detection: bool = True,
-                       turn_detection_type: str = 'server_vad',
-                       prefix_padding_ms: int = 300,
-                       turn_detection_threshold: float = 0.2,
-                       turn_detection_silence_duration_ms: int = 800,
-                       turn_detection_param: dict = None,
-                       translation_params: TranslationParams = None,
-                       transcription_params: TranscriptionParams = None,
-                       **kwargs) -> None:
-        '''
+    def update_session(
+        self,
+        output_modalities: List[MultiModality],
+        voice: str = None,
+        input_audio_format: AudioFormat = AudioFormat.PCM_16000HZ_MONO_16BIT,
+        output_audio_format: AudioFormat = AudioFormat.PCM_24000HZ_MONO_16BIT,
+        enable_input_audio_transcription: bool = True,
+        input_audio_transcription_model: str = None,
+        enable_turn_detection: bool = True,
+        turn_detection_type: str = "server_vad",
+        prefix_padding_ms: int = 300,
+        turn_detection_threshold: float = 0.2,
+        turn_detection_silence_duration_ms: int = 800,
+        turn_detection_param: dict = None,
+        translation_params: TranslationParams = None,
+        transcription_params: TranscriptionParams = None,
+        **kwargs,
+    ) -> None:
+        """
         update session configuration, should be used before create response
 
         Parameters
@@ -234,69 +247,81 @@ class OmniRealtimeConversation:
             enable turn detection
         turn_detection_threshold: float
             turn detection threshold, range [-1, 1]
-            In a noisy environment, it may be necessary to increase the threshold to reduce false detections
-            In a quiet environment, it may be necessary to decrease the threshold to improve sensitivity
+            In a noisy environment, it may be necessary to increase the threshold to reduce false detections  # noqa: E501  # pylint: disable=line-too-long
+            In a quiet environment, it may be necessary to decrease the threshold to improve sensitivity  # noqa: E501  # pylint: disable=line-too-long
         turn_detection_silence_duration_ms: int
-            duration of silence in milliseconds to detect turn, range [200, 6000]
+            duration of silence in milliseconds to detect turn, range [200, 6000]  # noqa: E501
         translation_params: TranslationParams
-            translation params, include language. Only effective with qwen3-livetranslate-flash-realtime model or
+            translation params, include language. Only effective with qwen3-livetranslate-flash-realtime model or  # noqa: E501  # pylint: disable=line-too-long
              further models. Do not set this parameter for other models.
         transcription_params: TranscriptionParams
-            transcription params, include language, sample_rate, input_audio_format, corpus.
+            transcription params, include language, sample_rate, input_audio_format, corpus.  # noqa: E501  # pylint: disable=line-too-long
             Only effective with qwen3-asr-flash-realtime model or
             further models. Do not set this parameter for other models.
-        '''
+        """
         self.config = {
-            'modalities': [m.value for m in output_modalities],
-            'voice': voice,
-            'input_audio_format': input_audio_format.format_str,
-            'output_audio_format': output_audio_format.format_str,
+            "modalities": [m.value for m in output_modalities],
+            "voice": voice,
+            "input_audio_format": input_audio_format.format_str,
+            "output_audio_format": output_audio_format.format_str,
         }
         if enable_input_audio_transcription:
-            self.config['input_audio_transcription'] = {
-                'model': input_audio_transcription_model,
+            self.config["input_audio_transcription"] = {
+                "model": input_audio_transcription_model,
             }
         else:
-            self.config['input_audio_transcription'] = None
+            self.config["input_audio_transcription"] = None
         if enable_turn_detection:
-            self.config['turn_detection'] = {
-                'type': turn_detection_type,
-                'threshold': turn_detection_threshold,
-                'prefix_padding_ms': prefix_padding_ms,
-                'silence_duration_ms': turn_detection_silence_duration_ms,
+            self.config["turn_detection"] = {
+                "type": turn_detection_type,
+                "threshold": turn_detection_threshold,
+                "prefix_padding_ms": prefix_padding_ms,
+                "silence_duration_ms": turn_detection_silence_duration_ms,
             }
             if turn_detection_param is not None:
-                self.config['turn_detection'].update(turn_detection_param)
+                self.config["turn_detection"].update(turn_detection_param)
         else:
-            self.config['turn_detection'] = None
+            self.config["turn_detection"] = None
         if translation_params is not None:
-            self.config['translation'] = {
-                'language': translation_params.language,
+            self.config["translation"] = {
+                "language": translation_params.language,
             }
             if translation_params.corpus is not None:
-                if translation_params.corpus and translation_params.corpus.phrases is not None:
-                    self.config['translation']['corpus'] = {
-                        'phrases': translation_params.corpus.phrases
+                if (
+                    translation_params.corpus
+                    and translation_params.corpus.phrases is not None
+                ):
+                    self.config["translation"]["corpus"] = {
+                        "phrases": translation_params.corpus.phrases,
                     }
         if transcription_params is not None:
-            self.config['input_audio_transcription'] = {}
+            self.config["input_audio_transcription"] = {}
             if transcription_params.language is not None:
-                self.config['input_audio_transcription'].update({'language': transcription_params.language})
+                self.config["input_audio_transcription"].update(
+                    {"language": transcription_params.language},
+                )
             if transcription_params.corpus_text is not None:
                 transcription_params.corpus = {
-                    "text": transcription_params.corpus_text
+                    "text": transcription_params.corpus_text,
                 }
             if transcription_params.corpus is not None:
-                self.config['input_audio_transcription'].update({'corpus': transcription_params.corpus})
-            self.config['input_audio_format'] = transcription_params.input_audio_format
-            self.config['sample_rate'] = transcription_params.sample_rate
+                self.config["input_audio_transcription"].update(
+                    {"corpus": transcription_params.corpus},
+                )
+            self.config[
+                "input_audio_format"
+            ] = transcription_params.input_audio_format
+            self.config["sample_rate"] = transcription_params.sample_rate
         self.config.update(kwargs)
         self.__send_str(
-            json.dumps({
-                'event_id': self._generate_event_id(),
-                'type': 'session.update',
-                'session': self.config
-            }))
+            json.dumps(
+                {
+                    "event_id": self._generate_event_id(),
+                    "type": "session.update",
+                    "session": self.config,
+                },
+            ),
+        )
 
     def end_session(self, timeout: int = 20) -> None:
         """
@@ -305,7 +330,7 @@ class OmniRealtimeConversation:
         Parameters:
         -----------
         timeout: int
-            Timeout in seconds to wait for the session to end. Default is 20 seconds.
+            Timeout in seconds to wait for the session to end. Default is 20 seconds.  # noqa: E501
         """
         if self.disconnect_event is not None:
             # if the event is already set, do nothing
@@ -315,10 +340,13 @@ class OmniRealtimeConversation:
         self.disconnect_event = threading.Event()
 
         self.__send_str(
-            json.dumps({
-                'event_id': self._generate_event_id(),
-                'type': 'session.finish'
-            }))
+            json.dumps(
+                {
+                    "event_id": self._generate_event_id(),
+                    "type": "session.finish",
+                },
+            ),
+        )
 
         # wait for the event to be set
         finish_success = self.disconnect_event.wait(timeout)
@@ -328,79 +356,100 @@ class OmniRealtimeConversation:
         # if the event is not set, close the connection
         if not finish_success:
             self.close()
-            raise TimeoutError("Session end timeout after {} seconds".format(timeout))
+            raise TimeoutError(
+                f"Session end timeout after {timeout} seconds",
+            )
 
-    def end_session_async(self, ) -> None:
+    def end_session_async(self) -> None:
         """
         end session asynchronously. you need close the connection manually
         """
         # 发送结束会话消息
         self.__send_str(
-            json.dumps({
-                'event_id': self._generate_event_id(),
-                'type': 'session.finish'
-            }))
+            json.dumps(
+                {
+                    "event_id": self._generate_event_id(),
+                    "type": "session.finish",
+                },
+            ),
+        )
 
     def append_audio(self, audio_b64: str) -> None:
-        '''
+        """
         send audio in base64 format
 
         Parameters
         ----------
         audio_b64: str
             base64 audio string
-        '''
-        logger.debug('[omni realtime] append audio: {}'.format(len(audio_b64)))
+        """
+        logger.debug("[omni realtime] append audio: %s", len(audio_b64))
         self.__send_str(
-            json.dumps({
-                'event_id': self._generate_event_id(),
-                'type': 'input_audio_buffer.append',
-                'audio': audio_b64
-            }), False)
+            json.dumps(
+                {
+                    "event_id": self._generate_event_id(),
+                    "type": "input_audio_buffer.append",
+                    "audio": audio_b64,
+                },
+            ),
+            False,
+        )
 
     def append_video(self, video_b64: str) -> None:
-        '''
+        """
         send one image frame in video in base64 format
 
         Parameters
         ----------
         video_b64: str
             base64 image string
-        '''
-        logger.debug('[omni realtime] append video: {}'.format(len(video_b64)))
+        """
+        logger.debug("[omni realtime] append video: %s", len(video_b64))
         self.__send_str(
-            json.dumps({
-                'event_id': self._generate_event_id(),
-                'type': 'input_image_buffer.append',
-                'image': video_b64
-            }), False)
+            json.dumps(
+                {
+                    "event_id": self._generate_event_id(),
+                    "type": "input_image_buffer.append",
+                    "image": video_b64,
+                },
+            ),
+            False,
+        )
 
-    def commit(self, ) -> None:
-        '''
+    def commit(self) -> None:
+        """
         Commit the audio and video sent before.
         When in Server VAD mode, the client does not need to use this method,
         the server will commit the audio automatically after detecting vad end.
-        '''
+        """
         self.__send_str(
-            json.dumps({
-                'event_id': self._generate_event_id(),
-                'type': 'input_audio_buffer.commit'
-            }))
+            json.dumps(
+                {
+                    "event_id": self._generate_event_id(),
+                    "type": "input_audio_buffer.commit",
+                },
+            ),
+        )
 
-    def clear_appended_audio(self, ) -> None:
-        '''
+    def clear_appended_audio(self) -> None:
+        """
         clear the audio sent to server before.
-        '''
+        """
         self.__send_str(
-            json.dumps({
-                'event_id': self._generate_event_id(),
-                'type': 'input_audio_buffer.clear'
-            }))
+            json.dumps(
+                {
+                    "event_id": self._generate_event_id(),
+                    "type": "input_audio_buffer.clear",
+                },
+            ),
+        )
 
-    def create_response(self,
-                        instructions: str = None,
-                        output_modalities: List[MultiModality] = None) -> None:
-        '''
+    def create_response(
+        self,
+        instructions: str = None,
+        output_modalities: List[MultiModality] = None,
+    ) -> None:
+        """
         create response, use audio and video commited before to request llm.
         When in Server VAD mode, the client does not need to use this method,
         the server will create response automatically after detecting vad
@@ -412,110 +461,139 @@ class OmniRealtimeConversation:
             instructions to llm
         output_modalities: list[MultiModality]
             omni output modalities to be used in session
-        '''
+        """
         request = {
-            'event_id': self._generate_event_id(),
-            'type': 'response.create',
-            'response': {}
+            "event_id": self._generate_event_id(),
+            "type": "response.create",
+            "response": {},
         }
-        request['response']['instructions'] = instructions
+        request["response"]["instructions"] = instructions
         if output_modalities:
-            request['response']['modalities'] = [
+            request["response"]["modalities"] = [
                 m.value for m in output_modalities
             ]
         self.__send_str(json.dumps(request))
 
-    def cancel_response(self, ) -> None:
-        '''
+    def cancel_response(self) -> None:
+        """
         cancel the current response
-        '''
+        """
         self.__send_str(
-            json.dumps({
-                'event_id': self._generate_event_id(),
-                'type': 'response.cancel'
-            }))
+            json.dumps(
+                {
+                    "event_id": self._generate_event_id(),
+                    "type": "response.cancel",
+                },
+            ),
+        )
 
     def send_raw(self, raw_data: str) -> None:
-        '''
+        """
         send raw data to server
-        '''
+        """
         self.__send_str(raw_data)
 
-    def close(self, ) -> None:
-        '''
+    def close(self) -> None:
+        """
         close the connection to server
-        '''
+        """
         self.ws.close()
 
     # 监听消息的回调函数
-    def on_message(self, ws, message):
+    def on_message(  # pylint: disable=unused-argument,too-many-branches
+        self,
+        ws,
+        message,
+    ):
         if isinstance(message, str):
-            logger.debug('[omni realtime] receive string {}'.format(
-                message[:1024]))
+            logger.debug(
+                "[omni realtime] receive string %s",
+                message[:1024],
+            )
             try:
                 # 尝试将消息解析为JSON
                 json_data = json.loads(message)
                 self.last_message = json_data
                 self.callback.on_event(json_data)
-                if 'type' in message:
-                    if 'session.created' == json_data['type']:
-                        logger.info('[omni realtime] session created')
-                        self.session_id = json_data['session']['id']
-                    elif 'session.finished' == json_data['type']:
+                if "type" in message:
+                    if "session.created" == json_data["type"]:
+                        logger.info("[omni realtime] session created")
+                        self.session_id = json_data["session"]["id"]
+                    elif "session.finished" == json_data["type"]:
                         # wait for the event to be set
-                        logger.info('[omni realtime] session finished')
+                        logger.info("[omni realtime] session finished")
                         if self.disconnect_event is not None:
                             self.disconnect_event.set()
-                    if 'response.created' == json_data['type']:
-                        self.last_response_id = json_data['response']['id']
+                    if "response.created" == json_data["type"]:
+                        self.last_response_id = json_data["response"]["id"]
                         self.last_response_create_time = time.time() * 1000
                         self.last_first_audio_delay = None
                         self.last_first_text_delay = None
-                    elif 'response.audio_transcript.delta' == json_data[
-                            'type']:
-                        if self.last_response_create_time and self.last_first_text_delay is None:
-                            self.last_first_text_delay = time.time(
-                            ) * 1000 - self.last_response_create_time
-                    elif 'response.audio.delta' == json_data['type']:
-                        if self.last_response_create_time and self.last_first_audio_delay is None:
-                            self.last_first_audio_delay = time.time(
-                            ) * 1000 - self.last_response_create_time
-                    elif 'response.done' == json_data['type']:
+                    elif (
+                        "response.audio_transcript.delta" == json_data["type"]
+                    ):
+                        if (
+                            self.last_response_create_time
+                            and self.last_first_text_delay is None
+                        ):
+                            self.last_first_text_delay = (
+                                time.time() * 1000
+                                - self.last_response_create_time
+                            )
+                    elif "response.audio.delta" == json_data["type"]:
+                        if (
+                            self.last_response_create_time
+                            and self.last_first_audio_delay is None
+                        ):
+                            self.last_first_audio_delay = (
+                                time.time() * 1000
+                                - self.last_response_create_time
+                            )
+                    elif "response.done" == json_data["type"]:
+                        # pylint: disable=line-too-long
                         logger.info(
-                            '[Metric] response: {}, first text delay: {}, first audio delay: {}'
-                            .format(self.last_response_id,
-                                    self.last_first_text_delay,
-                                    self.last_first_audio_delay))
+                            "[Metric] response: %s, first text delay: %s, first audio delay: %s",  # noqa: E501
+                            self.last_response_id,
+                            self.last_first_text_delay,
+                            self.last_first_audio_delay,
+                        )
             except json.JSONDecodeError:
-                logger.error('Failed to parse message as JSON.')
-                raise Exception('Failed to parse message as JSON.')
+                logger.error("Failed to parse message as JSON.")
+                # pylint: disable=broad-exception-raised,raise-missing-from
+                raise Exception("Failed to parse message as JSON.")
         elif isinstance(message, (bytes, bytearray)):
             # 如果失败，认为是二进制消息
             logger.error(
-                'should not receive binary message in omni realtime api')
-            logger.debug('[omni realtime] receive binary {} bytes'.format(
-                len(message)))
+                "should not receive binary message in omni realtime api",
+            )
+            logger.debug(
+                "[omni realtime] receive binary %s bytes",
+                len(message),
+            )
 
-    def on_close(self, ws, close_status_code, close_msg):
+    def on_close(  # pylint: disable=unused-argument
+        self,
+        ws,
+        close_status_code,
+        close_msg,
+    ):
         self.callback.on_close(close_status_code, close_msg)
 
     # WebSocket发生错误的回调函数
-    def on_error(self, ws, error):
-        print(f'websocket closed due to {error}')
-        raise Exception(f'websocket closed due to {error}')
+    def on_error(self, ws, error):  # pylint: disable=unused-argument
+        print(f"websocket closed due to {error}")
+        # pylint: disable=broad-exception-raised
+        raise Exception(f"websocket closed due to {error}")
 
     # 获取上一个任务的taskId
     def get_session_id(self) -> str:
-        return self.session_id
+        return self.session_id  # type: ignore[return-value]
 
     def get_last_message(self) -> str:
-        return self.last_message
-
-    def get_last_message(self) -> str:
-        return self.last_message
+        return self.last_message  # type: ignore[return-value]
 
     def get_last_response_id(self) -> str:
-        return self.last_response_id
+        return self.last_response_id  # type: ignore[return-value]
 
     def get_last_first_text_delay(self):
         return self.last_first_text_delay

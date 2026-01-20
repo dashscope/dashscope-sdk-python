@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import os
@@ -8,7 +9,7 @@ from dashscope.tokenizers.qwen_tokenizer import QwenTokenizer
 
 from .tokenizer_base import Tokenizer
 
-QWEN_SERIALS = ['qwen-7b-chat', 'qwen-turbo', 'qwen-plus', 'qwen-max']
+QWEN_SERIALS = ["qwen-7b-chat", "qwen-turbo", "qwen-plus", "qwen-max"]
 current_path = os.path.dirname(os.path.abspath(__file__))
 root_path = os.path.dirname(current_path)
 
@@ -27,13 +28,16 @@ def get_tokenizer(model: str) -> Tokenizer:
     """
     if model in QWEN_SERIALS:
         return QwenTokenizer(
-            os.path.join(root_path, 'resources', 'qwen.tiktoken'))
-    elif model.startswith('qwen'):
+            os.path.join(root_path, "resources", "qwen.tiktoken"),
+        )
+    elif model.startswith("qwen"):
         return QwenTokenizer(
-            os.path.join(root_path, 'resources', 'qwen.tiktoken'))
+            os.path.join(root_path, "resources", "qwen.tiktoken"),
+        )
     else:
         raise UnsupportedModel(
-            f'Not support model: {model}, currently only support qwen models.')
+            f"Not support model: {model}, currently only support qwen models.",
+        )
 
 
 def list_tokenizers() -> List[str]:

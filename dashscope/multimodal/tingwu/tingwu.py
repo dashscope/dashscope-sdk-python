@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from typing import Dict, Any
 
 from dashscope.api_entities.api_request_factory import _build_api_request
@@ -7,22 +8,20 @@ from dashscope.common.error import ModelRequired
 
 
 class TingWu(BaseApi):
-    """API for TingWu APP.
-
-    """
+    """API for TingWu APP."""
 
     task = None
     task_group = None
     function = None
 
     @classmethod
-    def call(
-            cls,
-            model: str,
-            user_defined_input: Dict[str, Any],
-            parameters: Dict[str, Any] = None,
-            api_key: str = None,
-            **kwargs
+    def call(  # type: ignore[override]
+        cls,
+        model: str,
+        user_defined_input: Dict[str, Any],
+        parameters: Dict[str, Any] = None,
+        api_key: str = None,
+        **kwargs,
     ) -> DashScopeAPIResponse:
         """Call generation model service.
 
@@ -45,29 +44,34 @@ class TingWu(BaseApi):
             stream is True, return Generator, otherwise GenerationResponse.
         """
         if model is None or not model:
-            raise ModelRequired('Model is required!')
-        input_config, parameters = cls._build_input_parameters(input_config=user_defined_input,
-                                                               params=parameters,
-                                                               **kwargs)
+            raise ModelRequired("Model is required!")
+        input_config, parameters = cls._build_input_parameters(
+            input_config=user_defined_input,
+            params=parameters,
+            **kwargs,
+        )
 
         request = _build_api_request(
             model=model,
             input=input_config,
             api_key=api_key,
-            task_group=TingWu.task_group,
-            task=TingWu.task,
-            function=TingWu.function,
+            task_group=TingWu.task_group,  # type: ignore[arg-type]
+            task=TingWu.task,  # type: ignore[arg-type]
+            function=TingWu.function,  # type: ignore[arg-type]
             is_service=False,
-            **parameters)
+            **parameters,
+        )
         response = request.call()
 
         return response
 
     @classmethod
-    def _build_input_parameters(cls,
-                                input_config,
-                                params: Dict[str, Any] = None,
-                                **kwargs):
+    def _build_input_parameters(
+        cls,
+        input_config,
+        params: Dict[str, Any] = None,
+        **kwargs,
+    ):
         parameters = {}
         if params is not None:
             parameters = params
@@ -75,6 +79,6 @@ class TingWu(BaseApi):
         input_param = input_config
 
         if kwargs.keys() is not None:
-            for key in kwargs.keys():
+            for key in kwargs:  # pylint: disable=consider-using-dict-items
                 parameters[key] = kwargs[key]
         return input_param, {**parameters, **kwargs}

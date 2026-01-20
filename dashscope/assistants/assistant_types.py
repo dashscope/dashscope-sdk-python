@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 # adapter from openai sdk
@@ -7,9 +8,16 @@ from typing import Dict, List, Optional, Union
 from dashscope.common.base_type import BaseList, BaseObjectMixin
 
 __all__ = [
-    'Assistant', 'AssistantFile', 'ToolCodeInterpreter', 'ToolSearch',
-    'ToolWanX', 'FunctionDefinition', 'ToolFunction', 'AssistantFileList',
-    'AssistantList', 'DeleteResponse'
+    "Assistant",
+    "AssistantFile",
+    "ToolCodeInterpreter",
+    "ToolSearch",
+    "ToolWanX",
+    "FunctionDefinition",
+    "ToolFunction",
+    "AssistantFileList",
+    "AssistantList",
+    "DeleteResponse",
 ]
 
 
@@ -20,31 +28,31 @@ class AssistantFile(BaseObjectMixin):
     created_at: int
     object: str
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
 @dataclass(init=False)
 class ToolCodeInterpreter(BaseObjectMixin):
-    type: str = 'code_interpreter'
+    type: str = "code_interpreter"
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
 @dataclass(init=False)
 class ToolSearch(BaseObjectMixin):
-    type: str = 'search'
+    type: str = "search"
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
 @dataclass(init=False)
 class ToolWanX(BaseObjectMixin):
-    type: str = 'wanx'
+    type: str = "wanx"
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
@@ -54,34 +62,34 @@ class FunctionDefinition(BaseObjectMixin):
     description: Optional[str] = None
     parameters: Optional[Dict[str, object]] = None
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)
 
 
 @dataclass(init=False)
 class ToolFunction(BaseObjectMixin):
     function: FunctionDefinition
-    type: str = 'function'
+    type: str = "function"
 
     def __init__(self, **kwargs):
-        self.function = FunctionDefinition(**kwargs.pop('function', {}))
+        self.function = FunctionDefinition(**kwargs.pop("function", {}))
         super().__init__(**kwargs)
 
 
 Tool = Union[ToolCodeInterpreter, ToolSearch, ToolFunction, ToolWanX]
 ASSISTANT_SUPPORT_TOOL = {
-    'code_interpreter': ToolCodeInterpreter,
-    'search': ToolSearch,
-    'wanx': ToolWanX,
-    'function': ToolFunction
+    "code_interpreter": ToolCodeInterpreter,
+    "search": ToolSearch,
+    "wanx": ToolWanX,
+    "function": ToolFunction,
 }
 
 
 def convert_tools_dict_to_objects(tools):
     tools_object = []
     for tool in tools:
-        if 'type' in tool:
-            tool_type = ASSISTANT_SUPPORT_TOOL.get(tool['type'], None)
+        if "type" in tool:
+            tool_type = ASSISTANT_SUPPORT_TOOL.get(tool["type"], None)
             if tool_type:
                 tools_object.append(tool_type(**tool))
             else:
@@ -107,16 +115,16 @@ class Assistant(BaseObjectMixin):
     """
     model: str
     name: Optional[str] = None
-    created_at: int
+    created_at: int  # type: ignore[misc]
     """The Unix timestamp (in seconds) for when the assistant was created.
     """
     description: Optional[str] = None
 
-    file_ids: List[str]
+    file_ids: List[str]  # type: ignore[misc]
 
     instructions: Optional[str] = None
     metadata: Optional[object] = None
-    tools: List[Tool]
+    tools: List[Tool]  # type: ignore[misc]
 
     object: Optional[str] = None
 
@@ -128,7 +136,7 @@ class Assistant(BaseObjectMixin):
     request_id: Optional[str] = None
 
     def __init__(self, **kwargs):
-        self.tools = convert_tools_dict_to_objects(kwargs.pop('tools', []))
+        self.tools = convert_tools_dict_to_objects(kwargs.pop("tools", []))
         super().__init__(**kwargs)
 
 
@@ -136,34 +144,44 @@ class Assistant(BaseObjectMixin):
 class AssistantList(BaseList):
     data: List[Assistant]
 
-    def __init__(self,
-                 has_more: bool = None,
-                 last_id: Optional[str] = None,
-                 first_id: Optional[str] = None,
-                 data: List[Assistant] = [],
-                 **kwargs):
-        super().__init__(has_more=has_more,
-                         last_id=last_id,
-                         first_id=first_id,
-                         data=data,
-                         **kwargs)
+    # pylint: disable=dangerous-default-value
+    def __init__(
+        self,
+        has_more: bool = None,
+        last_id: Optional[str] = None,
+        first_id: Optional[str] = None,
+        data: List[Assistant] = [],
+        **kwargs,
+    ):
+        super().__init__(
+            has_more=has_more,
+            last_id=last_id,
+            first_id=first_id,
+            data=data,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
 class AssistantFileList(BaseList):
     data: List[AssistantFile]
 
-    def __init__(self,
-                 has_more: bool = None,
-                 last_id: Optional[str] = None,
-                 first_id: Optional[str] = None,
-                 data: List[AssistantFile] = [],
-                 **kwargs):
-        super().__init__(has_more=has_more,
-                         last_id=last_id,
-                         first_id=first_id,
-                         data=data,
-                         **kwargs)
+    # pylint: disable=dangerous-default-value
+    def __init__(
+        self,
+        has_more: bool = None,
+        last_id: Optional[str] = None,
+        first_id: Optional[str] = None,
+        data: List[AssistantFile] = [],
+        **kwargs,
+    ):
+        super().__init__(
+            has_more=has_more,
+            last_id=last_id,
+            first_id=first_id,
+            data=data,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
@@ -171,5 +189,5 @@ class DeleteResponse(BaseObjectMixin):
     id: str
     deleted: bool
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):  # pylint: disable=useless-parent-delegation
         super().__init__(**kwargs)

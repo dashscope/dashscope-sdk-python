@@ -1,11 +1,14 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from http import HTTPStatus
 
 from attr import dataclass
 
-from dashscope.api_entities.dashscope_response import (DashScopeAPIResponse,
-                                                       DictMixin)
+from dashscope.api_entities.dashscope_response import (
+    DashScopeAPIResponse,
+    DictMixin,
+)
 
 
 @dataclass(init=False)
@@ -14,23 +17,27 @@ class BatchTextEmbeddingOutput(DictMixin):
     task_status: str
     url: str
 
-    def __init__(self,
-                 task_id: str,
-                 task_status: str,
-                 url: str = None,
-                 **kwargs):
-        super().__init__(self,
-                         task_id=task_id,
-                         task_status=task_status,
-                         url=url,
-                         **kwargs)
+    def __init__(
+        self,
+        task_id: str,
+        task_status: str,
+        url: str = None,
+        **kwargs,
+    ):
+        super().__init__(
+            self,
+            task_id=task_id,
+            task_status=task_status,
+            url=url,
+            **kwargs,
+        )
 
 
 @dataclass(init=False)
 class BatchTextEmbeddingUsage(DictMixin):
     total_tokens: int
 
-    def __init__(self, total_tokens: int=None, **kwargs):
+    def __init__(self, total_tokens: int = None, **kwargs):
         super().__init__(total_tokens=total_tokens, **kwargs)
 
 
@@ -55,11 +62,13 @@ class BatchTextEmbeddingResponse(DashScopeAPIResponse):
                 code=api_response.code,
                 message=api_response.message,
                 output=output,
-                usage=usage)
+                usage=usage,
+            )
 
         else:
             return BatchTextEmbeddingResponse(
                 status_code=api_response.status_code,
                 request_id=api_response.request_id,
                 code=api_response.code,
-                message=api_response.message)
+                message=api_response.message,
+            )

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import json
 
@@ -5,7 +6,6 @@ from dashscope.api_entities.encryption import Encryption
 
 
 class TestEncryption:
-
     @staticmethod
     def test_get_public_keys():
         pub_keys = Encryption._get_public_keys()
@@ -34,9 +34,11 @@ class TestEncryption:
     @staticmethod
     def test_encrypt_aes_key_with_rsa():
         public_keys = Encryption._get_public_keys()
-        public_key = public_keys.get('public_key')
+        public_key = public_keys.get("public_key")
         aes_key = Encryption._generate_aes_secret_key()
 
-        cipher_aes_key = Encryption._encrypt_aes_key_with_rsa(aes_key, public_key)
+        cipher_aes_key = Encryption._encrypt_aes_key_with_rsa(
+            aes_key,
+            public_key,
+        )
         print(f"\ncipher_aes_key: {cipher_aes_key}")
-

@@ -1,15 +1,23 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import copy
 import json
 from typing import Any, Dict, Generator, List, Union, AsyncGenerator
 
-from dashscope.api_entities.dashscope_response import (GenerationResponse,
-                                                       Message, Role)
+from dashscope.api_entities.dashscope_response import (
+    GenerationResponse,
+    Message,
+    Role,
+)
 from dashscope.client.base_api import BaseAioApi, BaseApi
-from dashscope.common.constants import (CUSTOMIZED_MODEL_ID,
-                                        DEPRECATED_MESSAGE, HISTORY, MESSAGES,
-                                        PROMPT)
+from dashscope.common.constants import (
+    CUSTOMIZED_MODEL_ID,
+    DEPRECATED_MESSAGE,
+    HISTORY,
+    MESSAGES,
+    PROMPT,
+)
 from dashscope.common.error import InputRequired, ModelRequired
 from dashscope.common.logging import logger
 from dashscope.common.utils import _get_task_group_and_task
@@ -18,24 +26,27 @@ from dashscope.utils.message_utils import merge_single_response
 
 
 class Generation(BaseApi):
-    task = 'text-generation'
+    task = "text-generation"
     """API for AI-Generated Content(AIGC) models.
 
     """
+
     class Models:
         """@deprecated, use qwen_turbo instead"""
-        qwen_v1 = 'qwen-v1'
-        """@deprecated, use qwen_plus instead"""
-        qwen_plus_v1 = 'qwen-plus-v1'
 
-        bailian_v1 = 'bailian-v1'
-        dolly_12b_v2 = 'dolly-12b-v2'
-        qwen_turbo = 'qwen-turbo'
-        qwen_plus = 'qwen-plus'
-        qwen_max = 'qwen-max'
+        qwen_v1 = "qwen-v1"
+        """@deprecated, use qwen_plus instead"""
+        qwen_plus_v1 = "qwen-plus-v1"
+
+        bailian_v1 = "bailian-v1"
+        dolly_12b_v2 = "dolly-12b-v2"
+        qwen_turbo = "qwen-turbo"
+        qwen_plus = "qwen-plus"
+        qwen_max = "qwen-max"
 
     @classmethod
-    def call(
+    # type: ignore[override]
+    def call(  # pylint: disable=arguments-renamed  # type: ignore[override]
         cls,
         model: str,
         prompt: Any = None,
@@ -44,7 +55,7 @@ class Generation(BaseApi):
         messages: List[Message] = None,
         plugins: Union[str, Dict[str, Any]] = None,
         workspace: str = None,
-        **kwargs
+        **kwargs,
     ) -> Union[GenerationResponse, Generator[GenerationResponse, None, None]]:
         """Call generation model service.
 
@@ -66,7 +77,7 @@ class Generation(BaseApi):
             plugins (Any): The plugin config. Can be plugins config str, or dict.
             **kwargs:
                 stream(bool, `optional`): Enable server-sent events
-                    (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501
+                    (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501  # pylint: disable=line-too-long
                     the result will back partially[qwen-turbo,bailian-v1].
                 temperature(float, `optional`): Used to control the degree
                     of randomness and diversity. Specifically, the temperature
@@ -84,8 +95,8 @@ class Generation(BaseApi):
                     tokens with top_p probability mass. So 0.1 means only
                     the tokens comprising the top 10% probability mass are
                     considered[qwen-turbo,bailian-v1].
-                top_k(int, `optional`): The size of the sample candidate set when generated.  # noqa E501
-                    For example, when the value is 50, only the 50 highest-scoring tokens  # noqa E501
+                top_k(int, `optional`): The size of the sample candidate set when generated.  # noqa E501  # pylint: disable=line-too-long
+                    For example, when the value is 50, only the 50 highest-scoring tokens  # noqa E501  # pylint: disable=line-too-long
                     in a single generation form a randomly sampled candidate set. # noqa E501
                     The larger the value, the higher the randomness generated;  # noqa E501
                     the smaller the value, the higher the certainty generated. # noqa E501
@@ -100,20 +111,20 @@ class Generation(BaseApi):
                     large model product, support model: [bailian-v1].
                 result_format(str, `optional`): [message|text] Set result result format. # noqa E501
                     Default result is text
-                incremental_output(bool, `optional`): Used to control the streaming output mode. # noqa E501
-                    If true, the subsequent output will include the previously input content. # noqa E501
-                    Otherwise, the subsequent output will not include the previously output # noqa E501
+                incremental_output(bool, `optional`): Used to control the streaming output mode. # noqa E501  # pylint: disable=line-too-long
+                    If true, the subsequent output will include the previously input content. # noqa E501  # pylint: disable=line-too-long
+                    Otherwise, the subsequent output will not include the previously output # noqa E501  # pylint: disable=line-too-long
                     content. Default false.
-                stop(list[str] or list[list[int]], `optional`): Used to control the generation to stop  # noqa E501
-                    when encountering setting str or token ids, the result will not include # noqa E501
+                stop(list[str] or list[list[int]], `optional`): Used to control the generation to stop  # noqa E501  # pylint: disable=line-too-long
+                    when encountering setting str or token ids, the result will not include # noqa E501  # pylint: disable=line-too-long
                     stop words or tokens.
-                max_tokens(int, `optional`): The maximum token num expected to be output. It should be # noqa E501
-                    noted that the length generated by the model will only be less than max_tokens,  # noqa E501
-                    not necessarily equal to it. If max_tokens is set too large, the service will # noqa E501
+                max_tokens(int, `optional`): The maximum token num expected to be output. It should be # noqa E501  # pylint: disable=line-too-long
+                    noted that the length generated by the model will only be less than max_tokens,  # noqa E501  # pylint: disable=line-too-long
+                    not necessarily equal to it. If max_tokens is set too large, the service will # noqa E501  # pylint: disable=line-too-long
                     directly prompt that the length exceeds the limit. It is generally # noqa E501
                     not recommended to set this value.
-                repetition_penalty(float, `optional`): Used to control the repeatability when generating models.  # noqa E501
-                    Increasing repetition_penalty can reduce the duplication of model generation.  # noqa E501
+                repetition_penalty(float, `optional`): Used to control the repeatability when generating models.  # noqa E501  # pylint: disable=line-too-long
+                    Increasing repetition_penalty can reduce the duplication of model generation.  # noqa E501  # pylint: disable=line-too-long
                     1.0 means no punishment.
             workspace (str): The dashscope workspace id.
         Raises:
@@ -124,69 +135,95 @@ class Generation(BaseApi):
                   Generator[GenerationResponse, None, None]]: If
             stream is True, return Generator, otherwise GenerationResponse.
         """
-        if (prompt is None or not prompt) and (messages is None
-                                               or not messages):
-            raise InputRequired('prompt or messages is required!')
+        if (prompt is None or not prompt) and (
+            messages is None or not messages
+        ):
+            raise InputRequired("prompt or messages is required!")
         if model is None or not model:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         task_group, function = _get_task_group_and_task(__name__)
         if plugins is not None:
-            headers = kwargs.pop('headers', {})
+            headers = kwargs.pop("headers", {})
             if isinstance(plugins, str):
-                headers['X-DashScope-Plugin'] = plugins
+                headers["X-DashScope-Plugin"] = plugins
             else:
-                headers['X-DashScope-Plugin'] = json.dumps(plugins)
-            kwargs['headers'] = headers
-        input, parameters = cls._build_input_parameters(
-            model, prompt, history, messages, **kwargs)
+                headers["X-DashScope-Plugin"] = json.dumps(plugins)
+            kwargs["headers"] = headers
+        (
+            input,  # pylint: disable=redefined-builtin
+            parameters,
+        ) = cls._build_input_parameters(
+            model,
+            prompt,
+            history,
+            messages,
+            **kwargs,
+        )
 
-        is_stream = parameters.get('stream', False)
+        is_stream = parameters.get("stream", False)
         # Check if we need to merge incremental output
-        is_incremental_output = kwargs.get('incremental_output', None)
+        is_incremental_output = kwargs.get("incremental_output", None)
         to_merge_incremental_output = False
-        if (ParamUtil.should_modify_incremental_output(model) and
-                is_stream and is_incremental_output is False):
+        if (
+            ParamUtil.should_modify_incremental_output(model)
+            and is_stream
+            and is_incremental_output is False
+        ):
             to_merge_incremental_output = True
-            parameters['incremental_output'] = True
+            parameters["incremental_output"] = True
 
         # Pass incremental_to_full flag via headers user-agent
-        if 'headers' not in parameters:
-            parameters['headers'] = {}
-        flag = '1' if to_merge_incremental_output else '0'
-        parameters['headers']['user-agent'] = f'incremental_to_full/{flag}'
+        if "headers" not in parameters:
+            parameters["headers"] = {}
+        flag = "1" if to_merge_incremental_output else "0"
+        parameters["headers"]["user-agent"] = f"incremental_to_full/{flag}"
 
-        response = super().call(model=model,
-                                task_group=task_group,
-                                task=Generation.task,
-                                function=function,
-                                api_key=api_key,
-                                input=input,
-                                workspace=workspace,
-                                **parameters)
+        response = super().call(
+            model=model,
+            task_group=task_group,
+            task=Generation.task,
+            function=function,
+            api_key=api_key,
+            input=input,
+            workspace=workspace,
+            **parameters,
+        )
         if is_stream:
             if to_merge_incremental_output:
                 # Extract n parameter for merge logic
-                n = parameters.get('n', 1)
+                n = parameters.get("n", 1)
                 return cls._merge_generation_response(response, n)
             else:
-                return (GenerationResponse.from_api_response(rsp)
-                        for rsp in response)
+                return (
+                    GenerationResponse.from_api_response(rsp)
+                    for rsp in response
+                )
         else:
             return GenerationResponse.from_api_response(response)
 
     @classmethod
-    def _build_input_parameters(cls, model, prompt, history, messages,
-                                **kwargs):
+    def _build_input_parameters(
+        cls,
+        model,
+        prompt,
+        history,
+        messages,
+        **kwargs,
+    ):
         if model == Generation.Models.qwen_v1:
             logger.warning(
-                'Model %s is deprecated, use %s instead!' %
-                (Generation.Models.qwen_v1, Generation.Models.qwen_turbo))
+                "Model %s is deprecated, use %s instead!",
+                Generation.Models.qwen_v1,
+                Generation.Models.qwen_turbo,
+            )
         if model == Generation.Models.qwen_plus_v1:
             logger.warning(
-                'Model %s is deprecated, use %s instead!' %
-                (Generation.Models.qwen_plus_v1, Generation.Models.qwen_plus))
+                "Model %s is deprecated, use %s instead!",
+                Generation.Models.qwen_plus_v1,
+                Generation.Models.qwen_plus,
+            )
         parameters = {}
-        input = {}
+        input = {}  # pylint: disable=redefined-builtin
         if history is not None:
             logger.warning(DEPRECATED_MESSAGE)
             input[HISTORY] = history
@@ -195,31 +232,40 @@ class Generation(BaseApi):
         elif messages is not None:
             msgs = copy.deepcopy(messages)
             if prompt is not None and prompt:
-                msgs.append({'role': Role.USER, 'content': prompt})
+                msgs.append({"role": Role.USER, "content": prompt})
             input = {MESSAGES: msgs}
         else:
             input[PROMPT] = prompt
 
-        if model.startswith('qwen'):
-            enable_search = kwargs.pop('enable_search', False)
+        if model.startswith("qwen"):
+            enable_search = kwargs.pop("enable_search", False)
             if enable_search:
-                parameters['enable_search'] = enable_search
-        elif model.startswith('bailian'):
-            customized_model_id = kwargs.pop('customized_model_id', None)
+                parameters["enable_search"] = enable_search
+        elif model.startswith("bailian"):
+            customized_model_id = kwargs.pop("customized_model_id", None)
             if customized_model_id is None:
-                raise InputRequired('customized_model_id is required for %s' %
-                                    model)
+                raise InputRequired(
+                    f"customized_model_id is required for {model}",
+                )
             input[CUSTOMIZED_MODEL_ID] = customized_model_id
 
         return input, {**parameters, **kwargs}
 
     @classmethod
-    def _merge_generation_response(cls, response, n=1) -> Generator[GenerationResponse, None, None]:
-        """Merge incremental response chunks to simulate non-incremental output."""
+    def _merge_generation_response(
+        cls,
+        response,
+        n=1,
+    ) -> Generator[GenerationResponse, None, None]:
+        """Merge incremental response chunks to simulate non-incremental output."""  # noqa: E501
         accumulated_data = {}
         for rsp in response:
             parsed_response = GenerationResponse.from_api_response(rsp)
-            result = merge_single_response(parsed_response, accumulated_data, n)
+            result = merge_single_response(
+                parsed_response,
+                accumulated_data,
+                n,
+            )
             if result is True:
                 yield parsed_response
             elif isinstance(result, list):
@@ -229,24 +275,28 @@ class Generation(BaseApi):
 
 
 class AioGeneration(BaseAioApi):
-    task = 'text-generation'
+    task = "text-generation"
     """API for AI-Generated Content(AIGC) models.
 
     """
+
     class Models:
         """@deprecated, use qwen_turbo instead"""
-        qwen_v1 = 'qwen-v1'
+
+        qwen_v1 = "qwen-v1"
         """@deprecated, use qwen_plus instead"""
-        qwen_plus_v1 = 'qwen-plus-v1'
+        qwen_plus_v1 = "qwen-plus-v1"
 
-        bailian_v1 = 'bailian-v1'
-        dolly_12b_v2 = 'dolly-12b-v2'
-        qwen_turbo = 'qwen-turbo'
-        qwen_plus = 'qwen-plus'
-        qwen_max = 'qwen-max'
+        bailian_v1 = "bailian-v1"
+        dolly_12b_v2 = "dolly-12b-v2"
+        qwen_turbo = "qwen-turbo"
+        qwen_plus = "qwen-plus"
+        qwen_max = "qwen-max"
 
+    # type: ignore[override]
     @classmethod
-    async def call(
+    async def call(  # type: ignore[override] # pylint: disable=arguments-renamed # noqa: E501
+        # type: ignore[override]
         cls,
         model: str,
         prompt: Any = None,
@@ -255,7 +305,7 @@ class AioGeneration(BaseAioApi):
         messages: List[Message] = None,
         plugins: Union[str, Dict[str, Any]] = None,
         workspace: str = None,
-        **kwargs
+        **kwargs,
     ) -> Union[GenerationResponse, AsyncGenerator[GenerationResponse, None]]:
         """Call generation model service.
 
@@ -277,7 +327,7 @@ class AioGeneration(BaseAioApi):
             plugins (Any): The plugin config. Can be plugins config str, or dict.
             **kwargs:
                 stream(bool, `optional`): Enable server-sent events
-                    (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501
+                    (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501  # pylint: disable=line-too-long
                     the result will back partially[qwen-turbo,bailian-v1].
                 temperature(float, `optional`): Used to control the degree
                     of randomness and diversity. Specifically, the temperature
@@ -295,8 +345,8 @@ class AioGeneration(BaseAioApi):
                     tokens with top_p probability mass. So 0.1 means only
                     the tokens comprising the top 10% probability mass are
                     considered[qwen-turbo,bailian-v1].
-                top_k(int, `optional`): The size of the sample candidate set when generated.  # noqa E501
-                    For example, when the value is 50, only the 50 highest-scoring tokens  # noqa E501
+                top_k(int, `optional`): The size of the sample candidate set when generated.  # noqa E501  # pylint: disable=line-too-long
+                    For example, when the value is 50, only the 50 highest-scoring tokens  # noqa E501  # pylint: disable=line-too-long
                     in a single generation form a randomly sampled candidate set. # noqa E501
                     The larger the value, the higher the randomness generated;  # noqa E501
                     the smaller the value, the higher the certainty generated. # noqa E501
@@ -311,20 +361,20 @@ class AioGeneration(BaseAioApi):
                     large model product, support model: [bailian-v1].
                 result_format(str, `optional`): [message|text] Set result result format. # noqa E501
                     Default result is text
-                incremental_output(bool, `optional`): Used to control the streaming output mode. # noqa E501
-                    If true, the subsequent output will include the previously input content. # noqa E501
-                    Otherwise, the subsequent output will not include the previously output # noqa E501
+                incremental_output(bool, `optional`): Used to control the streaming output mode. # noqa E501  # pylint: disable=line-too-long
+                    If true, the subsequent output will include the previously input content. # noqa E501  # pylint: disable=line-too-long
+                    Otherwise, the subsequent output will not include the previously output # noqa E501  # pylint: disable=line-too-long
                     content. Default false.
-                stop(list[str] or list[list[int]], `optional`): Used to control the generation to stop  # noqa E501
-                    when encountering setting str or token ids, the result will not include # noqa E501
+                stop(list[str] or list[list[int]], `optional`): Used to control the generation to stop  # noqa E501  # pylint: disable=line-too-long
+                    when encountering setting str or token ids, the result will not include # noqa E501  # pylint: disable=line-too-long
                     stop words or tokens.
-                max_tokens(int, `optional`): The maximum token num expected to be output. It should be # noqa E501
-                    noted that the length generated by the model will only be less than max_tokens,  # noqa E501
-                    not necessarily equal to it. If max_tokens is set too large, the service will # noqa E501
+                max_tokens(int, `optional`): The maximum token num expected to be output. It should be # noqa E501  # pylint: disable=line-too-long
+                    noted that the length generated by the model will only be less than max_tokens,  # noqa E501  # pylint: disable=line-too-long
+                    not necessarily equal to it. If max_tokens is set too large, the service will # noqa E501  # pylint: disable=line-too-long
                     directly prompt that the length exceeds the limit. It is generally # noqa E501
                     not recommended to set this value.
-                repetition_penalty(float, `optional`): Used to control the repeatability when generating models.  # noqa E501
-                    Increasing repetition_penalty can reduce the duplication of model generation.  # noqa E501
+                repetition_penalty(float, `optional`): Used to control the repeatability when generating models.  # noqa E501  # pylint: disable=line-too-long
+                    Increasing repetition_penalty can reduce the duplication of model generation.  # noqa E501  # pylint: disable=line-too-long
                     1.0 means no punishment.
             workspace (str): The dashscope workspace id.
         Raises:
@@ -335,49 +385,64 @@ class AioGeneration(BaseAioApi):
                   AsyncGenerator[GenerationResponse, None]]: If
             stream is True, return AsyncGenerator, otherwise GenerationResponse.
         """
-        if (prompt is None or not prompt) and (messages is None
-                                               or not messages):
-            raise InputRequired('prompt or messages is required!')
+        if (prompt is None or not prompt) and (
+            messages is None or not messages
+        ):
+            raise InputRequired("prompt or messages is required!")
         if model is None or not model:
-            raise ModelRequired('Model is required!')
+            raise ModelRequired("Model is required!")
         task_group, function = _get_task_group_and_task(__name__)
         if plugins is not None:
-            headers = kwargs.pop('headers', {})
+            headers = kwargs.pop("headers", {})
             if isinstance(plugins, str):
-                headers['X-DashScope-Plugin'] = plugins
+                headers["X-DashScope-Plugin"] = plugins
             else:
-                headers['X-DashScope-Plugin'] = json.dumps(plugins)
-            kwargs['headers'] = headers
-        input, parameters = Generation._build_input_parameters(
-            model, prompt, history, messages, **kwargs)
+                headers["X-DashScope-Plugin"] = json.dumps(plugins)
+            kwargs["headers"] = headers
+        # pylint: disable=protected-access
+        (
+            input,  # pylint: disable=redefined-builtin
+            parameters,
+        ) = Generation._build_input_parameters(
+            model,
+            prompt,
+            history,
+            messages,
+            **kwargs,
+        )
 
-        is_stream = parameters.get('stream', False)
+        is_stream = parameters.get("stream", False)
         # Check if we need to merge incremental output
-        is_incremental_output = kwargs.get('incremental_output', None)
+        is_incremental_output = kwargs.get("incremental_output", None)
         to_merge_incremental_output = False
-        if (ParamUtil.should_modify_incremental_output(model) and
-                is_stream and is_incremental_output is False):
+        if (
+            ParamUtil.should_modify_incremental_output(model)
+            and is_stream
+            and is_incremental_output is False
+        ):
             to_merge_incremental_output = True
-            parameters['incremental_output'] = True
+            parameters["incremental_output"] = True
 
         # Pass incremental_to_full flag via headers user-agent
-        if 'headers' not in parameters:
-            parameters['headers'] = {}
-        flag = '1' if to_merge_incremental_output else '0'
-        parameters['headers']['user-agent'] = f'incremental_to_full/{flag}'
+        if "headers" not in parameters:
+            parameters["headers"] = {}
+        flag = "1" if to_merge_incremental_output else "0"
+        parameters["headers"]["user-agent"] = f"incremental_to_full/{flag}"
 
-        response = await super().call(model=model,
-                                      task_group=task_group,
-                                      task=Generation.task,
-                                      function=function,
-                                      api_key=api_key,
-                                      input=input,
-                                      workspace=workspace,
-                                      **parameters)
+        response = await super().call(
+            model=model,
+            task_group=task_group,
+            task=Generation.task,
+            function=function,
+            api_key=api_key,
+            input=input,
+            workspace=workspace,
+            **parameters,
+        )
         if is_stream:
             if to_merge_incremental_output:
                 # Extract n parameter for merge logic
-                n = parameters.get('n', 1)
+                n = parameters.get("n", 1)
                 return cls._merge_generation_response(response, n)
             else:
                 return cls._stream_responses(response)
@@ -385,20 +450,31 @@ class AioGeneration(BaseAioApi):
             return GenerationResponse.from_api_response(response)
 
     @classmethod
-    async def _stream_responses(cls, response) -> AsyncGenerator[GenerationResponse, None]:
+    async def _stream_responses(
+        cls,
+        response,
+    ) -> AsyncGenerator[GenerationResponse, None]:
         """Convert async response stream to GenerationResponse stream."""
         # Type hint: when stream=True, response is actually an AsyncIterable
         async for rsp in response:  # type: ignore
             yield GenerationResponse.from_api_response(rsp)
 
     @classmethod
-    async def _merge_generation_response(cls, response, n=1) -> AsyncGenerator[GenerationResponse, None]:
+    async def _merge_generation_response(
+        cls,
+        response,
+        n=1,
+    ) -> AsyncGenerator[GenerationResponse, None]:
         """Async version of merge incremental response chunks."""
         accumulated_data = {}
 
         async for rsp in response:  # type: ignore
             parsed_response = GenerationResponse.from_api_response(rsp)
-            result = merge_single_response(parsed_response, accumulated_data, n)
+            result = merge_single_response(
+                parsed_response,
+                accumulated_data,
+                n,
+            )
             if result is True:
                 yield parsed_response
             elif isinstance(result, list):
