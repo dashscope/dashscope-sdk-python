@@ -81,7 +81,7 @@ class Application(BaseApi):
                 Defaults to None.
             workspace(str, `optional`): Workspace for app completion call
             api_key (str, optional): The api api_key, can be None,
-                if None, will get by default rule(TODO: api key doc).
+                if None, will get by default rule
             messages(list): The generation messages.
 
             **kwargs:
