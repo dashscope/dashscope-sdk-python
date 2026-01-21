@@ -39,7 +39,7 @@ jobs:
       - name: Update setuptools
         run: |
           pip install --upgrade pip
-          pip install setuptools==78.1.1 wheel==0.45.1
+          pip install setuptools==68.2.2 wheel==0.41.2
 
       - name: Set PYTHONPATH
         run: |
