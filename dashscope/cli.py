@@ -225,8 +225,7 @@ class Oss:
     @classmethod
     def upload(cls, args):
         print(
-            f"Start oss.upload: model={args.model}, file={args.file}, "
-            f"api_key={args.api_key}",
+            f"Start oss.upload: model={args.model}, file={args.file}",
         )
         if not args.file or not args.model:
             print("Please specify the model and file path")
