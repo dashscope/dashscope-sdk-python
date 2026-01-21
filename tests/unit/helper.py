@@ -11,6 +11,7 @@ class _ContextManager(Coroutine):
         self._coro = coro
         self._obj = None
 
+    # pylint: disable=arguments-renamed
     def send(self, arg):
         return self._coro.send(arg)  # pragma: no cover
 

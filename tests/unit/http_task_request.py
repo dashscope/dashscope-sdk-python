@@ -10,7 +10,7 @@ class HttpRequest(BaseApi, BaseAioApi):
     """API for AI-Generated Content(AIGC) models."""
 
     @classmethod
-    async def async_call(
+    async def async_call(  # type: ignore[override]
         cls,
         model: str,
         prompt: str,
@@ -33,8 +33,9 @@ class HttpRequest(BaseApi, BaseAioApi):
             **kwargs,
         )
 
+    # pylint: disable=arguments-renamed
     @classmethod
-    def call(
+    def call(  # type: ignore[override]
         cls,
         model: str,
         prompt: str,
