@@ -22,7 +22,7 @@ class HttpRequest(BaseApi, BaseAioApi):
         is_binary_input=False,
         **kwargs,
     ) -> DashScopeAPIResponse:
-        return await super().async_call(
+        return await super().async_call(  # type: ignore[misc]
             model=model,
             task_group=task_group,
             task=task,

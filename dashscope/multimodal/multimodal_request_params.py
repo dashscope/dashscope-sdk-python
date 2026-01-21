@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# mypy: disable-error-code="annotation-unchecked"
 from dataclasses import dataclass, field
 import uuid
 

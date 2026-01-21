@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
+# mypy: disable-error-code="annotation-unchecked"
 
 import json
 import platform
