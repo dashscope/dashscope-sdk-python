@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
-from dashscope.api_entities.dashscope_response import (
-    DashScopeAPIResponse,
-    GenerationResponse,
-)
+from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.client.base_api import BaseAioApi, BaseApi
 from dashscope.common.constants import ApiProtocol
 from dashscope.protocol.websocket import WebsocketStreamingMode
@@ -39,7 +36,7 @@ class WebSocketRequest(BaseApi, BaseAioApi):
         )
 
     @classmethod
-    def call(
+    def call(  # type: ignore[override]  # pylint: disable=arguments-renamed
         cls,
         model: str,
         prompt: str,
@@ -50,7 +47,7 @@ class WebSocketRequest(BaseApi, BaseAioApi):
         ws_stream_mode=WebsocketStreamingMode.NONE,
         is_binary_input=False,
         **kwargs,
-    ) -> GenerationResponse:
+    ) -> DashScopeAPIResponse:
         response = BaseApi.call(
             model=model,
             task_group=task_group,

@@ -18,13 +18,16 @@ class TestFineTuneRequest(MockServerBase):
 
     @classmethod
     def setup_class(cls):
+        # pylint: disable=consider-using-with
         cls.case_data = json.load(
             open('tests/data/fine_tune.json', 'r', encoding='utf-8'),
         )
         super().setup_class()
 
     def test_create_fine_tune_job(self, mock_server: MockServer):
-        response_body = self.case_data['create_response']
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_body = self.case_data['create_response']  # type: ignore
         mock_server.responses.put(json.dumps(response_body))
         model = 'gpt'
         training_file_ids = 'training_001'
@@ -47,10 +50,19 @@ class TestFineTuneRequest(MockServerBase):
         assert req['body']['hyper_parameters'] == hyper_parameters
         assert resp.output.job_id == response_body['output']['job_id']
         assert resp.output.status == response_body['output']['status']
-        assert resp.output.hyper_parameters == {'learning_rate': '2e-5', 'n_epochs': 10, 'batch_size': 32}
+        expected_hyper_params = {
+            'learning_rate': '2e-5',
+            'n_epochs': 10,
+            'batch_size': 32,
+        }
+        assert resp.output.hyper_parameters == expected_hyper_params
 
     def test_create_fine_tune_job_with_files(self, mock_server: MockServer):
-        response_body = self.case_data['create_multi_files_response']
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_body = self.case_data[  # type: ignore
+            'create_multi_files_response'
+        ]
         mock_server.responses.put(json.dumps(response_body))
         model = 'gpt'
         training_file_ids = ['training_001', 'training_002']
@@ -75,10 +87,13 @@ class TestFineTuneRequest(MockServerBase):
         assert resp.output.status == response_body['output']['status']
         assert resp.output.training_file_ids == training_file_ids
         assert resp.output.validation_file_ids == validation_file_ids
-        assert resp.output.hyper_parameters == response_body['output']['hyper_parameters']
+        expected_hyper_params = response_body['output']['hyper_parameters']
+        assert resp.output.hyper_parameters == expected_hyper_params
 
     def test_list_fine_tune_job(self, mock_server: MockServer):
-        response_body = self.case_data['list_response']
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_body = self.case_data['list_response']  # type: ignore
         mock_server.responses.put(json.dumps(response_body))
         response = FineTunes.list(
             page_no=10,
@@ -90,7 +105,9 @@ class TestFineTuneRequest(MockServerBase):
         assert response.output.jobs[0].job_id == 'ft-202403261454-d8b4'
 
     def test_get_fine_tune_job(self, mock_server: MockServer):
-        response_body = self.case_data['query_response']
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_body = self.case_data['query_response']  # type: ignore
         mock_server.responses.put(json.dumps(response_body))
         job_id = str(uuid.uuid4())
         response = FineTunes.get(job_id=job_id)
@@ -100,7 +117,11 @@ class TestFineTuneRequest(MockServerBase):
 
     def test_delete_fine_tune_job(self, mock_server: MockServer):
         request_id = str(uuid.uuid4())
-        response_body = '{"output": {"status": "success"}, "request_id": "%s", "code": null, "message": "", "usage": null}' % request_id  # noqa E501
+        response_body = (
+            '{"output": {"status": "success"}, '
+            f'"request_id": "{request_id}", '
+            '"code": null, "message": "", "usage": null}'
+        )
         mock_server.responses.put(response_body)
         rsp = FineTunes.delete(TEST_JOB_ID)
         req = mock_server.requests.get(block=True)
@@ -110,7 +131,11 @@ class TestFineTuneRequest(MockServerBase):
 
     def test_cancel_fine_tune_job(self, mock_server: MockServer):
         request_id = str(uuid.uuid4())
-        response_body = '{"output": {"status": "success"}, "request_id": "%s", "code": null, "message": "", "usage": null}' % request_id  # noqa E501
+        response_body = (
+            '{"output": {"status": "success"}, '
+            f'"request_id": "{request_id}", '
+            '"code": null, "message": "", "usage": null}'
+        )
         mock_server.responses.put(response_body)
         rsp = FineTunes.cancel(TEST_JOB_ID)
         req = mock_server.requests.get(block=True)
@@ -118,6 +143,7 @@ class TestFineTuneRequest(MockServerBase):
         assert rsp.status_code == HTTPStatus.OK
         assert rsp.request_id == request_id
 
+    # pylint: disable=unused-argument
     def test_stream_event(self, mock_server: MockServer):
         responses = FineTunes.stream_events(TEST_JOB_ID)
         idx = 0

@@ -9,6 +9,7 @@ from tests.unit.mock_request_base import MockRequestBase
 
 
 class TestModelRequest(MockRequestBase):
+    # pylint: disable=unused-argument
     def test_list_models(self, http_server):
         rsp = Models.list()
         assert rsp.status_code == HTTPStatus.OK

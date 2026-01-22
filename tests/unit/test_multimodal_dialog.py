@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-import sys
-import pytest
 import logging
+import sys
 import time
-from dashscope.common.logging import logger
+
+import pytest
 from dashscope.multimodal.dialog_state import DialogState
 from dashscope.multimodal.multimodal_dialog import (
     MultiModalDialog,
@@ -21,8 +21,12 @@ from tests.unit.base_test import BaseTestEnvironment
 
 logger = logging.getLogger("dashscope")
 logger.setLevel(logging.DEBUG)
-# create console handler and set level to debug
 console_handler = logging.StreamHandler()
+
+# Global variable for dialog ID
+g_dialog_id = None
+# Global variable for conversation instance
+conver_instance = None
 
 
 # 定义voice chat服务回调
@@ -36,20 +40,22 @@ class TestCallback(MultiModalCallback):
 
     def on_stopped(self):
         logger.info("stopped with server.")
-        pass
 
     def on_state_changed(self, state: DialogState):
         if state == DialogState.LISTENING:
             # app.update_text("开始收音。。。请提问")
-            pass
-        elif state == DialogState.THINKING:
-            pass
+            return
+        if state == DialogState.THINKING:
             # app.update_text("思考中。。。请耐心等待")
-        elif state == DialogState.RESPONDING:
-            pass
+            return
+        if state == DialogState.RESPONDING:
             # app.update_text("正在回答。。。")
+            return
 
-    def on_speech_audio_data(self, data: bytes):
+    def on_speech_audio_data(
+        self,
+        data: bytes,
+    ):  # pylint: disable=unused-argument
         # pcm_play.play(data)
         return
 
@@ -60,22 +66,22 @@ class TestCallback(MultiModalCallback):
     def on_responding_started(self):
         # 开始端侧播放
         # pcm_play.start_play()
-        global conver_instance
-        conver_instance.send_local_responding_started()
-        return
+        global conver_instance  # pylint: disable=global-variable-not-assigned
+        if conver_instance is not None:
+            conver_instance.send_local_responding_started()
 
-    def on_responding_ended(self, payload):
+    def on_responding_ended(self, payload):  # pylint: disable=unused-argument
         logger.debug("on responding ended")
-        conver_instance.send_local_responding_ended()
+        global conver_instance  # pylint: disable=global-variable-not-assigned
+        if conver_instance is not None:
+            conver_instance.send_local_responding_ended()
         # pcm_play.stop_play()
 
     def on_speech_content(self, payload):
-        pass
         if payload is not None:
             logger.debug(payload)
 
     def on_responding_content(self, payload):
-        pass
         if payload is not None:
             logger.debug(payload)
 
@@ -86,8 +92,9 @@ class TestCallback(MultiModalCallback):
 
     def on_close(self, close_status_code, close_msg):
         logger.info(
-            "close with status code: %d, msg: %s"
-            % (close_status_code, close_msg),
+            "close with status code: %d, msg: %s",
+            close_status_code,
+            close_msg,
         )
 
 

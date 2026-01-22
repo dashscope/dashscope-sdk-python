@@ -7,7 +7,7 @@ import dashscope
 from dashscope.protocol.websocket import WebsocketStreamingMode
 from tests.unit.base_test import BaseTestEnvironment
 from tests.unit.constants import TestTasks
-from tests.legacy.websocket_task_request import WebSocketRequest
+from tests.unit.websocket_task_request import WebSocketRequest
 
 # set mock server url.
 base_websocket_api_url = "ws://localhost:8080/ws/aigc/v1"

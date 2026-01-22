@@ -33,7 +33,7 @@ from tests.unit.handle_fine_tune_request import (
     list_fine_tune_handler,
 )
 from tests.unit.mock_sse import sse_response
-from tests.legacy.websocket_mock_server_task_handler import (
+from tests.unit.websocket_mock_server_task_handler import (
     WebSocketTaskProcessor,
 )
 

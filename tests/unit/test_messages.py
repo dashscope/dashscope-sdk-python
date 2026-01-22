@@ -17,14 +17,20 @@ class TestMessages(MockServerBase):
 
     @classmethod
     def setup_class(cls):
+        # pylint: disable=consider-using-with
         cls.case_data = json.load(
             open("tests/data/messages.json", "r", encoding="utf-8"),
         )
         super().setup_class()
 
     def test_create(self, mock_server: MockServer):
-        request_body = self.case_data["create_message_request"]
-        response_body = self.case_data["create_message_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        request_body = self.case_data["create_message_request"]  # type: ignore
+        # pylint: disable=unsubscriptable-object
+        response_body = self.case_data[  # type: ignore
+            "create_message_response"
+        ]
         mock_server.responses.put(json.dumps(response_body))
         response = Messages.create(**request_body)
         req = mock_server.requests.get(block=True)
@@ -34,7 +40,11 @@ class TestMessages(MockServerBase):
         assert len(response.content) == 1
 
     def test_update(self, mock_server: MockServer):
-        response_body = self.case_data["create_message_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_body = self.case_data[  # type: ignore
+            "create_message_response"
+        ]
         mock_server.responses.put(json.dumps(response_body))
         thread_id = str(uuid.uuid4())
         message_id = str(uuid.uuid4())
@@ -55,7 +65,11 @@ class TestMessages(MockServerBase):
         assert len(response.content) == 1
 
     def test_retrieve(self, mock_server: MockServer):
-        response_obj = self.case_data["create_message_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_obj = self.case_data[  # type: ignore
+            "create_message_response"
+        ]
         response_str = json.dumps(response_obj)
         mock_server.responses.put(response_str)
         thread_id = "tid"
@@ -68,7 +82,9 @@ class TestMessages(MockServerBase):
         assert len(response.content) == 1
 
     def test_list(self, mock_server: MockServer):
-        response_obj = self.case_data["list_message_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_obj = self.case_data["list_message_response"]  # type: ignore
         mock_server.responses.put(json.dumps(response_obj))
         thread_id = "test_thread_id"
         response = Messages.list(
@@ -80,16 +96,21 @@ class TestMessages(MockServerBase):
         )
         # get assistant id we send.
         req = mock_server.requests.get(block=True)
-        assert (
-            req
-            == f"/api/v1/threads/{thread_id}/messages?limit=10&order=inc&after=after&before=before"
+        expected_path = (
+            f"/api/v1/threads/{thread_id}/messages?"
+            "limit=10&order=inc&after=after&before=before"
         )
+        assert req == expected_path
         assert len(response.data) == 2
         assert response.data[0].id == "msg_1"
         assert response.data[1].id == "msg_0"
 
     def test_list_message_files(self, mock_server: MockServer):
-        response_obj = self.case_data["list_message_files_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_obj = self.case_data[  # type: ignore
+            "list_message_files_response"
+        ]
         mock_server.responses.put(json.dumps(response_obj))
         thread_id = "test_thread_id"
         message_id = "test_message_id"
@@ -103,10 +124,11 @@ class TestMessages(MockServerBase):
         )
         # get assistant id we send.
         req = mock_server.requests.get(block=True)
-        assert (
-            req
-            == f"/api/v1/threads/{thread_id}/messages/{message_id}/files?limit=10&order=inc&after=after&before=before"
-        )  # noqa E501
+        expected_path = (
+            f"/api/v1/threads/{thread_id}/messages/{message_id}/files?"
+            "limit=10&order=inc&after=after&before=before"
+        )
+        assert req == expected_path
         assert len(response.data) == 2
         assert response.data[0].id == "file-1"
         assert response.data[1].id == "file-2"
@@ -133,9 +155,10 @@ class TestMessages(MockServerBase):
         )
         # get assistant id we send.
         req = mock_server.requests.get(block=True)
-        assert (
-            req
-            == f"/api/v1/threads/{thread_id}/messages/{message_id}/files/{file_id}"
+        expected_path = (
+            f"/api/v1/threads/{thread_id}/messages/{message_id}/"
+            f"files/{file_id}"
         )
+        assert req == expected_path
         assert response.id == file_id
         assert response.message_id == message_id

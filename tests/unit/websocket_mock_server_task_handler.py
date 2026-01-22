@@ -42,15 +42,16 @@ class WebSocketTaskProcessor:
         self.is_binary_out = is_binary_out
         self._duplex_task_finished = False
 
-    async def aio_call(self):
-        await self._send_start_event()  # no matter what, send start event first.
+    async def aio_call(self):  # pylint: disable=too-many-branches
+        # no matter what, send start event first.
+        await self._send_start_event()
         if self.streaming_mode == WebsocketStreamingMode.NONE:
             # if binary data, we need to receive data
             if self.is_binary_in:
                 binary_data = (
                     await self._receive_batch_binary()
                 )  # ignore timeout.
-                print("Receive binary data, length: %s" % len(binary_data))
+                print(f"Receive binary data, length: {len(binary_data)}")
             # send "event":"task-finished"
             if self.is_binary_out:
                 # send binary data
@@ -79,7 +80,7 @@ class WebSocketTaskProcessor:
                         "usage": {
                             "input_tokens": 100,
                             "output_tokens": 200,
-                        },  # noqa E501
+                        },
                     },
                 )  # for echo message out.
 
@@ -104,7 +105,7 @@ class WebSocketTaskProcessor:
                                 "output_tokens": 200,
                             },
                         },
-                    )  # noqa E501
+                    )
                 else:
                     await self._send_task_finished(
                         payload={
@@ -154,7 +155,7 @@ class WebSocketTaskProcessor:
             await self._send_task_finished(payload={})
 
     async def send_streaming_binary_output(self):
-        for i in range(10):
+        for _ in range(10):
             data = bytes([0x01] * 100)
             await self.ws.send_bytes(data)
 
@@ -163,7 +164,7 @@ class WebSocketTaskProcessor:
             "task_id": self.task_id,
             "event": "result-generated",
         }
-        for i in range(10):
+        for _ in range(10):
             payload = {
                 "output": {
                     "text": "world",
@@ -185,13 +186,13 @@ class WebSocketTaskProcessor:
         headers = {"task_id": self.task_id, EVENT_KEY: EventType.STARTED}
         payload = {}
         message = self._build_up_message(headers, payload=payload)
-        print("sending task started event message: %s" % message)
+        print(f"sending task started event message: {message}")
         await self.ws.send_str(message)
 
     async def _send_task_finished(self, payload):
         headers = {"task_id": self.task_id, EVENT_KEY: EventType.FINISHED}
         message = self._build_up_message(headers, payload)
-        print("sending task finished message: %s" % message)
+        print(f"sending task finished message: {message}")
         await self.ws.send_str(message)
 
     async def _receive_streaming_binary_data(self):
@@ -200,20 +201,18 @@ class WebSocketTaskProcessor:
             if await self.validate_message(msg):
                 return
             if msg.type == aiohttp.WSMsgType.BINARY:
-                print(
-                    "Receive binary data length: %s" % len(msg.data),
-                )  # real server need return data and process.
+                # real server need return data and process.
+                print(f"Receive binary data length: {len(msg.data)}")
             elif msg.type == aiohttp.WSMsgType.TEXT:
                 req = msg.json()
-                print("Receive %s event" % req["header"][ACTION_KEY])
+                print(f"Receive {req['header'][ACTION_KEY]} event")
                 if req["header"][ACTION_KEY] == ActionType.FINISHED:
                     self._duplex_task_finished = True
                     break
-                else:
-                    print("Unknown message: %s" % msg)
+                print(f"Unknown message: {msg}")
             else:
                 raise UnexpectedMessageReceived(
-                    "Expect binary data but receive %s!" % msg.type,
+                    f"Expect binary data but receive {msg.type}!",
                 )
 
     async def _receive_streaming_text_data(self):
@@ -225,21 +224,20 @@ class WebSocketTaskProcessor:
                 return
             if msg.type == aiohttp.WSMsgType.TEXT:
                 msg_json = msg.json()
-                print("Receive %s event" % msg_json["header"][ACTION_KEY])
+                print(f"Receive {msg_json['header'][ACTION_KEY]} event")
                 if msg_json["header"][ACTION_KEY] == ActionType.CONTINUE:
-                    print("Receive text data: " % msg_json["payload"])
+                    print(f"Receive text data: {msg_json['payload']}")
                     payload.append(msg_json["payload"])
                 elif msg_json["header"][ACTION_KEY] == ActionType.FINISHED:
-                    print("Receive text data: " % msg_json["payload"])
+                    print(f"Receive text data: {msg_json['payload']}")
                     if msg_json["payload"]:
                         payload.append(msg_json["payload"])
                     self._duplex_task_finished = True
                     return payload
-                else:
-                    print("Unknown message: %s" % msg_json)
+                print(f"Unknown message: {msg_json}")
             else:
                 raise UnexpectedMessageReceived(
-                    "Expect binary data but receive %s!" % msg.type,
+                    f"Expect binary data but receive {msg.type}!",
                 )
 
     async def _receive_batch_binary(self):
@@ -256,10 +254,9 @@ class WebSocketTaskProcessor:
                 break
             if msg.type == aiohttp.WSMsgType.BINARY:
                 return msg.data
-            else:
-                raise UnexpectedMessageReceived(
-                    "Expect binary data but receive %s!" % msg.type,
-                )
+            raise UnexpectedMessageReceived(
+                f"Expect binary data but receive {msg.type}!",
+            )
 
     async def _receive_batch_text(self):
         """If the data is not binary, data is send in start package.
@@ -272,11 +269,11 @@ class WebSocketTaskProcessor:
         final_data = self.run_task_json_message["payload"]
         while True:
             msg = await self.ws.receive()
-            if self.validate_message():
+            if await self.validate_message(msg):
                 break
             if msg.type == aiohttp.WSMsgType.TEXT:
                 req = msg.json()
-                print("Receive %s event" % req["header"][ACTION_KEY])
+                print(f"Receive {req['header'][ACTION_KEY]} event")
                 if req["header"][ACTION_KEY] == ActionType.START:
                     print("receive start task event")
                 elif req["header"][ACTION_KEY] == ActionType.FINISHED:
@@ -284,9 +281,9 @@ class WebSocketTaskProcessor:
                     await self._send_task_finished(final_data)
                     break
                 else:
-                    print("Unknown message: %s" % msg)
+                    print(f"Unknown message: {msg}")
             else:
-                raise UnexpectedMessageReceived("Expect text %s!" % msg.type)
+                raise UnexpectedMessageReceived(f"Expect text {msg.type}!")
 
     def _build_up_message(self, headers, payload):
         message = {"header": headers, "payload": payload}
@@ -296,6 +293,6 @@ class WebSocketTaskProcessor:
         if msg.type == aiohttp.WSMsgType.CLOSED:
             print("Client close the connection")
         elif msg.type == aiohttp.WSMsgType.ERROR:
-            print("Connection error: %s" % msg.data)
+            print(f"Connection error: {msg.data}")
             return True
         return False

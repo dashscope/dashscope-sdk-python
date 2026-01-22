@@ -8,6 +8,7 @@ from tests.unit.mock_request_base import MockRequestBase
 
 
 class TestFileRequest(MockRequestBase):
+    # pylint: disable=unused-argument
     def test_upload_files(self, http_server):
         resp = Files.upload(
             file_path="tests/data/dogs.jpg",

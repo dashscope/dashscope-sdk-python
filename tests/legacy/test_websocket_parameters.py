@@ -9,7 +9,7 @@ from tests.unit.constants import (
     TEST_ENABLE_DATA_INSPECTION_REQUEST_ID,
     TestTasks,
 )
-from tests.legacy.websocket_task_request import WebSocketRequest
+from tests.unit.websocket_task_request import WebSocketRequest
 
 
 def pytest_generate_tests(metafunc):

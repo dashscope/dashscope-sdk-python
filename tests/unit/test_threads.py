@@ -25,7 +25,7 @@ class TestThreads(MockServerBase):
         req = mock_server.requests.get(block=True)
         assert response.id == thread_id
         assert response.metadata == metadata
-        req["metadata"] == metadata
+        assert req["metadata"] == metadata
 
     def test_create_with_messages(self, mock_server: MockServer):
         thread_id = str(uuid.uuid4())
@@ -49,12 +49,12 @@ class TestThreads(MockServerBase):
                 "content": "画幅画",
             },
         ]
-        thread = Threads.create(messages=messages)
+        thread = Threads.create(messages=messages)  # type: ignore[arg-type]
 
         assert thread.id == thread_id
         assert thread.metadata == metadata
         req = mock_server.requests.get(block=True)
-        req["messages"] == messages
+        assert req["messages"] == messages
 
     def test_retrieve(self, mock_server: MockServer):
         thread_id = str(uuid.uuid4())

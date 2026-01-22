@@ -14,7 +14,11 @@ class TestTokenization(MockServerBase):
         "output": {
             "token_ids": [115798, 198],
             "tokens": ["<|im_start|>", "\n"],
-            "prompt": "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n如何做土豆炖猪脚?<|im_end|>\n<|im_start|>assistant\n",  # noqa E501
+            "prompt": (
+                "<|im_start|>system\nYou are a helpful assistant."
+                "<|im_end|>\n<|im_start|>user\n如何做土豆炖猪脚?"
+                "<|im_end|>\n<|im_start|>assistant\n"
+            ),
         },
         "usage": {
             "input_tokens": 28,

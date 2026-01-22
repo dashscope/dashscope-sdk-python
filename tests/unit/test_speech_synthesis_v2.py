@@ -26,7 +26,7 @@ class TestCallback(ResultCallback):
 
     def on_data(self, data: bytes) -> None:
         # save audio to file
-        print("recv speech audio {}".format(len(data)))
+        print(f"recv speech audio {len(data)}")
 
 
 class TestSynthesis(BaseTestEnvironment):
@@ -59,7 +59,7 @@ class TestSynthesis(BaseTestEnvironment):
             url=self.url,
         )
         audio = synthesizer.call(self.text_array[0])
-        print("recv audio length {}".format(len(audio)))
+        print(f"recv audio length {len(audio)}")
 
     @pytest.mark.skip
     def test_sync_streaming_call_with_multi_formats(self):

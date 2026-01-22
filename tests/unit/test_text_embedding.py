@@ -8,6 +8,7 @@ from tests.unit.mock_request_base import MockRequestBase
 
 
 class TestTextEmbeddingRequest(MockRequestBase):
+    # pylint: disable=unused-argument
     def test_call_with_string(self, http_server):
         resp = TextEmbedding.call(
             model=TextEmbedding.Models.text_embedding_v3,
@@ -25,7 +26,7 @@ class TestTextEmbeddingRequest(MockRequestBase):
         assert len(resp.output["embeddings"]) == 1
 
     def test_call_with_opened_file(self, http_server):
-        with open("tests/data/multi_line.txt") as f:
+        with open("tests/data/multi_line.txt", encoding="utf-8") as f:
             response = TextEmbedding.call(
                 model=TextEmbedding.Models.text_embedding_v3,
                 input=f,

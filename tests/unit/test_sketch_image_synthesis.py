@@ -43,7 +43,13 @@ class TestSketchImageSynthesis(MockServerBase):
             realisticness=9,
         )
         req = mock_server.requests.get(block=True)
-        expect_req_str = '{"model": "wanx-sketch-to-image-v1", "parameters": {"n": 4, "size": "1024*1024", "sketch_weight": 8, "realisticness": 9}, "input": {"prompt": "hello", "sketch_image_url": "http://sketch_url"}}'  # noqa E501
+        expect_req_str = (
+            '{"model": "wanx-sketch-to-image-v1", '
+            '"parameters": {"n": 4, "size": "1024*1024", '
+            '"sketch_weight": 8, "realisticness": 9}, '
+            '"input": {"prompt": "hello", '
+            '"sketch_image_url": "http://sketch_url"}}'
+        )
         expect_req = json.loads(expect_req_str)
         assert expect_req == req
 
@@ -63,7 +69,13 @@ class TestSketchImageSynthesis(MockServerBase):
             realisticness=9,
         )
         req = mock_server.requests.get(block=True)
-        expect_req_str = '{"model": "wanx-sketch-to-image-v1", "parameters": {"n": 4, "size": "1024*1024", "realisticness": 9}, "input": {"prompt": "hello", "sketch_image_url": "http://sketch_url"}}'  # noqa E501
+        expect_req_str = (
+            '{"model": "wanx-sketch-to-image-v1", '
+            '"parameters": {"n": 4, "size": "1024*1024", '
+            '"realisticness": 9}, '
+            '"input": {"prompt": "hello", '
+            '"sketch_image_url": "http://sketch_url"}}'
+        )
         expect_req = json.loads(expect_req_str)
         assert expect_req == req
 

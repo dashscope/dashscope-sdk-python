@@ -16,13 +16,16 @@ class TestRuns(MockServerBase):
 
     @classmethod
     def setup_class(cls):
+        # pylint: disable=consider-using-with
         cls.case_data = json.load(
             open("tests/data/runs.json", "r", encoding="utf-8"),
         )
         super().setup_class()
 
     def test_create_simple(self, mock_server: MockServer):
-        response_body = self.case_data["create_run_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_body = self.case_data["create_run_response"]  # type: ignore
         mock_server.responses.put(json.dumps(response_body))
         thread_id = str(uuid.uuid4())
         assistant_id = str(uuid.uuid4())
@@ -33,7 +36,9 @@ class TestRuns(MockServerBase):
         assert response.metadata == {"key": "value"}
 
     def test_create_complicated(self, mock_server: MockServer):
-        response_body = self.case_data["create_run_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_body = self.case_data["create_run_response"]  # type: ignore
         mock_server.responses.put(json.dumps(response_body))
         thread_id = str(uuid.uuid4())
         assistant_id = str(uuid.uuid4())
@@ -76,7 +81,7 @@ class TestRuns(MockServerBase):
             model=model_name,
             instructions=instructions,
             additional_instructions=additional_instructions,
-            tools=tools,
+            tools=tools,  # type: ignore[arg-type]
             metadata=metadata,
         )
         req = mock_server.requests.get(block=True)
@@ -91,7 +96,9 @@ class TestRuns(MockServerBase):
         assert response.tools[0].type == "code_interpreter"
 
     def test_retrieve(self, mock_server: MockServer):
-        response_obj = self.case_data["create_run_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_obj = self.case_data["create_run_response"]  # type: ignore
         response_str = json.dumps(response_obj)
         mock_server.responses.put(response_str)
         thread_id = "tid"
@@ -104,7 +111,9 @@ class TestRuns(MockServerBase):
         assert response.tools[0].type == "code_interpreter"
 
     def test_list(self, mock_server: MockServer):
-        response_obj = self.case_data["list_run_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_obj = self.case_data["list_run_response"]  # type: ignore
         mock_server.responses.put(json.dumps(response_obj))
         thread_id = "test_thread_id"
         response = Runs.list(
@@ -116,16 +125,19 @@ class TestRuns(MockServerBase):
         )
         # get assistant id we send.
         req = mock_server.requests.get(block=True)
-        assert (
-            req
-            == f"/api/v1/threads/{thread_id}/runs?limit=10&order=inc&after=after&before=before"
+        expected_path = (
+            f"/api/v1/threads/{thread_id}/runs?"
+            "limit=10&order=inc&after=after&before=before"
         )
+        assert req == expected_path
         assert len(response.data) == 1
         assert response.data[0].id == "1"
         assert response.data[0].tools[2].type == "function"
 
     def test_create_thread_and_run(self, mock_server: MockServer):
-        response_body = self.case_data["create_run_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_body = self.case_data["create_run_response"]  # type: ignore
         mock_server.responses.put(json.dumps(response_body))
         assistant_id = str(uuid.uuid4())
         model_name = str(uuid.uuid4())
@@ -179,7 +191,7 @@ class TestRuns(MockServerBase):
             model=model_name,
             instructions=instructions,
             additional_instructions=additional_instructions,
-            tools=tools,
+            tools=tools,  # type: ignore[arg-type]
             metadata=metadata,
         )
         req = mock_server.requests.get(block=True)
@@ -195,7 +207,11 @@ class TestRuns(MockServerBase):
         assert response.tools[0].type == "code_interpreter"
 
     def test_submit_tool_outputs(self, mock_server: MockServer):
-        response_body = self.case_data["submit_function_call_result"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_body = self.case_data[  # type: ignore
+            "submit_function_call_result"
+        ]
         mock_server.responses.put(json.dumps(response_body))
         thread_id = str(uuid.uuid4())
         run_id = str(uuid.uuid4())
@@ -217,7 +233,11 @@ class TestRuns(MockServerBase):
         assert response.tools[0].type == "code_interpreter"
 
     def test_run_required_function_call(self, mock_server: MockServer):
-        response_obj = self.case_data["required_action_function_call_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_obj = self.case_data[  # type: ignore
+            "required_action_function_call_response"
+        ]
         mock_server.responses.put(json.dumps(response_obj))
         thread_id = str(uuid.uuid4())
         assistant_id = str(uuid.uuid4())
@@ -238,7 +258,11 @@ class TestRuns(MockServerBase):
         )
 
     def test_list_run_steps(self, mock_server: MockServer):
-        response_obj = self.case_data["list_run_steps_response"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_obj = self.case_data[  # type: ignore
+            "list_run_steps_response"
+        ]
         mock_server.responses.put(json.dumps(response_obj))
         thread_id = "test_thread_id"
         run_id = str(uuid.uuid4())
@@ -252,10 +276,11 @@ class TestRuns(MockServerBase):
         )
         # get assistant id we send.
         req = mock_server.requests.get(block=True)
-        assert (
-            req
-            == f"/api/v1/threads/{thread_id}/runs/{run_id}/steps?limit=10&order=inc&after=after&before=before"
+        expected_path = (
+            f"/api/v1/threads/{thread_id}/runs/{run_id}/steps?"
+            "limit=10&order=inc&after=after&before=before"
         )
+        assert req == expected_path
         assert len(response.data) == 2
         assert response.data[0].id == "step_1"
         assert response.data[0].step_details.type == "message_creation"
@@ -284,7 +309,9 @@ class TestRuns(MockServerBase):
         )
 
     def test_retrieve_run_steps(self, mock_server: MockServer):
-        response_obj = self.case_data["retrieve_run_step"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_obj = self.case_data["retrieve_run_step"]  # type: ignore
         mock_server.responses.put(json.dumps(response_obj))
         thread_id = str(uuid.uuid4())
         run_id = str(uuid.uuid4())
@@ -300,9 +327,10 @@ class TestRuns(MockServerBase):
         )
         # get assistant id we send.
         req = mock_server.requests.get(block=True)
-        assert (
-            req == f"/api/v1/threads/{thread_id}/runs/{run_id}/steps/{step_id}"
+        expected_path = (
+            f"/api/v1/threads/{thread_id}/runs/{run_id}/steps/{step_id}"
         )
+        assert req == expected_path
         assert response.id == "step_1"
 
         assert response.step_details.type == "tool_calls"
@@ -316,7 +344,9 @@ class TestRuns(MockServerBase):
         assert response.usage.completion_tokens == 22
 
     def test_cancel(self, mock_server: MockServer):
-        response_obj = self.case_data["retrieve_run_step"]
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
+        response_obj = self.case_data["retrieve_run_step"]  # type: ignore
         mock_server.responses.put(json.dumps(response_obj))
         thread_id = str(uuid.uuid4())
         run_id = str(uuid.uuid4())

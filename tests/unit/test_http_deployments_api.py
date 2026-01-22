@@ -9,6 +9,7 @@ from tests.unit.mock_request_base import MockRequestBase
 
 
 class TestDeploymentRequest(MockRequestBase):
+    # pylint: disable=unused-argument
     def test_create_deployment_tune_job(self, http_server):
         resp = Deployments.call(
             model="gpt",
