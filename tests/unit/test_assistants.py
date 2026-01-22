@@ -16,9 +16,8 @@ class TestAssistants(MockServerBase):
 
     @classmethod
     def setup_class(cls):
-        cls.case_data = json.load(
-            open("tests/data/assistant.json", "r", encoding="utf-8"),
-        )
+        with open("tests/data/assistant.json", "r", encoding="utf-8") as f:
+            cls.case_data = json.load(f)
         super().setup_class()
 
     def test_create_assistant_only_model(self, mock_server: MockServer):
@@ -96,12 +95,19 @@ class TestAssistants(MockServerBase):
         assert req["tools"] == [{"type": "search"}, {"type": "wanx"}]
         assert req["instructions"] == "Your a helpful assistant."
         assert req["name"] == "hello"
-        assert response.file_ids == []
+        assert not response.file_ids
         assert response.instructions == req["instructions"]
         assert response.metadata == req["metadata"]
 
     def test_create_assistant_function_call(self, mock_server: MockServer):
+        # Accessing dict key in test mock data
+        assert self.case_data is not None
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
         request_body = self.case_data["test_function_call_request"]
+        # Accessing dict key in test mock data
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
         response_body = json.dumps(
             self.case_data["test_function_call_response"],
         )
@@ -110,7 +116,7 @@ class TestAssistants(MockServerBase):
         req = mock_server.requests.get(block=True)
         assert response.model == req["model"]
         assert response.tools[2].function.name == "big_add"
-        assert response.file_ids == []
+        assert not response.file_ids
         assert response.instructions == req["instructions"]
 
     def test_retrieve_assistant(self, mock_server: MockServer):
@@ -145,11 +151,15 @@ class TestAssistants(MockServerBase):
         req_assistant_id = mock_server.requests.get(block=True)
         assert response.model == self.TEST_MODEL_NAME
         assert req_assistant_id == self.ASSISTANT_ID
-        assert response.file_ids == []
+        assert not response.file_ids
         assert response.instructions == response_obj["instructions"]
         assert response.metadata == response_obj["metadata"]
 
     def test_list_assistant(self, mock_server: MockServer):
+        # Accessing dict key in test mock data
+        assert self.case_data is not None
+        # type: ignore[index]
+        # pylint: disable=unsubscriptable-object
         response_obj = self.case_data["test_list"]
         mock_server.responses.put(json.dumps(response_obj))
         response = Assistants.list(
@@ -161,9 +171,9 @@ class TestAssistants(MockServerBase):
         )
         # get assistant id we send.
         req = mock_server.requests.get(block=True)
-        assert (
-            req
-            == "/api/v1/assistants?limit=10&order=inc&after=after&before=before"
+        assert req == (
+            "/api/v1/assistants?limit=10&order=inc&"
+            "after=after&before=before"
         )
         assert len(response.data) == 2
         assert response.data[0].id == "asst_1"
@@ -199,7 +209,7 @@ class TestAssistants(MockServerBase):
         assert req is not None
         assert response.model == self.TEST_MODEL_NAME
         assert response.id == self.ASSISTANT_ID
-        assert response.file_ids == []
+        assert not response.file_ids
         assert response.instructions == response_obj["instructions"]
         assert response.tools == response_obj["tools"]
         assert response.metadata == response_obj["metadata"]

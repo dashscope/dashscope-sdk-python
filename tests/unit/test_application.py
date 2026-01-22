@@ -45,25 +45,29 @@ class TestCompletion(MockServerBase):
                         "action_type": "api",
                         "action_name": "文档检索",
                         "action": "searchDocument",
-                        "action_input_stream": '{"query":"API接口说明中, TopP参数改如何传递?"}',
+                        "action_input_stream": (
+                            '{"query":"API接口说明中, ' 'TopP参数改如何传递?"}'
+                        ),
                         "action_input": {
-                            "query": "API接口说明中, TopP参数改如何传递?",
+                            "query": ("API接口说明中, TopP参数改如何传递?"),
                         },
-                        "observation": """{"data": [
-                                                {
-                                                  "docId": "1234",
-                                                  "docName": "API接口说明",
-                                                  "docUrl": "https://127.0.0.1/dl/API接口说明.pdf",
-                                                  "indexId": "1",
-                                                  "score": 0.11992252,
-                                                  "text": "填(0,1.0),取值越大,生成的随机性越高;启用文档检索后,文档引用类型,取值包括:simple|indexed。",
-                                                  "title": "API接口说明",
-                                                  "titlePath": "API接口说明>>>接口说明>>>是否必   说明>>>填"
-                                                }
-                                              ],
-                                              "status": "SUCCESS"
-                                            }""",
-                        "response": "API接口说明中, TopP参数是一个float类型的参数,取值范围为0到1.0,默认为1.0。取值越大,生成的随机性越高。[5]",
+                        "observation": (
+                            '{"data": [{"docId": "1234", '
+                            '"docName": "API接口说明", '
+                            '"docUrl": "https://127.0.0.1/dl/'
+                            'API接口说明.pdf", "indexId": "1", '
+                            '"score": 0.11992252, "text": "填(0,1.0),'
+                            "取值越大,生成的随机性越高;启用文档检索后,"
+                            '文档引用类型,取值包括:simple|indexed。", '
+                            '"title": "API接口说明", "titlePath": '
+                            '"API接口说明>>>接口说明>>>是否必   说明>>>填"}], '
+                            '"status": "SUCCESS"}'
+                        ),
+                        "response": (
+                            "API接口说明中, TopP参数是一个float类型的"
+                            "参数,取值范围为0到1.0,默认为1.0。取值越大,"
+                            "生成的随机性越高。[5]"
+                        ),
                     },
                 ],
             },
@@ -86,11 +90,12 @@ class TestCompletion(MockServerBase):
             top_p=0.2,
             temperature=1.0,
             doc_tag_codes=["t1234", "t2345"],
-            doc_reference_type=Application.DocReferenceType.simple,
+            doc_reference_type=(Application.DocReferenceType.simple),
             has_thoughts=True,
         )
 
-        self.check_result(resp, test_response)
+        # Test mock response type
+        self.check_result(resp, test_response)  # type: ignore[arg-type]
 
     def test_flow_call(self, mock_server: MockServer):
         test_response = {
@@ -105,13 +110,19 @@ class TestCompletion(MockServerBase):
                         "action_type": "api",
                         "action_name": "plugin",
                         "action": "api",
-                        "action_input_stream": '{"userId": "123", "date": "202402", "city": "hangzhou"}',
+                        "action_input_stream": (
+                            '{"userId": "123", "date": "202402", '
+                            '"city": "hangzhou"}'
+                        ),
                         "action_input": {
                             "userId": "123",
                             "date": "202402",
                             "city": "hangzhou",
                         },
-                        "observation": """{"quantity": 102, "type": "resident", "date": "202402", "unit": "千瓦"}""",
+                        "observation": (
+                            '{"quantity": 102, "type": "resident", '
+                            '"date": "202402", "unit": "千瓦"}'
+                        ),
                         "response": "当月的居民用电量为102千瓦。",
                     },
                 ],
@@ -140,7 +151,8 @@ class TestCompletion(MockServerBase):
             has_thoughts=True,
         )
 
-        self.check_result(resp, test_response)
+        # Test mock response type
+        self.check_result(resp, test_response)  # type: ignore[arg-type]
 
     def test_call_with_error(self, mock_server: MockServer):
         test_response = {
@@ -212,21 +224,21 @@ class TestCompletion(MockServerBase):
                 expected_doc_refs,
             )
 
-            for i in range(len(doc_refs)):
-                assert doc_refs[i].index_id == expected_doc_refs[i].get(
+            for i, doc_ref in enumerate(doc_refs):
+                assert doc_ref.index_id == expected_doc_refs[i].get(
                     "index_id",
                 )
-                assert doc_refs[i].doc_id == expected_doc_refs[i].get("doc_id")
-                assert doc_refs[i].doc_name == expected_doc_refs[i].get(
+                assert doc_ref.doc_id == expected_doc_refs[i].get("doc_id")
+                assert doc_ref.doc_name == expected_doc_refs[i].get(
                     "doc_name",
                 )
-                assert doc_refs[i].doc_url == expected_doc_refs[i].get(
+                assert doc_ref.doc_url == expected_doc_refs[i].get(
                     "doc_url",
                 )
-                assert doc_refs[i].title == expected_doc_refs[i].get("title")
-                assert doc_refs[i].text == expected_doc_refs[i].get("text")
-                assert doc_refs[i].biz_id == expected_doc_refs[i].get("biz_id")
-                assert json.dumps(doc_refs[i].images) == json.dumps(
+                assert doc_ref.title == expected_doc_refs[i].get("title")
+                assert doc_ref.text == expected_doc_refs[i].get("text")
+                assert doc_ref.biz_id == expected_doc_refs[i].get("biz_id")
+                assert json.dumps(doc_ref.images) == json.dumps(
                     expected_doc_refs[i].get("images"),
                 )
 
@@ -238,26 +250,26 @@ class TestCompletion(MockServerBase):
                 expected_thoughts,
             )
 
-            for i in range(len(thoughts)):
-                assert thoughts[i].thought == expected_thoughts[i].get(
+            for i, thought in enumerate(thoughts):
+                assert thought.thought == expected_thoughts[i].get(
                     "thought",
                 )
-                assert thoughts[i].action == expected_thoughts[i].get("action")
-                assert thoughts[i].action_name == expected_thoughts[i].get(
+                assert thought.action == expected_thoughts[i].get("action")
+                assert thought.action_name == expected_thoughts[i].get(
                     "action_name",
                 )
-                assert thoughts[i].action_type == expected_thoughts[i].get(
+                assert thought.action_type == expected_thoughts[i].get(
                     "action_type",
                 )
-                assert json.dumps(thoughts[i].action_input) == json.dumps(
+                assert json.dumps(thought.action_input) == json.dumps(
                     expected_thoughts[i].get("action_input"),
                 )
-                assert thoughts[i].action_input_stream == expected_thoughts[
-                    i
-                ].get("action_input_stream")
-                assert thoughts[i].observation == expected_thoughts[i].get(
+                assert thought.action_input_stream == (
+                    expected_thoughts[i].get("action_input_stream")
+                )
+                assert thought.observation == expected_thoughts[i].get(
                     "observation",
                 )
-                assert thoughts[i].response == expected_thoughts[i].get(
+                assert thought.response == expected_thoughts[i].get(
                     "response",
                 )

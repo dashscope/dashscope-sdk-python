@@ -65,7 +65,7 @@ class TestConversationRequest(MockServerBase):
         messages = [{"role": "user", "content": prompt}]
         resp = Generation.call(
             model=model,
-            messages=messages,
+            messages=messages,  # type: ignore[arg-type]
             max_tokens=1024,
             api_protocol="http",
             result_format="message",
@@ -81,7 +81,7 @@ class TestConversationRequest(MockServerBase):
         assert resp.output.text is None
         assert resp.output.choices[0] == Choice(
             finish_reason="stop",
-            message={
+            message={  # type: ignore[arg-type]
                 "role": "assistant",
                 "content": "hello world",
             },
@@ -152,9 +152,12 @@ class TestConversationRequest(MockServerBase):
         )
         assert response.status_code == HTTPStatus.OK
         assert response.output.text is None
-        choices = TestConversationRequest.message_response_obj["output"][
-            "choices"
-        ]
+        # Accessing dict key in test mock data
+        msg_resp_obj = TestConversationRequest.message_response_obj
+        # type: ignore[index]
+        choices = msg_resp_obj["output"]["choices"]  # type: ignore[index]
+        # Comparing with mock data
+        # type: ignore[comparison-overlap]
         assert response.output.choices == choices
         req = mock_server.requests.get(block=True)
         assert req["model"] == model
@@ -176,9 +179,12 @@ class TestConversationRequest(MockServerBase):
         )
         assert response.status_code == HTTPStatus.OK
         assert response.output.text is None
-        choices = TestConversationRequest.message_response_obj["output"][
-            "choices"
-        ]
+        # Accessing dict key in test mock data
+        msg_resp_obj = TestConversationRequest.message_response_obj
+        # type: ignore[index]
+        choices = msg_resp_obj["output"]["choices"]  # type: ignore[index]
+        # Comparing with mock data
+        # type: ignore[comparison-overlap]
         assert response.output.choices == choices
         req = mock_server.requests.get(block=True)
         assert req["model"] == model
@@ -200,9 +206,12 @@ class TestConversationRequest(MockServerBase):
         )
         assert response.status_code == HTTPStatus.OK
         assert response.output.text is None
-        choices = TestConversationRequest.message_response_obj["output"][
-            "choices"
-        ]
+        # Accessing dict key in test mock data
+        msg_resp_obj = TestConversationRequest.message_response_obj
+        # type: ignore[index]
+        choices = msg_resp_obj["output"]["choices"]  # type: ignore[index]
+        # Comparing with mock data
+        # type: ignore[comparison-overlap]
         assert response.output.choices == choices
         req = mock_server.requests.get(block=True)
         assert req["model"] == model

@@ -40,7 +40,10 @@ class TestAsrPhrases(MockRequestBase):
         cls.update_phrase = {"黄鸡": 2, "红鸡": 1}
         cls.phrase_id = TEST_JOB_ID
 
-    def test_create_phrases(self, http_server):
+    def test_create_phrases(
+        self,
+        http_server,
+    ):  # pylint: disable=unused-argument
         result = AsrPhraseManager.create_phrases(
             model=self.model,
             phrases=self.phrase,
@@ -54,7 +57,10 @@ class TestAsrPhrases(MockRequestBase):
         assert len(result.output["finetuned_output"]) > 0
         self.phrase_id = result.output["finetuned_output"]
 
-    def test_update_phrases(self, http_server):
+    def test_update_phrases(
+        self,
+        http_server,
+    ):  # pylint: disable=unused-argument
         result = AsrPhraseManager.update_phrases(
             model=self.model,
             phrase_id=self.phrase_id,
@@ -66,7 +72,10 @@ class TestAsrPhrases(MockRequestBase):
         assert result.output["finetuned_output"] is not None
         assert len(result.output["finetuned_output"]) > 0
 
-    def test_query_phrases(self, http_server):
+    def test_query_phrases(
+        self,
+        http_server,
+    ):  # pylint: disable=unused-argument
         result = AsrPhraseManager.query_phrases(phrase_id=self.phrase_id)
         assert result is not None
         assert result.status_code == HTTPStatus.OK
@@ -75,14 +84,20 @@ class TestAsrPhrases(MockRequestBase):
         assert result.output["model"] is not None
         assert len(result.output["model"]) > 0
 
-    def test_list_phrases(self, http_server):
+    def test_list_phrases(
+        self,
+        http_server,
+    ):  # pylint: disable=unused-argument
         result = AsrPhraseManager.list_phrases(page=1, page_size=10)
         assert result is not None
         assert result.status_code == HTTPStatus.OK
         assert result.output["finetuned_outputs"] is not None
         assert len(result.output["finetuned_outputs"]) > 0
 
-    def test_delete_phrases(self, http_server):
+    def test_delete_phrases(
+        self,
+        http_server,
+    ):  # pylint: disable=unused-argument
         result = AsrPhraseManager.delete_phrases(phrase_id=self.phrase_id)
         assert result is not None
         assert result.status_code == HTTPStatus.OK
@@ -90,24 +105,26 @@ class TestAsrPhrases(MockRequestBase):
         assert len(result.output["finetuned_output"]) > 0
 
 
-def str2bool(str):
-    return True if str.lower() == "true" else False
+def str2bool(test):  # pylint: disable=redefined-builtin
+    # Return True if test string is "true", False otherwise
+    return test.lower() == "true"
 
 
-def complete_url(url: str) -> str:
+def complete_url(url: str) -> None:
+    # Set base URLs for dashscope API
     parsed = urlparse(url)
     base_url = "".join([parsed.scheme, "://", parsed.netloc])
     dashscope.base_websocket_api_url = "/".join(
         [base_url, "api-ws", dashscope.common.env.api_version, "inference"],
     )
-    dashscope.base_http_api_url = url = "/".join(
+    dashscope.base_http_api_url = "/".join(
         [base_url, "api", dashscope.common.env.api_version],
     )
     print("Set base_websocket_api_url: ", dashscope.base_websocket_api_url)
     print("Set base_http_api_url: ", dashscope.base_http_api_url)
 
 
-def phrases(
+def phrases(  # pylint: disable=redefined-outer-name,too-many-branches
     model,
     phrase_id: str,
     phrases: dict,
@@ -115,6 +132,7 @@ def phrases(
     page_size: int,
     delete: bool,
 ):
+    # Manage ASR phrases based on provided parameters
     print("phrase_id: ", phrase_id)
     print("phrase: ", phrases)
     print("delete flag: ", delete)
@@ -126,33 +144,30 @@ def phrases(
                 phrase_id=phrase_id,
                 phrases=phrases,
             )
-        else:
-            print("Create phrases -->")
-            return AsrPhraseManager.create_phrases(
-                model=model,
-                phrases=phrases,
-            )
-    else:
-        if delete:
-            print("Delete phrases -->")
-            return AsrPhraseManager.delete_phrases(phrase_id=phrase_id)
-        else:
-            if phrase_id is not None:
-                print("Query phrases -->")
-                return AsrPhraseManager.query_phrases(phrase_id=phrase_id)
-            if page is not None and page_size is not None:
-                print(
-                    "List phrases page %d page_size %d -->"
-                    % (page, page_size),
-                )
-                return AsrPhraseManager.list_phrases(
-                    page=page,
-                    page_size=page_size,
-                )
+        print("Create phrases -->")
+        return AsrPhraseManager.create_phrases(
+            model=model,
+            phrases=phrases,
+        )
+    if delete:
+        print("Delete phrases -->")
+        return AsrPhraseManager.delete_phrases(phrase_id=phrase_id)
+    if phrase_id is not None:
+        print("Query phrases -->")
+        return AsrPhraseManager.query_phrases(phrase_id=phrase_id)
+    if page is not None and page_size is not None:
+        print(
+            f"List phrases page {page} page_size {page_size} -->",
+        )
+        return AsrPhraseManager.list_phrases(
+            page=page,
+            page_size=page_size,
+        )
+    return None
 
 
 @pytest.mark.skip
-def test_by_user():
+def test_by_user():  # pylint: disable=too-many-branches
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default="paraformer-realtime-v1")
     parser.add_argument("--phrase", type=str, default="")
@@ -184,21 +199,23 @@ def test_by_user():
         print("Response of phrases: ", resp)
         if resp is not None and resp.output is not None:
             output = resp.output
-            print("\nGet output: %s\n" % (str(output)))
+            print(f"\nGet output: {str(output)}\n")
 
             if (
                 "finetuned_output" in output
                 and output["finetuned_output"] is not None
             ):
-                print("Get phrase_id: %s" % (output["finetuned_output"]))
+                print(
+                    f"Get phrase_id: {output['finetuned_output']}",
+                )
             if "job_id" in output and output["job_id"] is not None:
-                print("Get job_id: %s" % (output["job_id"]))
+                print(f"Get job_id: {output['job_id']}")
             if "create_time" in output and output["create_time"] is not None:
-                print("Get create_time: %s" % (output["create_time"]))
+                print(f"Get create_time: {output['create_time']}")
             if "model" in output and output["model"] is not None:
-                print("Get model_id: %s" % (output["model"]))
+                print(f"Get model_id: {output['model']}")
             if "output_type" in output and output["output_type"] is not None:
-                print("Get output_type: %s" % (output["output_type"]))
+                print(f"Get output_type: {output['output_type']}")
 
             if (
                 "finetuned_outputs" in output
@@ -206,24 +223,23 @@ def test_by_user():
             ):
                 outputs = output["finetuned_outputs"]
                 print(
-                    "Get %d info from page_no:%d page_size:%d total:%d ->"
-                    % (
-                        len(outputs),
-                        output["page_no"],
-                        output["page_size"],
-                        output["total"],
-                    ),
+                    f"Get {len(outputs)} info from "
+                    f"page_no:{output['page_no']} "
+                    f"page_size:{output['page_size']} "
+                    f"total:{output['total']} ->",
                 )
                 for item in outputs:
-                    print("  get phrase_id: %s" % (item["finetuned_output"]))
-                    print("  get job_id: %s" % (item["job_id"]))
-                    print("  get create_time: %s" % (item["create_time"]))
-                    print("  get model_id: %s" % (item["model"]))
-                    print("  get output_type: %s\n" % (item["output_type"]))
+                    print(
+                        f"  get phrase_id: {item['finetuned_output']}",
+                    )
+                    print(f"  get job_id: {item['job_id']}")
+                    print(f"  get create_time: {item['create_time']}")
+                    print(f"  get model_id: {item['model']}")
+                    print(f"  get output_type: {item['output_type']}\n")
     else:
         print(
-            "ERROR, status_code:%d, code_message:%s, error_message:%s"
-            % (resp.status_code, resp.code, resp.message),
+            f"ERROR, status_code:{resp.status_code}, "
+            f"code_message:{resp.code}, error_message:{resp.message}",
         )
 
 
