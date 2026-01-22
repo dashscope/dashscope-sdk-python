@@ -58,7 +58,6 @@ class QwenTokenizer(Tokenizer):
             token: index for index, token in SPECIAL_TOKENS
         }
 
-        # try load extra vocab from file
         if extra_vocab_file is not None:
             used_ids = set(self._mergeable_ranks.values()) | set(
                 self._special_tokens.values(),
