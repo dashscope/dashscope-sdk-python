@@ -2,6 +2,8 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import os
+
+import dashscope
 from dashscope import Generation
 
 
@@ -10,6 +12,9 @@ class TestGeneration:
 
     @staticmethod
     def test_response_with_content():
+
+        dashscope.enable_http_connection_pool()
+
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
             {

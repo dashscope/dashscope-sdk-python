@@ -42,6 +42,8 @@ class HttpRequest(AioBaseRequest):
         flattened_output: bool = False,
         encryption: Optional[Encryption] = None,
         user_agent: str = "",
+        session: Optional[requests.Session] = None,
+        aio_session: Optional[aiohttp.ClientSession] = None,
     ) -> None:
         """HttpSSERequest, processing http server sent event stream.
 
@@ -54,6 +56,10 @@ class HttpRequest(AioBaseRequest):
                 Defaults to DEFAULT_REQUEST_TIMEOUT_SECONDS.
             user_agent (str, optional): Additional user agent string to
                 append. Defaults to ''.
+            session (Optional[requests.Session]): External session for
+                connection reuse (sync). Defaults to None.
+            aio_session (Optional[aiohttp.ClientSession]): External session
+                for connection reuse (async). Defaults to None.
         """
 
         super().__init__(user_agent=user_agent)
@@ -61,10 +67,13 @@ class HttpRequest(AioBaseRequest):
         self.flattened_output = flattened_output
         self.async_request = async_request
         self.encryption = encryption
+        self._external_session = session
+        self._external_aio_session = aio_session
+        base_headers = getattr(self, "headers", {})
         self.headers = {
             "Accept": "application/json",
             "Authorization": f"Bearer {api_key}",
-            **self.headers,
+            **base_headers,
         }
 
         if encryption and encryption.is_valid():
@@ -102,6 +111,24 @@ class HttpRequest(AioBaseRequest):
         else:
             self.timeout = timeout  # type: ignore[has-type]
 
+    def get_external_session(self) -> Optional[requests.Session]:
+        """
+        获取外部传入的同步 Session
+
+        Returns:
+            Optional[requests.Session]: 外部 Session，如果未设置则返回 None
+        """
+        return self._external_session
+
+    def get_external_aio_session(self) -> Optional[aiohttp.ClientSession]:
+        """
+        获取外部传入的异步 Session
+
+        Returns:
+            Optional[aiohttp.ClientSession]: 外部异步 Session，如果未设置则返回 None
+        """
+        return self._external_aio_session
+
     def add_header(self, key, value):
         self.headers[key] = value
 
@@ -132,57 +159,119 @@ class HttpRequest(AioBaseRequest):
                 pass
             return result
 
+    async def _get_aio_session(self):
+        """获取异步 Session（优先级：外部 > 全局 > 临时）"""
+        # 1. 检查是否有外部传入的 Session（最高优先级）
+        if self._external_aio_session is not None:
+            logger.debug(
+                "Using external async session for request: %s",
+                self.url,
+            )
+            return self._external_aio_session, False
+
+        # 2. 尝试获取全局异步 Session
+        from dashscope.common.aio_session_manager import AioSessionManager
+
+        manager = await AioSessionManager.get_instance()
+        global_session = await manager.get_session()
+
+        if global_session is not None:
+            logger.debug(
+                "Using global async session for request: %s",
+                self.url,
+            )
+            return global_session, False
+
+        # 3. 创建临时 Session（保持向后兼容）
+        connector = aiohttp.TCPConnector(
+            ssl=ssl.create_default_context(
+                cafile=certifi.where(),
+            ),
+        )
+        session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=aiohttp.ClientTimeout(total=self.timeout),
+            headers=self.headers,
+        )
+        logger.debug(
+            "Using temporary async session for request: %s",
+            self.url,
+        )
+        return session, True
+
+    async def _execute_aio_request(self, session, timeout):
+        """执行异步 HTTP 请求"""
+        logger.debug("Starting request: %s", self.url)
+
+        if self.method == HTTPMethod.POST:
+            return await self._execute_post_request(session, timeout)
+        if self.method == HTTPMethod.GET:
+            return await self._execute_get_request(session, timeout)
+
+        raise UnsupportedHTTPMethod(
+            f"Unsupported http method: {self.method}",
+        )
+
+    async def _execute_post_request(self, session, timeout):
+        """执行 POST 请求"""
+        is_form, obj = False, {}
+        if hasattr(self, "data") and self.data is not None:
+            is_form, obj = self.data.get_aiohttp_payload()
+
+        if is_form:
+            headers = {**self.headers, **obj.headers}
+            return await session.post(
+                url=self.url,
+                data=obj,
+                headers=headers,
+                timeout=timeout,
+            )
+
+        return await session.request(
+            "POST",
+            url=self.url,
+            json=obj,
+            headers=self.headers,
+            timeout=timeout,
+        )
+
+    async def _execute_get_request(self, session, timeout):
+        """执行 GET 请求"""
+        params = {}
+        if hasattr(self, "data") and self.data is not None:
+            params = getattr(self.data, "parameters", {})
+        if params:
+            params = self.__handle_parameters(params)
+
+        return await session.get(
+            url=self.url,
+            params=params,
+            headers=self.headers,
+            timeout=timeout,
+        )
+
     async def _handle_aio_request(self):
         try:
-            connector = aiohttp.TCPConnector(
-                ssl=ssl.create_default_context(
-                    cafile=certifi.where(),
-                ),
-            )
-            async with aiohttp.ClientSession(
-                connector=connector,
-                timeout=aiohttp.ClientTimeout(total=self.timeout),
-                headers=self.headers,
-            ) as session:
-                logger.debug("Starting request: %s", self.url)
-                if self.method == HTTPMethod.POST:
-                    is_form, obj = False, {}
-                    if hasattr(self, "data") and self.data is not None:
-                        is_form, obj = self.data.get_aiohttp_payload()
-                    if is_form:
-                        headers = {**self.headers, **obj.headers}
-                        response = await session.post(
-                            url=self.url,
-                            data=obj,
-                            headers=headers,
-                        )
-                    else:
-                        response = await session.request(
-                            "POST",
-                            url=self.url,
-                            json=obj,
-                            headers=self.headers,
-                        )
-                elif self.method == HTTPMethod.GET:
-                    # 添加条件判断
-                    params = {}
-                    if hasattr(self, "data") and self.data is not None:
-                        params = getattr(self.data, "parameters", {})
-                    if params:
-                        params = self.__handle_parameters(params)
-                    response = await session.get(
-                        url=self.url,
-                        params=params,
-                        headers=self.headers,
-                    )
-                else:
-                    raise UnsupportedHTTPMethod(
-                        f"Unsupported http method: {self.method}",
-                    )
+            # 获取 Session（优先级：外部 > 全局 > 临时）
+            session, should_close = await self._get_aio_session()
+
+            try:
+                # 设置超时
+                timeout = aiohttp.ClientTimeout(total=self.timeout)
+
+                # 执行请求
+                response = await self._execute_aio_request(session, timeout)
+
                 logger.debug("Response returned: %s", self.url)
                 async with response:
                     async for rsp in self._handle_aio_response(response):
                         yield rsp
+            finally:
+                # 只关闭临时 Session
+                if should_close:
+                    await session.close()
+                    logger.debug("Temporary async session closed")
+
         except aiohttp.ClientConnectorError as e:
             logger.error(e)
             raise e
@@ -407,8 +496,34 @@ class HttpRequest(AioBaseRequest):
             yield _handle_http_failed_response(response)
 
     def _handle_request(self):
+        """
+        处理 HTTP 请求
+
+        优先级：
+        1. 外部传入的 session（用户自定义）
+        2. 全局 SessionManager（如果启用）
+        3. 临时 session（保持原有行为）
+        """
         try:
-            with requests.Session() as session:
+            from dashscope.common.session_manager import SessionManager
+
+            # 优先使用外部传入的 session
+            if self._external_session is not None:
+                session = self._external_session
+                should_close = False
+            else:
+                # 尝试使用全局 SessionManager
+                session_manager = SessionManager.get_instance()
+                session = session_manager.get_session()
+                should_close = False
+
+                # 如果未启用连接复用，创建临时 session
+                if session is None:
+                    session = requests.Session()
+                    should_close = True
+
+            try:
+                # 执行请求
                 if self.method == HTTPMethod.POST:
                     is_form, form, obj = self.data.get_http_payload()
                     if is_form:
@@ -441,8 +556,14 @@ class HttpRequest(AioBaseRequest):
                     raise UnsupportedHTTPMethod(
                         f"Unsupported http method: {self.method}",
                     )
+
                 for rsp in self._handle_response(response):
                     yield rsp
+            finally:
+                # 只关闭临时创建的 session
+                if should_close:
+                    session.close()
+
         except BaseException as e:
             logger.error(e)
             raise e
