@@ -36,8 +36,6 @@ def _get_protocol_params(kwargs):
     base_address = kwargs.pop("base_address", None)
     flattened_output = kwargs.pop("flattened_output", False)
     extra_url_parameters = kwargs.pop("extra_url_parameters", None)
-    session = kwargs.pop("session", None)
-    aio_session = kwargs.pop("aio_session", None)
 
     # Extract user-agent from headers if present
     user_agent = ""
@@ -60,8 +58,6 @@ def _get_protocol_params(kwargs):
         flattened_output,
         extra_url_parameters,
         user_agent,
-        session,
-        aio_session,
     )
 
 
@@ -91,8 +87,6 @@ def _build_api_request(  # pylint: disable=too-many-branches
         flattened_output,
         extra_url_parameters,
         user_agent,
-        session,
-        aio_session,
     ) = _get_protocol_params(kwargs)
     task_id = kwargs.pop("task_id", None)
     enable_encryption = kwargs.pop("enable_encryption", False)
@@ -136,8 +130,6 @@ def _build_api_request(  # pylint: disable=too-many-branches
             flattened_output=flattened_output,
             encryption=encryption,
             user_agent=user_agent,
-            session=session,
-            aio_session=aio_session,
         )
     elif api_protocol == ApiProtocol.WEBSOCKET:
         if base_address is not None:
