@@ -120,7 +120,7 @@ class QwenTtsRealtime:
         )
         headers = {
             "user-agent": ua,
-            "Authorization": "bearer " + self.apikey,
+            "Authorization": "Bearer " + self.apikey,
         }
         if self.user_headers:
             headers = {**self.user_headers, **headers}
@@ -177,6 +177,8 @@ class QwenTtsRealtime:
         bit_rate: int = None,
         language_type: str = None,
         enable_tn: bool = None,
+        instructions: str = None,
+        optimize_instructions: bool = None,
         **kwargs,
     ) -> None:
         """
@@ -206,6 +208,10 @@ class QwenTtsRealtime:
             bit_rate for tts, support 6~510,default is 128kbps. only work on format: opus/mp3  # noqa: E501  # pylint: disable=line-too-long
         enable_tn: bool
             enable text normalization for tts, default is None
+        instructions: str
+            instructions for tts, default is None
+        optimize_instructions: bool
+            optimize_instructions for tts, default is None
         """
         self.config = {
             "voice": voice,
@@ -230,6 +236,10 @@ class QwenTtsRealtime:
 
         if language_type is not None:
             self.config["language_type"] = language_type
+        if instructions is not None:
+            self.config["instructions"] = instructions
+        if optimize_instructions is not None:
+            self.config["optimize_instructions"] = optimize_instructions
         self.config.update(kwargs)
         self.__send_str(
             json.dumps(

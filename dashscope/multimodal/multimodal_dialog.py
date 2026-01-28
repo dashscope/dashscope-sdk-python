@@ -445,7 +445,7 @@ class _Request:
         )
         self.ws_headers = {
             "User-Agent": ua,
-            "Authorization": f"bearer {api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Accept": "application/json",
         }
         logger.info("websocket header: %s", self.ws_headers)

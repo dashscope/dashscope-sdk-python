@@ -168,7 +168,7 @@ class OmniRealtimeConversation:
         )
         headers = {
             "user-agent": ua,
-            "Authorization": "bearer " + self.apikey,
+            "Authorization": "Bearer " + self.apikey,
         }
         if self.user_headers:
             headers = {**self.user_headers, **headers}

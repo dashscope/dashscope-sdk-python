@@ -147,7 +147,7 @@ class Request:
         )
         self.headers = {
             "user-agent": ua,
-            "Authorization": "bearer " + self.apikey,
+            "Authorization": "Bearer " + self.apikey,
         }
         if headers:
             self.headers = {**self.headers, **headers}
