@@ -3,6 +3,9 @@
 
 import asyncio
 import os
+import aiohttp
+import ssl
+import certifi
 from dashscope.aigc.generation import AioGeneration
 
 
@@ -439,6 +442,118 @@ class TestAioGeneration:
         await call_deep_research_model(messages, "第二步：深入研究")
         print("\n 研究完成！")
 
+    @staticmethod
+    async def test_with_custom_session():
+        """示例：使用自定义 ClientSession 进行连接复用"""
+        print("\n=== 使用自定义 ClientSession 示例 ===")
+
+        # 配置 TCPConnector
+        connector = aiohttp.TCPConnector(
+            limit=100,
+            limit_per_host=30,
+            ssl=ssl.create_default_context(cafile=certifi.where()),
+        )
+
+        # 创建自定义 ClientSession
+        async with aiohttp.ClientSession(connector=connector) as session:
+            # 使用同一个 session 进行多次请求
+            for i in range(3):
+                print(f"\n--- 请求 {i+1} ---")
+
+                messages = [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": f"你好"},
+                ]
+
+                response = await AioGeneration.call(
+                    api_key=os.getenv("DASHSCOPE_API_KEY"),
+                    model="qwen-turbo",
+                    messages=messages,
+                    result_format="message",
+                    session=session,  # ← 传入自定义 session
+                )
+
+                print(f"响应: {response.output.choices[0].message.content}")
+
+        print("\n✅ ClientSession 已自动关闭")
+
+    @staticmethod
+    async def test_with_custom_session_streaming():
+        """示例：使用自定义 ClientSession 进行流式输出"""
+        print("\n=== 使用自定义 ClientSession 流式输出示例 ===")
+
+        # 配置连接池
+        connector = aiohttp.TCPConnector(
+            limit=100,
+            ssl=ssl.create_default_context(cafile=certifi.where()),
+        )
+
+        async with aiohttp.ClientSession(connector=connector) as session:
+            messages = [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "请写一首关于秋天的诗"},
+            ]
+
+            print("\n流式输出:")
+            response = await AioGeneration.call(
+                api_key=os.getenv("DASHSCOPE_API_KEY"),
+                model="qwen-turbo",
+                messages=messages,
+                result_format="message",
+                stream=True,
+                incremental_output=True,
+                session=session,  # ← 传入自定义 session
+            )
+
+            async for chunk in response:
+                if chunk.status_code == 200:
+                    print(chunk.output.choices[0].message.content, end='', flush=True)
+
+            print("\n")
+
+        print("✅ ClientSession 已自动关闭")
+
+    @staticmethod
+    async def test_with_custom_session_concurrent():
+        """示例：使用自定义 ClientSession 进行并发请求"""
+        print("\n=== 使用自定义 ClientSession 并发请求示例 ===")
+
+        # 配置连接池
+        connector = aiohttp.TCPConnector(
+            limit=100,
+            ssl=ssl.create_default_context(cafile=certifi.where()),
+        )
+
+        async with aiohttp.ClientSession(connector=connector) as session:
+            # 创建多个并发任务
+            tasks = []
+            topics = ["Python", "JavaScript", "Go"]
+
+            for topic in topics:
+                messages = [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": f"请用一句话介绍：{topic}"},
+                ]
+
+                task = AioGeneration.call(
+                    api_key=os.getenv("DASHSCOPE_API_KEY"),
+                    model="qwen-turbo",
+                    messages=messages,
+                    result_format="message",
+                    session=session,  # ← 所有请求共享同一个 session
+                )
+                tasks.append(task)
+
+            # 并发执行所有任务
+            print("\n开始并发请求...")
+            responses = await asyncio.gather(*tasks)
+
+            # 处理响应
+            for i, response in enumerate(responses):
+                print(f"\n请求 {i+1} 响应: {response.output.choices[0].message.content}")
+
+        print("\n✅ ClientSession 已自动关闭")
+
 
 async def main():
     """Main function to run all async tests."""
@@ -449,6 +564,11 @@ async def main():
     # await TestAioGeneration.test_response_with_tool_calls()
     # await TestAioGeneration.test_response_with_search_info()
     # await TestAioGeneration.test_response_with_reasoning_content()
+
+    # 自定义 Session 示例
+    # await TestAioGeneration.test_with_custom_session()
+    # await TestAioGeneration.test_with_custom_session_streaming()
+    # await TestAioGeneration.test_with_custom_session_concurrent()
 
     print("\n所有异步测试用例执行完成！")
 

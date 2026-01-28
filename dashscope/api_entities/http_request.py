@@ -4,7 +4,7 @@ import datetime
 import json
 import ssl
 from http import HTTPStatus
-from typing import Optional
+from typing import Optional, Dict, Union
 
 import aiohttp
 import certifi
@@ -42,6 +42,9 @@ class HttpRequest(AioBaseRequest):
         flattened_output: bool = False,
         encryption: Optional[Encryption] = None,
         user_agent: str = "",
+        session: Optional[
+            Union[requests.Session, aiohttp.ClientSession]
+        ] = None,
     ) -> None:
         """HttpSSERequest, processing http server sent event stream.
 
@@ -54,6 +57,11 @@ class HttpRequest(AioBaseRequest):
                 Defaults to DEFAULT_REQUEST_TIMEOUT_SECONDS.
             user_agent (str, optional): Additional user agent string to
                 append. Defaults to ''.
+            session (Optional[Union[requests.Session,
+                aiohttp.ClientSession]], optional):
+                Custom Session for connection reuse. Can be either
+                requests.Session for sync calls or aiohttp.ClientSession
+                for async calls. Defaults to None.
         """
 
         super().__init__(user_agent=user_agent)
@@ -61,7 +69,26 @@ class HttpRequest(AioBaseRequest):
         self.flattened_output = flattened_output
         self.async_request = async_request
         self.encryption = encryption
-        self.headers = {
+
+        # Auto-detect session type and store accordingly
+        if session is not None:
+            session_type = type(session).__name__
+            session_module = type(session).__module__
+
+            # Check if it's an aiohttp ClientSession
+            if (
+                session_type == "ClientSession" and "aiohttp" in session_module
+            ) or isinstance(session, aiohttp.ClientSession):
+                self._external_session = None
+                self._external_aio_session = session
+            else:
+                # Treat as requests Session
+                self._external_session = session
+                self._external_aio_session = None
+        else:
+            self._external_session = None
+            self._external_aio_session = None
+        self.headers: Dict = {
             "Accept": "application/json",
             "Authorization": f"Bearer {api_key}",
             **self.headers,
@@ -132,18 +159,27 @@ class HttpRequest(AioBaseRequest):
                 pass
             return result
 
-    async def _handle_aio_request(self):
+    async def _handle_aio_request(self):  # pylint: disable=too-many-branches
         try:
-            connector = aiohttp.TCPConnector(
-                ssl=ssl.create_default_context(
-                    cafile=certifi.where(),
-                ),
-            )
-            async with aiohttp.ClientSession(
-                connector=connector,
-                timeout=aiohttp.ClientTimeout(total=self.timeout),
-                headers=self.headers,
-            ) as session:
+            # Use external aio_session if provided,
+            # otherwise create temporary session
+            if self._external_aio_session is not None:
+                session = self._external_aio_session
+                should_close = False
+            else:
+                connector = aiohttp.TCPConnector(
+                    ssl=ssl.create_default_context(
+                        cafile=certifi.where(),
+                    ),
+                )
+                session = aiohttp.ClientSession(
+                    connector=connector,
+                    timeout=aiohttp.ClientTimeout(total=self.timeout),
+                    headers=self.headers,
+                )
+                should_close = True
+
+            try:
                 logger.debug("Starting request: %s", self.url)
                 if self.method == HTTPMethod.POST:
                     is_form, obj = False, {}
@@ -183,6 +219,10 @@ class HttpRequest(AioBaseRequest):
                 async with response:
                     async for rsp in self._handle_aio_response(response):
                         yield rsp
+            finally:
+                # Only close if we created the session
+                if should_close:
+                    await session.close()
         except aiohttp.ClientConnectorError as e:
             logger.error(e)
             raise e
@@ -408,7 +448,16 @@ class HttpRequest(AioBaseRequest):
 
     def _handle_request(self):
         try:
-            with requests.Session() as session:
+            # Use external session if provided,
+            # otherwise create temporary session
+            if self._external_session is not None:
+                session = self._external_session
+                should_close = False
+            else:
+                session = requests.Session()
+                should_close = True
+
+            try:
                 if self.method == HTTPMethod.POST:
                     is_form, form, obj = self.data.get_http_payload()
                     if is_form:
@@ -443,6 +492,10 @@ class HttpRequest(AioBaseRequest):
                     )
                 for rsp in self._handle_response(response):
                     yield rsp
+            finally:
+                # Only close if we created the session
+                if should_close:
+                    session.close()
         except BaseException as e:
             logger.error(e)
             raise e

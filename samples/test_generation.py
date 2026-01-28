@@ -2,6 +2,8 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import os
+import requests
+from requests.adapters import HTTPAdapter
 from dashscope import Generation
 
 
@@ -331,9 +333,85 @@ class TestGeneration:
         call_deep_research_model(messages, "第二步：深入研究")
         print("\n 研究完成！")
 
+    @staticmethod
+    def test_with_custom_session():
+        """示例：使用自定义 Session 进行连接复用"""
+        print("\n=== 使用自定义 Session 示例 ===")
+
+        # 创建自定义 Session 并配置连接池
+        with requests.Session() as session:
+            # 配置连接池参数
+            adapter = HTTPAdapter(
+                pool_connections=10,
+                pool_maxsize=20,
+                max_retries=3,
+            )
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
+
+            # 使用同一个 session 进行多次请求
+            for i in range(3):
+                print(f"\n--- 请求 {i+1} ---")
+
+                messages = [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": f"请用一句话介绍：主题 {i+1}"},
+                ]
+
+                response = Generation.call(
+                    api_key=os.getenv("DASHSCOPE_API_KEY"),
+                    model="qwen-turbo",
+                    messages=messages,
+                    result_format="message",
+                    session=session,  # ← 传入自定义 session
+                )
+
+                print(f"响应: {response.output.choices[0].message.content}")
+
+        print("\n✅ Session 已自动关闭")
+
+    @staticmethod
+    def test_with_custom_session_streaming():
+        """示例：使用自定义 Session 进行流式输出"""
+        print("\n=== 使用自定义 Session 流式输出示例 ===")
+
+        with requests.Session() as session:
+            # 配置连接池
+            adapter = HTTPAdapter(
+                pool_connections=10,
+                pool_maxsize=20,
+            )
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
+
+            messages = [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "你好！"},
+            ]
+
+            print("\n流式输出:")
+            response = Generation.call(
+                api_key=os.getenv("DASHSCOPE_API_KEY"),
+                model="qwen-turbo",
+                messages=messages,
+                result_format="message",
+                stream=True,
+                incremental_output=True,
+                session=session,  # ← 传入自定义 session
+            )
+
+            for chunk in response:
+                print(f"chunk: {chunk}")
+
+        print("✅ Session 已自动关闭")
+
 
 if __name__ == "__main__":
     TestGeneration.test_response_with_content()
     # TestGeneration.test_response_with_tool_calls()
     # TestGeneration.test_response_with_search_info()
     # TestGeneration.test_response_with_reasoning_content()
+
+    # 自定义 Session 示例
+    # TestGeneration.test_with_custom_session()
+    # TestGeneration.test_with_custom_session_streaming()
