@@ -497,5 +497,4 @@ class HttpRequest(AioBaseRequest):
                 if should_close:
                     session.close()
         except BaseException as e:
-            logger.error(e)
             raise e
