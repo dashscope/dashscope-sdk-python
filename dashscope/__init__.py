@@ -17,6 +17,9 @@ from dashscope.app.application import Application
 from dashscope.assistants import Assistant, AssistantList, Assistants
 from dashscope.assistants.assistant_types import AssistantFile, DeleteResponse
 from dashscope.audio.asr.transcription import Transcription
+from dashscope.audio.http_tts.http_speech_synthesizer import (
+    HttpSpeechSynthesizer,
+)
 from dashscope.audio.tts.speech_synthesizer import SpeechSynthesizer
 from dashscope.common.api_key import save_api_key
 from dashscope.common.env import (
@@ -88,6 +91,7 @@ __all__ = [
     "MultiModalEmbeddingItemImage",
     "MultiModalEmbeddingItemText",
     "SpeechSynthesizer",
+    "HttpSpeechSynthesizer",
     "MultiModalConversation",
     "AioMultiModalConversation",
     "BatchTextEmbedding",
