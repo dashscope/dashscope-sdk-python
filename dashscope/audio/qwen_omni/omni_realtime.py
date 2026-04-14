@@ -199,7 +199,7 @@ class OmniRealtimeConversation:
         if not (self.ws.sock and self.ws.sock.connected):
             raise TimeoutError(
                 "websocket connection could not established within 5s. "
-                "Please check your network connection, firewall settings,"
+                "Please check your network connection, firewall settings, "
                 "or server status.",
             )
         self.callback.on_open()
@@ -593,8 +593,8 @@ class OmniRealtimeConversation:
 
     # WebSocket发生错误的回调函数
     def _on_error(self, ws, error):  # pylint: disable=unused-argument
-        print(f"websocket closed due to {error}")
         # pylint: disable=broad-exception-raised
+        logger.error("websocket closed due to %s", error)
         raise Exception(f"websocket closed due to {error}")
 
     # 获取上一个任务的taskId
