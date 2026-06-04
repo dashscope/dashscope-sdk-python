@@ -25,3 +25,7 @@ base_websocket_api_url = os.environ.get(
     "DASHSCOPE_WEBSOCKET_BASE_URL",
     f"wss://dashscope.aliyuncs.com/api-ws/{api_version}/inference",
 )
+base_compatible_api_url = os.environ.get(
+    "DASHSCOPE_COMPATIBLE_BASE_URL",
+    f"https://dashscope.aliyuncs.com/compatible-mode/{api_version}",
+)

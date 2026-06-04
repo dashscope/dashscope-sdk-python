@@ -25,6 +25,7 @@ from dashscope.common.api_key import save_api_key
 from dashscope.common.env import (
     api_key,
     api_key_file_path,
+    base_compatible_api_url,
     base_http_api_url,
     base_websocket_api_url,
 )
@@ -68,6 +69,7 @@ from dashscope.tokenizers import (
 )
 
 __all__ = [
+    "base_compatible_api_url",
     "base_http_api_url",
     "base_websocket_api_url",
     "api_key",
