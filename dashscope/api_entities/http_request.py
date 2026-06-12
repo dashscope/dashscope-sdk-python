@@ -2,14 +2,13 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import datetime
 import json
-import ssl
 from http import HTTPStatus
 from typing import Optional, Dict, Union
 
 import aiohttp
-import certifi
 import requests
 
+from dashscope.api_entities.aio_session import get_shared_aio_session
 from dashscope.api_entities.base_request import AioBaseRequest
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.common.constants import (
@@ -162,67 +161,55 @@ class HttpRequest(AioBaseRequest):
     async def _handle_aio_request(self):  # pylint: disable=too-many-branches
         try:
             # Use external aio_session if provided,
-            # otherwise create temporary session
+            # otherwise use shared session with connection pooling
             if self._external_aio_session is not None:
                 session = self._external_aio_session
-                should_close = False
             else:
-                connector = aiohttp.TCPConnector(
-                    ssl=ssl.create_default_context(
-                        cafile=certifi.where(),
-                    ),
-                )
-                session = aiohttp.ClientSession(
-                    connector=connector,
-                    timeout=aiohttp.ClientTimeout(total=self.timeout),
-                    headers=self.headers,
-                )
-                should_close = True
+                session = await get_shared_aio_session()
 
-            try:
-                logger.debug("Starting request: %s", self.url)
-                if self.method == HTTPMethod.POST:
-                    is_form, obj = False, {}
-                    if hasattr(self, "data") and self.data is not None:
-                        is_form, obj = self.data.get_aiohttp_payload()
-                    if is_form:
-                        headers = {**self.headers, **obj.headers}
-                        response = await session.post(
-                            url=self.url,
-                            data=obj,
-                            headers=headers,
-                        )
-                    else:
-                        response = await session.request(
-                            "POST",
-                            url=self.url,
-                            json=obj,
-                            headers=self.headers,
-                        )
-                elif self.method == HTTPMethod.GET:
-                    # 添加条件判断
-                    params = {}
-                    if hasattr(self, "data") and self.data is not None:
-                        params = getattr(self.data, "parameters", {})
-                    if params:
-                        params = self.__handle_parameters(params)
-                    response = await session.get(
+            request_timeout = aiohttp.ClientTimeout(total=self.timeout)
+
+            logger.debug("Starting request: %s", self.url)
+            if self.method == HTTPMethod.POST:
+                is_form, obj = False, {}
+                if hasattr(self, "data") and self.data is not None:
+                    is_form, obj = self.data.get_aiohttp_payload()
+                if is_form:
+                    headers = {**self.headers, **obj.headers}
+                    response = await session.post(
                         url=self.url,
-                        params=params,
-                        headers=self.headers,
+                        data=obj,
+                        headers=headers,
+                        timeout=request_timeout,
                     )
                 else:
-                    raise UnsupportedHTTPMethod(
-                        f"Unsupported http method: {self.method}",
+                    response = await session.request(
+                        "POST",
+                        url=self.url,
+                        json=obj,
+                        headers=self.headers,
+                        timeout=request_timeout,
                     )
-                logger.debug("Response returned: %s", self.url)
-                async with response:
-                    async for rsp in self._handle_aio_response(response):
-                        yield rsp
-            finally:
-                # Only close if we created the session
-                if should_close:
-                    await session.close()
+            elif self.method == HTTPMethod.GET:
+                params = {}
+                if hasattr(self, "data") and self.data is not None:
+                    params = getattr(self.data, "parameters", {})
+                if params:
+                    params = self.__handle_parameters(params)
+                response = await session.get(
+                    url=self.url,
+                    params=params,
+                    headers=self.headers,
+                    timeout=request_timeout,
+                )
+            else:
+                raise UnsupportedHTTPMethod(
+                    f"Unsupported http method: {self.method}",
+                )
+            logger.debug("Response returned: %s", self.url)
+            async with response:
+                async for rsp in self._handle_aio_response(response):
+                    yield rsp
         except aiohttp.ClientConnectorError as e:
             logger.error(e)
             raise e
