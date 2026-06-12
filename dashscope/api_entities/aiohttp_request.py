@@ -251,7 +251,10 @@ class AioHttpRequest(AioBaseRequest):
         try:
             session = await get_shared_aio_session()
             if self.stream:
-                request_timeout = aiohttp.ClientTimeout(sock_read=self.timeout)
+                request_timeout = aiohttp.ClientTimeout(
+                    total=None,
+                    sock_read=self.timeout,
+                )
             else:
                 request_timeout = aiohttp.ClientTimeout(total=self.timeout)
 

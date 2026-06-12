@@ -11,7 +11,7 @@ Tests the connection reuse and SSL context caching in aio_session module.
 
 import asyncio
 import ssl
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import aiohttp
 import pytest
@@ -112,6 +112,26 @@ class TestSharedAioSession:
     async def test_close_idempotent(self):
         await aio_session.close_shared_aio_session()
         await aio_session.close_shared_aio_session()
+
+    @pytest.mark.asyncio
+    async def test_stale_sessions_cleaned_up(self):
+        """Test that closed sessions are replaced in the dict."""
+        s1 = await aio_session.get_shared_aio_session()
+        loop = asyncio.get_running_loop()
+
+        # Manually close without calling close_shared_aio_session
+        await s1.close()
+        assert s1.closed
+        assert loop in aio_session._aio_sessions
+
+        # Getting a new session should replace the stale entry
+        s2 = await aio_session.get_shared_aio_session()
+        try:
+            assert s2 is not s1
+            assert not s2.closed
+            assert aio_session._aio_sessions[loop] is s2
+        finally:
+            await aio_session.close_shared_aio_session()
 
 
 class TestSessionPerLoop:
