@@ -39,7 +39,9 @@ class AioHttpRequest(AioBaseRequest):
             api_key (str): The api key.
             method (str): The http method(GET|POST).
             stream (bool, optional): Is stream request. Defaults to True.
-            timeout (int, optional): Total request timeout.
+            timeout (int, optional): Request timeout in seconds. For streaming
+                requests, this is the idle timeout between chunks (sock_read);
+                for non-streaming requests, this is the total request timeout.
                 Defaults to DEFAULT_REQUEST_TIMEOUT_SECONDS.
             user_agent (str, optional): Additional user agent string to
                 append. Defaults to ''.
@@ -248,7 +250,10 @@ class AioHttpRequest(AioBaseRequest):
     async def _handle_request(self):
         try:
             session = await get_shared_aio_session()
-            request_timeout = aiohttp.ClientTimeout(total=self.timeout)
+            if self.stream:
+                request_timeout = aiohttp.ClientTimeout(sock_read=self.timeout)
+            else:
+                request_timeout = aiohttp.ClientTimeout(total=self.timeout)
 
             logger.debug("Starting request: %s", self.url)
             if self.method == HTTPMethod.POST:
