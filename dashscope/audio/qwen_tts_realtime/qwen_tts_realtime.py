@@ -222,7 +222,9 @@ class QwenTtsRealtime:
         if speech_rate is not None:
             self.config["speech_rate"] = speech_rate
         if audio_format is not None:
-            self.config["response_format"] = audio_format  # update if configured
+            self.config[
+                "response_format"
+            ] = audio_format  # update if configured
         if pitch_rate is not None:
             self.config["pitch_rate"] = pitch_rate
         if bit_rate is not None:

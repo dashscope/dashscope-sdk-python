@@ -81,7 +81,8 @@ class AsyncAioTaskGetMixin:
 
     @classmethod
     async def _handle_request(cls, request):
-        # If aio_call returns an async generator, consume it to get the response
+        # If aio_call returns an async generator, consume it to get
+        # the response
         response = await request.aio_call()
         # Handle async generator case
         if isinstance(response, collections.abc.AsyncGenerator):

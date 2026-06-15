@@ -110,11 +110,16 @@ class ReplaceWord:
 class Upstream:
     """struct for upstream"""
 
-    audio_format: str = field(default="pcm")  # upstream audio format, default pcm, supports pcm/opus
+    audio_format: str = field(
+        default="pcm",
+    )  # upstream audio format, default pcm, supports pcm/opus
     type: str = field(
         default="AudioOnly",
-    )  # upstream type: AudioOnly for voice only; AudioAndVideo for video upload
-    mode: str = field(default="tap2talk")  # client interaction mode: push2talk/tap2talk/duplex
+    )  # upstream type: AudioOnly for voice only;
+    # AudioAndVideo for video upload
+    mode: str = field(
+        default="tap2talk",
+    )  # client interaction mode: push2talk/tap2talk/duplex
     sample_rate: int = field(default=16000)  # audio sample rate
     vocabulary_id: str = field(default=None)
     asr_post_processing: AsrPostProcessing = field(default=None)
@@ -144,11 +149,17 @@ class Downstream:
     # dialog  returns dialog system intermediate results
     # Multiple values can be set, comma-separated, default is transcript
     voice: str = field(default="")  # voice timbre
-    sample_rate: int = field(default=0)  # voice timbre # synthesis audio sample rate
-    intermediate_text: str = field(default="transcript")  # Controls which intermediate text is returned to user:
+    sample_rate: int = field(
+        default=0,
+    )  # voice timbre # synthesis audio sample rate
+    intermediate_text: str = field(
+        default="transcript",
+    )  # Controls which intermediate text is returned to user:
     debug: bool = field(default=False)  # Controls whether to return debug info
     # type_: str = field(default="Audio", metadata={"alias": "type"})  # downstream type: Text: no audio output; Audio: output audio, default  # noqa: E501  # pylint: disable=line-too-long
-    audio_format: str = field(default="pcm")  # downstream audio format, default pcm, supports pcm/mp3
+    audio_format: str = field(
+        default="pcm",
+    )  # downstream audio format, default pcm, supports pcm/mp3
     volume: int = field(default=50)  # voice volume 0-100
     pitch_rate: int = field(default=100)  # voice pitch 50-200
     speech_rate: int = field(default=100)  # voice speed 50-200

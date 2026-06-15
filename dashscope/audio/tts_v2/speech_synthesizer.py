@@ -770,7 +770,8 @@ class SpeechSynthesizer:
             it will wait for the corresponding number of milliseconds;
             otherwise, it will wait indefinitely.
         """
-        # print('non-streaming TTS not yet supported for LLM calls, using streaming simulation')
+        # print('non-streaming TTS not yet supported for LLM calls,'
+        #       ' using streaming simulation')
         if self.additional_params is None:
             self.additional_params = {"enable_ssml": True}
         else:
@@ -995,7 +996,8 @@ class SpeechSynthesizerObjectPool:
         logger.debug("[SpeechSynthesizerObjectPool] get synthesizer")
         synthesizer: SpeechSynthesizer = None
         with self._lock:
-            # Iterate over object pool, return pre-connected object if available
+            # Iterate over object pool, return pre-connected object
+            # if available
             for idx, poolObject in enumerate(self._pool):
                 if (
                     self._avaliable[idx]

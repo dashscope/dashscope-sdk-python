@@ -558,7 +558,9 @@ class _TingWuResponse:
             self._callback.on_recognize_result(response_json)
         elif action == "ai-result":
             self._callback.on_ai_result(response_json)
-        elif action == "speech-end":  # ai-result event always arrives before speech-end event
+        elif (
+            action == "speech-end"
+        ):  # ai-result event always arrives before speech-end event
             self._callback.on_stopped()
             if self._close_callback is not None:
                 self._close_callback()

@@ -6,7 +6,8 @@ from enum import Enum
 
 class DialogState(Enum):
     """
-    Dialog state enumeration class, defining the possible states of a dialog bot.
+    Dialog state enumeration class, defining the possible states
+    of a dialog bot.
 
     Attributes:
         IDLE (str): Bot is in idle state.

@@ -94,10 +94,12 @@ class VoiceEnrollmentService(BaseApi):
         """
         Create a new cloned voice.
         param: target_model TTS model version for the cloned voice
-        param: prefix Custom voice prefix, only digits and lowercase letters allowed, less than 10 characters.
+        param: prefix Custom voice prefix, only digits and lowercase
+            letters allowed, less than 10 characters.
         param: url Audio file URL for voice cloning
         param: language_hints Target language for the cloned voice
-        param: max_prompt_audio_length Max length of prompt audio output from audio preprocessing, in seconds. Default is 10s.
+        param: max_prompt_audio_length Max length of prompt audio output
+            from audio preprocessing, in seconds. Default is 10s.
         param: kwargs Additional parameters
         return: voice_id
         """
@@ -136,7 +138,8 @@ class VoiceEnrollmentService(BaseApi):
         List all created voices.
         param: page_index Page index for query
         param: page_size Page size
-        return: List[dict] Voice list, including id, creation time, modification time, and status for each voice.
+        return: List[dict] Voice list, including id, creation time,
+            modification time, and status for each voice.
         """
         if prefix:
             # pylint: disable=no-value-for-parameter

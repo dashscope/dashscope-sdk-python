@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-# -*- coding: utf-8 -*-
 
 # multimodal conversation request directive
 
@@ -21,12 +20,17 @@ RESPONSE_NAME_STOPPED = "Stopped"
 RESPONSE_NAME_STATE_CHANGED = "DialogStateChanged"
 RESPONSE_NAME_REQUEST_ACCEPTED = "RequestAccepted"
 RESPONSE_NAME_SPEECH_STARTED = "SpeechStarted"
-RESPONSE_NAME_SPEECH_ENDED = "SpeechEnded"  # Server sends this event when ASR speech endpoint is detected, optional event
-RESPONSE_NAME_RESPONDING_STARTED = (
-    "RespondingStarted"  # AI voice response starts, SDK should prepare to receive audio data from server
-)
+# Server sends this event when ASR speech endpoint is detected,
+# optional event
+RESPONSE_NAME_SPEECH_ENDED = "SpeechEnded"
+# AI voice response starts, SDK prepares to receive audio
+RESPONSE_NAME_RESPONDING_STARTED = "RespondingStarted"
 RESPONSE_NAME_RESPONDING_ENDED = "RespondingEnded"  # AI voice response ends
-RESPONSE_NAME_SPEECH_CONTENT = "SpeechContent"  # User speech recognition text, full streaming output
-RESPONSE_NAME_RESPONDING_CONTENT = "RespondingContent"  # System output text, full streaming output
+RESPONSE_NAME_SPEECH_CONTENT = (
+    "SpeechContent"  # User speech recognition text, full streaming output
+)
+RESPONSE_NAME_RESPONDING_CONTENT = (
+    "RespondingContent"  # System output text, full streaming output
+)
 RESPONSE_NAME_ERROR = "Error"  # Server-side error during dialog
 RESPONSE_NAME_HEART_BEAT = "HeartBeat"  # Heartbeat message

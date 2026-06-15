@@ -88,7 +88,8 @@ class VocabularyService(BaseApi):
         """
         Create a hot word table.
         param: target_model ASR model version for the hot word table
-        param: prefix Custom hot word table prefix, only digits and lowercase letters allowed, less than 10 characters.
+        param: prefix Custom hot word table prefix, only digits and
+            lowercase letters allowed, less than 10 characters.
         param: vocabulary Hot word table dictionary
         return: Hot word table identifier vocabulary_id
         """
@@ -120,7 +121,8 @@ class VocabularyService(BaseApi):
     ) -> List[dict]:
         """
         List all created hot word tables.
-        param: prefix Custom prefix, if set only returns hot word table identifiers with the specified prefix.
+        param: prefix Custom prefix, if set only returns hot word table
+            identifiers with the specified prefix.
         param: page_index Page index for query
         param: page_size Page size
         return: List of hot word table identifiers
