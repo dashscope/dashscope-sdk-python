@@ -129,7 +129,7 @@ class TingWuRealtime(BaseApi):
         self.response = _TingWuResponse(
             self._callback,
             self.close,
-        )  # 传递 self.close 作为回调
+        )  # pass self.close as callback
 
     def _on_message(  # pylint: disable=unused-argument
         self,
@@ -145,13 +145,13 @@ class TingWuRealtime(BaseApi):
     def _on_error(self, ws, error):  # pylint: disable=unused-argument
         logger.error(f"Error: {error}")
         if self._callback:
-            error_code = ""  # 默认错误码
+            error_code = ""  # default error code
             if "connection" in str(error).lower():
-                error_code = "1001"  # 连接错误
+                error_code = "1001"  # connection error
             elif "timeout" in str(error).lower():
-                error_code = "1002"  # 超时错误
+                error_code = "1002"  # timeout error
             elif "authentication" in str(error).lower():
-                error_code = "1003"  # 认证错误
+                error_code = "1003"  # authentication error
             self._callback.on_error(
                 error_code=error_code,
                 error_msg=str(error),
@@ -251,7 +251,7 @@ class TingWuRealtime(BaseApi):
             on_close=self._on_close,
         )
         self.thread = threading.Thread(target=self._run_forever)
-        # 统一心跳机制配置
+        # Unified heartbeat configuration
         self.ws.ping_interval = 5
         self.ws.ping_timeout = 4
         self.thread.daemon = True
@@ -272,11 +272,11 @@ class TingWuRealtime(BaseApi):
             not (self.ws.sock and self.ws.sock.connected)
             and (time.time() - start_time) < timeout
         ):
-            time.sleep(0.1)  # 短暂休眠，避免密集轮询
+            time.sleep(0.1)  # Brief sleep to avoid busy polling
 
     def _send_text_frame(self, text: str):
-        # 避免在日志中记录敏感信息，如API密钥等
-        # 只记录非敏感信息
+        # Avoid logging sensitive information such as API keys
+        # Only log non-sensitive information
         if '"Authorization"' not in text:
             logger.info(">>>>>> send text frame : %s", text)
         else:
@@ -300,9 +300,9 @@ class TingWuRealtime(BaseApi):
             if self.ws:
                 self.ws.close()
             if self.thread and self.thread.is_alive():
-                # 设置标志位通知线程退出
+                # Set flag to notify thread to exit
                 self.thread.join(timeout=2)
-            # 清除引用
+            # Clear references
             self.ws = None
             self.thread = None
             self._callback = None
@@ -488,9 +488,9 @@ class _Request:
 class _TingWuResponse:
     def __init__(self, callback: TingWuRealtimeCallback, close_callback=None):
         super().__init__()
-        self.task_id = None  # 对话ID.
+        self.task_id = None  # Task ID
         self._callback = callback
-        self._close_callback = close_callback  # 保存关闭回调函数
+        self._close_callback = close_callback  # Save close callback function
 
     def handle_text_response(self, response_json: str):
         """
@@ -558,7 +558,7 @@ class _TingWuResponse:
             self._callback.on_recognize_result(response_json)
         elif action == "ai-result":
             self._callback.on_ai_result(response_json)
-        elif action == "speech-end":  # ai-result事件永远会先于speech-end事件
+        elif action == "speech-end":  # ai-result event always arrives before speech-end event
             self._callback.on_stopped()
             if self._close_callback is not None:
                 self._close_callback()
@@ -598,7 +598,7 @@ class RequestBodyInput:
 class DashHeader:
     action: str
     task_id: str = field(default=get_random_uuid())
-    streaming: str = field(default="duplex")  # 默认为 duplex
+    streaming: str = field(default="duplex")  # default to duplex
 
     def to_dict(self):
         return {

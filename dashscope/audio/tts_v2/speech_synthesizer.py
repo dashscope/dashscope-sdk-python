@@ -167,7 +167,7 @@ class Request:
         self.language_hints = language_hints
 
     def gen_uid(self):
-        # 生成随机UUID
+        # Generate random UUID
         return uuid.uuid4().hex
 
     def get_websocket_headers(self, headers, workspace):
@@ -403,13 +403,13 @@ class SpeechSynthesizer:
         self.thread = threading.Thread(target=self.ws.run_forever)
         self.thread.daemon = True
         self.thread.start()
-        # 等待连接建立
+        # Wait for connection to be established
         start_time = time.time()
         while (
             not (self.ws.sock and self.ws.sock.connected)
             and (time.time() - start_time) < timeout_seconds
         ):
-            time.sleep(0.1)  # 短暂休眠，避免密集轮询
+            time.sleep(0.1)  # Brief sleep to avoid busy polling
         if not (self.ws.sock and self.ws.sock.connected):
             raise TimeoutError(
                 "websocket connection could not established within 5s. "
@@ -540,10 +540,10 @@ class SpeechSynthesizer:
 
         if self._is_started:
             raise InvalidTask("task has already started.")
-        # 建立ws连接
+        # Establish WebSocket connection
         if self.ws is None:
             self.__connect(5)
-        # 发送run-task指令
+        # Send run-task command
         request = self.request.get_start_request(self.additional_params)
         self.__send_str(request)
         if not self.start_event.wait(10):
@@ -680,7 +680,7 @@ class SpeechSynthesizer:
         self.start_event.set()
         self.complete_event.set()
 
-    # 监听消息的回调函数
+    # Callback for listening to messages
     def on_message(  # pylint: disable=unused-argument,too-many-branches
         self,
         ws,
@@ -689,11 +689,11 @@ class SpeechSynthesizer:
         if isinstance(message, str):
             logger.debug("<<<recv %s", message)
             try:
-                # 尝试将消息解析为JSON
+                # Attempt to parse message as JSON
                 json_data = json.loads(message)
                 self.last_response = json_data
                 event = json_data["header"][EVENT_KEY]
-                # 调用JSON回调
+                # Invoke JSON callback
                 if EventType.STARTED == event:
                     self.start_event.set()
                 elif EventType.FINISHED == event:
@@ -721,7 +721,7 @@ class SpeechSynthesizer:
                 # pylint: disable=broad-exception-raised,raise-missing-from
                 raise Exception("Failed to parse message as JSON.")
         elif isinstance(message, (bytes, bytearray)):
-            # 如果失败，认为是二进制消息
+            # If parsing fails, treat as binary message
             logger.debug("<<<recv binary %s", len(message))
             if self._recv_audio_length == 0:
                 self._first_package_timestamp = time.time() * 1000
@@ -742,7 +742,7 @@ class SpeechSynthesizer:
                 self._recv_audio_length,
                 current_rtf,
             )
-            # 只有在非异步调用的时候保存音频
+            # Only save audio in non-async calls
             if not self.async_call:
                 if self._audio_data is None:
                     self._audio_data = bytes(message)
@@ -770,7 +770,7 @@ class SpeechSynthesizer:
             it will wait for the corresponding number of milliseconds;
             otherwise, it will wait indefinitely.
         """
-        # print('还不支持非流式语音合成sdk调用大模型，使用流式模拟')
+        # print('non-streaming TTS not yet supported for LLM calls, using streaming simulation')
         if self.additional_params is None:
             self.additional_params = {"enable_ssml": True}
         else:
@@ -786,7 +786,7 @@ class SpeechSynthesizer:
             self.streaming_complete(timeout_millis)
             return self._audio_data
 
-    # WebSocket关闭的回调函数
+    # Callback for WebSocket close
     def on_close(  # pylint: disable=unused-argument
         self,
         ws,
@@ -795,17 +795,17 @@ class SpeechSynthesizer:
     ):
         pass
 
-    # WebSocket发生错误的回调函数
+    # Callback for WebSocket error
     def on_error(self, ws, error):  # pylint: disable=unused-argument
         print(f"websocket closed due to {error}")
         # pylint: disable=broad-exception-raised
         raise Exception(f"websocket closed due to {error}")
 
-    # 关闭WebSocket连接
+    # Close WebSocket connection
     def close(self):
         self.ws.close()
 
-    # 获取上一个任务的taskId
+    # Get the taskId of the last task
     def get_last_request_id(self):
         return self.last_request_id
 
@@ -865,7 +865,7 @@ class SpeechSynthesizerObjectPool:
         if max_size > 100:
             raise ValueError("max_size must be less than 100")
         self._pool = []
-        # 如果重连中，则会将avaliable置为False，避免被使用
+        # If reconnecting, set available to False to avoid being used
         self._avaliable = []
         self._pool_size = max_size
         for i in range(self._pool_size):  # pylint: disable=unused-variable
@@ -918,7 +918,7 @@ class SpeechSynthesizerObjectPool:
 
                 current_time = time.time()
                 for idx, poolObject in enumerate(self._pool):
-                    # 如果超过固定时间没有使用对象，则重连
+                    # Reconnect if object has not been used for a fixed time
                     if poolObject.connect_time == -1:
                         objects_need_to_connect.append(poolObject)
                         self._avaliable[idx] = False
@@ -995,7 +995,7 @@ class SpeechSynthesizerObjectPool:
         logger.debug("[SpeechSynthesizerObjectPool] get synthesizer")
         synthesizer: SpeechSynthesizer = None
         with self._lock:
-            # 遍历对象池，如果存在预建连的对象，则返回
+            # Iterate over object pool, return pre-connected object if available
             for idx, poolObject in enumerate(self._pool):
                 if (
                     self._avaliable[idx]
@@ -1009,7 +1009,7 @@ class SpeechSynthesizerObjectPool:
                     self._avaliable.pop(idx)
                     break
 
-        # 如果对象池不足，则返回未建连的新对象
+        # If pool is exhausted, return a new unconnected object
         if synthesizer is None:
             synthesizer = self.__get_default_synthesizer()
             logger.warning(
