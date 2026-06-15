@@ -1,12 +1,3 @@
-<h4 align="center">
-    <p>
-        <b>English</b>
-    <p>
-</h4>
-
-
-</div>
-
 # DashScope Python SDK
 
 The DashScope Python SDK provides a comprehensive interface to [Alibaba Cloud Model Studio (Bailian)](https://www.alibabacloud.com/help/en/model-studio/) APIs, covering text generation, multi-modal understanding, embeddings, reranking, image/video generation, speech synthesis & recognition, and more.
