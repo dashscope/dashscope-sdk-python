@@ -894,6 +894,7 @@ class AioVideoSynthesis(BaseAsyncAioApi):
         task: Union[str, VideoSynthesisResponse],  # type: ignore[override]
         api_key: str = None,
         workspace: str = None,
+        wait_timeout: int = -1,
         **kwargs,
     ) -> VideoSynthesisResponse:
         """Wait for video synthesis task to complete, and return the result.
@@ -903,11 +904,18 @@ class AioVideoSynthesis(BaseAsyncAioApi):
                 VideoSynthesisResponse return by async_call().
             api_key (str, optional): The api api_key. Defaults to None.
             workspace (str): The dashscope workspace id.
+            wait_timeout (int, optional): The maximum seconds to wait.
+                Default is -1 (no timeout).
 
         Returns:
             VideoSynthesisResponse: The task result.
         """
-        response = await super().wait(task, api_key, workspace=workspace)
+        response = await super().wait(
+            task,
+            api_key,
+            workspace=workspace,
+            wait_timeout=wait_timeout,
+        )
         return VideoSynthesisResponse.from_api_response(response)
 
     @classmethod

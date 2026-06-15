@@ -127,6 +127,7 @@ class QwenTranscription(BaseAsyncApi):
         task: Union[str, TranscriptionResponse],  # type: ignore[override]
         api_key: str = None,
         workspace: str = None,
+        wait_timeout: int = -1,
         **kwargs,
     ) -> TranscriptionResponse:
         """Poll task until the final results of transcription is obtained.
@@ -135,6 +136,8 @@ class QwenTranscription(BaseAsyncApi):
             task (Union[str, TranscriptionResponse]): The task_id or
                 response including task_id returned from async_call().
             workspace (str): The dashscope workspace id.
+            wait_timeout (int, optional): The maximum seconds to wait.
+                Default is -1 (no timeout).
 
         Returns:
             TranscriptionResponse: The result of batch transcription.
@@ -143,6 +146,7 @@ class QwenTranscription(BaseAsyncApi):
             task,
             api_key=api_key,
             workspace=workspace,
+            wait_timeout=wait_timeout,
             **kwargs,
         )
         return TranscriptionResponse.from_api_response(response)
