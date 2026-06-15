@@ -46,7 +46,7 @@ from dashscope.embeddings.text_embedding import TextEmbedding
 from dashscope.files import Files
 from dashscope.models import Models
 from dashscope.nlp.understanding import Understanding
-from dashscope.rerank.text_rerank import TextReRank
+from dashscope.rerank import AioTextReRank, TextReRank
 from dashscope.threads import (
     MessageFile,
     Messages,
@@ -106,6 +106,7 @@ __all__ = [
     "list_tokenizers",
     "Application",
     "TextReRank",
+    "AioTextReRank",
     "Assistants",
     "Threads",
     "Messages",

@@ -387,6 +387,7 @@ class ImageSynthesis(BaseAsyncApi):
         task: Union[str, ImageSynthesisResponse],
         api_key: str = None,
         workspace: str = None,
+        **kwargs,
     ) -> ImageSynthesisResponse:
         """Wait for image(s) synthesis task to complete, and return the result.
 
@@ -399,7 +400,12 @@ class ImageSynthesis(BaseAsyncApi):
         Returns:
             ImageSynthesisResponse: The task result.
         """
-        response = super().wait(task, api_key, workspace=workspace)
+        response = super().wait(
+            task,
+            api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return ImageSynthesisResponse.from_api_response(response)
 
     @classmethod

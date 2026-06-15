@@ -129,6 +129,23 @@ class OssUtils(GetMixin):
         return super().get(None, api_key, params=params, **kwargs)  # type: ignore[return-value] # pylint: disable=line-too-long # noqa: E501
 
 
+def _resolve_file_uri_path(file_uri: str):
+    parse_result = urlparse(file_uri)
+    if parse_result.netloc:
+        file_path = parse_result.netloc + unquote_plus(parse_result.path)
+    else:
+        file_path = unquote_plus(parse_result.path)
+
+    if (
+        file_path.startswith("/")
+        and len(file_path) > 2
+        and file_path[2] == ":"
+    ):
+        file_path = file_path[1:]
+
+    return os.path.expanduser(file_path)
+
+
 def upload_file(
     model: str,
     upload_path: str,
@@ -136,11 +153,7 @@ def upload_file(
     upload_certificate: dict = None,
 ):
     if upload_path.startswith(FILE_PATH_SCHEMA):
-        parse_result = urlparse(upload_path)
-        if parse_result.netloc:
-            file_path = parse_result.netloc + unquote_plus(parse_result.path)
-        else:
-            file_path = unquote_plus(parse_result.path)
+        file_path = _resolve_file_uri_path(upload_path)
         if os.path.exists(file_path):
             file_url, _ = OssUtils.upload(
                 model=model,
@@ -184,11 +197,7 @@ def check_and_upload_local(
             is the certificate (newly obtained or passed in)
     """
     if content.startswith(FILE_PATH_SCHEMA):
-        parse_result = urlparse(content)
-        if parse_result.netloc:
-            file_path = parse_result.netloc + unquote_plus(parse_result.path)
-        else:
-            file_path = unquote_plus(parse_result.path)
+        file_path = _resolve_file_uri_path(content)
         if os.path.isfile(file_path):
             file_url, cert = OssUtils.upload(
                 model=model,
@@ -201,9 +210,10 @@ def check_and_upload_local(
                     f"Uploading file: {content} failed",
                 )
             return True, file_url, cert
-    elif content.startswith("oss://"):
+        raise InvalidInput(f"The file: {file_path} is not exists!")
+    if content.startswith("oss://"):
         return True, content, upload_certificate
-    elif not content.startswith("http"):
+    if not content.startswith("http"):
         content = os.path.expanduser(content)
         if os.path.isfile(content):
             file_url, cert = OssUtils.upload(

@@ -143,6 +143,7 @@ class BatchTextEmbedding(BaseAsyncApi):
         task: Union[str, BatchTextEmbeddingResponse],
         api_key: str = None,
         workspace: str = None,
+        **kwargs,
     ) -> BatchTextEmbeddingResponse:
         """Wait for async text embedding task to complete, and return the result.  # noqa: E501
 
@@ -155,7 +156,12 @@ class BatchTextEmbedding(BaseAsyncApi):
         Returns:
             AsyncTextEmbeddingResponse: The task result.
         """
-        response = super().wait(task, api_key, workspace=workspace)
+        response = super().wait(
+            task,
+            api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return BatchTextEmbeddingResponse.from_api_response(response)
 
     @classmethod

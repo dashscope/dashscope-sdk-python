@@ -59,7 +59,12 @@ class DictMixin(dict):
         return super().__setitem__(attr, value)
 
     def __getattr__(self, attr):
-        return self[attr]
+        try:
+            return self[attr]
+        except KeyError:
+            raise AttributeError(
+                f"{type(self).__name__!r} object has no attribute {attr!r}",
+            ) from None
 
     def __setattr__(self, attr, value):
         self[attr] = value

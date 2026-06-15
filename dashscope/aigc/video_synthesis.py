@@ -509,6 +509,7 @@ class VideoSynthesis(BaseAsyncApi):
         task: Union[str, VideoSynthesisResponse],
         api_key: str = None,
         workspace: str = None,
+        **kwargs,
     ) -> VideoSynthesisResponse:
         """Wait for video synthesis task to complete, and return the result.
 
@@ -521,7 +522,12 @@ class VideoSynthesis(BaseAsyncApi):
         Returns:
             VideoSynthesisResponse: The task result.
         """
-        response = super().wait(task, api_key, workspace=workspace)
+        response = super().wait(
+            task,
+            api_key,
+            workspace=workspace,
+            **kwargs,
+        )
         return VideoSynthesisResponse.from_api_response(response)
 
     @classmethod
