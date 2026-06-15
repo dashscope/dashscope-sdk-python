@@ -5,7 +5,7 @@ import uuid
 
 
 def get_random_uuid() -> str:
-    """生成并返回32位UUID字符串"""
+    """Generate and return a 32-character UUID string"""
     return uuid.uuid4().hex
 
 
@@ -13,7 +13,7 @@ def get_random_uuid() -> str:
 class DashHeader:
     action: str
     task_id: str = field(default=get_random_uuid())
-    streaming: str = field(default="duplex")  # 默认为 duplex
+    streaming: str = field(default="duplex")  # default to duplex
 
     def to_dict(self):
         return {
@@ -110,12 +110,17 @@ class ReplaceWord:
 class Upstream:
     """struct for upstream"""
 
-    audio_format: str = field(default="pcm")  # 上行语音格式，默认pcm.支持pcm/opus
+    audio_format: str = field(
+        default="pcm",
+    )  # upstream audio format, default pcm, supports pcm/opus
     type: str = field(
         default="AudioOnly",
-    )  # 上行类型：AudioOnly 仅语音通话; AudioAndVideo 上传视频
-    mode: str = field(default="tap2talk")  # 客户端交互模式 push2talk/tap2talk/duplex
-    sample_rate: int = field(default=16000)  # 音频采样率
+    )  # upstream type: AudioOnly for voice only;
+    # AudioAndVideo for video upload
+    mode: str = field(
+        default="tap2talk",
+    )  # client interaction mode: push2talk/tap2talk/duplex
+    sample_rate: int = field(default=16000)  # audio sample rate
     vocabulary_id: str = field(default=None)
     asr_post_processing: AsrPostProcessing = field(default=None)
     pass_through_params: dict = field(default=None)  # type: ignore[arg-type]
@@ -140,18 +145,24 @@ class Upstream:
 
 @dataclass
 class Downstream:
-    # transcript  返回用户语音识别结果
-    # dialog 返回对话系统回答中间结果
-    # 可以设置多种，以逗号分割，默认为transcript
-    voice: str = field(default="")  # 语音音色
-    sample_rate: int = field(default=0)  # 语音音色 # 合成音频采样率
-    intermediate_text: str = field(default="transcript")  # 控制返回给用户那些中间文本：
-    debug: bool = field(default=False)  # 控制是否返回debug信息
-    # type_: str = field(default="Audio", metadata={"alias": "type"})  # 下行类型：Text：不需要下发语音;Audio：输出语音，默认值  # noqa: E501  # pylint: disable=line-too-long
-    audio_format: str = field(default="pcm")  # 下行语音格式，默认pcm 。支持pcm/mp3
-    volume: int = field(default=50)  # 语音音量 0-100
-    pitch_rate: int = field(default=100)  # 语音语调 50-200
-    speech_rate: int = field(default=100)  # 语音语速 50-200
+    # transcript  returns user speech recognition results
+    # dialog  returns dialog system intermediate results
+    # Multiple values can be set, comma-separated, default is transcript
+    voice: str = field(default="")  # voice timbre
+    sample_rate: int = field(
+        default=0,
+    )  # voice timbre # synthesis audio sample rate
+    intermediate_text: str = field(
+        default="transcript",
+    )  # Controls which intermediate text is returned to user:
+    debug: bool = field(default=False)  # Controls whether to return debug info
+    # type_: str = field(default="Audio", metadata={"alias": "type"})  # downstream type: Text: no audio output; Audio: output audio, default  # noqa: E501  # pylint: disable=line-too-long
+    audio_format: str = field(
+        default="pcm",
+    )  # downstream audio format, default pcm, supports pcm/mp3
+    volume: int = field(default=50)  # voice volume 0-100
+    pitch_rate: int = field(default=100)  # voice pitch 50-200
+    speech_rate: int = field(default=100)  # voice speed 50-200
     pass_through_params: dict = field(default=None)  # type: ignore[arg-type]
 
     def to_dict(self):

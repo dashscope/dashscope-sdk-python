@@ -86,11 +86,12 @@ class VocabularyService(BaseApi):
         vocabulary: List[dict],
     ) -> str:
         """
-        创建热词表
-        param: target_model 热词表对应的语音识别模型版本
-        param: prefix 热词表自定义前缀，仅允许数字和小写字母，小于十个字符。
-        param: vocabulary 热词表字典
-        return: 热词表标识符 vocabulary_id
+        Create a hot word table.
+        param: target_model ASR model version for the hot word table
+        param: prefix Custom hot word table prefix, only digits and
+            lowercase letters allowed, less than 10 characters.
+        param: vocabulary Hot word table dictionary
+        return: Hot word table identifier vocabulary_id
         """
         # pylint: disable=no-value-for-parameter
         response = self.__call_with_input(
@@ -119,11 +120,12 @@ class VocabularyService(BaseApi):
         page_size: int = 10,
     ) -> List[dict]:
         """
-        查询已创建的所有热词表
-        param: prefix 自定义前缀，如果设定则只返回指定前缀的热词表标识符列表。
-        param: page_index 查询的页索引
-        param: page_size 查询页大小
-        return: 热词表标识符列表
+        List all created hot word tables.
+        param: prefix Custom prefix, if set only returns hot word table
+            identifiers with the specified prefix.
+        param: page_index Page index for query
+        param: page_size Page size
+        return: List of hot word table identifiers
         """
         if prefix:
             # pylint: disable=no-value-for-parameter
@@ -157,9 +159,9 @@ class VocabularyService(BaseApi):
 
     def query_vocabulary(self, vocabulary_id: str) -> List[dict]:
         """
-        获取热词表内容
-        param: vocabulary_id 热词表标识符
-        return: 热词表
+        Get hot word table contents.
+        param: vocabulary_id Hot word table identifier
+        return: Hot word table
         """
         # pylint: disable=no-value-for-parameter
         response = self.__call_with_input(
@@ -185,9 +187,9 @@ class VocabularyService(BaseApi):
         vocabulary: List[dict],
     ) -> None:
         """
-        用新的热词表替换已有热词表
-        param: vocabulary_id 需要替换的热词表标识符
-        param: vocabulary 热词表
+        Replace existing hot word table with a new one.
+        param: vocabulary_id Hot word table identifier to replace
+        param: vocabulary Hot word table
         """
         # pylint: disable=no-value-for-parameter
         response = self.__call_with_input(
@@ -210,8 +212,8 @@ class VocabularyService(BaseApi):
 
     def delete_vocabulary(self, vocabulary_id: str) -> None:
         """
-        删除热词表
-        param: vocabulary_id 需要删除的热词表标识符
+        Delete hot word table.
+        param: vocabulary_id Hot word table identifier to delete
         """
         # pylint: disable=no-value-for-parameter
         response = self.__call_with_input(

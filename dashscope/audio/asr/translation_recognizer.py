@@ -744,7 +744,7 @@ class TranslationRecognizerRealtime(BaseApi):
         """Last Package Delay is the time between stop sending audio and receive last words package"""  # noqa: E501  # pylint: disable=line-too-long
         return self._on_complete_timestamp - self._stop_stream_timestamp
 
-    # 获取上一个任务的taskId
+    # Get the taskId of the last task
     def get_last_request_id(self):
         return self.last_request_id
 
@@ -1087,6 +1087,6 @@ class TranslationRecognizerChat(BaseApi):
         """Last Package Delay is the time between stop sending audio and receive last words package"""  # noqa: E501  # pylint: disable=line-too-long
         return self._on_complete_timestamp - self._stop_stream_timestamp
 
-    # 获取上一个任务的taskId
+    # Get the taskId of the last task
     def get_last_request_id(self):
         return self.last_request_id

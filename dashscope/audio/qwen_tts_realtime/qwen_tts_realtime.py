@@ -141,13 +141,13 @@ class QwenTtsRealtime:
         self.thread = threading.Thread(target=self.ws.run_forever)
         self.thread.daemon = True
         self.thread.start()
-        timeout = 5  # 最长等待时间（秒）
+        timeout = 5  # max wait time in seconds
         start_time = time.time()
         while (
             not (self.ws.sock and self.ws.sock.connected)
             and (time.time() - start_time) < timeout
         ):
-            time.sleep(0.1)  # 短暂休眠，避免密集轮询
+            time.sleep(0.1)  # Brief sleep to avoid busy polling
         if not (self.ws.sock and self.ws.sock.connected):
             raise TimeoutError(
                 "websocket connection could not established within 5s. "
@@ -215,14 +215,16 @@ class QwenTtsRealtime:
             "response_format": response_format.format,
             "sample_rate": response_format.sample_rate,
         }
-        if sample_rate is not None:  # 如果配置，则更新
+        if sample_rate is not None:  # update if configured
             self.config["sample_rate"] = sample_rate
         if volume is not None:
             self.config["volume"] = volume
         if speech_rate is not None:
             self.config["speech_rate"] = speech_rate
         if audio_format is not None:
-            self.config["response_format"] = audio_format  # 如果配置，则更新
+            self.config[
+                "response_format"
+            ] = audio_format  # update if configured
         if pitch_rate is not None:
             self.config["pitch_rate"] = pitch_rate
         if bit_rate is not None:
@@ -332,7 +334,7 @@ class QwenTtsRealtime:
         """
         self.ws.close()
 
-    # 监听消息的回调函数
+    # Callback for listening to messages
     def on_message(  # pylint: disable=unused-argument
         self,
         ws,
@@ -344,7 +346,7 @@ class QwenTtsRealtime:
                 message[:1024],
             )
             try:
-                # 尝试将消息解析为JSON
+                # Attempt to parse message as JSON
                 json_data = json.loads(message)
                 self.last_message = json_data
                 self.callback.on_event(json_data)
@@ -372,7 +374,7 @@ class QwenTtsRealtime:
                 # pylint: disable=broad-exception-raised,raise-missing-from
                 raise Exception("Failed to parse message as JSON.")
         elif isinstance(message, (bytes, bytearray)):
-            # 如果失败，认为是二进制消息
+            # If parsing fails, treat as binary message
             logger.error(
                 "should not receive binary message in omni realtime api",
             )
@@ -394,13 +396,13 @@ class QwenTtsRealtime:
         )
         self.callback.on_close(close_status_code, close_msg)
 
-    # WebSocket发生错误的回调函数
+    # Callback for WebSocket error
     def on_error(self, ws, error):  # pylint: disable=unused-argument
         print(f"websocket closed due to {error}")
         # pylint: disable=broad-exception-raised
         raise Exception(f"websocket closed due to {error}")
 
-    # 获取上一个任务的taskId
+    # Get the taskId of the last task
     def get_session_id(self):
         return self.session_id
 

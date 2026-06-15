@@ -81,9 +81,10 @@ class AsyncAioTaskGetMixin:
 
     @classmethod
     async def _handle_request(cls, request):
-        # 如果 aio_call 返回的是异步生成器，则需要从中获取响应
+        # If aio_call returns an async generator, consume it to get
+        # the response
         response = await request.aio_call()
-        # 处理异步生成器的情况
+        # Handle async generator case
         if isinstance(response, collections.abc.AsyncGenerator):
             result = None
             async for item in response:
@@ -236,7 +237,7 @@ class BaseAsyncAioApi(AsyncAioTaskGetMixin):
                     return rsp
                 else:
                     logger.info("The task %s is  %s", task_id, task_status)
-                    await asyncio.sleep(wait_seconds)  # 异步等待
+                    await asyncio.sleep(wait_seconds)  # async wait
             elif rsp.status_code in REPEATABLE_STATUS:
                 logger.warning(
                     "Get task: %s temporary failure, "
@@ -246,7 +247,7 @@ class BaseAsyncAioApi(AsyncAioTaskGetMixin):
                     rsp.code,
                     rsp.message,
                 )
-                await asyncio.sleep(wait_seconds)  # 异步等待
+                await asyncio.sleep(wait_seconds)  # async wait
             else:
                 return rsp
 
