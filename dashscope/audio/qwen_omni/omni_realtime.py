@@ -153,6 +153,7 @@ class OmniRealtimeConversation:
         self.metrics = []
         # Add event for synchronously waiting on connection close
         self.disconnect_event = None
+        self._disconnect_error = None
 
     def _generate_event_id(self):
         """
@@ -350,6 +351,7 @@ class OmniRealtimeConversation:
 
         # create the event
         self.disconnect_event = threading.Event()
+        self._disconnect_error = None
 
         self.__send_str(
             json.dumps(
@@ -362,10 +364,14 @@ class OmniRealtimeConversation:
 
         # wait for the event to be set
         finish_success = self.disconnect_event.wait(timeout)
-        # clear the event
+        error = self._disconnect_error
         self.disconnect_event = None
+        self._disconnect_error = None
 
-        # if the event is not set, close the connection
+        # if the server returned an error or timed out, close the connection
+        if error is not None:
+            self.close()
+            return
         if not finish_success:
             self.close()
             raise TimeoutError(
@@ -535,6 +541,14 @@ class OmniRealtimeConversation:
                         # wait for the event to be set
                         logger.info("[omni realtime] session finished")
                         if self.disconnect_event is not None:
+                            self.disconnect_event.set()
+                    elif "error" == json_data.get("type"):
+                        if self.disconnect_event is not None:
+                            self._disconnect_error = json_data.get("error")
+                            logger.warning(
+                                "[omni realtime] error during end_session: %s",
+                                self._disconnect_error,
+                            )
                             self.disconnect_event.set()
                     if "response.created" == json_data["type"]:
                         self.last_response_id = json_data["response"]["id"]
