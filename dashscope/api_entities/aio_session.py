@@ -41,7 +41,7 @@ async def get_shared_aio_session() -> aiohttp.ClientSession:
         return session
 
     connector = aiohttp.TCPConnector(ssl=get_ssl_context())
-    session = aiohttp.ClientSession(connector=connector)
+    session = aiohttp.ClientSession(connector=connector, trust_env=True)
     _aio_sessions[loop] = session
     return session
 

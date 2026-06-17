@@ -74,6 +74,7 @@ async def async_http_request(
         async with aiohttp.ClientSession(
             headers=headers,
             timeout=aiohttp.ClientTimeout(total=timeout),
+            trust_env=True,
         ) as session:
             method_upper = method.upper()
 
