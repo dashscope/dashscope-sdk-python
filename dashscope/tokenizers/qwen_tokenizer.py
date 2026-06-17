@@ -33,6 +33,11 @@ SPECIAL_TOKENS = tuple(
 )
 SPECIAL_TOKENS_SET = set(t for i, t in SPECIAL_TOKENS)
 
+# tiktoken's BPE merges tokens recursively in Rust, which can overflow the
+# call stack on very long inputs (pyo3_runtime.PanicException: StackOverflow).
+# Split text into chunks below this threshold before encoding.
+_CHUNK_SIZE = 100_000
+
 
 class QwenTokenizer(Tokenizer):
     @staticmethod
@@ -102,11 +107,43 @@ class QwenTokenizer(Tokenizer):
         disallowed_special: Union[Collection, str] = (),
     ) -> Union[List[List], List]:
         text = unicodedata.normalize("NFC", text)
-        return self._tokenizer.encode(
-            text,
-            allowed_special=allowed_special,
-            disallowed_special=disallowed_special,
-        )
+        if len(text) <= _CHUNK_SIZE:
+            return self._tokenizer.encode(
+                text,
+                allowed_special=allowed_special,
+                disallowed_special=disallowed_special,
+            )
+
+        result = []
+        for chunk in self._split_text(text):
+            result.extend(
+                self._tokenizer.encode(
+                    chunk,
+                    allowed_special=allowed_special,
+                    disallowed_special=disallowed_special,
+                ),
+            )
+        return result
+
+    @staticmethod
+    def _split_text(text: str, chunk_size: int = _CHUNK_SIZE) -> List[str]:
+        """Split text into chunks at safe tokenization boundaries."""
+        parts: List[str] = []
+        for i, line in enumerate(text.split("\n")):
+            piece = line if i == 0 else "\n" + line
+            if len(piece) <= chunk_size:
+                parts.append(piece)
+            else:
+                for j in range(0, len(piece), chunk_size):
+                    parts.append(piece[j : j + chunk_size])
+
+        chunks: List[str] = []
+        for part in parts:
+            if chunks and len(chunks[-1]) + len(part) <= chunk_size:
+                chunks[-1] += part
+            else:
+                chunks.append(part)
+        return chunks
 
     def decode(
         self,
