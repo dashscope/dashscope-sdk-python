@@ -410,7 +410,6 @@ async def handle_endpoint(request: Request) -> JSONResponse:
     cancelled = False
     processor_input = None
 
-    disconnect_listener = None
     disconnected = asyncio.Event()
 
     async def _listen_for_disconnect():
@@ -425,6 +424,8 @@ async def handle_endpoint(request: Request) -> JSONResponse:
             # If receive() raises (e.g. connection already closed),
             # treat as disconnected.
             disconnected.set()
+
+    disconnect_listener = asyncio.create_task(_listen_for_disconnect())
 
     # Extract trace context from request headers
     _otel_ctx_token, _upstream_tokens = await _extract_trace_context(request)
