@@ -425,7 +425,7 @@ async def handle_endpoint(request: Request) -> JSONResponse:
             # treat as disconnected.
             disconnected.set()
 
-    disconnect_listener = asyncio.create_task(_listen_for_disconnect())
+    disconnect_listener = None
 
     # Extract trace context from request headers
     _otel_ctx_token, _upstream_tokens = await _extract_trace_context(request)
