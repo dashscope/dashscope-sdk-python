@@ -7,7 +7,7 @@ import typer
 
 from dashscope.aigc import Generation
 from dashscope.cli.common import (
-    error,
+    err_console,
     handle_sdk_error,
     print_failed_message,
 )
@@ -43,7 +43,9 @@ def _build_generation_kwargs(
         try:
             kwargs["messages"] = json.loads(messages)
         except json.JSONDecodeError as exc:
-            error("--messages must be a valid JSON string")
+            err_console.print(
+                "[red]Error:[/red] --messages must be a valid JSON string",
+            )
             raise typer.Exit(1) from exc
 
     # Group simple parameters to reduce branches

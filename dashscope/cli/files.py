@@ -71,7 +71,13 @@ def upload(
         base_address=base_url,
     )
     output = ensure_ok(rsp)
-    file_id = output["uploaded_files"][0]["file_id"]
+
+    # Validate uploaded_files exists and is not empty
+    uploaded_files = output.get("uploaded_files", [])
+    if not uploaded_files:
+        error("Upload succeeded but no file_id returned in response")
+
+    file_id = uploaded_files[0]["file_id"]
     success(f"Upload success, file id: {file_id}")
 
 

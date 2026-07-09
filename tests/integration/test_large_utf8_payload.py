@@ -11,6 +11,8 @@ import json
 import os
 import time
 
+import pytest
+
 from dashscope.aigc.generation import Generation, AioGeneration
 
 WEBSEARCH_JSON = os.path.join(
@@ -20,6 +22,28 @@ WEBSEARCH_JSON = os.path.join(
 
 MODEL = "qwen3.7-max"
 MAX_OUTPUT_TOKENS = 1280
+
+
+@pytest.fixture(scope="module")
+def messages():
+    """Load messages from websearch.json for testing."""
+    if not os.path.exists(WEBSEARCH_JSON):
+        pytest.skip(f"Test data file not found: {WEBSEARCH_JSON}")
+
+    with open(WEBSEARCH_JSON, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # websearch.json stores some fields as JSON strings; parse them so the API
+    # schema (which expects objects) is satisfied.
+    for msg in data["messages"]:
+        for key in ("extra", "files", "childrenIds"):
+            if key in msg and isinstance(msg[key], str):
+                try:
+                    msg[key] = json.loads(msg[key])
+                except json.JSONDecodeError:
+                    pass
+
+    return data["messages"]
 
 
 def _print_result(resp, elapsed):  # pylint: disable=unused-argument
@@ -46,7 +70,7 @@ def _print_result(resp, elapsed):  # pylint: disable=unused-argument
         return False
 
 
-def test_sync(messages):
+def test_sync(test_messages):
     print("\n" + "=" * 60)
     print("SYNC TEST")
     print("=" * 60)
@@ -54,7 +78,7 @@ def test_sync(messages):
     try:
         resp = Generation.call(
             model=MODEL,
-            messages=messages,
+            messages=test_messages,
             max_tokens=MAX_OUTPUT_TOKENS,
             result_format="message",
         )
@@ -70,7 +94,7 @@ def test_sync(messages):
     return _print_result(resp, elapsed)
 
 
-async def test_async(messages):
+async def test_async(test_messages):
     print("\n" + "=" * 60)
     print("ASYNC TEST")
     print("=" * 60)
@@ -78,7 +102,7 @@ async def test_async(messages):
     try:
         resp = await AioGeneration.call(
             model=MODEL,
-            messages=messages,
+            messages=test_messages,
             max_tokens=MAX_OUTPUT_TOKENS,
             result_format="message",
         )
@@ -94,7 +118,7 @@ async def test_async(messages):
     return _print_result(resp, elapsed)
 
 
-def test_stream(messages):
+def test_stream(test_messages):
     print("\n" + "=" * 60)
     print("STREAM TEST")
     print("=" * 60)
@@ -103,7 +127,7 @@ def test_stream(messages):
     try:
         responses = Generation.call(
             model=MODEL,
-            messages=messages,
+            messages=test_messages,
             max_tokens=MAX_OUTPUT_TOKENS,
             result_format="message",
             stream=True,
@@ -136,10 +160,10 @@ def test_stream(messages):
     return True
 
 
-def test_websocket(messages):
+def test_websocket(test_messages):
     # WebSocket has a smaller message size limit than HTTP;
     # use a subset that still contains non-ASCII content.
-    ws_messages = messages[:5]
+    ws_messages = test_messages[:5]
     print("\n" + "=" * 60)
     print(
         f"WEBSOCKET TEST ({len(ws_messages)}/{len(messages)} messages)",
@@ -180,10 +204,10 @@ def main():
                 except json.JSONDecodeError:
                     pass
 
-    messages = data["messages"]
+    test_messages = data["messages"]
 
     print(f"Model:       {MODEL}")
-    print(f"Messages:    {len(messages)}")
+    print(f"Messages:    {len(test_messages)}")
     print(
         f"API URL:     {os.environ.get('DASHSCOPE_HTTP_BASE_URL', 'default')}",
     )
@@ -191,10 +215,10 @@ def main():
     print("-" * 60)
 
     results = []
-    results.append(("SYNC", test_sync(messages)))
-    results.append(("ASYNC", asyncio.run(test_async(messages))))
-    results.append(("STREAM", test_stream(messages)))
-    results.append(("WEBSOCKET", test_websocket(messages)))
+    results.append(("SYNC", test_sync(test_messages)))
+    results.append(("ASYNC", asyncio.run(test_async(test_messages))))
+    results.append(("STREAM", test_stream(test_messages)))
+    results.append(("WEBSOCKET", test_websocket(test_messages)))
 
     print("\n" + "=" * 60)
     print("SUMMARY")

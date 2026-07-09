@@ -1,1 +1,3 @@
 include dashscope/resources/qwen.tiktoken
+include NOTICE
+include LICENSE.certifi

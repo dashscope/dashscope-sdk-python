@@ -14,7 +14,12 @@ from dashscope.common.constants import HTTPMethod
 
 
 class HttpSpeechSynthesisResult:
-    """The result of HTTP speech synthesis."""
+    """The result of HTTP speech synthesis.
+
+    This class wraps the actual SpeechSynthesisResponse and provides
+    convenient access to both synthesis-specific data and standard
+    DashScopeAPIResponse attributes for compatibility with CLI tools.
+    """
 
     def __init__(
         self,
@@ -61,6 +66,49 @@ class HttpSpeechSynthesisResult:
     def response(self) -> Optional[SpeechSynthesisResponse]:
         """Get the full API response."""
         return self._response
+
+    # Proxy standard DashScopeAPIResponse attributes for CLI compatibility
+    @property
+    def request_id(self) -> str:
+        """Get the request ID from the underlying response."""
+        if self._response:
+            return self._response.request_id
+        return ""
+
+    @property
+    def status_code(self) -> int:
+        """Get the HTTP status code from the underlying response."""
+        if self._response:
+            return self._response.status_code
+        return 0
+
+    @property
+    def code(self) -> str:
+        """Get the error code from the underlying response."""
+        if self._response:
+            return self._response.code
+        return ""
+
+    @property
+    def message(self) -> str:
+        """Get the error message from the underlying response."""
+        if self._response:
+            return self._response.message
+        return ""
+
+    @property
+    def output(self):
+        """Get the output from the underlying response."""
+        if self._response:
+            return self._response.output
+        return None
+
+    @property
+    def usage(self):
+        """Get the usage from the underlying response."""
+        if self._response:
+            return self._response.usage
+        return None
 
 
 class HttpSpeechSynthesizer(BaseApi):

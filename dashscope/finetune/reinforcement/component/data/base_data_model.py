@@ -43,6 +43,7 @@ class ModelProtocol(str, Enum):
 
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
+    DASHSCOPE = "dashscope"
 
 
 # ========================================================================== #

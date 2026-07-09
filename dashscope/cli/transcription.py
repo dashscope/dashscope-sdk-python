@@ -93,7 +93,9 @@ def create(
         special_word_filter=special_word_filter,
         audio_event_detection_enabled=audio_event_detection_enabled,
     )
-    output = ensure_ok(response)
+    # For async task creation, only check HTTP success, not business errors
+    # Business errors will be reported when fetching/waiting for task results
+    output = ensure_ok(response, check_business_error=False)
     console.print_json(json.dumps(output, ensure_ascii=False))
     usage = getattr(response, "usage", None)
     if usage:

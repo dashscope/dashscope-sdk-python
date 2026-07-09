@@ -1,12 +1,18 @@
 # -*- coding: utf-8 -*-
 """``speech-synthesis`` sub-command group."""
 import json
+from http import HTTPStatus
 from typing import Optional
 
 import typer
 
 import dashscope
-from dashscope.cli.common import console, handle_sdk_error
+from dashscope.cli.common import (
+    console,
+    error,
+    handle_sdk_error,
+    print_failed_message,
+)
 
 app = typer.Typer(
     name="speech-synthesis",
@@ -75,6 +81,18 @@ def create(
         rate=rate,
         pitch=pitch,
     )
+
+    # Validate response status and required fields
+    if (
+        not hasattr(result, "status_code")
+        or result.status_code != HTTPStatus.OK
+    ):
+        print_failed_message(result)
+        raise typer.Exit(1)
+
+    if not result.audio_url:
+        error("Speech synthesis succeeded but missing audio_url in response")
+
     output = {
         "audio_url": result.audio_url,
         "audio_id": result.audio_id,

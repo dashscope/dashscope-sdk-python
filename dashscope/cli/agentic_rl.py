@@ -536,14 +536,26 @@ def run(
             # Handle API response errors
             if result.status_code != 200:
                 raise OutputError(
-                    f"API returned status {result.status_code}:"
-                    f" {result.message}",
+                    (
+                        f"API error [status={result.status_code}, "
+                        f"code={result.code}]: {result.message}"
+                    ),
+                    response={
+                        "status_code": result.status_code,
+                        "code": result.code,
+                        "message": result.message,
+                        "request_id": result.request_id,
+                    },
                 )
 
             progress.update(
                 task,
                 description="[green]✅ Job submitted successfully![/green]",
             )
+
+        # Validate output is not None before accessing attributes
+        if result.output is None:
+            raise OutputError("API returned success but output is empty")
 
         format_output(
             {
@@ -594,8 +606,21 @@ def get(
         # Handle API response errors
         if result.status_code != 200:
             raise OutputError(
-                f"API returned status {result.status_code}: {result.message}",
+                (
+                    f"API error [status={result.status_code}, "
+                    f"code={result.code}]: {result.message}"
+                ),
+                response={
+                    "status_code": result.status_code,
+                    "code": result.code,
+                    "message": result.message,
+                    "request_id": result.request_id,
+                },
             )
+
+        # Validate output is not None before accessing attributes
+        if result.output is None:
+            raise OutputError("API returned success but output is empty")
 
         format_output(
             {
@@ -628,7 +653,16 @@ def cancel(
         # Handle API response errors
         if result.status_code != 200:
             raise OutputError(
-                f"API returned status {result.status_code}: {result.message}",
+                (
+                    f"API error [status={result.status_code}, "
+                    f"code={result.code}]: {result.message}"
+                ),
+                response={
+                    "status_code": result.status_code,
+                    "code": result.code,
+                    "message": result.message,
+                    "request_id": result.request_id,
+                },
             )
 
         err_console.print(
@@ -666,11 +700,25 @@ def logs(
         # Handle API response errors
         if result.status_code != 200:
             raise OutputError(
-                f"API returned status {result.status_code}: {result.message}",
+                (
+                    f"API error [status={result.status_code}, "
+                    f"code={result.code}]: {result.message}"
+                ),
+                response={
+                    "status_code": result.status_code,
+                    "code": result.code,
+                    "message": result.message,
+                    "request_id": result.request_id,
+                },
             )
 
+        # Validate output is not None before accessing attributes
+        logs_data = ""
+        if result.output is not None and isinstance(result.output, dict):
+            logs_data = result.output.get("logs", "")
+
         format_output(
-            {"job_id": job_id, "logs": getattr(result.output, "logs", "")},
+            {"job_id": job_id, "logs": logs_data},
             fmt=output_format,
         )
     except Exception as e:
@@ -703,7 +751,16 @@ def list_jobs(
         # Handle API response errors
         if result.status_code != 200:
             raise OutputError(
-                f"API returned status {result.status_code}: {result.message}",
+                (
+                    f"API error [status={result.status_code}, "
+                    f"code={result.code}]: {result.message}"
+                ),
+                response={
+                    "status_code": result.status_code,
+                    "code": result.code,
+                    "message": result.message,
+                    "request_id": result.request_id,
+                },
             )
 
         output_data = serialize_for_output(

@@ -12,6 +12,5 @@ resp = TingWu.call(
         "appid": "123456",
     },
     api_key=os.getenv("DASHSCOPE_API_KEY"),
-    base_address="https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
 )
 print(resp)

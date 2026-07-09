@@ -228,8 +228,10 @@ class HttpRequest(AioBaseRequest):
                 if should_close:
                     await session.close()
         except Exception as e:
-            logger.debug(e)
-            raise e
+            logger.error(f"Async request failed: {e}", exc_info=True)
+            from dashscope.common.error import DashScopeException
+
+            raise DashScopeException(str(e)) from e
 
     @staticmethod
     def __handle_parameters(params: dict) -> dict:
@@ -411,10 +413,12 @@ class HttpRequest(AioBaseRequest):
                         request_id=request_id,
                         status_code=status_code,
                         output=None,
-                        code=msg["code"]
-                        if "code" in msg
-                        else None,  # noqa E501
-                        message=msg["message"] if "message" in msg else None,
+                        code=msg.get("code")
+                        or msg.get("error_code")
+                        or f"http_{status_code}",
+                        message=msg.get("message")
+                        or msg.get("error_message")
+                        or f"HTTP {status_code} error",
                         headers=headers,
                     )  # noqa E501
                 else:
@@ -517,5 +521,7 @@ class HttpRequest(AioBaseRequest):
                 if should_close:
                     session.close()
         except Exception as e:
-            logger.debug(e)
-            raise e
+            logger.error(f"Sync request failed: {e}", exc_info=True)
+            from dashscope.common.error import DashScopeException
+
+            raise DashScopeException(str(e)) from e

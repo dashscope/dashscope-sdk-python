@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """``fine-tunes`` sub-command group."""
 import time
+from http import HTTPStatus
 from typing import Optional, List
 
 import typer
@@ -13,6 +14,7 @@ from dashscope.cli.common import (
     console,
     err_console,
     ensure_ok,
+    error,
     handle_sdk_error,
     logger,
     print_failed_message,
@@ -39,12 +41,31 @@ def callback(ctx: typer.Context):
 # ---------------------------------------------------------------------------
 
 
-def _wait_for_job(job_id: str):
-    """Block until the fine-tune job reaches a terminal state."""
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+DEFAULT_WAIT_TIMEOUT = 3600  # 1 hour default timeout for waiting
+
+
+def _wait_for_job(job_id: str, timeout: int = DEFAULT_WAIT_TIMEOUT):
+    """Block until the fine-tune job reaches a terminal state or times out."""
+    start_time = time.time()
     try:
         while True:
+            # Check timeout
+            elapsed = time.time() - start_time
+            if elapsed > timeout:
+                err_console.print(
+                    "[red]Timeout:[/red] Job "
+                    f"{job_id} did not complete within "
+                    f"{timeout} seconds. You can check status later via: "
+                    f"[cyan]dashscope fine-tunes get {job_id}[/cyan]",
+                )
+                raise typer.Exit(1)
+
             rsp = dashscope.FineTunes.get(job_id)
-            output = ensure_ok(rsp)
+            # During polling, only check HTTP success, not business errors
+            output = ensure_ok(rsp, check_business_error=False)
             status = output.status
 
             if status == TaskStatus.FAILED:
@@ -86,12 +107,21 @@ def _stream_events(job_id: str):
         print_failed_message(rsp)
         return
 
-    if rsp.output.status in (
+    # Validate output is not None and is a dict before accessing
+    if rsp.output is None or not isinstance(rsp.output, dict):
+        err_console.print(
+            f"[red]Error:[/red] Invalid response for job {job_id}. "
+            f"Request ID: {rsp.request_id}",
+        )
+        return
+
+    status = rsp.output.get("status")
+    if status in (
         TaskStatus.FAILED,
         TaskStatus.CANCELED,
         TaskStatus.SUCCEEDED,
     ):
-        console.print(f"Fine-tune job: {job_id} is {rsp.output.status}")
+        console.print(f"Fine-tune job: {job_id} is {status}")
         _dump_logs(job_id)
         return
 
@@ -120,9 +150,12 @@ def _dump_logs(job_id: str):
             line=LOG_PAGE_SIZE,
         )
         output = ensure_ok(rsp)
-        for line in output.logs:
+        logs = output.get("logs", [])
+        if not logs:
+            break
+        for line in logs:
             console.print(line, highlight=False)
-        if len(output.logs) < LOG_PAGE_SIZE:
+        if len(logs) < LOG_PAGE_SIZE:
             break
         offset += LOG_PAGE_SIZE
 
@@ -201,8 +234,23 @@ def create(
         mode=mode,  # type: ignore[arg-type]
         hyper_parameters=params if params else None,  # type: ignore[arg-type]
     )
-    output = ensure_ok(rsp)
-    job_id = output.job_id
+
+    # Enhanced error checking with detailed validation
+    if rsp.status_code != HTTPStatus.OK:
+        print_failed_message(rsp)
+        raise typer.Exit(1)
+
+    output = rsp.output
+    if output is None:
+        error("Fine-tune creation returned empty response")
+
+    job_id = output.get("job_id")
+    if not job_id:
+        error(
+            "Fine-tune creation succeeded but missing job_id in response. "
+            f"Response: {output}",
+        )
+
     success(f"Create fine-tune job success, job_id: {job_id}")
     _wait_for_job(job_id)
 

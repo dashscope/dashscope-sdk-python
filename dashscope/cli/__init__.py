@@ -23,7 +23,6 @@ from dashscope.cli.common import err_console  # noqa: E402
 from dashscope.common.error import AuthenticationError  # noqa: E402
 from dashscope.cli import (  # noqa: E402
     application,
-    code_generation,
     deployments,
     embeddings,
     files,
@@ -39,7 +38,6 @@ from dashscope.cli import (  # noqa: E402
     speech_synthesis,
     tokenization,
     transcription,
-    understanding,
     video_synthesis,
 )
 
@@ -97,9 +95,7 @@ _TOP_LEVEL_COMMANDS = {
     "embeddings",
     "tokenization",
     "models",
-    "understanding",
     "application",
-    "code-generation",
     "image-synthesis",
     "video-synthesis",
     "image-generation",
@@ -276,9 +272,7 @@ app.add_typer(rerank.app)
 app.add_typer(embeddings.app)
 app.add_typer(tokenization.app)
 app.add_typer(models.app)
-app.add_typer(understanding.app)
 app.add_typer(application.app)
-app.add_typer(code_generation.app)
 app.add_typer(image_synthesis.app)
 app.add_typer(video_synthesis.app)
 app.add_typer(image_generation.app)

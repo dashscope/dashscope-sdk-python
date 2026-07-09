@@ -15,6 +15,7 @@ class TestCliSpeechSynthesis:
         def mock_call(**kwargs):
             captured_request.update(kwargs)
             return SimpleNamespace(
+                status_code=200,
                 audio_url="https://example.com/audio.wav",
                 audio_id="audio-1234",
                 expires_at=1893456000,

@@ -19,6 +19,7 @@ messages = [
     },
 ]
 dashscope.base_http_api_url = "https://dashscope.aliyuncs.com/api/v1/"
+# qwen3-asr-flash is a public model available on Alibaba Cloud's Bailian platform
 response = dashscope.MultiModalConversation.call(
     model="qwen3-asr-flash",
     messages=messages,

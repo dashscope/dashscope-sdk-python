@@ -140,6 +140,7 @@ class TestBaseDataModels:
     def test_model_protocol_values(self):
         assert ModelProtocol.OPENAI == "openai"
         assert ModelProtocol.ANTHROPIC == "anthropic"
+        assert ModelProtocol.DASHSCOPE == "dashscope"
 
     def test_model_resource_creation(self, model_resource):
         assert model_resource.model_name == "qwen-max"
@@ -185,10 +186,10 @@ class TestBaseDataModels:
 
     def test_resource_custom_values(self):
         resource = Resource(
-            model_name="gpt-4o",
-            base_url="https://api.openai.com/v1",
+            model_name="qwen-max",
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             api_key=SecretStr("sk-key"),
-            protocol=ModelProtocol.OPENAI,
+            protocol=ModelProtocol.DASHSCOPE,
             max_tokens=4096,
             max_turns=50,
             sampling_params={"temperature": 0.7, "top_p": 0.9},

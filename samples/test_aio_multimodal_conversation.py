@@ -250,6 +250,7 @@ class TestAioMultiModalConversation:
         ]
 
         # Call AioMultiModalConversation API with ASR options
+        # qwen3-asr-flash is a public model available on Alibaba Cloud's Bailian platform
         response = await dashscope.AioMultiModalConversation.call(
             model="qwen3-asr-flash",
             messages=messages,

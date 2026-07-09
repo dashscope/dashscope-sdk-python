@@ -23,7 +23,7 @@ def callback(ctx: typer.Context):
         typer.echo(ctx.get_help())
 
 
-@app.command("create")
+@app.command("create", hidden=True)
 @handle_sdk_error("Understanding request failed")
 def create(
     model: str = typer.Option(..., "-m", "--model", help="The model to call"),
@@ -46,7 +46,8 @@ def create(
         help="Task type, such as extraction or classification",
     ),
 ):
-    """Call natural language understanding API."""
+    """[DEPRECATED] OpenNLU endpoint is offline.
+    This command is hidden and will be removed."""
     response = dashscope.Understanding.call(
         model=model,
         sentence=sentence,

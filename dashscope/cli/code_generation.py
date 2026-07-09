@@ -27,7 +27,7 @@ def callback(ctx: typer.Context):
         typer.echo(ctx.get_help())
 
 
-@app.command("create")
+@app.command("create", hidden=True)
 @handle_sdk_error("Code generation request failed")
 def create(
     model: str = typer.Option(..., "-m", "--model", help="The model to call"),
@@ -56,7 +56,8 @@ def create(
     ),
     n: int = typer.Option(1, "-n", "--n", help="The number of output results"),
 ):
-    """Call code generation API."""
+    """[DEPRECATED] No independent endpoint available.
+    This command is hidden and will be removed."""
     messages = [UserRoleMessageParam(content=content)]
     if attachment_meta is not None:
         try:
