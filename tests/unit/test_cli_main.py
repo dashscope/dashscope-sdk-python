@@ -46,7 +46,7 @@ class TestCliMain:
         combined_output = captured_output.out + captured_output.err
 
         assert exception_info.value.code == 1
-        assert "No api key provided." in combined_output
+        assert "No api key provided" in combined_output
         assert "Traceback" not in combined_output
 
     def test_top_level_help_shows_global_api_key(self):

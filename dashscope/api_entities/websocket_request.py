@@ -230,7 +230,7 @@ class WebSocketRequest(AioBaseRequest):
             yield DashScopeAPIResponse(
                 request_id=task_id,
                 status_code=code,
-                code=f"http_{code}" if code else "websocket_handshake_error",
+                code=f"WS_HANDSHAKE_{code}" if code else "WS_HANDSHAKE_FAILED",
                 message=msg,
             )
         except BaseException as e:

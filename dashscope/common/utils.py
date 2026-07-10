@@ -269,16 +269,16 @@ def _handle_stream(response: requests.Response):
 
 
 def _handle_error_message(error, status_code, flattened_output, headers):
-    code = None
+    code = ""
     msg = ""
     request_id = ""
     if flattened_output:
         error["status_code"] = status_code
         return error
-    if "message" in error:
-        msg = error["message"]
     if "msg" in error:
         msg = error["msg"]
+    if "message" in error:
+        msg = error["message"]
     if "code" in error:
         code = error["code"]
     if "request_id" in error:
@@ -375,19 +375,25 @@ async def _handle_aiohttp_failed_response(
         )
     elif SSE_CONTENT_TYPE in response.content_type:
         error = None
+        raw_data = []
         async for _, _, data in _handle_aio_stream(response):
-            error = json.loads(data)
+            raw_data.append(data)
+            try:
+                error = json.loads(data)
+            except json.JSONDecodeError:
+                continue
         if error is None:
+            raw_content = "\n".join(raw_data) if raw_data else ""
             if flattened_output:
                 return {  # type: ignore[return-value]
                     "status_code": response.status,
-                    "message": "Empty SSE error response",
+                    "message": raw_content or "Empty SSE error response",
                 }
             return DashScopeAPIResponse(
                 request_id=request_id,
                 status_code=response.status,
                 code=f"http_{response.status}",
-                message="Empty SSE error response",
+                message=raw_content or "Empty SSE error response",
                 headers=headers,
             )
         return _handle_error_message(
@@ -458,18 +464,18 @@ def _handle_http_stream_response(
                             usage=usage,
                             headers=headers,
                         )
-                except json.JSONDecodeError as e:
+                except json.JSONDecodeError:
                     if flattened_output:
                         yield event.eventType, {
                             "status_code": response.status_code,
-                            "message": e.message,
+                            "message": event.data,
                         }
                     else:
                         yield event.eventType, DashScopeAPIResponse(
                             request_id=request_id,
-                            status_code=HTTPStatus.BAD_REQUEST,
+                            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
                             output=None,
-                            code="Unknown",
+                            code="",
                             message=event.data,
                             headers=headers,
                         )
@@ -481,17 +487,29 @@ def _handle_http_stream_response(
                         "message": event.data,
                     }
                 else:
-                    msg = json.loads(event.data)
-                    yield event.eventType, DashScopeAPIResponse(
-                        request_id=request_id,
-                        status_code=status_code,
-                        output=None,
-                        code=msg["code"]
-                        if "code" in msg
-                        else None,  # noqa E501
-                        message=msg["message"] if "message" in msg else None,
-                        headers=headers,
-                    )  # noqa E501
+                    try:
+                        msg = json.loads(event.data)
+                        yield event.eventType, DashScopeAPIResponse(
+                            request_id=request_id,
+                            status_code=status_code,
+                            output=None,
+                            code=msg.get("code")
+                            or msg.get("error_code")
+                            or f"http_{status_code}",
+                            message=msg.get("message")
+                            or msg.get("error_message")
+                            or f"HTTP {status_code} error",
+                            headers=headers,
+                        )  # noqa E501
+                    except json.JSONDecodeError:
+                        yield event.eventType, DashScopeAPIResponse(
+                            request_id=request_id,
+                            status_code=status_code,
+                            output=None,
+                            code=f"http_{status_code}",
+                            message=event.data,
+                            headers=headers,
+                        )
     # pylint: disable=consider-using-in
     elif (
         response.status_code == HTTPStatus.OK

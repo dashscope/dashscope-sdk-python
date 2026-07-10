@@ -162,14 +162,15 @@ class AioHttpRequest(AioBaseRequest):
                     if "request_id" in msg:
                         request_id = msg["request_id"]
                 except json.JSONDecodeError:
+                    msg = None
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                        code="Unknown",
+                        code=None,
                         message=data,
                     )
                     continue
-                if is_error:
+                if is_error and msg is not None:
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=status_code,
@@ -249,7 +250,7 @@ class AioHttpRequest(AioBaseRequest):
                 yield DashScopeAPIResponse(
                     request_id=request_id,
                     status_code=response.status,
-                    code="Unknown",
+                    code=None,
                     message=msg.decode("utf-8"),
                 )
 

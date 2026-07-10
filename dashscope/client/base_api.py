@@ -1565,14 +1565,14 @@ class StreamEventMixin:
                             "error_message",
                         )
                     except json.JSONDecodeError:
-                        code = "Unknown"
+                        code = None
                         message = data
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=status_code,
                         output=None,
-                        code=code or "",
-                        message=message or "",
+                        code=code,
+                        message=message,
                     )  # noqa E501
                 else:
                     yield DashScopeAPIResponse(

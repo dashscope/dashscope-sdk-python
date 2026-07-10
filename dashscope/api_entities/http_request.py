@@ -293,7 +293,7 @@ class HttpRequest(AioBaseRequest):
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                        code="Unknown",
+                        code=None,
                         message=data,
                         headers=headers,
                     )
@@ -403,7 +403,7 @@ class HttpRequest(AioBaseRequest):
                         request_id=request_id,
                         status_code=HTTPStatus.BAD_REQUEST,
                         output=None,
-                        code="Unknown",
+                        code=None,
                         message=data,
                         headers=headers,
                     )

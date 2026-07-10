@@ -180,6 +180,7 @@ def create(
                     typer.echo(usage)
             else:
                 print_failed_message(rsp)
+                break
     else:
         if response.status_code == HTTPStatus.OK:
             typer.echo(response.output)
