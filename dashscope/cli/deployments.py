@@ -92,7 +92,12 @@ def _wait_for_deployment(
 
 def _print_deployments(output):
     """Pretty-print a list of deployments from *output*."""
-    if output is None:
+    if (
+        output is None
+        or not isinstance(output, dict)
+        or "deployments" not in output
+        or not output["deployments"]
+    ):
         console.print("There is no deployed model!")
         return
 
@@ -174,7 +179,11 @@ def create(
     if output is None:
         error("Deployment creation returned empty response")
 
-    deployed_model = output.get("deployed_model")
+    deployed_model = (
+        output.get("deployed_model")
+        if isinstance(output, dict)
+        else getattr(output, "deployed_model", None)
+    )
     if not deployed_model:
         error(
             "Deployment creation succeeded but missing deployed_model "

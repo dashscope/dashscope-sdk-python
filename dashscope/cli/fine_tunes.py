@@ -107,8 +107,8 @@ def _stream_events(job_id: str):
         print_failed_message(rsp)
         return
 
-    # Validate output is not None before accessing attributes
-    if rsp.output is None:
+    # Validate output is not None and is a dict before accessing
+    if rsp.output is None or not isinstance(rsp.output, dict):
         err_console.print(
             f"[red]Error:[/red] Invalid response for job {job_id}. "
             f"Request ID: {rsp.request_id}",
