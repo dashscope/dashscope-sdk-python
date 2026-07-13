@@ -220,6 +220,7 @@ async def _register_fc_async(
 
     except Exception as e:
         _handle_exception(e, "FC registration failed", err_console)
+        raise  # pragma: no cover
 
 
 @app.command("register-functions", hidden=True)
@@ -295,6 +296,7 @@ async def _test_fc_async(
 
     except Exception as e:
         _handle_exception(e, "Function test failed", err_console)
+        raise  # pragma: no cover
 
 
 @app.command("test-functions", hidden=True)
