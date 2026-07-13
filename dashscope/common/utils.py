@@ -213,7 +213,7 @@ async def _handle_aiohttp_response(response: aiohttp.ClientResponse):
                 request_id=request_id,
                 status_code=response.status,
                 output=None,
-                code="Unknown",
+                code=f"http_{response.status}",
                 message=msg,
             )
 
