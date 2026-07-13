@@ -706,8 +706,11 @@ def logs(
 
         # Validate output is not None before accessing attributes
         logs_data = ""
-        if result.output is not None and isinstance(result.output, dict):
-            logs_data = result.output.get("logs", "")
+        if result.output is not None:
+            if isinstance(result.output, dict):
+                logs_data = result.output.get("logs", "")
+            else:
+                logs_data = getattr(result.output, "logs", "")
 
         format_output(
             {"job_id": job_id, "logs": logs_data},

@@ -107,15 +107,19 @@ def _stream_events(job_id: str):
         print_failed_message(rsp)
         return
 
-    # Validate output is not None and is a dict before accessing
-    if rsp.output is None or not isinstance(rsp.output, dict):
+    # Validate output is not None before accessing attributes
+    if rsp.output is None:
         err_console.print(
             f"[red]Error:[/red] Invalid response for job {job_id}. "
             f"Request ID: {rsp.request_id}",
         )
         return
 
-    status = rsp.output.get("status")
+    # Support both dictionary and object formats
+    if isinstance(rsp.output, dict):
+        status = rsp.output.get("status")
+    else:
+        status = getattr(rsp.output, "status", None)
     if status in (
         TaskStatus.FAILED,
         TaskStatus.CANCELED,
@@ -150,7 +154,7 @@ def _dump_logs(job_id: str):
             line=LOG_PAGE_SIZE,
         )
         output = ensure_ok(rsp)
-        logs = output.get("logs", [])
+        logs = output.get("logs", []) if isinstance(output, dict) else getattr(output, "logs", [])
         if not logs:
             break
         for line in logs:
@@ -244,7 +248,7 @@ def create(
     if output is None:
         error("Fine-tune creation returned empty response")
 
-    job_id = output.get("job_id")
+    job_id = output.get("job_id") if isinstance(output, dict) else getattr(output, "job_id", None)
     if not job_id:
         error(
             "Fine-tune creation succeeded but missing job_id in response. "

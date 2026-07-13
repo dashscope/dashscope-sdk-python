@@ -92,15 +92,26 @@ def _wait_for_deployment(
 
 def _print_deployments(output):
     """Pretty-print a list of deployments from *output*."""
-    if (
-        output is None
-        or not isinstance(output, dict)
-        or "deployments" not in output
-        or not output["deployments"]
-    ):
+    if output is None:
         console.print("There is no deployed model!")
         return
-    for dep in output.deployments:
+    
+    # Support both dictionary and object formats
+    if isinstance(output, dict):
+        raw_deps = output.get("deployments", [])
+        from types import SimpleNamespace
+        deployments = [
+            SimpleNamespace(**d) if isinstance(d, dict) else d
+            for d in raw_deps
+        ]
+    else:
+        deployments = getattr(output, "deployments", [])
+    
+    if not deployments:
+        console.print("There is no deployed model!")
+        return
+    
+    for dep in deployments:
         console.print(
             f"Deployed_model: {dep.deployed_model}, "
             f"model: {dep.model_name}, "
