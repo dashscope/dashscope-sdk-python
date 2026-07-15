@@ -17,7 +17,10 @@ from dashscope.common.constants import (
 )
 from dashscope.common.error import UnsupportedHTTPMethod
 from dashscope.common.logging import logger
-from dashscope.common.utils import async_to_sync
+from dashscope.common.utils import (
+    async_to_sync,
+    _handle_aiohttp_failed_response,
+)
 
 
 class AioHttpRequest(AioBaseRequest):
@@ -174,8 +177,12 @@ class AioHttpRequest(AioBaseRequest):
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=status_code,
-                        code=msg["code"],
-                        message=msg["message"],
+                        code=msg.get("code")
+                        or msg.get("error_code")
+                        or f"http_{status_code}",
+                        message=msg.get("message")
+                        or msg.get("error_message")
+                        or f"HTTP {status_code} error",
                     )
                 else:
                     yield DashScopeAPIResponse(
@@ -220,39 +227,7 @@ class AioHttpRequest(AioBaseRequest):
                 usage=usage,
             )
         else:
-            if "application/json" in response.content_type:
-                error = await response.json()
-                if "request_id" in error:
-                    request_id = error["request_id"]
-                if "message" not in error:
-                    message = ""
-                    logger.error(
-                        "Request: %s failed, status: %s",
-                        self.url,
-                        response.status,
-                    )
-                else:
-                    message = error["message"]
-                    logger.error(
-                        "Request: %s failed, status: %s, message: %s",
-                        self.url,
-                        response.status,
-                        error["message"],
-                    )
-                yield DashScopeAPIResponse(
-                    request_id=request_id,
-                    status_code=response.status,
-                    code=error["code"],
-                    message=message,
-                )
-            else:
-                msg = await response.read()
-                yield DashScopeAPIResponse(
-                    request_id=request_id,
-                    status_code=response.status,
-                    code=None,
-                    message=msg.decode("utf-8"),
-                )
+            yield _handle_aiohttp_failed_response(response)
 
     # pylint: disable=too-many-branches
     async def _handle_request(self):

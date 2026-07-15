@@ -227,6 +227,9 @@ class WebSocketRequest(AioBaseRequest):
                     or f"WebSocket handshake failed with status {e.status}"
                 )
 
+            # Note: For WebSocket handshake errors, code uses format
+            # "WS_HANDSHAKE_{status_code}" to distinguish from business errors.
+            # This is a special case.
             yield DashScopeAPIResponse(
                 request_id=task_id,
                 status_code=code,

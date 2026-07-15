@@ -302,8 +302,12 @@ class HttpRequest(AioBaseRequest):
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=status_code,
-                        code=msg["code"],
-                        message=msg["message"],
+                        code=msg.get("code")
+                        or msg.get("error_code")
+                        or f"http_{status_code}",
+                        message=msg.get("message")
+                        or msg.get("error_message")
+                        or f"HTTP {status_code} error",
                         headers=headers,
                     )
                 else:

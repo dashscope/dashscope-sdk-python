@@ -213,7 +213,7 @@ async def _handle_aiohttp_response(response: aiohttp.ClientResponse):
                 request_id=request_id,
                 status_code=response.status,
                 output=None,
-                code=f"http_{response.status}",
+                code="",
                 message=msg,
             )
 
@@ -275,10 +275,10 @@ def _handle_error_message(error, status_code, flattened_output, headers):
     if flattened_output:
         error["status_code"] = status_code
         return error
-    if "msg" in error:
-        msg = error["msg"]
     if "message" in error:
         msg = error["message"]
+    elif "msg" in error:
+        msg = error["msg"]
     if "code" in error:
         code = error["code"]
     if "request_id" in error:
@@ -320,8 +320,8 @@ def _handle_http_failed_response(
         return DashScopeAPIResponse(
             request_id=request_id,
             status_code=response.status_code,
-            code=f"http_{response.status_code}",
-            message=msgs,
+            code="",
+            message="\n".join(msgs).strip() or "Empty SSE error response",
             headers=headers,
         )
     else:
@@ -331,7 +331,7 @@ def _handle_http_failed_response(
         return DashScopeAPIResponse(
             request_id=request_id,
             status_code=response.status_code,
-            code=f"http_{response.status_code}",
+            code="",
             message=msg,
             headers=headers,
         )
@@ -367,6 +367,12 @@ async def _handle_aiohttp_failed_response(
     headers = dict(response.headers)
     if "application/json" in response.content_type:
         error = await response.json()
+        logger.error(
+            "Request failed: status=%s, code=%s, message=%s",
+            response.status,
+            error.get("code", error.get("error_code", "unknown")),
+            error.get("message", error.get("error_message", "unknown")),
+        )
         return _handle_error_message(
             error,
             response.status,
@@ -383,7 +389,7 @@ async def _handle_aiohttp_failed_response(
             except json.JSONDecodeError:
                 continue
         if error is None:
-            raw_content = "\n".join(raw_data) if raw_data else ""
+            raw_content = "\n".join(raw_data).strip() if raw_data else ""
             if flattened_output:
                 return {  # type: ignore[return-value]
                     "status_code": response.status,
@@ -392,7 +398,7 @@ async def _handle_aiohttp_failed_response(
             return DashScopeAPIResponse(
                 request_id=request_id,
                 status_code=response.status,
-                code=f"http_{response.status}",
+                code="",
                 message=raw_content or "Empty SSE error response",
                 headers=headers,
             )
@@ -409,7 +415,7 @@ async def _handle_aiohttp_failed_response(
         return DashScopeAPIResponse(
             request_id=request_id,
             status_code=response.status,
-            code=f"http_{response.status}",
+            code="",
             message=msg,
             headers=headers,
         )
@@ -506,7 +512,7 @@ def _handle_http_stream_response(
                             request_id=request_id,
                             status_code=status_code,
                             output=None,
-                            code=f"http_{status_code}",
+                            code="",
                             message=event.data,
                             headers=headers,
                         )
