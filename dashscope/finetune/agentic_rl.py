@@ -3,7 +3,7 @@ from __future__ import annotations
 
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
-from typing import Union, List, Optional, ClassVar, Dict, Any
+from typing import Union, List, Optional, ClassVar, Dict, Any, Tuple
 from typing_extensions import Self
 
 from dashscope.client.base_api import CreateMixin
@@ -81,7 +81,7 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             ]
         ] = None,
         lazy_load: Optional[bool] = True,
-    ) -> tuple[
+    ) -> Tuple[
         List[str],
         List[str],
         List[str],
@@ -127,7 +127,7 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         datasets: Optional[List[Dataset]] = None,
         training_files: Optional[Union[List[str], str]] = None,
         validation_files: Optional[Union[List[str], str]] = None,
-    ) -> tuple[List[str], List[str]]:
+    ) -> Tuple[List[str], List[str]]:
         if datasets:
             self.tuning.datasets = datasets
 

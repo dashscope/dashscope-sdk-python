@@ -1171,7 +1171,7 @@ class TuningModel(Models, BaseModel):
     async def register_functions(
         self,
         lazy_load: Optional[bool] = True,
-    ) -> tuple[
+    ) -> Tuple[
         List[str],
         List[str],
         List[str],
@@ -1265,7 +1265,7 @@ class TuningModel(Models, BaseModel):
         self,
         training_files: Union[List[str], str] = None,
         validation_files: Union[List[str], str] = None,
-    ) -> tuple[List[str], List[str]]:
+    ) -> Tuple[List[str], List[str]]:
         """Register and validate training/validation datasets."""
         uploaded_training_ids = []
         uploaded_validation_ids = []
