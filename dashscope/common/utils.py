@@ -9,7 +9,7 @@ import queue
 import threading
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Dict
+from typing import Dict, Tuple
 from urllib.parse import urlparse
 
 import aiohttp
@@ -49,7 +49,7 @@ def is_validate_fine_tune_file(file_path: str) -> bool:
     return True
 
 
-def _get_task_group_and_task(module_name: str) -> tuple[str, str]:
+def _get_task_group_and_task(module_name: str) -> Tuple[str, str]:
     """Get task_group and task name.
     get task_group and task name based on api file __name__
 
