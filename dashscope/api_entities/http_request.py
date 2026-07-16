@@ -17,6 +17,7 @@ from dashscope.common.constants import (
     HTTPMethod,
 )
 from dashscope.common.error import UnsupportedHTTPMethod
+from dashscope.common.error_registry import MISSING_PARAMETER, INVALID_REQUEST
 from dashscope.common.logging import logger
 from dashscope.common.utils import (
     _handle_aio_stream,
@@ -130,10 +131,10 @@ class HttpRequest(AioBaseRequest):
         else:
             self.timeout = timeout  # type: ignore[has-type]
 
-    def add_header(self, key, value):
+    def add_header(self, key: str, value: str) -> None:
         self.headers[key] = value
 
-    def add_headers(self, headers):
+    def add_headers(self, headers: Dict[str, str]) -> None:
         self.headers = {**self.headers, **headers}
 
     def call(self):
@@ -142,9 +143,8 @@ class HttpRequest(AioBaseRequest):
             return (item for item in response)
         else:
             output = next(response)
-            try:
-                next(response)
-            except StopIteration:
+            # Consume remaining items to ensure generator completes
+            for _ in response:
                 pass
             return output
 
@@ -154,9 +154,8 @@ class HttpRequest(AioBaseRequest):
             return (item async for item in response)
         else:
             result = await response.__anext__()
-            try:
-                await response.__anext__()
-            except StopAsyncIteration:
+            # Consume remaining items to ensure generator completes
+            async for _ in response:
                 pass
             return result
 
@@ -292,9 +291,11 @@ class HttpRequest(AioBaseRequest):
                 except json.JSONDecodeError:
                     yield DashScopeAPIResponse(
                         request_id=request_id,
-                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                        code=None,
-                        message=data,
+                        status_code=MISSING_PARAMETER.status_code,
+                        code=MISSING_PARAMETER.error_code,
+                        message=MISSING_PARAMETER.format_msg(
+                            {"parameter": "response data"},
+                        ),
                         headers=headers,
                     )
                     continue
@@ -405,10 +406,10 @@ class HttpRequest(AioBaseRequest):
                 except json.JSONDecodeError:
                     yield DashScopeAPIResponse(
                         request_id=request_id,
-                        status_code=HTTPStatus.BAD_REQUEST,
+                        status_code=INVALID_REQUEST.status_code,
                         output=None,
-                        code=None,
-                        message=data,
+                        code=INVALID_REQUEST.error_code,
+                        message=INVALID_REQUEST.error_msg,
                         headers=headers,
                     )
                     continue

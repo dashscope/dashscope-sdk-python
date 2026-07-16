@@ -59,6 +59,7 @@ def _make_mock_sync_session():
 class _MockAioResponse:
     status = 200
     content_type = "application/json"
+    headers = {"Content-Type": "application/json; charset=utf-8"}
 
     async def json(self):
         return {"output": {"text": "ok"}, "request_id": "test-123"}

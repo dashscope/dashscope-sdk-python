@@ -18,11 +18,28 @@ import requests
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.common.api_key import get_default_api_key
 from dashscope.common.constants import SSE_CONTENT_TYPE
+from dashscope.common.error_registry import INTERNAL_ERROR
 from dashscope.common.logging import logger
 from dashscope.version import __version__
 
 
-def is_validate_fine_tune_file(file_path):
+def truncate_error_message(message: str, max_length: int = 200) -> str:
+    """Truncate error message for logging to avoid excessive log output.
+
+    Args:
+        message: The error message to truncate.
+        max_length: Maximum length of the message. Defaults to 200.
+
+    Returns:
+        Truncated message with '...' suffix if longer than max_length,
+        otherwise original message.
+    """
+    if len(message) > max_length:
+        return message[:max_length] + "..."
+    return message
+
+
+def is_validate_fine_tune_file(file_path: str) -> bool:
     with open(file_path, encoding="utf-8") as f:
         for line in f:
             try:
@@ -32,7 +49,7 @@ def is_validate_fine_tune_file(file_path):
     return True
 
 
-def _get_task_group_and_task(module_name):
+def _get_task_group_and_task(module_name: str) -> tuple[str, str]:
     """Get task_group and task name.
     get task_group and task name based on api file __name__
 
@@ -48,41 +65,36 @@ def _get_task_group_and_task(module_name):
     return task_group, task
 
 
-def is_path(path: str):
-    """Check the input path is valid local path.
+def is_path(path: str) -> bool:
+    """Check if the input is a valid local path.
 
     Args:
-        path_or_url (str): The path.
+        path: The path to check.
 
     Returns:
-        bool: If path return True, otherwise False.
+        True if it's a valid local path, False otherwise.
     """
     url_parsed = urlparse(path)
-    if url_parsed.scheme in ("file", ""):
-        return os.path.exists(url_parsed.path)
-    else:
-        return False
+    return url_parsed.scheme in ("file", "") and os.path.exists(
+        url_parsed.path,
+    )
 
 
-def is_url(url: str):
-    """Check the input url is valid url.
+def is_url(url: str) -> bool:
+    """Check if the input is a valid URL.
 
     Args:
-        url (str): The url
+        url: The URL to check.
 
     Returns:
-        bool: If is url return True, otherwise False.
+        True if it's a valid URL, False otherwise.
     """
     url_parsed = urlparse(url)
-    # pylint: disable=simplifiable-if-statement
-    if url_parsed.scheme in ("http", "https", "oss"):
-        return True
-    else:
-        return False
+    return url_parsed.scheme in ("http", "https", "oss")
 
 
 def iter_over_async(ait):
-    loop = asyncio.get_event_loop_policy().new_event_loop()
+    loop = asyncio.new_event_loop()
     ait = ait.__aiter__()
 
     async def get_next():
@@ -106,28 +118,25 @@ def iter_over_async(ait):
                     message_queue.put((True, e, None))
                     break
         finally:
-            try:
-                loop.close()
-            except Exception:
-                pass
+            loop.close()
 
     message_queue = queue.Queue()
     x = threading.Thread(
         target=iter_thread,
         args=(loop, message_queue),
         name="iter_async_thread",
+        daemon=True,
     )
     x.start()
     while True:
         finished, error, obj = message_queue.get()
         if finished:
             if error is not None:
-                exception_name = type(error).__name__
                 yield DashScopeAPIResponse(
-                    -1,
-                    "",
-                    "",
-                    message=f"[SDK Internal Error] {exception_name}: {error}",
+                    status_code=INTERNAL_ERROR.status_code,
+                    request_id="",
+                    code=INTERNAL_ERROR.error_code,
+                    message=INTERNAL_ERROR.format_msg(),
                 )
             break
         yield obj  # pylint: disable=no-else-break
@@ -171,7 +180,7 @@ def default_headers(api_key: str = None) -> Dict[str, str]:
     return headers
 
 
-def join_url(base_url, *args):
+def join_url(base_url: str, *args: str) -> str:
     if not base_url.endswith("/"):
         base_url = base_url + "/"
     url = base_url
@@ -181,58 +190,19 @@ def join_url(base_url, *args):
     return url[:-1]
 
 
-async def _handle_aiohttp_response(response: aiohttp.ClientResponse):
-    request_id = ""
-    if response.status == HTTPStatus.OK:
-        json_content = await response.json()
-        if "request_id" in json_content:
-            request_id = json_content["request_id"]
-        return DashScopeAPIResponse(
-            request_id=request_id,
-            status_code=HTTPStatus.OK,
-            output=json_content,
-        )
-    else:
-        if "application/json" in response.content_type:
-            error = await response.json()
-            msg = ""
-            if "message" in error:
-                msg = error["message"]
-            if "request_id" in error:
-                request_id = error["request_id"]
-            return DashScopeAPIResponse(
-                request_id=request_id,
-                status_code=response.status,
-                output=None,
-                code=error["code"],
-                message=msg,
-            )
-        else:
-            msg = await response.read()
-            return DashScopeAPIResponse(
-                request_id=request_id,
-                status_code=response.status,
-                output=None,
-                code="",
-                message=msg,
-            )
-
-
 @dataclass
 class SSEEvent:
-    id: str
-    eventType: str
-    data: str
+    """Server-Sent Events event representation.
 
-    def __init__(  # pylint: disable=redefined-builtin
-        self,
-        id: str,
-        type: str,
-        data: str,
-    ):
-        self.id = id
-        self.eventType = type
-        self.data = data
+    Attributes:
+        id: Event ID from the 'id:' field.
+        eventType: Event type from the 'event:' field.
+        data: Event data from the 'data:' field.
+    """
+
+    id: str = ""
+    eventType: str = ""
+    data: str = ""
 
 
 def _handle_stream(response: requests.Response):
@@ -272,17 +242,46 @@ def _handle_error_message(error, status_code, flattened_output, headers):
     code = ""
     msg = ""
     request_id = ""
+
+    # Log original error information
+    original_code = error.get("code", error.get("error_code", ""))
+    original_message = error.get(
+        "message",
+        error.get("error_message", error.get("msg", "")),
+    )
+    logger.error(
+        "Request failed: status=%s, code=%s, message=%s",
+        status_code,
+        original_code or "unknown",
+        original_message or "unknown",
+    )
+
     if flattened_output:
         error["status_code"] = status_code
         return error
-    if "message" in error:
+
+    # Extract message, fallback to INTERNAL_ERROR.format_msg() if empty
+    if "message" in error and error["message"]:
         msg = error["message"]
-    elif "msg" in error:
+    elif "msg" in error and error["msg"]:
         msg = error["msg"]
-    if "code" in error:
+    elif "error_message" in error and error["error_message"]:
+        msg = error["error_message"]
+    else:
+        msg = INTERNAL_ERROR.format_msg()
+
+    # Extract code, fallback to INTERNAL_ERROR.error_code if empty
+    if "code" in error and error["code"]:
         code = error["code"]
+    elif "error_code" in error and error["error_code"]:
+        code = error["error_code"]
+    else:
+        code = INTERNAL_ERROR.error_code
+
+    # Extract request_id
     if "request_id" in error:
         request_id = error["request_id"]
+
     return DashScopeAPIResponse(
         request_id=request_id,
         status_code=status_code,
@@ -317,22 +316,41 @@ def _handle_http_failed_response(
                     flattened_output,
                     headers,
                 )
+        # SSE 响应中没有有效的错误数据
+        error_message = "\n".join(msgs).strip() or INTERNAL_ERROR.format_msg()
+        logger.error(
+            "Request failed: status=%s, code=%s, message=%s",
+            response.status_code,
+            INTERNAL_ERROR.error_code,
+            truncate_error_message(error_message),
+        )
         return DashScopeAPIResponse(
             request_id=request_id,
             status_code=response.status_code,
-            code="",
-            message="\n".join(msgs).strip() or "Empty SSE error response",
+            code=INTERNAL_ERROR.error_code,
+            message=error_message,
             headers=headers,
         )
     else:
         msg = response.content.decode("utf-8")
+        error_message = msg or INTERNAL_ERROR.format_msg()
+        logger.error(
+            "Request failed: status=%s, code=%s, message=%s",
+            response.status_code,
+            INTERNAL_ERROR.error_code,
+            truncate_error_message(error_message),
+        )
         if flattened_output:
-            return {"status_code": response.status_code, "message": msg}  # type: ignore[return-value] # pylint: disable=line-too-long # noqa: E501
+            return {  # type: ignore[return-value]
+                "status_code": response.status_code,
+                "code": INTERNAL_ERROR.error_code,
+                "message": error_message,
+            }
         return DashScopeAPIResponse(
             request_id=request_id,
             status_code=response.status_code,
-            code="",
-            message=msg,
+            code=INTERNAL_ERROR.error_code,
+            message=error_message,
             headers=headers,
         )
 
@@ -360,18 +378,32 @@ async def _handle_aio_stream(response):
 
 
 async def _handle_aiohttp_failed_response(
-    response: requests.Response,
+    response: aiohttp.ClientResponse,
     flattened_output: bool = False,
 ) -> DashScopeAPIResponse:
     request_id = ""
     headers = dict(response.headers)
     if "application/json" in response.content_type:
         error = await response.json()
+        # Pass through code, fallback to
+        # INTERNAL_ERROR.error_code if not available
+        error_code = (
+            error.get("code")
+            or error.get("error_code")
+            or INTERNAL_ERROR.error_code
+        )
+        # Pass through message, fallback to
+        # INTERNAL_ERROR.error_msg if not available
+        error_message = (
+            error.get("message")
+            or error.get("error_message")
+            or INTERNAL_ERROR.format_msg()
+        )
         logger.error(
             "Request failed: status=%s, code=%s, message=%s",
             response.status,
-            error.get("code", error.get("error_code", "unknown")),
-            error.get("message", error.get("error_message", "unknown")),
+            error_code,
+            truncate_error_message(error_message),
         )
         return _handle_error_message(
             error,
@@ -390,16 +422,25 @@ async def _handle_aiohttp_failed_response(
                 continue
         if error is None:
             raw_content = "\n".join(raw_data).strip() if raw_data else ""
+            error_code = INTERNAL_ERROR.error_code
+            error_message = raw_content or INTERNAL_ERROR.format_msg()
+            logger.error(
+                "Request failed: status=%s, code=%s, message=%s",
+                response.status,
+                error_code,
+                truncate_error_message(error_message),
+            )
             if flattened_output:
                 return {  # type: ignore[return-value]
                     "status_code": response.status,
-                    "message": raw_content or "Empty SSE error response",
+                    "code": error_code,
+                    "message": error_message,
                 }
             return DashScopeAPIResponse(
                 request_id=request_id,
                 status_code=response.status,
-                code="",
-                message=raw_content or "Empty SSE error response",
+                code=error_code,
+                message=error_message,
                 headers=headers,
             )
         return _handle_error_message(
@@ -410,13 +451,25 @@ async def _handle_aiohttp_failed_response(
         )
     else:
         msg = await response.text()
+        error_code = INTERNAL_ERROR.error_code
+        error_message = msg or INTERNAL_ERROR.format_msg()
+        logger.error(
+            "Request failed: status=%s, code=%s, message=%s",
+            response.status,
+            error_code,
+            truncate_error_message(error_message),
+        )
         if flattened_output:
-            return {"status_code": response.status, "message": msg}  # type: ignore[return-value] # pylint: disable=line-too-long # noqa: E501
+            return {  # type: ignore[return-value]
+                "status_code": response.status,
+                "code": error_code,
+                "message": error_message,
+            }
         return DashScopeAPIResponse(
             request_id=request_id,
             status_code=response.status,
-            code="",
-            message=msg,
+            code=error_code,
+            message=error_message,
             headers=headers,
         )
 
@@ -425,11 +478,10 @@ def _handle_http_response(
     response: requests.Response,
     flattened_output: bool = False,
 ):
-    response = _handle_http_stream_response(response, flattened_output)
-    _, output = next(response)
-    try:
-        next(response)
-    except StopIteration:
+    response_gen = _handle_http_stream_response(response, flattened_output)
+    _, output = next(response_gen)
+    # Consume remaining items to ensure generator completes
+    for _ in response_gen:
         pass
     return output
 
@@ -471,18 +523,27 @@ def _handle_http_stream_response(
                             headers=headers,
                         )
                 except json.JSONDecodeError:
+                    error_code = INTERNAL_ERROR.error_code
+                    error_message = event.data or INTERNAL_ERROR.format_msg()
+                    logger.error(
+                        "Request failed: status=%s, code=%s, message=%s",
+                        response.status_code,
+                        error_code,
+                        truncate_error_message(error_message),
+                    )
                     if flattened_output:
                         yield event.eventType, {
                             "status_code": response.status_code,
-                            "message": event.data,
+                            "code": error_code,
+                            "message": error_message,
                         }
                     else:
                         yield event.eventType, DashScopeAPIResponse(
                             request_id=request_id,
                             status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
                             output=None,
-                            code="",
-                            message=event.data,
+                            code=error_code,
+                            message=error_message,
                             headers=headers,
                         )
                     continue
@@ -508,12 +569,22 @@ def _handle_http_stream_response(
                             headers=headers,
                         )  # noqa E501
                     except json.JSONDecodeError:
+                        error_code = INTERNAL_ERROR.error_code
+                        error_message = (
+                            event.data or INTERNAL_ERROR.format_msg()
+                        )
+                        logger.error(
+                            "Request failed: status=%s, code=%s, message=%s",
+                            status_code,
+                            error_code,
+                            truncate_error_message(error_message),
+                        )
                         yield event.eventType, DashScopeAPIResponse(
                             request_id=request_id,
                             status_code=status_code,
                             output=None,
-                            code="",
-                            message=event.data,
+                            code=error_code,
+                            message=error_message,
                             headers=headers,
                         )
     # pylint: disable=consider-using-in

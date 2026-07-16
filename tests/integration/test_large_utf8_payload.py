@@ -70,7 +70,7 @@ def _print_result(resp, elapsed):  # pylint: disable=unused-argument
         return False
 
 
-def test_sync(test_messages):
+def test_sync(messages):  # pylint: disable=redefined-outer-name
     print("\n" + "=" * 60)
     print("SYNC TEST")
     print("=" * 60)
@@ -78,7 +78,7 @@ def test_sync(test_messages):
     try:
         resp = Generation.call(
             model=MODEL,
-            messages=test_messages,
+            messages=messages,
             max_tokens=MAX_OUTPUT_TOKENS,
             result_format="message",
         )
@@ -94,7 +94,7 @@ def test_sync(test_messages):
     return _print_result(resp, elapsed)
 
 
-async def test_async(test_messages):
+async def test_async(messages):  # pylint: disable=redefined-outer-name
     print("\n" + "=" * 60)
     print("ASYNC TEST")
     print("=" * 60)
@@ -102,7 +102,7 @@ async def test_async(test_messages):
     try:
         resp = await AioGeneration.call(
             model=MODEL,
-            messages=test_messages,
+            messages=messages,
             max_tokens=MAX_OUTPUT_TOKENS,
             result_format="message",
         )
@@ -118,7 +118,7 @@ async def test_async(test_messages):
     return _print_result(resp, elapsed)
 
 
-def test_stream(test_messages):
+def test_stream(messages):  # pylint: disable=redefined-outer-name
     print("\n" + "=" * 60)
     print("STREAM TEST")
     print("=" * 60)
@@ -127,7 +127,7 @@ def test_stream(test_messages):
     try:
         responses = Generation.call(
             model=MODEL,
-            messages=test_messages,
+            messages=messages,
             max_tokens=MAX_OUTPUT_TOKENS,
             result_format="message",
             stream=True,
@@ -160,10 +160,10 @@ def test_stream(test_messages):
     return True
 
 
-def test_websocket(test_messages):
+def test_websocket(messages):  # pylint: disable=redefined-outer-name
     # WebSocket has a smaller message size limit than HTTP;
     # use a subset that still contains non-ASCII content.
-    ws_messages = test_messages[:5]
+    ws_messages = messages[:5]
     print("\n" + "=" * 60)
     print(
         f"WEBSOCKET TEST ({len(ws_messages)}/{len(messages)} messages)",
