@@ -10,10 +10,11 @@ The SDK consists of two core modules:
 1.  **Functions Module**: Manages custom Python code for **Rollout** (trajectory generation), **Reward** (scoring), and **Group Reward** (batch scoring). It supports automatic registration, testing, and built-in **Observability (Tracing)**.
 2.  **Tuning Module**: Handles dataset management, hyperparameter configuration, job submission, and lifecycle management (status, logs, cancellation).
 
-```
 **Workflow**:
-1. First, register functions (Rollout/Reward/Group Reward) in the Functions Module. These can be tested locally or remotely.
-2. Then, use the Tuning Module to upload datasets, configure the job, and submit it for training.
+1. Register custom functions. Regular reinforcement training requires a
+   Rollout and at least one Reward; Rollout and Reward are optional for OPD.
+2. Use the Tuning Module to upload datasets, configure the job, and submit it
+   for training.
 
 ---
 
@@ -46,15 +47,20 @@ workspace/
 ├── data/                   # Datasets
 │   ├── training.jsonl
 │   └── validation.jsonl
-├── functions/              # Custom Logic
+├── functions/              # Custom functions; optional only for OPD
 │   ├── reward/
 │   │   ├── group_reward.py
 │   │   └── reward.py
 │   └── rollout/
 │       └── rollout.py
 ├── requirements.txt        # Dependencies for Function Components
-└── job.yaml                # Optional: Job configuration
+├── rl-job.yaml             # Regular Agentic RL configuration
+└── opd-job.yaml            # OPD configuration
 ```
+
+Regular reinforcement training requires a custom Rollout and at least one
+Reward. Only OPD may omit Rollout and Reward, or configure either one
+independently.
 
 ### 2.5 Dependency Packages (requirements.txt Guidelines)
 This file is **mandatory** for deploying Function Components to the cloud. It must reside in the workspace root.
@@ -259,7 +265,14 @@ class MyRolloutProcessor(AbstractRolloutProcessor):
 * [CLI] Entry point: dashscope rl
 
 ### 4.1 Job Configuration
-Initialize the client using YAML or code. Code arguments override YAML.
+
+Regular reinforcement training and OPD use the same SDK/CLI workflow. Select
+the corresponding YAML configuration; code arguments override YAML values.
+
+| Training type | Configuration | Custom functions |
+|---|---|---|
+| Regular reinforcement | `rl-job.yaml` | Rollout is required, with at least one Reward |
+| OPD | `opd-job.yaml` | Rollout and Reward are independently optional and may both be omitted |
 
 **[SDK] \_\_init\_\_**
 ```python
@@ -291,7 +304,45 @@ Initializes the instance from a YAML configuration file.
 **Example**:
 ```python
 from dashscope.finetune.agentic_rl import AgenticRL
-rl = AgenticRL().init("job.yaml", job_name="custom_job")
+config_path = "opd-job.yaml"  # Use "rl-job.yaml" for regular reinforcement
+rl = AgenticRL().init(config_path, job_name="custom_job")
+result = await rl.run()
+```
+
+When `opd-job.yaml` is selected, keep or remove the Rollout and Reward blocks
+to choose the required capabilities:
+
+| Function blocks kept | OPD mode | Trajectory source | Task reward |
+|---|---|---|---|
+| Neither | Teacher only | Platform | Disabled |
+| Reward only | Teacher + Reward | Platform | Custom Reward |
+| Rollout only | Teacher + Rollout | Custom Rollout | Disabled |
+| Rollout and Reward | Teacher + Rollout + Reward | Custom Rollout | Custom Reward |
+
+The committed `opd-job.yaml` keeps both blocks. Delete either block, or both,
+to select another OPD combination:
+
+```yaml
+teacher_model: qwen3.5-397b-a17b
+
+functions:
+# Remove this block to use platform generation.
+- type: rollout
+  # ...
+# Remove this block to disable custom task rewards.
+- type: reward
+  # ...
+
+training:
+  type: pg-opd
+```
+
+```bash
+# Regular reinforcement
+dashscope rl run -c rl-job.yaml
+
+# OPD
+dashscope rl run -c opd-job.yaml
 ```
 
 ### 4.2 Registering Functions
@@ -444,18 +495,32 @@ Automatically registers functions, uploads data, and submits the job.
 
 **[SDK] [run](submit_job.py)**
 ```python
-def run(self, model: Optional[str] = None, training_files: Optional[Union[List[str], str]] = None, validation_files: Optional[Union[List[str], str]] = None, functions: Optional[Union[List[Union[RolloutFunctionComponent, RewardFunctionComponent, AgenticRLFunctionComponent]], RolloutFunctionComponent, RewardFunctionComponent, AgenticRLFunctionComponent]] = None, hyper_parameters: Optional[Dict[str, str]] = None, job_name: Optional[str] = None, workspace_dir: str = "./", **kwargs) -> FineTune: ...
+async def run(
+    self,
+    model: Optional[str] = None,
+    training_datasets: Optional[List[TrainingDataset]] = None,
+    validation_datasets: Optional[List[ValidationDataset]] = None,
+    functions: Optional[
+        Union[List[AgenticRLFunctionComponent], AgenticRLFunctionComponent]
+    ] = None,
+    hyper_parameters: Optional[Dict[str, str]] = None,
+    resources: Optional[Dict[str, str]] = None,
+    job_name: Optional[str] = None,
+    teacher_model: Optional[str] = None,
+    **kwargs,
+) -> FineTune: ...
 ```
 Full workflow execution (registration + upload + submission).
 
 **Parameters**:
 - `model`: Base model name
-- `training_files`: Training dataset files
-- `validation_files`: Validation dataset files
+- `training_datasets`: Training dataset objects
+- `validation_datasets`: Validation dataset objects
 - `functions`: Function components
 - `hyper_parameters`: Training hyper_parameters
+- `resources`: Training resource configuration
 - `job_name`: Custom job name
-- `workspace_dir`: Working directory
+- `teacher_model`: Teacher model; enables OPD while Rollout and Reward remain optional
 
 **Returns**: `FineTune` job object
 
@@ -510,7 +575,7 @@ job = await rl.run(
 
 **[CLI] run**
 
-**Usage: dashscope run [OPTIONS]**
+**Usage: dashscope rl run [OPTIONS]**
 ```bash
  🚀 Launch the complete RL tuning workflow (function registration → dataset upload → job submission)
 
@@ -519,13 +584,13 @@ job = await rl.run(
  2. Direct parameter: Provide all required arguments via CLI options
 
  Required parameters:
- - rollout_classpath
- - reward_classpaths (at least one)
  - training_files (at least one)
+ - Rollout and Reward are required for reinforcement learning, but optional for OPD.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --config                   -c      PATH   Path to YAML configuration file                                                                                                                                            │
 │ --model                            TEXT   Base model identifier                                                                                                                                                      │
+│ --teacher-model                    TEXT   Enable OPD and override the Teacher model in YAML; Rollout and Reward are optional                                                                                          │
 │ --training-files                   TEXT   Paths to training dataset files                                                                                                                                            │
 │ --validation-files                 TEXT   Paths to validation dataset files                                                                                                                                          │
 │ --rollout-classpath                TEXT   Python import path to rollout class (module:Class)                                                                                                                         │
@@ -554,7 +619,7 @@ job = await rl.run(
 **Example**: Run Full Workflow (Auto)
 ```bash
 dashscope rl run \
-  --config "job.yaml" \
+  --config "rl-job.yaml" \
   --verbose
 ```
 

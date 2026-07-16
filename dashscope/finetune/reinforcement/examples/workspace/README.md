@@ -56,6 +56,16 @@ Develop functions under the `functions` directory:
 
 > Note: The `functions/` directory must contain an `__init__.py` file
 
+Function components depend on the selected training configuration:
+
+| Configuration | Mode | Custom Rollout | Custom Reward |
+|---|---|---:|---:|
+| `rl-job.yaml` | Regular reinforcement | Required | At least one |
+| `opd-job.yaml` without function blocks | Teacher only | No | No |
+| `opd-job.yaml` with Reward only | Teacher + Reward | No | Yes |
+| `opd-job.yaml` with Rollout only | Teacher + Rollout | Yes | No |
+| `opd-job.yaml` with both blocks | Teacher + Rollout + Reward | Yes | Yes |
+
 ### 3.2 Preparing Training Data
 
 Add dataset files under the `data` directory:
@@ -67,18 +77,56 @@ Add dataset files under the `data` directory:
 
 ### 4.1 Function Execution (Register + Test)
 
+Regular reinforcement training requires a custom Rollout and at least one
+Reward. Rollout and Reward are optional for OPD.
+
 ```bash
 python test_functions.py
 ```
 
 ### 4.2 Workflow Execution (YAML Config + Lifecycle Management)
 
+Regular reinforcement training and OPD use the same SDK workflow. Select the
+corresponding YAML:
+
+```python
+from dashscope.finetune.agentic_rl import AgenticRL
+
+client = AgenticRL()
+# Use rl-job.yaml for regular reinforcement or opd-job.yaml for OPD
+client.init(config_path="rl-job.yaml")
+result = await client.run()
+```
+
+`opd-job.yaml` keeps both function blocks by default, representing Teacher +
+Rollout + Reward. Remove the Reward block for Teacher + Rollout, remove the
+Rollout block for Teacher + Reward, or remove both for Teacher only.
+
 ```bash
+# submit_job.py uses the regular reinforcement rl-job.yaml by default
 python submit_job.py
 ```
 
 ## 5. Executing Tasks with CLI
 Example code：cli.sh
+
+`cli.sh` demonstrates the regular reinforcement workflow. For OPD, skip
+registration and testing for function blocks removed from `opd-job.yaml`; dataset
+submission, `rl run`, and job lifecycle commands remain unchanged.
+
+The CLI consumes the same YAML files as the SDK:
+
+```bash
+# Regular reinforcement
+dashscope rl run -c rl-job.yaml
+
+# OPD
+dashscope rl run -c opd-job.yaml
+
+# Override the Teacher configured in opd-job.yaml
+dashscope rl run -c opd-job.yaml \
+  --teacher-model qwen3.5-397b-a17b
+```
 
 ```bash
 dashscope rl --help  # View full command help

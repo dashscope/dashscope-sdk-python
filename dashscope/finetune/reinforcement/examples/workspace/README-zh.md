@@ -56,6 +56,16 @@ langchain-openai==1.2.0
 
 > 注：functions/目录下需要包含__init__.py文件
 
+函数组件是否必需取决于训练配置：
+
+| 配置 | 场景 | 自定义 Rollout | 自定义 Reward |
+|---|---|---:|---:|
+| `rl-job.yaml` | 普通强化学习 | 必选 | 至少一个 |
+| `opd-job.yaml` 不保留函数块 | 仅 Teacher | 否 | 否 |
+| `opd-job.yaml` 仅保留 Reward | Teacher + Reward | 否 | 是 |
+| `opd-job.yaml` 仅保留 Rollout | Teacher + Rollout | 是 | 否 |
+| `opd-job.yaml` 保留两个函数块 | Teacher + Rollout + Reward | 是 | 是 |
+
 ### 3.2 准备训练数据
 
 在`data`目录下添加数据集文件：
@@ -67,18 +77,55 @@ langchain-openai==1.2.0
 
 ### 4.1 函数执行（注册+测试）
 
+普通强化学习必须注册自定义 Rollout 和至少一个 Reward。OPD 的
+Rollout、Reward 可选。
+
 ```bash
 python test_functions.py
 ```
 
 ### 4.2 工作流执行（YAML配置+生命周期管理）
 
+普通强化学习与 OPD 使用完全相同的 SDK 工作流，只需选择对应 YAML：
+
+```python
+from dashscope.finetune.agentic_rl import AgenticRL
+
+client = AgenticRL()
+# 普通强化学习使用 rl-job.yaml；OPD 使用 opd-job.yaml
+client.init(config_path="rl-job.yaml")
+result = await client.run()
+```
+
+`opd-job.yaml` 默认保留两个函数块，表示 Teacher + Rollout + Reward。删除
+Reward 块表示 Teacher + Rollout；删除 Rollout 块表示 Teacher + Reward；
+两个都删除表示仅 Teacher。
+
 ```bash
+# submit_job.py 默认使用普通强化学习 rl-job.yaml
 python submit_job.py
 ```
 
 ## 5. 使用CLI执行任务
 示例代码：cli.sh
+
+`cli.sh` 展示普通强化学习的完整流程。执行 OPD 时，对 `opd-job.yaml` 中已经
+删除的函数块跳过对应注册和测试；数据提交、`rl run` 和任务生命周期命令
+保持不变。
+
+CLI 与 SDK 使用同一份 YAML：
+
+```bash
+# 普通强化学习
+dashscope rl run -c rl-job.yaml
+
+# OPD
+dashscope rl run -c opd-job.yaml
+
+# 覆盖 opd-job.yaml 中配置的 Teacher 模型
+dashscope rl run -c opd-job.yaml \
+  --teacher-model qwen3.5-397b-a17b
+```
 
 ```bash
 dashscope rl --help  # 查看完整命令帮助
