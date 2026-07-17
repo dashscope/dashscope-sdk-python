@@ -69,6 +69,68 @@ def _get_protocol_params(kwargs):
     )
 
 
+def _build_http_url(
+    base_address,
+    is_service,
+    task_group,
+    task,
+    function,
+    extra_url_parameters,
+):
+    """Build HTTP/HTTPS URL from components."""
+    if base_address is None:
+        base_address = dashscope.base_http_api_url
+
+    # Validate base_address has proper scheme (http:// or https://)
+    if base_address and not base_address.startswith(
+        ("http://", "https://"),
+    ):
+        from dashscope.common.error import InvalidBaseURL
+
+        raise InvalidBaseURL(
+            f"Invalid URL '{base_address}': No scheme supplied. "
+            f"Perhaps you meant https://{base_address}?",
+        )
+
+    if not base_address.endswith("/"):
+        http_url = base_address + "/"
+    else:
+        http_url = base_address
+
+    if is_service:
+        http_url = http_url + SERVICE_API_PATH + "/"
+
+    if task_group:
+        http_url += f"{task_group}/"
+    if task:
+        http_url += f"{task}/"
+    if function:
+        http_url += function
+    if extra_url_parameters is not None and extra_url_parameters:
+        http_url += "?" + urlencode(extra_url_parameters)
+
+    return http_url
+
+
+def _build_websocket_url(base_address):
+    """Build WebSocket URL with validation."""
+    if base_address is not None:
+        websocket_url = base_address
+    else:
+        websocket_url = dashscope.base_websocket_api_url
+
+    # Validate websocket_url has proper scheme (ws:// or wss://)
+    if websocket_url and not websocket_url.startswith(("ws://", "wss://")):
+        from dashscope.common.error import InvalidBaseURL
+
+        raise InvalidBaseURL(
+            f"Invalid URL '{websocket_url}': No scheme supplied. "
+            f"Perhaps you meant wss://{websocket_url}?",
+        )
+
+    return websocket_url
+
+
 def _build_api_request(  # pylint: disable=too-many-branches
     model: str,
     input: object,  # pylint: disable=redefined-builtin
@@ -102,24 +164,14 @@ def _build_api_request(  # pylint: disable=too-many-branches
     encryption = None
 
     if api_protocol in [ApiProtocol.HTTP, ApiProtocol.HTTPS]:
-        if base_address is None:
-            base_address = dashscope.base_http_api_url
-        if not base_address.endswith("/"):
-            http_url = base_address + "/"
-        else:
-            http_url = base_address
-
-        if is_service:
-            http_url = http_url + SERVICE_API_PATH + "/"
-
-        if task_group:
-            http_url += f"{task_group}/"
-        if task:
-            http_url += f"{task}/"
-        if function:
-            http_url += function
-        if extra_url_parameters is not None and extra_url_parameters:
-            http_url += "?" + urlencode(extra_url_parameters)
+        http_url = _build_http_url(
+            base_address,
+            is_service,
+            task_group,
+            task,
+            function,
+            extra_url_parameters,
+        )
 
         if enable_encryption is True:
             encryption = Encryption()
@@ -142,10 +194,8 @@ def _build_api_request(  # pylint: disable=too-many-branches
             session=session,
         )
     elif api_protocol == ApiProtocol.WEBSOCKET:
-        if base_address is not None:
-            websocket_url = base_address
-        else:
-            websocket_url = dashscope.base_websocket_api_url
+        websocket_url = _build_websocket_url(base_address)
+
         pre_task_id = kwargs.pop("pre_task_id", None)
         request = WebSocketRequest(
             url=websocket_url,

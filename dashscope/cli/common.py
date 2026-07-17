@@ -90,9 +90,7 @@ ERROR_MESSAGE_TEMPLATES: Dict[str, str] = {
     "InvalidModel": (
         "Invalid model specified. " "Please check the model name."
     ),
-    "InvalidInput": (
-        "Invalid input data. " "Please check your input format."
-    ),
+    "InvalidInput": ("Invalid input data. " "Please check your input format."),
     "InvalidFileFormat": (
         "Invalid file format. " "Please check the file type."
     ),
@@ -119,7 +117,9 @@ ERROR_MESSAGE_TEMPLATES: Dict[str, str] = {
     "MultiInputsWithBinaryNotSupported": (
         "Binary input is not supported with multiple inputs."
     ),
-    "UnexpectedMessageReceived": ("Unexpected message received from the server."),
+    "UnexpectedMessageReceived": (
+        "Unexpected message received from the server."
+    ),
     "UnsupportedData": "Unsupported data format.",
     "UnknownMessageReceived": ("Unknown message received from the server."),
     "ServiceUnavailableError": (

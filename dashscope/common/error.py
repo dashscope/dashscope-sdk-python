@@ -144,3 +144,15 @@ class UploadFileException(DashScopeException):
 
 class TimeoutException(DashScopeException):
     pass
+
+
+class InvalidBaseURL(DashScopeException):
+    """Raised when the base_address is invalid.
+
+    This can happen when the scheme is missing or the URL is malformed.
+    """
+
+    class BaseUrlError:
+        """Error message pattern for invalid base URL."""
+
+        pattern = r"No scheme supplied"

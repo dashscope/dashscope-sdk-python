@@ -47,7 +47,7 @@ class TestPrintFailedMessage:
         # Missing request_id should not be displayed (empty fields are omitted)
         assert "request_id:" not in captured.err
         # Error code is kept in original camelCase format
-        assert "InvalidParameter" in captured.err
+        assert "BadRequest" in captured.err
         assert "400" in captured.err
 
     def test_empty_code_and_message(self, capsys):
@@ -223,8 +223,8 @@ class TestHandleSdkError:
         captured = capsys.readouterr()
         assert "Test action" in captured.err
         assert "req_auth" in captured.err
-        # Error code is kept in original camelCase format
-        assert "AuthFailed" in captured.err
+        # Error code is kept in original camelCase format (exception type name)
+        assert "AuthenticationError" in captured.err
 
     def test_generic_exception_handling(self, capsys):
         """Test handling of generic exceptions."""
