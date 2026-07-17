@@ -46,8 +46,8 @@ class TestPrintFailedMessage:
         captured = capsys.readouterr()
         # Missing request_id should not be displayed (empty fields are omitted)
         assert "request_id:" not in captured.err
-        # Error code is mapped to CLI-friendly code
-        assert "INVALID_PARAMETER" in captured.err
+        # Error code is kept in original camelCase format
+        assert "InvalidParameter" in captured.err
         assert "400" in captured.err
 
     def test_empty_code_and_message(self, capsys):
@@ -131,8 +131,8 @@ class TestEnsureOk:
         captured = capsys.readouterr()
         # Rich may wrap long lines and add extra spaces, normalize whitespace
         normalized_err = " ".join(captured.err.split())
-        # Error code is mapped to CLI-friendly code
-        assert "INVALID_PARAMETER" in normalized_err
+        # Error code is kept in original camelCase format
+        assert "InvalidParameter" in normalized_err
         assert "Model not found" in normalized_err
 
     def test_business_error_without_message(self, capsys):
@@ -223,8 +223,8 @@ class TestHandleSdkError:
         captured = capsys.readouterr()
         assert "Test action" in captured.err
         assert "req_auth" in captured.err
-        # Error code is mapped to CLI-friendly code
-        assert "AUTH_FAILED" in captured.err
+        # Error code is kept in original camelCase format
+        assert "AuthFailed" in captured.err
 
     def test_generic_exception_handling(self, capsys):
         """Test handling of generic exceptions."""

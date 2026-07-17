@@ -27,103 +27,115 @@ DEFAULT_START_PAGE = 1
 # Error code mapping: SDK error codes -> CLI-friendly error codes
 # ---------------------------------------------------------------------------
 ERROR_CODE_MAPPING: Dict[str, str] = {
-    # Authentication errors
-    "AuthenticationError": "AUTH_FAILED",
-    "AuthFailed": "AUTH_FAILED",
-    "InvalidToken": "AUTH_FAILED",
-    "TokenExpired": "AUTH_FAILED",
-    "Unauthorized": "AUTH_FAILED",
-    # Parameter errors
-    "InvalidParameter": "INVALID_PARAMETER",
-    "InvalidParam": "INVALID_PARAMETER",
-    "BadRequest": "INVALID_PARAMETER",
-    "ModelRequired": "MISSING_MODEL",
-    "InvalidModel": "INVALID_MODEL",
-    "InvalidInput": "INVALID_INPUT",
-    "InvalidFileFormat": "INVALID_FILE_FORMAT",
-    "InputDataRequired": "MISSING_INPUT_DATA",
-    "InputRequired": "MISSING_INPUT",
-    "UnsupportedDataType": "UNSUPPORTED_DATA_TYPE",
-    # Task errors
-    "InvalidTask": "INVALID_TASK",
-    "UnsupportedTask": "UNSUPPORTED_TASK",
-    "UnsupportedModel": "UNSUPPORTED_MODEL",
-    "UnsupportedApiProtocol": "UNSUPPORTED_PROTOCOL",
-    "NotImplemented": "NOT_IMPLEMENTED",
-    "MultiInputsWithBinaryNotSupported": "BINARY_INPUT_NOT_SUPPORTED",
-    "UnexpectedMessageReceived": "UNEXPECTED_MESSAGE",
-    "UnsupportedData": "UNSUPPORTED_DATA",
-    "UnknownMessageReceived": "UNKNOWN_MESSAGE",
-    # Service errors
-    "ServiceUnavailableError": "SERVICE_UNAVAILABLE",
-    "UnsupportedHTTPMethod": "UNSUPPORTED_METHOD",
-    "AsyncTaskCreateFailed": "TASK_CREATE_FAILED",
-    "UploadFileException": "UPLOAD_FAILED",
-    "TimeoutException": "REQUEST_TIMEOUT",
-    # Assistant errors
-    "AssistantError": "ASSISTANT_ERROR",
+    # Authentication errors - keep original camelCase format
+    "AuthenticationError": "AuthenticationError",
+    "AuthFailed": "AuthFailed",
+    "InvalidToken": "InvalidToken",
+    "TokenExpired": "TokenExpired",
+    "Unauthorized": "Unauthorized",
+    # Parameter errors - keep original camelCase format
+    "InvalidParameter": "InvalidParameter",
+    "InvalidParam": "InvalidParam",
+    "BadRequest": "BadRequest",
+    "ModelRequired": "ModelRequired",
+    "InvalidModel": "InvalidModel",
+    "InvalidInput": "InvalidInput",
+    "InvalidFileFormat": "InvalidFileFormat",
+    "InputDataRequired": "InputDataRequired",
+    "InputRequired": "InputRequired",
+    "UnsupportedDataType": "UnsupportedDataType",
+    # Task errors - keep original camelCase format
+    "InvalidTask": "InvalidTask",
+    "UnsupportedTask": "UnsupportedTask",
+    "UnsupportedModel": "UnsupportedModel",
+    "UnsupportedApiProtocol": "UnsupportedApiProtocol",
+    "NotImplemented": "NotImplemented",
+    "MultiInputsWithBinaryNotSupported": "MultiInputsWithBinaryNotSupported",
+    "UnexpectedMessageReceived": "UnexpectedMessageReceived",
+    "UnsupportedData": "UnsupportedData",
+    "UnknownMessageReceived": "UnknownMessageReceived",
+    # Service errors - keep original camelCase format
+    "ServiceUnavailableError": "ServiceUnavailableError",
+    "UnsupportedHTTPMethod": "UnsupportedHTTPMethod",
+    "AsyncTaskCreateFailed": "AsyncTaskCreateFailed",
+    "UploadFileException": "UploadFileException",
+    "TimeoutException": "TimeoutException",
+    # Assistant errors - keep original camelCase format
+    "AssistantError": "AssistantError",
 }
 
 # Error message templates with CLI context
 ERROR_MESSAGE_TEMPLATES: Dict[str, str] = {
-    "AUTH_FAILED": (
+    "AuthFailed": (
         "Authentication failed. " "Please check your API key and try again."
     ),
-    "INVALID_PARAMETER": (
+    "InvalidToken": (
+        "Authentication failed. " "Please check your API key and try again."
+    ),
+    "TokenExpired": (
+        "Authentication failed. " "Please check your API key and try again."
+    ),
+    "Unauthorized": (
+        "Authentication failed. " "Please check your API key and try again."
+    ),
+    "InvalidParameter": (
         "Invalid parameter provided. " "Please check your input parameters."
     ),
-    "MISSING_MODEL": (
+    "InvalidParam": (
+        "Invalid parameter provided. " "Please check your input parameters."
+    ),
+    "ModelRequired": (
         "Model parameter is required. " "Please specify a valid model."
     ),
-    "INVALID_MODEL": (
+    "InvalidModel": (
         "Invalid model specified. " "Please check the model name."
     ),
-    "INVALID_INPUT": (
+    "InvalidInput": (
         "Invalid input data. " "Please check your input format."
     ),
-    "INVALID_FILE_FORMAT": (
+    "InvalidFileFormat": (
         "Invalid file format. " "Please check the file type."
     ),
-    "MISSING_INPUT_DATA": (
+    "InputDataRequired": (
         "Input data is required. " "Please provide the necessary input."
     ),
-    "MISSING_INPUT": (
+    "InputRequired": (
         "Input is required. " "Please provide the necessary input."
     ),
-    "UNSUPPORTED_DATA_TYPE": (
+    "UnsupportedDataType": (
         "Unsupported data type. " "Please check the data format."
     ),
-    "INVALID_TASK": ("Invalid task specified. " "Please check the task type."),
-    "UNSUPPORTED_TASK": (
+    "InvalidTask": ("Invalid task specified. " "Please check the task type."),
+    "UnsupportedTask": (
         "Unsupported task type. " "Please check the available tasks."
     ),
-    "UNSUPPORTED_MODEL": (
+    "UnsupportedModel": (
         "Unsupported model. " "Please check the available models."
     ),
-    "UNSUPPORTED_PROTOCOL": (
+    "UnsupportedApiProtocol": (
         "Unsupported API protocol. " "Please check the protocol version."
     ),
-    "NOT_IMPLEMENTED": "This feature is not yet implemented.",
-    "BINARY_INPUT_NOT_SUPPORTED": (
+    "NotImplemented": "This feature is not yet implemented.",
+    "MultiInputsWithBinaryNotSupported": (
         "Binary input is not supported with multiple inputs."
     ),
-    "UNEXPECTED_MESSAGE": ("Unexpected message received from the server."),
-    "UNSUPPORTED_DATA": "Unsupported data format.",
-    "UNKNOWN_MESSAGE": ("Unknown message received from the server."),
-    "SERVICE_UNAVAILABLE": (
+    "UnexpectedMessageReceived": ("Unexpected message received from the server."),
+    "UnsupportedData": "Unsupported data format.",
+    "UnknownMessageReceived": ("Unknown message received from the server."),
+    "ServiceUnavailableError": (
         "Service is temporarily unavailable. " "Please try again later."
     ),
-    "UNSUPPORTED_METHOD": (
+    "UnsupportedHTTPMethod": (
         "Unsupported HTTP method. " "Please check the request method."
     ),
-    "TASK_CREATE_FAILED": (
+    "AsyncTaskCreateFailed": (
         "Failed to create async task. " "Please check your request."
     ),
-    "UPLOAD_FAILED": (
+    "UploadFileException": (
         "File upload failed. " "Please check the file and try again."
     ),
-    "REQUEST_TIMEOUT": "Request timed out. Please try again.",
-    "ASSISTANT_ERROR": (
+    "TimeoutException": "Request timed out. Please try again.",
+    "AssistantError": (
         "Assistant encountered an error. " "Please check the error details."
     ),
 }
