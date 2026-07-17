@@ -70,14 +70,14 @@ def _get_protocol_params(kwargs):
 
 
 def _build_http_url(
-    base_address,
-    is_service,
-    task_group,
-    task,
-    function,
-    extra_url_parameters,
-):
-    """Build HTTP/HTTPS URL from components."""
+    base_address: str,
+    is_service: bool,
+    task_group: str,
+    task: str,
+    function: str,
+    extra_url_parameters: dict,
+) -> str:
+    """Build HTTP/HTTPS URL from components with validation."""
     if base_address is None:
         base_address = dashscope.base_http_api_url
 
@@ -112,8 +112,8 @@ def _build_http_url(
     return http_url
 
 
-def _build_websocket_url(base_address):
-    """Build WebSocket URL with validation."""
+def _build_websocket_url(base_address: str) -> str:
+    """Build and validate WebSocket URL."""
     if base_address is not None:
         websocket_url = base_address
     else:
@@ -195,7 +195,6 @@ def _build_api_request(  # pylint: disable=too-many-branches
         )
     elif api_protocol == ApiProtocol.WEBSOCKET:
         websocket_url = _build_websocket_url(base_address)
-
         pre_task_id = kwargs.pop("pre_task_id", None)
         request = WebSocketRequest(
             url=websocket_url,

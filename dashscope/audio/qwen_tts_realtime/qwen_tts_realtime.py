@@ -10,7 +10,7 @@ from enum import Enum, unique
 import websocket  # pylint: disable=wrong-import-order
 
 import dashscope
-from dashscope.common.error import ModelRequired
+from dashscope.common.error import AuthenticationError, ModelRequired
 from dashscope.common.logging import logger
 from dashscope.common.utils import get_user_agent
 
@@ -105,6 +105,8 @@ class QwenTtsRealtime:
         self.last_first_text_time = None
         self.last_first_audio_delay = None
         self.metrics = []
+        self._auth_failed = False  # Flag to track authentication failures
+        self._connection_error = None  # Store connection error details
 
     def _generate_event_id(self):
         """
@@ -131,6 +133,10 @@ class QwenTtsRealtime:
         """
         connect to server, create session and return default session configuration  # noqa: E501
         """
+        # Reset error flags before connecting
+        self._auth_failed = False
+        self._connection_error = None
+
         self.ws = websocket.WebSocketApp(
             self.url,
             header=self._get_websocket_header(),
@@ -147,7 +153,16 @@ class QwenTtsRealtime:
             not (self.ws.sock and self.ws.sock.connected)
             and (time.time() - start_time) < timeout
         ):
+            # Check for authentication errors first
+            if self._auth_failed and self._connection_error is not None:
+                raise self._connection_error
+
             time.sleep(0.1)  # Brief sleep to avoid busy polling
+
+        # Final check after timeout
+        if self._auth_failed and self._connection_error is not None:
+            raise self._connection_error
+
         if not (self.ws.sock and self.ws.sock.connected):
             raise TimeoutError(
                 "websocket connection could not established within 5s. "
@@ -415,6 +430,20 @@ class QwenTtsRealtime:
     # Callback for WebSocket error
     def on_error(self, ws, error):  # pylint: disable=unused-argument
         logger.error(f"websocket error: {error}")
+
+        # Detect authentication errors from error message
+        error_str = str(error)
+        if (
+            "401" in error_str
+            or "Unauthorized" in error_str
+            or "InvalidApiKey" in error_str
+        ):
+            self._auth_failed = True
+            self._connection_error = AuthenticationError(
+                "API Key is invalid. Please check your API key configuration.",
+            )
+            logger.error("Authentication failed: Invalid API Key")
+
         # Do not raise exception here, let the connection close naturally
         # Raising exception in callback can cause unexpected thread termination
 
