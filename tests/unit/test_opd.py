@@ -42,7 +42,7 @@ def _success_response():
 
 
 def test_pg_opd_training_type_is_public():
-    assert TrainingType.PG_OPD == "pg-opd"
+    assert TrainingType.PG_OPD == "pg_opd"
 
 
 @pytest.mark.parametrize(

@@ -334,7 +334,7 @@ functions:
   # ...
 
 training:
-  type: pg-opd
+  type: pg_opd
 ```
 
 ```bash

@@ -47,7 +47,7 @@ class DatasetsType(str, Enum):
 
 class TrainingType(str, Enum):
     TRAINING_TYPE = "reinforcement"
-    PG_OPD = "pg-opd"
+    PG_OPD = "pg_opd"
 
     def __str__(self):
         return self.value

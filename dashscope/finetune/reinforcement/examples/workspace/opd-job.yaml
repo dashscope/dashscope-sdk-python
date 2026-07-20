@@ -58,7 +58,7 @@ datasets:
   data_source_type: file_id
   file_name: ./data/calc_validation_min.jsonl
 training:
-  type: pg-opd
+  type: pg_opd
   hyper_parameters:
     eval_steps: 1
     kl_loss_coef: 0.002
