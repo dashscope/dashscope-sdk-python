@@ -4,6 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List
 
+__version__ = "1.0.0"
+__commit__ = "aa17fe8"
+__snapshot__ = False
+
 
 @dataclass(frozen=True)
 class PublicError:
@@ -38,8 +42,6 @@ class InternalErrorDef:
                 msg = msg.replace("{" + k + "}", v)
         return msg
 
-
-# -- Public Errors --------------------------------------------------
 
 INVALID_REQUEST = PublicError(
     key="invalid_request",

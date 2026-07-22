@@ -119,11 +119,8 @@ class WebSocketRequest(AioBaseRequest):
     async def connection_handler(
         self,
     ):  # pylint: disable=too-many-branches,too-many-statements
-        send_task = None
-        task_id = (
-            ""  # Initialize at the beginning to ensure it's always defined
-        )
         try:
+            task_id = None
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(
                     total=self.timeout,
@@ -133,7 +130,7 @@ class WebSocketRequest(AioBaseRequest):
                 async with session.ws_connect(
                     self.url,
                     headers=self.headers,
-                    heartbeat=30,
+                    heartbeat=6000,
                 ) as ws:
                     await self._start_task(ws)  # send start task action.
                     task_id = self.task_headers["task_id"]
@@ -185,27 +182,15 @@ class WebSocketRequest(AioBaseRequest):
                                 message,
                             )
                     else:  # duplex mode
-                        # Track the background task to ensure proper cleanup
-                        send_task = asyncio.create_task(
-                            self._send_continue_task_data(ws),
-                        )
-                        try:
-                            async for is_binary, message in self._receive_streaming_data_task(  # noqa E501  # pylint: disable=line-too-long
-                                ws,
-                            ):
-                                yield self._to_DashScopeAPIResponse(
-                                    task_id,
-                                    is_binary,
-                                    message,
-                                )
-                        finally:
-                            # Cancel the send task if it's still running
-                            if send_task and not send_task.done():
-                                send_task.cancel()
-                                try:
-                                    await send_task
-                                except asyncio.CancelledError:
-                                    pass
+                        asyncio.create_task(self._send_continue_task_data(ws))
+                        async for is_binary, message in self._receive_streaming_data_task(  # noqa E501  # pylint: disable=line-too-long
+                            ws,
+                        ):
+                            yield self._to_DashScopeAPIResponse(
+                                task_id,
+                                is_binary,
+                                message,
+                            )
         except RequestFailure as e:
             yield DashScopeAPIResponse(
                 request_id=e.request_id,
@@ -225,13 +210,14 @@ class WebSocketRequest(AioBaseRequest):
                     code=SERVICE_UNAVAILABLE.error_code,
                     message=SERVICE_UNAVAILABLE.error_msg,
                 )
-            else:
-                yield DashScopeAPIResponse(
-                    request_id=task_id if task_id else "",
-                    status_code=-1,
-                    code="ClientConnectorError",
-                    message=str(e),
-                )
+                return
+
+            yield DashScopeAPIResponse(
+                request_id=task_id if task_id else "",
+                status_code=INTERNAL_ERROR.status_code,
+                code=INTERNAL_ERROR.error_code,
+                message=INTERNAL_ERROR.error_msg,
+            )
         except aiohttp.WSServerHandshakeError as e:
             original_msg = e.message or ""
 

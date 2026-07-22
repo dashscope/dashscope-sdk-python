@@ -239,7 +239,6 @@ def _handle_stream(response: requests.Response):
 
 
 def _handle_error_message(error, status_code, flattened_output, headers):
-    code = ""
     msg = ""
     request_id = ""
 
@@ -316,40 +315,42 @@ def _handle_http_failed_response(
                     flattened_output,
                     headers,
                 )
-        # SSE 响应中没有有效的错误数据
+        # No valid error data in SSE response
         error_message = "\n".join(msgs).strip() or INTERNAL_ERROR.format_msg()
+        error_code = INTERNAL_ERROR.error_code
         logger.error(
             "Request failed: status=%s, code=%s, message=%s",
             response.status_code,
-            INTERNAL_ERROR.error_code,
+            error_code,
             truncate_error_message(error_message),
         )
         return DashScopeAPIResponse(
             request_id=request_id,
             status_code=response.status_code,
-            code=INTERNAL_ERROR.error_code,
+            code=error_code,
             message=error_message,
             headers=headers,
         )
     else:
         msg = response.content.decode("utf-8")
         error_message = msg or INTERNAL_ERROR.format_msg()
+        error_code = INTERNAL_ERROR.error_code
         logger.error(
             "Request failed: status=%s, code=%s, message=%s",
             response.status_code,
-            INTERNAL_ERROR.error_code,
+            error_code,
             truncate_error_message(error_message),
         )
         if flattened_output:
             return {  # type: ignore[return-value]
                 "status_code": response.status_code,
-                "code": INTERNAL_ERROR.error_code,
+                "code": error_code,
                 "message": error_message,
             }
         return DashScopeAPIResponse(
             request_id=request_id,
             status_code=response.status_code,
-            code=INTERNAL_ERROR.error_code,
+            code=error_code,
             message=error_message,
             headers=headers,
         )
