@@ -40,62 +40,16 @@ from dashscope.finetune.reinforcement import (
     get_func_type_id,
     deep_remove_none,
 )
-from dashscope.finetune.reinforcement.common.errors import (
-    RegistrationError,
-    ValidationError,
-    RuntimeErrorWithCode,
-    ValueErrorWithCode,
-    DatasetsError,
+from dashscope.common.error import (
+    AuthenticationError,
+    InvalidParameter,
+    DashScopeException,
 )
 from dashscope.common.error_registry import (
     INVALID_API_KEY,
     INVALID_REQUEST,
     INTERNAL_ERROR,
 )
-
-
-def _convert_to_public_exception(exc: Exception) -> Exception:
-    """Convert internal AgenticRL exceptions to public SDK exceptions.
-
-    Follows the error.md principle: API-returned errors (DashScopeException
-    and its subclasses) are passed through unchanged to preserve the original
-    code, message, status_code, and request_id from the HTTP API response.
-
-    For internal AgenticRL exceptions with a public_error mapping, converts
-    them to standard SDK exceptions via to_public_exception(). Otherwise logs
-    the internal error and returns a generic InternalServerError to prevent
-    leaking internal error codes.
-    """
-    # Pass through API-returned standard exceptions unchanged
-    from dashscope.common.error import DashScopeException
-
-    if isinstance(exc, DashScopeException):
-        return exc
-
-    if hasattr(exc, "to_public_exception"):
-        converted = exc.to_public_exception()
-        # If to_public_exception returned self (no public_error set),
-        # fall through to the safe fallback below
-        if converted is not exc:
-            return converted
-
-    # Safe fallback: log internal details, never expose integer error codes
-    internal_code = getattr(exc, "error_code", None)
-    logger.error(
-        "AgenticRL internal error (no public_error mapping): code=%s, "
-        "type=%s, message=%s",
-        internal_code,
-        type(exc).__name__,
-        str(exc),
-        exc_info=True,
-    )
-
-    formatted_msg = INTERNAL_ERROR.format_msg()
-    safe_exc = DashScopeException(formatted_msg)
-    safe_exc.status_code = INTERNAL_ERROR.status_code
-    safe_exc.error_code = INTERNAL_ERROR.error_code
-    safe_exc.request_id = None  # type: ignore[attr-defined]
-    return safe_exc
 
 
 class AgenticRL(AgenticRLTuning, CreateMixin):
@@ -107,13 +61,16 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         try:
             set_api_key(api_key)
         except Exception as e:
-            raise _convert_to_public_exception(
-                ValueErrorWithCode(
-                    "Invalid API key configuration",
-                    error_code=3001,
-                    public_error=INVALID_API_KEY,
-                ),
-            ) from e
+            logger.error(
+                "AgenticRL internal error: code=3001, "
+                "message=Invalid API key configuration: %s",
+                e,
+                exc_info=True,
+            )
+            exc = AuthenticationError(INVALID_API_KEY.format_msg())
+            exc.status_code = INVALID_API_KEY.status_code
+            exc.error_code = INVALID_API_KEY.error_code
+            raise exc from e
 
     def init(self, config_path: Optional[str] = None, **kwargs) -> Self:
         """
@@ -158,15 +115,22 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             )
             logger.info("Function components registered")
         except Exception as e:
-            if hasattr(e, "error_code"):
-                raise _convert_to_public_exception(e) from e
-            raise _convert_to_public_exception(
-                RegistrationError(
-                    "Function registration failed",
-                    error_code=3002,
-                    public_error=INTERNAL_ERROR,
-                ),
-            ) from e
+            if isinstance(e, DashScopeException):
+                raise
+            logger.error(
+                "AgenticRL internal error: code=3002, "
+                "message=Function registration failed: %s",
+                e,
+                exc_info=True,
+            )
+            original_summary = f"{type(e).__name__}: {str(e)[:150]}"
+            exc = DashScopeException(
+                f"{INTERNAL_ERROR.format_msg()} | "
+                f"Caused by: {original_summary}",
+            )
+            exc.status_code = INTERNAL_ERROR.status_code
+            exc.error_code = INTERNAL_ERROR.error_code
+            raise exc from e
 
         return (
             rollout_entity_ids,
@@ -196,13 +160,22 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             )
             logger.info("Datasets uploaded")
         except Exception as e:
-            raise _convert_to_public_exception(
-                DatasetsError(
-                    "Datasets upload failed",
-                    error_code=3003,
-                    public_error=INTERNAL_ERROR,
-                ),
-            ) from e
+            if isinstance(e, DashScopeException):
+                raise
+            logger.error(
+                "AgenticRL internal error: code=3003, "
+                "message=Datasets upload failed: %s",
+                e,
+                exc_info=True,
+            )
+            original_summary = f"{type(e).__name__}: {str(e)[:150]}"
+            exc = DashScopeException(
+                f"{INTERNAL_ERROR.format_msg()} | "
+                f"Caused by: {original_summary}",
+            )
+            exc.status_code = INTERNAL_ERROR.status_code
+            exc.error_code = INTERNAL_ERROR.error_code
+            raise exc from e
 
         return uploaded_training_ids, uploaded_validation_ids
 
@@ -258,14 +231,14 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         )
         # names of functions
         if not self.tuning.check_function_names():
-            raise _convert_to_public_exception(
-                ValueErrorWithCode(
-                    "Duplicate function names detected. "
-                    "All function names must be unique.",
-                    error_code=3004,
-                    public_error=INVALID_REQUEST,
-                ),
+            logger.error(
+                "AgenticRL internal error: code=3004, "
+                "message=Duplicate function names detected",
             )
+            exc = InvalidParameter(INVALID_REQUEST.format_msg())
+            exc.status_code = INVALID_REQUEST.status_code
+            exc.error_code = INVALID_REQUEST.error_code
+            raise exc
 
         # datasets
         if datasets:
@@ -312,15 +285,22 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
                 **kwargs,
             )
         except Exception as e:
-            if hasattr(e, "error_code"):
-                raise _convert_to_public_exception(e) from e
-            raise _convert_to_public_exception(
-                RuntimeErrorWithCode(
-                    "Job submission failed",
-                    error_code=3005,
-                    public_error=INTERNAL_ERROR,
-                ),
-            ) from e
+            if isinstance(e, DashScopeException):
+                raise
+            logger.error(
+                "AgenticRL internal error: code=3005, "
+                "message=Job submission failed: %s",
+                e,
+                exc_info=True,
+            )
+            original_summary = f"{type(e).__name__}: {str(e)[:150]}"
+            exc = DashScopeException(
+                f"{INTERNAL_ERROR.format_msg()} | "
+                f"Caused by: {original_summary}",
+            )
+            exc.status_code = INTERNAL_ERROR.status_code
+            exc.error_code = INTERNAL_ERROR.error_code
+            raise exc from e
 
         return FineTune(**resp)
 
@@ -380,15 +360,22 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
                 **kwargs,
             )
         except Exception as e:
-            if hasattr(e, "error_code"):
-                raise _convert_to_public_exception(e) from e
-            raise _convert_to_public_exception(
-                RuntimeErrorWithCode(
-                    "RL tuning workflow failed",
-                    error_code=3006,
-                    public_error=INTERNAL_ERROR,
-                ),
-            ) from e
+            if isinstance(e, DashScopeException):
+                raise
+            logger.error(
+                "AgenticRL internal error: code=3006, "
+                "message=RL tuning workflow failed: %s",
+                e,
+                exc_info=True,
+            )
+            original_summary = f"{type(e).__name__}: {str(e)[:150]}"
+            exc = DashScopeException(
+                f"{INTERNAL_ERROR.format_msg()} | "
+                f"Caused by: {original_summary}",
+            )
+            exc.status_code = INTERNAL_ERROR.status_code
+            exc.error_code = INTERNAL_ERROR.error_code
+            raise exc from e
 
     @classmethod
     def cancel(
@@ -504,13 +491,15 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             elif functype == FunctionType.GROUP_REWARD:
                 value = GroupRewardInput.model_validate(input_data)
             else:
-                raise _convert_to_public_exception(
-                    ValueErrorWithCode(
-                        f"Unsupported function type: {functype}",
-                        error_code=3007,
-                        public_error=INVALID_REQUEST,
-                    ),
+                logger.error(
+                    "AgenticRL internal error: code=3007, "
+                    "message=Unsupported function type: %s",
+                    functype,
                 )
+                exc = InvalidParameter(INVALID_REQUEST.format_msg())
+                exc.status_code = INVALID_REQUEST.status_code
+                exc.error_code = INVALID_REQUEST.error_code
+                raise exc
 
             logger.info(
                 f"Starting {str(functype)} verification",
@@ -526,10 +515,19 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             )
 
         except Exception as e:
-            raise _convert_to_public_exception(
-                ValidationError(
-                    "Function test failed",
-                    error_code=3008,
-                    public_error=INVALID_REQUEST,
-                ),
-            ) from e
+            if isinstance(e, (DashScopeException, InvalidParameter)):
+                raise
+            logger.error(
+                "AgenticRL internal error: code=3008, "
+                "message=Function test failed: %s",
+                e,
+                exc_info=True,
+            )
+            original_summary = f"{type(e).__name__}: {str(e)[:150]}"
+            exc = InvalidParameter(
+                f"{INVALID_REQUEST.format_msg()} | "
+                f"Caused by: {original_summary}",
+            )
+            exc.status_code = INVALID_REQUEST.status_code
+            exc.error_code = INVALID_REQUEST.error_code
+            raise exc from e

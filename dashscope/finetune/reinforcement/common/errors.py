@@ -6,23 +6,28 @@ Custom exception hierarchy for the AgenticRL system
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, Dict, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from dashscope.common.error_registry import PublicError
+from typing import Optional, Dict
 
 
 class _RootCauseMixin:
     """Mixin that provides root-cause traversal and formatting for exceptions
     that carry an error code."""
 
+    MAX_CAUSE_DEPTH = 50
+
     @property
     def root_cause(self) -> "Exception":
         root: "Exception" = self  # type: ignore[assignment]
         seen = {id(root)}
-        while root.__cause__ and id(root.__cause__) not in seen:
+        depth = 0
+        while (
+            root.__cause__
+            and id(root.__cause__) not in seen
+            and depth < self.MAX_CAUSE_DEPTH
+        ):
             root = root.__cause__
             seen.add(id(root))
+            depth += 1
         return root
 
     def _format_cause(self) -> str:
@@ -37,134 +42,6 @@ class _RootCauseMixin:
         return ""
 
 
-def _build_safe_fallback(error_code: int, message: str) -> Exception:
-    """Build a safe public exception when no public_error mapping exists.
-
-    Logs the internal error_code for backend debugging and returns a
-    generic InternalServerError so that integer error codes are never
-    exposed to SDK callers.
-    """
-    from dashscope.finetune.reinforcement import logger
-    from dashscope.common.error_registry import INTERNAL_ERROR
-    from dashscope.common.error import DashScopeException
-
-    logger.error(
-        "AgenticRL internal error (no public_error mapping): code=%s, "
-        "message=%s",
-        error_code,
-        message,
-        exc_info=True,
-    )
-
-    formatted_msg = INTERNAL_ERROR.format_msg()
-    safe_exc = DashScopeException(formatted_msg)
-    safe_exc.status_code = INTERNAL_ERROR.status_code
-    safe_exc.error_code = INTERNAL_ERROR.error_code
-    safe_exc.request_id = None  # type: ignore[attr-defined]
-    return safe_exc
-
-
-# Module-level mapping from PublicError.error_code (string class name) to
-# SDK exception class. Built once at first use; ImportError is logged as a
-# warning so that refactoring in error.py is never silently swallowed.
-_ERROR_CODE_TO_CLASS: Dict[str, type] = {}
-_ERROR_CODE_TO_CLASS_LOADED = False
-
-
-def _load_error_code_mapping() -> None:
-    """Lazily load the error-code-to-class mapping with ImportError guard."""
-    global _ERROR_CODE_TO_CLASS, _ERROR_CODE_TO_CLASS_LOADED
-    if _ERROR_CODE_TO_CLASS_LOADED:
-        return
-
-    from dashscope.common.error import DashScopeException
-
-    try:
-        from dashscope.common.error import (
-            AuthenticationError,
-            InvalidParameter,
-            ServiceUnavailableError,
-            TimeoutException,
-        )
-
-        _ERROR_CODE_TO_CLASS.update(
-            {
-                "AuthenticationError": AuthenticationError,
-                "BadRequestError": InvalidParameter,
-                "PermissionDeniedError": DashScopeException,
-                "NotFoundError": DashScopeException,
-                "RequestTooLargeError": DashScopeException,
-                "RateLimitError": DashScopeException,
-                "InternalServerError": DashScopeException,
-                "ServiceUnavailableError": ServiceUnavailableError,
-                "GatewayTimeoutError": TimeoutException,
-            },
-        )
-    except ImportError:
-        from dashscope.finetune.reinforcement import logger
-
-        logger.warning(
-            "Failed to import SDK exception classes from "
-            "dashscope.common.error; all AgenticRL errors will fall back "
-            "to generic DashScopeException.",
-            exc_info=True,
-        )
-
-    _ERROR_CODE_TO_CLASS_LOADED = True
-
-
-def _convert_with_public_error(
-    public_error: "PublicError",
-    internal_error_code: int,
-    internal_message: str,
-    timestamp: str = "",
-) -> Exception:
-    """Convert an internal error to a public SDK exception via public_error.
-
-    Handles two failure modes safely:
-    1. ImportError of SDK exception classes → logged as warning, falls back
-       to generic DashScopeException.
-    2. public_error.format_msg() raises → caught and replaced with a
-       hard-coded safe message to prevent leaking internal details.
-    """
-    from dashscope.finetune.reinforcement import logger
-    from dashscope.common.error import DashScopeException
-
-    # Log internal error details for backend debugging
-    logger.error(
-        "AgenticRL internal error: code=%s, message=%s%s",
-        internal_error_code,
-        internal_message,
-        f", timestamp={timestamp}" if timestamp else "",
-        exc_info=True,
-    )
-
-    _load_error_code_mapping()
-
-    exc_class = _ERROR_CODE_TO_CLASS.get(
-        public_error.error_code,
-        DashScopeException,
-    )
-
-    # Guard format_msg() to prevent leaking internal details on failure
-    try:
-        formatted_msg = public_error.format_msg()
-    except Exception:
-        logger.warning(
-            "public_error.format_msg() failed for error_code=%s; "
-            "using safe fallback message.",
-            public_error.error_code,
-            exc_info=True,
-        )
-        formatted_msg = "An internal error occurred. Please try again later."
-
-    exc = exc_class(formatted_msg)
-    exc.status_code = public_error.status_code  # type: ignore[attr-defined]
-    exc.error_code = public_error.error_code  # type: ignore[attr-defined]
-    exc.request_id = None  # type: ignore[attr-defined]
-    return exc
-
-
 class AgenticRLError(_RootCauseMixin, Exception):
     """Base class for all Agentic RL exceptions."""
 
@@ -172,28 +49,15 @@ class AgenticRLError(_RootCauseMixin, Exception):
         self,
         message: str,
         error_code: int = 1000,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(message)
         self.error_code = error_code
-        self.public_error = public_error
         self.timestamp = datetime.now().isoformat()
         self.message = message
 
     def __str__(self):
         base = f"[{self.error_code}] {self.message} (at {self.timestamp})"
         return f"{base}{self._format_cause()}"
-
-    def to_public_exception(self) -> Exception:
-        """Convert to a standard SDK exception aligned with error_registry."""
-        if self.public_error is None:
-            return _build_safe_fallback(self.error_code, self.message)
-        return _convert_with_public_error(
-            self.public_error,
-            self.error_code,
-            self.message,
-            self.timestamp,
-        )
 
 
 class IOErrorWithCode(AgenticRLError):
@@ -205,9 +69,8 @@ class IOErrorWithCode(AgenticRLError):
         error_code: int = 1800,
         path: Optional[str] = None,
         operation: Optional[str] = None,
-        public_error: Optional["PublicError"] = None,
     ):
-        super().__init__(f"I/O error: {message}", error_code, public_error)
+        super().__init__(f"I/O error: {message}", error_code)
         self.path = path
         self.operation = operation
 
@@ -220,25 +83,13 @@ class RuntimeErrorWithCode(_RootCauseMixin, RuntimeError):
         self,
         message: str,
         error_code: int = 0,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(message)
         self.error_code = error_code
-        self.public_error = public_error
         self.message = message
 
     def __str__(self):
         return f"[{self.error_code}] {self.message}{self._format_cause()}"
-
-    def to_public_exception(self) -> Exception:
-        """Convert to a standard SDK exception aligned with error_registry."""
-        if self.public_error is None:
-            return _build_safe_fallback(self.error_code, self.message)
-        return _convert_with_public_error(
-            self.public_error,
-            self.error_code,
-            self.message,
-        )
 
 
 class ValueErrorWithCode(_RootCauseMixin, ValueError):
@@ -249,25 +100,13 @@ class ValueErrorWithCode(_RootCauseMixin, ValueError):
         self,
         message: str,
         error_code: int = 0,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(message)
         self.error_code = error_code
-        self.public_error = public_error
         self.message = message
 
     def __str__(self):
         return f"[{self.error_code}] {self.message}{self._format_cause()}"
-
-    def to_public_exception(self) -> Exception:
-        """Convert to a standard SDK exception aligned with error_registry."""
-        if self.public_error is None:
-            return _build_safe_fallback(self.error_code, self.message)
-        return _convert_with_public_error(
-            self.public_error,
-            self.error_code,
-            self.message,
-        )
 
 
 class InputError(AgenticRLError):
@@ -278,9 +117,8 @@ class InputError(AgenticRLError):
         message: str,
         error_code: int = 1100,
         field: Optional[str] = None,
-        public_error: Optional["PublicError"] = None,
     ):
-        super().__init__(message, error_code, public_error)
+        super().__init__(message, error_code)
         self.field = field
 
 
@@ -292,9 +130,8 @@ class OutputError(AgenticRLError):
         message: str,
         error_code: int = 1200,
         response: Optional[Dict] = None,
-        public_error: Optional["PublicError"] = None,
     ):
-        super().__init__(message, error_code, public_error)
+        super().__init__(message, error_code)
         self.response = response
 
 
@@ -306,9 +143,8 @@ class BaseConnectionError(AgenticRLError):
         message: str,
         error_code: int = 1300,
         endpoint: Optional[str] = None,
-        public_error: Optional["PublicError"] = None,
     ):
-        super().__init__(message, error_code, public_error)
+        super().__init__(message, error_code)
         self.endpoint = endpoint
 
 
@@ -320,13 +156,11 @@ class OSSConnectionError(BaseConnectionError):
         message: str,
         error_code: int = 1310,
         endpoint: str = None,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(
             f"OSS connection failed: {message}",
             error_code,
             endpoint,
-            public_error,
         )
 
 
@@ -341,13 +175,11 @@ class OSSUploadError(BaseConnectionError):
         bucket: Optional[str] = None,
         object_key: Optional[str] = None,
         file_size: Optional[int] = None,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(
             f"OSS upload failed: {message}",
             error_code,
             endpoint,
-            public_error,
         )
         self.bucket = bucket
         self.object_key = object_key
@@ -362,9 +194,8 @@ class DeploymentError(AgenticRLError):
         message: str,
         error_code: int = 1400,
         resource_id: Optional[str] = None,
-        public_error: Optional["PublicError"] = None,
     ):
-        super().__init__(message, error_code, public_error)
+        super().__init__(message, error_code)
         self.resource_id = resource_id
 
 
@@ -376,13 +207,11 @@ class RegistrationError(DeploymentError):
         message: str,
         error_code: int = 1410,
         resource_id: Optional[str] = None,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(
             f"Registration failed: {message}",
             error_code,
             resource_id,
-            public_error,
         )
 
 
@@ -393,12 +222,10 @@ class DatasetsError(DeploymentError):
         self,
         message: str,
         error_code: int = 1460,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(
             f"Datasets failed: {message}",
             error_code,
-            public_error=public_error,
         )
 
 
@@ -411,13 +238,11 @@ class FunctionLoadError(DeploymentError):
         error_code: int = 1420,
         entity_id: str = None,
         error_log: Optional[str] = None,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(
             f"Function load failed: {message}",
             error_code,
             entity_id,
-            public_error,
         )
         self.entity_id = entity_id
         self.error_log = error_log
@@ -432,13 +257,11 @@ class FunctionLayerError(DeploymentError):
         error_code: int = 1450,
         layer_name: str = None,
         error_log: Optional[str] = None,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(
             f"Function layer create failed: {message}",
             error_code,
             layer_name,
-            public_error,
         )
         self.layer_name = layer_name
         self.error_log = error_log
@@ -454,12 +277,10 @@ class InstanceWarmupError(DeploymentError):
         instance_url: str = None,
         timeout: float = 0.0,
         retry_after: Optional[float] = None,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(
             f"Instance warmup failed: {message}",
             error_code,
-            public_error=public_error,
         )
         self.instance_url = instance_url
         self.timeout = timeout
@@ -475,12 +296,10 @@ class InstanceQueryError(DeploymentError):
         error_code: int = 1440,
         instance_id: str = None,
         query_attempts: int = 1,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(
             f"Instance query failed: {message}",
             error_code,
-            public_error=public_error,
         )
         self.instance_id = instance_id
         self.query_attempts = query_attempts
@@ -495,12 +314,10 @@ class ValidationError(AgenticRLError):
         error_code: int = 1500,
         invalid_data: Optional[Dict] = None,
         validation_rules: Optional[Dict] = None,
-        public_error: Optional["PublicError"] = None,
     ):
         super().__init__(
             f"Validation failed: {message}",
             error_code,
-            public_error,
         )
         self.invalid_data = invalid_data
         self.validation_rules = validation_rules
