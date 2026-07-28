@@ -86,6 +86,11 @@ from dashscope.finetune.reinforcement.common.errors import (
     IOErrorWithCode,
     ValueErrorWithCode,
 )
+from dashscope.common.error_registry import (
+    INVALID_REQUEST,
+    INTERNAL_ERROR,
+    SERVICE_UNAVAILABLE,
+)
 
 
 class MountStorage(BaseModel):
@@ -123,6 +128,7 @@ class Dataset(BaseModel):
                 raise OSSUploadError(
                     "Failed to upload datasets",
                     error_code=2061,
+                    public_error=SERVICE_UNAVAILABLE,
                 ) from e
 
         return self.file_id
@@ -168,6 +174,7 @@ class Datasets(BaseModel):
             raise OSSUploadError(
                 "Failed to upload datasets",
                 error_code=2062,
+                public_error=SERVICE_UNAVAILABLE,
             ) from e
 
         return uploaded_training_ids, uploaded_validation_ids
@@ -219,6 +226,7 @@ class Models(BaseModel):
             raise IOErrorWithCode(
                 "Failed to load from dict",
                 error_code=1002,
+                public_error=INTERNAL_ERROR,
             ) from e
 
     @classmethod
@@ -235,6 +243,7 @@ class Models(BaseModel):
                 f"Failed to load YAML file: {file_path}",
                 error_code=1001,
                 path=file_path,
+                public_error=INTERNAL_ERROR,
             ) from e
 
         return cls.load_from_dict(d)
@@ -271,6 +280,7 @@ class Models(BaseModel):
             raise IOErrorWithCode(
                 "Failed to write file",
                 error_code=1003,
+                public_error=INTERNAL_ERROR,
             ) from e
 
 
@@ -340,6 +350,7 @@ class FunctionComponentModel(BaseModel):
                 raise OSSConnectionError(
                     f"Empty OSS URL received: {result}",
                     error_code=2001,
+                    public_error=SERVICE_UNAVAILABLE,
                 )
 
             logger.debug(
@@ -354,6 +365,7 @@ class FunctionComponentModel(BaseModel):
             raise OSSConnectionError(
                 "Failed to obtain OSS URL",
                 error_code=2002,
+                public_error=SERVICE_UNAVAILABLE,
             ) from e
 
     async def create_layer(
@@ -400,6 +412,7 @@ class FunctionComponentModel(BaseModel):
             raise FunctionLayerError(
                 "Function layer create failed",
                 error_code=2013,
+                public_error=SERVICE_UNAVAILABLE,
             ) from e
 
         return layer_code
@@ -447,6 +460,7 @@ class FunctionComponentModel(BaseModel):
                 "Package upload failed",
                 error_code=2003,
                 endpoint=url or "",
+                public_error=SERVICE_UNAVAILABLE,
             ) from e
 
         return
@@ -483,6 +497,7 @@ class FunctionComponentModel(BaseModel):
                 raise FunctionLayerError(
                     f"Function layer create failed: {status}",
                     error_code=2014,
+                    public_error=SERVICE_UNAVAILABLE,
                 )
 
             return status
@@ -715,6 +730,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 raise RegistrationError(
                     f"Not exist type: {self.type.name}",
                     error_code=2011,
+                    public_error=INVALID_REQUEST,
                 )
 
             result = await client_fc(
@@ -729,6 +745,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 raise RegistrationError(
                     f"Empty entity ID received: {result}",
                     error_code=2012,
+                    public_error=INTERNAL_ERROR,
                 )
 
             logger.info(
@@ -775,6 +792,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 raise ValueErrorWithCode(
                     "No valid registration ID provided",
                     error_code=2021,
+                    public_error=INVALID_REQUEST,
                 )
 
             if FC_LAYER_USED:
@@ -782,6 +800,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     raise ValueErrorWithCode(
                         "layer_code is required when FC_LAYER_USED is enabled",
                         error_code=2022,
+                        public_error=INVALID_REQUEST,
                     )
                 await self.fcmodel.get_layer(
                     layer_code=self.runtime.layer_code,
@@ -803,6 +822,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 raise FunctionLoadError(
                     f"Empty instance ID received: {result}",
                     error_code=2023,
+                    public_error=INTERNAL_ERROR,
                 )
 
             self.instance_url = result.get("output", {}).get("trigger_url", "")
@@ -814,6 +834,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 raise FunctionLoadError(
                     "Missing instance URL or token",
                     error_code=2024,
+                    public_error=INTERNAL_ERROR,
                 )
 
             logger.info(
@@ -847,6 +868,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     raise ValueErrorWithCode(
                         "Invalid instance URL format",
                         error_code=2025,
+                        public_error=INVALID_REQUEST,
                     )
 
                 url = f"{self.instance_url.rstrip('/')}/health"
@@ -862,6 +884,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                         f"Health check failed: {result}",
                         error_code=2026,
                         instance_url=url,
+                        public_error=SERVICE_UNAVAILABLE,
                     )
 
                 logger.info(
