@@ -5,18 +5,13 @@ Validates that AgenticRL methods raise correct standard SDK exceptions
 (AuthenticationError, InvalidParameter, DashScopeException) with proper
 status_code and error_code attributes in error scenarios.
 """
-import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
+import pytest
 
 from dashscope.common.error import (
     AuthenticationError,
     InvalidParameter,
     DashScopeException,
-)
-from dashscope.common.error_registry import (
-    INVALID_API_KEY,
-    INVALID_REQUEST,
-    INTERNAL_ERROR,
 )
 from dashscope.finetune.agentic_rl import AgenticRL
 from dashscope.finetune.reinforcement import FunctionType
@@ -26,7 +21,10 @@ class TestInitAuthenticationError:
     """Test __init__ raises AuthenticationError for invalid API key."""
 
     @patch("dashscope.finetune.agentic_rl.set_api_key")
-    def test_init_invalid_api_key_raises_authentication_error(self, mock_set_api_key):
+    def test_init_invalid_api_key_raises_authentication_error(
+        self,
+        mock_set_api_key,
+    ):
         """__init__ should raise AuthenticationError when set_api_key fails."""
         mock_set_api_key.side_effect = ValueError("Invalid API key")
 
@@ -41,12 +39,21 @@ class TestInitAuthenticationError:
 class TestSubmitJobInvalidParameter:
     """Test submit_job raises InvalidParameter for duplicate function names."""
 
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    @patch("dashscope.finetune.agentic_rl.generate_random_id", return_value="abcd1234")
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    @patch(
+        "dashscope.finetune.agentic_rl.generate_random_id",
+        return_value="abcd1234",
+    )
     def test_submit_job_duplicate_function_names_raises_invalid_parameter(
-        self, mock_random_id, mock_parent_init
+        self,
+        _mock_random_id,
+        _mock_parent_init,
     ):
-        """submit_job should raise InvalidParameter when check_function_names returns False."""
+        """submit_job should raise InvalidParameter when
+        check_function_names returns False."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
         agent.tuning.name = "test-job"
@@ -70,15 +77,20 @@ class TestRegisterFunctionsDashScopeException:
     """Test register_functions raises DashScopeException on failure."""
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
     async def test_register_functions_failure_raises_dashscope_exception(
-        self, mock_parent_init
+        self,
+        _mock_parent_init,
     ):
-        """register_functions should raise DashScopeException when internal call fails."""
+        """register_functions should raise DashScopeException
+        when internal call fails."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
         agent.tuning.register_functions = AsyncMock(
-            side_effect=RuntimeError("Registration failed")
+            side_effect=RuntimeError("Registration failed"),
         )
 
         with pytest.raises(DashScopeException) as exc_info:
@@ -93,15 +105,20 @@ class TestUploadDatasetsDashScopeException:
     """Test upload_datasets raises DashScopeException on failure."""
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
     async def test_upload_datasets_failure_raises_dashscope_exception(
-        self, mock_parent_init
+        self,
+        _mock_parent_init,
     ):
-        """upload_datasets should raise DashScopeException when upload fails."""
+        """upload_datasets should raise DashScopeException
+        when upload fails."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
         agent.tuning.upload_datasets = AsyncMock(
-            side_effect=IOError("Upload failed")
+            side_effect=IOError("Upload failed"),
         )
 
         with pytest.raises(DashScopeException) as exc_info:
@@ -114,13 +131,23 @@ class TestUploadDatasetsDashScopeException:
 class TestSubmitJobCallFailure:
     """Test submit_job raises DashScopeException when API call fails."""
 
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    @patch("dashscope.finetune.agentic_rl.generate_random_id", return_value="abcd1234")
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    @patch(
+        "dashscope.finetune.agentic_rl.generate_random_id",
+        return_value="abcd1234",
+    )
     @patch("dashscope.finetune.agentic_rl.CreateMixin.call")
     def test_submit_job_call_failure_raises_dashscope_exception(
-        self, mock_call, mock_random_id, mock_parent_init
+        self,
+        mock_call,
+        _mock_random_id,
+        _mock_parent_init,
     ):
-        """submit_job should raise DashScopeException when super().call() fails."""
+        """submit_job should raise DashScopeException
+        when super().call() fails."""
         mock_call.side_effect = RuntimeError("API call failed")
 
         agent = AgenticRL.__new__(AgenticRL)
@@ -145,14 +172,24 @@ class TestRunFailure:
     """Test run raises DashScopeException on failure."""
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    async def test_run_failure_raises_dashscope_exception(self, mock_parent_init):
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    async def test_run_failure_raises_dashscope_exception(
+        self,
+        _mock_parent_init,
+    ):
         """run should raise DashScopeException when any step fails."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
-        object.__setattr__(agent, "register_functions", AsyncMock(
-            side_effect=RuntimeError("Step failed"),
-        ))
+        object.__setattr__(
+            agent,
+            "register_functions",
+            AsyncMock(
+                side_effect=RuntimeError("Step failed"),
+            ),
+        )
 
         with pytest.raises(DashScopeException) as exc_info:
             await agent.run()
@@ -162,14 +199,17 @@ class TestRunFailure:
 
 
 class TestTestFunctionsInvalidParameter:
-    """Test test_functions raises InvalidParameter for unsupported types and validation failures."""
+    """Test test_functions raises InvalidParameter for
+    unsupported types and validation failures."""
 
     @pytest.mark.asyncio
     @patch("dashscope.finetune.agentic_rl.set_api_key")
     async def test_test_functions_unsupported_type_raises_invalid_parameter(
-        self, mock_set_api_key
+        self,
+        _mock_set_api_key,
     ):
-        """test_functions should raise InvalidParameter for unsupported FunctionType."""
+        """test_functions should raise InvalidParameter
+        for unsupported FunctionType."""
         with pytest.raises(InvalidParameter) as exc_info:
             await AgenticRL.test_functions(
                 instance_id="inst-123",
@@ -184,9 +224,12 @@ class TestTestFunctionsInvalidParameter:
     @patch("dashscope.finetune.agentic_rl.set_api_key")
     @patch("dashscope.finetune.agentic_rl.RolloutInput.model_validate")
     async def test_test_functions_validation_failure_raises_invalid_parameter(
-        self, mock_validate, mock_set_api_key
+        self,
+        mock_validate,
+        _mock_set_api_key,
     ):
-        """test_functions should raise InvalidParameter when validation fails."""
+        """test_functions should raise InvalidParameter
+        when validation fails."""
         mock_validate.side_effect = ValueError("Validation failed")
 
         with pytest.raises(InvalidParameter) as exc_info:
@@ -203,13 +246,23 @@ class TestTestFunctionsInvalidParameter:
 class TestDashScopeExceptionPassthrough:
     """Test that DashScopeException from API is passed through unchanged."""
 
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    @patch("dashscope.finetune.agentic_rl.generate_random_id", return_value="abcd1234")
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    @patch(
+        "dashscope.finetune.agentic_rl.generate_random_id",
+        return_value="abcd1234",
+    )
     @patch("dashscope.finetune.agentic_rl.CreateMixin.call")
     def test_submit_job_passthrough_dashscope_exception(
-        self, mock_call, mock_random_id, mock_parent_init
+        self,
+        mock_call,
+        _mock_random_id,
+        _mock_parent_init,
     ):
-        """submit_job should pass through DashScopeException from API unchanged."""
+        """submit_job should pass through DashScopeException
+        from API unchanged."""
         original_exc = DashScopeException("API error")
         original_exc.status_code = 429
         original_exc.error_code = "RateLimitError"
@@ -237,11 +290,16 @@ class TestDashScopeExceptionPassthrough:
         assert exc_info.value.request_id == "req-123"
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
     async def test_register_functions_passthrough_dashscope_exception(
-        self, mock_parent_init
+        self,
+        _mock_parent_init,
     ):
-        """register_functions should pass through DashScopeException unchanged."""
+        """register_functions should pass through
+        DashScopeException unchanged."""
         original_exc = DashScopeException("Service error")
         original_exc.status_code = 503
         original_exc.error_code = "ServiceUnavailableError"
@@ -258,16 +316,27 @@ class TestDashScopeExceptionPassthrough:
         assert exc_info.value.error_code == "ServiceUnavailableError"
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    async def test_run_passthrough_dashscope_exception(self, mock_parent_init):
-        """run should pass through DashScopeException from inner calls unchanged."""
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    async def test_run_passthrough_dashscope_exception(
+        self,
+        _mock_parent_init,
+    ):
+        """run should pass through DashScopeException
+        from inner calls unchanged."""
         original_exc = DashScopeException("Inner error")
         original_exc.status_code = 400
         original_exc.error_code = "BadRequestError"
 
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
-        object.__setattr__(agent, "register_functions", AsyncMock(side_effect=original_exc))
+        object.__setattr__(
+            agent,
+            "register_functions",
+            AsyncMock(side_effect=original_exc),
+        )
 
         with pytest.raises(DashScopeException) as exc_info:
             await agent.run()
@@ -292,9 +361,13 @@ class TestExceptionChainPreserved:
         assert exc_info.value.__cause__ is original
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    async def test_register_functions_preserves_cause(self, mock_parent_init):
-        """register_functions should preserve __cause__ for non-DashScopeException."""
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    async def test_register_functions_preserves_cause(self, _mock_parent_init):
+        """register_functions should preserve __cause__
+        for non-DashScopeException."""
         original = IOError("network down")
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
@@ -306,8 +379,11 @@ class TestExceptionChainPreserved:
         assert exc_info.value.__cause__ is original
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    async def test_upload_datasets_preserves_cause(self, mock_parent_init):
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    async def test_upload_datasets_preserves_cause(self, _mock_parent_init):
         """upload_datasets should preserve __cause__."""
         original = OSError("disk full")
         agent = AgenticRL.__new__(AgenticRL)
@@ -319,11 +395,20 @@ class TestExceptionChainPreserved:
 
         assert exc_info.value.__cause__ is original
 
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    @patch("dashscope.finetune.agentic_rl.generate_random_id", return_value="abcd1234")
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    @patch(
+        "dashscope.finetune.agentic_rl.generate_random_id",
+        return_value="abcd1234",
+    )
     @patch("dashscope.finetune.agentic_rl.CreateMixin.call")
     def test_submit_job_call_failure_preserves_cause(
-        self, mock_call, mock_random_id, mock_parent_init
+        self,
+        mock_call,
+        _mock_random_id,
+        _mock_parent_init,
     ):
         """submit_job should preserve __cause__ when API call fails."""
         original = TimeoutError("connection timeout")
@@ -347,7 +432,10 @@ class TestExceptionChainPreserved:
 
     @pytest.mark.asyncio
     @patch("dashscope.finetune.agentic_rl.set_api_key")
-    async def test_test_functions_validation_preserves_cause(self, mock_set_api_key):
+    async def test_test_functions_validation_preserves_cause(
+        self,
+        _mock_set_api_key,
+    ):
         """test_functions should preserve __cause__ on validation failure."""
         original = TypeError("wrong type")
 
@@ -381,13 +469,22 @@ class TestInternalLogCodes:
         assert "code=3001" in mock_logger.error.call_args[0][0]
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
     @patch("dashscope.finetune.agentic_rl.logger")
-    async def test_register_functions_logs_code_3002(self, mock_logger, mock_parent_init):
+    async def test_register_functions_logs_code_3002(
+        self,
+        mock_logger,
+        _mock_parent_init,
+    ):
         """register_functions should log internal code 3002."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
-        agent.tuning.register_functions = AsyncMock(side_effect=RuntimeError("fail"))
+        agent.tuning.register_functions = AsyncMock(
+            side_effect=RuntimeError("fail"),
+        )
 
         with pytest.raises(DashScopeException):
             await agent.register_functions()
@@ -396,9 +493,16 @@ class TestInternalLogCodes:
         assert "code=3002" in mock_logger.error.call_args[0][0]
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
     @patch("dashscope.finetune.agentic_rl.logger")
-    async def test_upload_datasets_logs_code_3003(self, mock_logger, mock_parent_init):
+    async def test_upload_datasets_logs_code_3003(
+        self,
+        mock_logger,
+        _mock_parent_init,
+    ):
         """upload_datasets should log internal code 3003."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
@@ -410,11 +514,20 @@ class TestInternalLogCodes:
         mock_logger.error.assert_called_once()
         assert "code=3003" in mock_logger.error.call_args[0][0]
 
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    @patch("dashscope.finetune.agentic_rl.generate_random_id", return_value="abcd1234")
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    @patch(
+        "dashscope.finetune.agentic_rl.generate_random_id",
+        return_value="abcd1234",
+    )
     @patch("dashscope.finetune.agentic_rl.logger")
     def test_submit_job_duplicate_names_logs_code_3004(
-        self, mock_logger, mock_random_id, mock_parent_init
+        self,
+        mock_logger,
+        _mock_random_id,
+        _mock_parent_init,
     ):
         """submit_job duplicate names should log internal code 3004."""
         agent = AgenticRL.__new__(AgenticRL)
@@ -434,12 +547,22 @@ class TestInternalLogCodes:
         mock_logger.error.assert_called_once()
         assert "code=3004" in mock_logger.error.call_args[0][0]
 
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    @patch("dashscope.finetune.agentic_rl.generate_random_id", return_value="abcd1234")
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    @patch(
+        "dashscope.finetune.agentic_rl.generate_random_id",
+        return_value="abcd1234",
+    )
     @patch("dashscope.finetune.agentic_rl.CreateMixin.call")
     @patch("dashscope.finetune.agentic_rl.logger")
     def test_submit_job_call_failure_logs_code_3005(
-        self, mock_logger, mock_call, mock_random_id, mock_parent_init
+        self,
+        mock_logger,
+        mock_call,
+        _mock_random_id,
+        _mock_parent_init,
     ):
         """submit_job call failure should log internal code 3005."""
         mock_call.side_effect = RuntimeError("API down")
@@ -462,9 +585,12 @@ class TestInternalLogCodes:
         assert "code=3005" in mock_logger.error.call_args[0][0]
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
     @patch("dashscope.finetune.agentic_rl.logger")
-    async def test_run_logs_code_3006(self, mock_logger, mock_parent_init):
+    async def test_run_logs_code_3006(self, mock_logger, _mock_parent_init):
         """run should log internal code 3006 on failure."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
@@ -484,9 +610,12 @@ class TestInternalLogCodes:
     @patch("dashscope.finetune.agentic_rl.set_api_key")
     @patch("dashscope.finetune.agentic_rl.logger")
     async def test_test_functions_unsupported_type_logs_code_3007(
-        self, mock_logger, mock_set_api_key
+        self,
+        mock_logger,
+        _mock_set_api_key,
     ):
-        """test_functions unsupported type should log internal code 3007 only (not 3008)."""
+        """test_functions unsupported type should log
+        internal code 3007 only (not 3008)."""
         with pytest.raises(InvalidParameter):
             await AgenticRL.test_functions(
                 instance_id="inst-1",
@@ -494,7 +623,9 @@ class TestInternalLogCodes:
                 input_data={},
             )
 
-        error_messages = [call[0][0] for call in mock_logger.error.call_args_list]
+        error_messages = [
+            call[0][0] for call in mock_logger.error.call_args_list
+        ]
         assert any("code=3007" in msg for msg in error_messages)
         assert not any("code=3008" in msg for msg in error_messages)
 
@@ -502,7 +633,9 @@ class TestInternalLogCodes:
     @patch("dashscope.finetune.agentic_rl.set_api_key")
     @patch("dashscope.finetune.agentic_rl.logger")
     async def test_test_functions_validation_failure_logs_code_3008(
-        self, mock_logger, mock_set_api_key
+        self,
+        mock_logger,
+        _mock_set_api_key,
     ):
         """test_functions validation failure should log internal code 3008."""
         with patch(
@@ -523,13 +656,23 @@ class TestInternalLogCodes:
 class TestPassthroughAttributeCompleteness:
     """Verify that passthrough DashScopeException preserves ALL attributes."""
 
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
-    @patch("dashscope.finetune.agentic_rl.generate_random_id", return_value="abcd1234")
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
+    @patch(
+        "dashscope.finetune.agentic_rl.generate_random_id",
+        return_value="abcd1234",
+    )
     @patch("dashscope.finetune.agentic_rl.CreateMixin.call")
     def test_submit_job_passthrough_preserves_all_attributes(
-        self, mock_call, mock_random_id, mock_parent_init
+        self,
+        mock_call,
+        _mock_random_id,
+        _mock_parent_init,
     ):
-        """Passthrough should preserve status_code, error_code, request_id, and message."""
+        """Passthrough should preserve status_code,
+        error_code, request_id, and message."""
         original = DashScopeException("Rate limited by server")
         original.status_code = 429
         original.error_code = "RateLimitError"
@@ -561,7 +704,10 @@ class TestMultipleUnderlyingExceptionTypes:
     """Verify correct behavior with various underlying exception types."""
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
     @pytest.mark.parametrize(
         "underlying_exc",
         [
@@ -573,9 +719,12 @@ class TestMultipleUnderlyingExceptionTypes:
         ],
     )
     async def test_register_functions_handles_various_exceptions(
-        self, mock_parent_init, underlying_exc
+        self,
+        _mock_parent_init,
+        underlying_exc,
     ):
-        """register_functions should convert various exception types to DashScopeException."""
+        """register_functions should convert various
+        exception types to DashScopeException."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
         agent.tuning.register_functions = AsyncMock(side_effect=underlying_exc)
@@ -588,7 +737,10 @@ class TestMultipleUnderlyingExceptionTypes:
         assert exc_info.value.__cause__ is underlying_exc
 
     @pytest.mark.asyncio
-    @patch("dashscope.finetune.agentic_rl.AgenticRLTuning.__init__", return_value=None)
+    @patch(
+        "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
+        return_value=None,
+    )
     @pytest.mark.parametrize(
         "underlying_exc",
         [
@@ -598,9 +750,12 @@ class TestMultipleUnderlyingExceptionTypes:
         ],
     )
     async def test_upload_datasets_handles_various_exceptions(
-        self, mock_parent_init, underlying_exc
+        self,
+        _mock_parent_init,
+        underlying_exc,
     ):
-        """upload_datasets should convert various exception types to DashScopeException."""
+        """upload_datasets should convert various
+        exception types to DashScopeException."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
         agent.tuning.upload_datasets = AsyncMock(side_effect=underlying_exc)
