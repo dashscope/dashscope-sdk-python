@@ -14,13 +14,31 @@ The pre-release backend currently emits ``error_code``/``error_message``
 instead of nested ``error.{code,message}``. We accept both shapes and
 normalize to the documented form. The compatibility branch is marked
 with ``# TODO(bma-fix)`` so we can remove it once the backend aligns.
+
+Codes and default messages come from :mod:`dashscope.common.error_registry`
+(the single source of truth). :func:`from_response` normalizes to that
+taxonomy — rewriting legacy aliases and falling back to the per-status code
+— so ``.code`` is always unified; the server's raw payload stays on ``.raw``.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Mapping, Optional
 
+from dashscope.common import error_registry as _error_registry
 from dashscope.common.error import DashScopeException
+from dashscope.common.error_registry import (
+    AUTH_FAILED,
+    INTERNAL_ERROR,
+    INVALID_REQUEST,
+    PERMISSION_DENIED,
+    PublicError,
+    RATE_LIMIT_EXCEEDED,
+    REQUEST_TIMEOUT,
+    RESOURCE_NOT_FOUND,
+    SERVICE_UNAVAILABLE,
+)
 
 
 class AgentStudioError(DashScopeException):
@@ -104,7 +122,9 @@ class AuthenticationError(APIStatusError):
 
 
 class PermissionDeniedError(APIStatusError):
-    code = "permission_denied_error"
+    # Unified external standard (registry anthropic_error_code / the
+    # canonical Anthropic API error type).
+    code = "permission_error"
 
 
 class NotFoundError(APIStatusError):
@@ -162,16 +182,80 @@ _STATUS_TO_DEFAULT: Dict[int, type] = {
     504: InternalServerError,
 }
 
+# Registry row per status, for the default code/message when the server
+# omits one. 409 has no row and falls back to a bare HTTP status.
+_STATUS_TO_PUBLIC: Dict[int, PublicError] = {
+    400: INVALID_REQUEST,
+    401: AUTH_FAILED,
+    403: PERMISSION_DENIED,
+    404: RESOURCE_NOT_FOUND,
+    429: RATE_LIMIT_EXCEEDED,
+    500: INTERNAL_ERROR,
+    502: INTERNAL_ERROR,
+    503: SERVICE_UNAVAILABLE,
+    504: REQUEST_TIMEOUT,
+}
+
+# Class routing: normalized code -> exception type. Legacy aliases are
+# rewritten to their canonical form by ``_normalize_code`` before routing.
 _CODE_TO_CLASS: Dict[str, type] = {
     "invalid_request_error": InvalidRequestError,
     "authentication_error": AuthenticationError,
-    "permission_denied_error": PermissionDeniedError,
+    "permission_error": PermissionDeniedError,
     "not_found_error": NotFoundError,
     "conflict_error": ConflictError,
     "rate_limit_error": RateLimitError,
     "overloaded_error": OverloadedError,
     "api_error": InternalServerError,
 }
+
+# Codes the registry defines; a server code already in this set is kept
+# as-is (e.g. ``billing_error`` stays distinct from ``rate_limit_error``).
+_REGISTRY_CODES = frozenset(
+    pe.anthropic_error_code
+    for pe in vars(_error_registry).values()
+    if isinstance(pe, PublicError)
+)
+
+# Pre-standard codes the backend has emitted historically, mapped to their
+# normalized form so old exceptions still resolve to a unified code.
+_LEGACY_CODE_ALIASES: Dict[str, str] = {
+    "permission_denied_error": "permission_error",  # TODO(bma-fix)
+}
+
+_PLACEHOLDER_RE = re.compile(r"\s*:?\s*\{[^}]+\}")
+
+
+def _normalize_code(code: Optional[str]) -> Optional[str]:
+    """Map a server-supplied code to the unified taxonomy.
+
+    Returns the canonical code for a known alias, the code itself when it is
+    already a registry code, or ``None`` when the SDK does not recognize it
+    (the caller then falls back to the registry's per-status code).
+    """
+
+    if code is None:
+        return None
+    if code in _LEGACY_CODE_ALIASES:
+        return _LEGACY_CODE_ALIASES[code]
+    if code in _REGISTRY_CODES:
+        return code
+    return None
+
+
+def _default_message(public: PublicError) -> str:
+    """Placeholder-free default message from a registry entry.
+
+    Registry ``error_msg`` values may embed ``{var}`` templates the server
+    fills in (e.g. ``"...not found: {resource}."``). When falling back to a
+    default we have no values, so strip the unresolved placeholders for a
+    clean sentence.
+    """
+
+    msg = _PLACEHOLDER_RE.sub("", public.error_msg).strip()
+    if msg and not msg.endswith("."):
+        msg += "."
+    return msg
 
 
 def from_response(
@@ -222,13 +306,23 @@ def from_response(
         if message is None:
             message = body.get("message")
 
-    if message is None:
-        message = f"HTTP {status_code}"
-    if code is None:
+    public = _STATUS_TO_PUBLIC.get(status_code)
+
+    # Normalized SDK code wins; unknown/omitted falls back to the status row.
+    normalized = _normalize_code(code)
+    if normalized is not None:
+        code = normalized
+    elif public is not None:
+        code = public.anthropic_error_code
+    else:
         code = _STATUS_TO_DEFAULT.get(  # type: ignore[attr-defined]
             status_code,
             APIStatusError,
         ).code
+
+    if message is None:
+        # Registry default (placeholder-free); else a bare HTTP status.
+        message = _default_message(public) if public else f"HTTP {status_code}"
 
     cls = (
         _CODE_TO_CLASS.get(code)

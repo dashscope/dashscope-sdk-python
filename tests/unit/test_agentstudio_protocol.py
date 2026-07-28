@@ -56,6 +56,40 @@ def test_error_legacy_underscored_fields_still_parsed():
     assert err.code == "rate_limit_error"
 
 
+def test_legacy_permission_code_is_normalized():
+    """Pre-standard ``permission_denied_error`` normalizes to the unified
+    ``permission_error`` (SDK normalization wins over the raw server code)."""
+    body = {"type": "error", "error": {"code": "permission_denied_error"}}
+    err = exceptions.from_response(status_code=403, body=body)
+    assert isinstance(err, exceptions.PermissionDeniedError)
+    assert err.code == "permission_error"
+
+
+def test_404_default_message_has_no_unresolved_placeholder():
+    """The registry 404 message is templated; the default must not leak the
+    raw ``{resource}`` placeholder when the server omits a message."""
+    err = exceptions.from_response(status_code=404, body=None)
+    assert isinstance(err, exceptions.NotFoundError)
+    assert "{" not in err.message
+    assert err.message == "The requested resource was not found."
+
+
+def test_504_code_and_message_are_consistent():
+    """504 code and default message come from the same registry row, so
+    they no longer disagree (previously ``api_error`` + a timeout message)."""
+    err = exceptions.from_response(status_code=504, body=None)
+    assert err.code == "timeout_error"
+    assert "timed out" in err.message
+
+
+def test_default_messages_sourced_from_registry():
+    """Statuses the registry models carry a placeholder-free default."""
+    for status in (400, 401, 403, 404, 429, 500, 503, 504):
+        err = exceptions.from_response(status_code=status, body=None)
+        assert "{" not in err.message
+        assert not err.message.startswith("HTTP ")
+
+
 def test_is_error_payload_detects_both_shapes():
     assert is_error_payload(
         {"type": "error", "error": {"code": "x", "message": "y"}},
