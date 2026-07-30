@@ -41,6 +41,22 @@ class _RootCauseMixin:
                 return f" (caused by: {type(root).__name__})"
         return ""
 
+    def _get_registry_message(self, error_code: str) -> str:
+        """Get the message from error_registry for the given error_code name.
+
+        Uses lazy import to avoid circular dependency with error_registry.
+        Returns empty string if not found.
+        """
+        try:
+            from dashscope.common.error_registry import INTERNAL_ERRORS
+
+            for err_def in INTERNAL_ERRORS:
+                if err_def.name == error_code:
+                    return err_def.format_message()
+        except Exception:
+            pass
+        return ""
+
 
 class AgenticRLError(_RootCauseMixin, Exception):
     """Base class for all Agentic RL exceptions."""
@@ -48,7 +64,7 @@ class AgenticRLError(_RootCauseMixin, Exception):
     def __init__(
         self,
         message: str,
-        error_code: int = 1000,
+        error_code: str = "agentic_rl.AgenticRLError",
     ):
         super().__init__(message)
         self.error_code = error_code
@@ -56,7 +72,11 @@ class AgenticRLError(_RootCauseMixin, Exception):
         self.message = message
 
     def __str__(self):
-        base = f"[{self.error_code}] {self.message} (at {self.timestamp})"
+        registry_msg = self._get_registry_message(self.error_code)
+        if registry_msg:
+            base = f"[{self.error_code}] {registry_msg} | {self.message}"
+        else:
+            base = f"[{self.error_code}] {self.message}"
         return f"{base}{self._format_cause()}"
 
 
@@ -66,7 +86,7 @@ class IOErrorWithCode(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1800,
+        error_code: str = "agentic_rl.IOErrorWithCode",
         path: Optional[str] = None,
         operation: Optional[str] = None,
     ):
@@ -82,13 +102,19 @@ class RuntimeErrorWithCode(_RootCauseMixin, RuntimeError):
     def __init__(
         self,
         message: str,
-        error_code: int = 0,
+        error_code: str = "agentic_rl.RuntimeErrorWithCode",
     ):
         super().__init__(message)
         self.error_code = error_code
         self.message = message
 
     def __str__(self):
+        registry_msg = self._get_registry_message(self.error_code)
+        if registry_msg:
+            return (
+                f"[{self.error_code}] {registry_msg} | "
+                f"{self.message}{self._format_cause()}"
+            )
         return f"[{self.error_code}] {self.message}{self._format_cause()}"
 
 
@@ -99,13 +125,19 @@ class ValueErrorWithCode(_RootCauseMixin, ValueError):
     def __init__(
         self,
         message: str,
-        error_code: int = 0,
+        error_code: str = "agentic_rl.ValueErrorWithCode",
     ):
         super().__init__(message)
         self.error_code = error_code
         self.message = message
 
     def __str__(self):
+        registry_msg = self._get_registry_message(self.error_code)
+        if registry_msg:
+            return (
+                f"[{self.error_code}] {registry_msg} | "
+                f"{self.message}{self._format_cause()}"
+            )
         return f"[{self.error_code}] {self.message}{self._format_cause()}"
 
 
@@ -115,7 +147,7 @@ class InputError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1100,
+        error_code: str = "agentic_rl.InputError",
         field: Optional[str] = None,
     ):
         super().__init__(message, error_code)
@@ -128,7 +160,7 @@ class OutputError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1200,
+        error_code: str = "agentic_rl.OutputError",
         response: Optional[Dict] = None,
     ):
         super().__init__(message, error_code)
@@ -141,7 +173,7 @@ class BaseConnectionError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1300,
+        error_code: str = "agentic_rl.BaseConnectionError",
         endpoint: Optional[str] = None,
     ):
         super().__init__(message, error_code)
@@ -154,7 +186,7 @@ class OSSConnectionError(BaseConnectionError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1310,
+        error_code: str = "agentic_rl.OSSConnectionError",
         endpoint: str = None,
     ):
         super().__init__(
@@ -170,7 +202,7 @@ class OSSUploadError(BaseConnectionError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1320,
+        error_code: str = "agentic_rl.OSSUploadError",
         endpoint: str = None,
         bucket: Optional[str] = None,
         object_key: Optional[str] = None,
@@ -192,7 +224,7 @@ class DeploymentError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1400,
+        error_code: str = "agentic_rl.DeploymentError",
         resource_id: Optional[str] = None,
     ):
         super().__init__(message, error_code)
@@ -205,7 +237,7 @@ class RegistrationError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1410,
+        error_code: str = "agentic_rl.RegistrationError",
         resource_id: Optional[str] = None,
     ):
         super().__init__(
@@ -221,7 +253,7 @@ class DatasetsError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1460,
+        error_code: str = "agentic_rl.DatasetsError",
     ):
         super().__init__(
             f"Datasets failed: {message}",
@@ -235,7 +267,7 @@ class FunctionLoadError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1420,
+        error_code: str = "agentic_rl.FunctionLoadError",
         entity_id: str = None,
         error_log: Optional[str] = None,
     ):
@@ -254,7 +286,7 @@ class FunctionLayerError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1450,
+        error_code: str = "agentic_rl.FunctionLayerError",
         layer_name: str = None,
         error_log: Optional[str] = None,
     ):
@@ -273,7 +305,7 @@ class InstanceWarmupError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1430,
+        error_code: str = "agentic_rl.InstanceWarmupError",
         instance_url: str = None,
         timeout: float = 0.0,
         retry_after: Optional[float] = None,
@@ -293,7 +325,7 @@ class InstanceQueryError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1440,
+        error_code: str = "agentic_rl.InstanceQueryError",
         instance_id: str = None,
         query_attempts: int = 1,
     ):
@@ -311,7 +343,7 @@ class ValidationError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1500,
+        error_code: str = "agentic_rl.ValidationError",
         invalid_data: Optional[Dict] = None,
         validation_rules: Optional[Dict] = None,
     ):
@@ -329,7 +361,7 @@ class ConfigurationError(ValidationError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1510,
+        error_code: str = "agentic_rl.ConfigurationError",
         config_path: Optional[str] = None,
     ):
         super().__init__(message, error_code=error_code)
@@ -342,7 +374,7 @@ class BasePermissionError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: int = 1700,
+        error_code: str = "agentic_rl.BasePermissionError",
         operation: str = None,
         resource: str = None,
     ):

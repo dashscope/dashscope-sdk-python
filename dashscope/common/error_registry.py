@@ -43,6 +43,8 @@ class InternalErrorDef:
         return msg
 
 
+# -- Public Errors --------------------------------------------------
+
 INVALID_REQUEST = PublicError(
     key="invalid_request",
     status_code=400,
@@ -185,3 +187,3030 @@ REQUEST_TIMEOUT = PublicError(
     error_msg="The request timed out. Please try again later.",
     anthropic_error_code="timeout_error",
 )
+
+
+# -- Internal Errors -------------------------------------------------
+
+GATEWAY_INVALID_REQUEST = InternalErrorDef(
+    name="gateway.InvalidRequest",
+    external=INVALID_REQUEST,
+    message="The request body is malformed or not valid JSON.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_MISSING_INPUT = InternalErrorDef(
+    name="gateway.MissingInput",
+    external=MISSING_PARAMETER,
+    message="Required input field is missing.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_INVALID_PARAMETER = InternalErrorDef(
+    name="gateway.InvalidParameter",
+    external=INVALID_REQUEST,
+    message="Parameter '{parameter}' has an invalid value.",
+    allow_retry=False,
+    vars=["parameter"],
+    cause="",
+    solution="",
+)
+
+GATEWAY_INVALID_REQUEST_BODY = InternalErrorDef(
+    name="gateway.InvalidRequestBody",
+    external=INVALID_REQUEST,
+    message="The request body structure is invalid or unexpected.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_REQUEST_TOO_LARGE = InternalErrorDef(
+    name="gateway.RequestTooLarge",
+    external=REQUEST_TOO_LARGE,
+    message="Request payload exceeds the allowed size of {limit}.",
+    allow_retry=False,
+    vars=["limit"],
+    cause="",
+    solution="",
+)
+
+GATEWAY_RATE_LIMIT_EXCEEDED = InternalErrorDef(
+    name="gateway.RateLimitExceeded",
+    external=RATE_LIMIT_EXCEEDED,
+    message="Request rate exceeds the configured RPS limit.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_BURST_RATE_EXCEEDED = InternalErrorDef(
+    name="gateway.BurstRateExceeded",
+    external=RATE_LIMIT_EXCEEDED,
+    message="Burst request rate exceeded; service is shedding load.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_CONCURRENCY_LIMIT_EXCEEDED = InternalErrorDef(
+    name="gateway.ConcurrencyLimitExceeded",
+    external=CONCURRENCY_LIMIT_EXCEEDED,
+    message="Concurrent request count exceeds the limit.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_QUOTA_EXCEEDED = InternalErrorDef(
+    name="gateway.QuotaExceeded",
+    external=INSUFFICIENT_QUOTA,
+    message="Account usage quota has been exhausted.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_ACCOUNT_IN_ARREARS = InternalErrorDef(
+    name="gateway.AccountInArrears",
+    external=PERMISSION_DENIED,
+    message=(
+        "Account is in arrears; requests are suspended until "
+        "balance is restored."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_PERMISSION_DENIED = InternalErrorDef(
+    name="gateway.PermissionDenied",
+    external=PERMISSION_DENIED,
+    message="Caller does not have permission to perform this operation.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_MODEL_ACCESS_DENIED = InternalErrorDef(
+    name="gateway.ModelAccessDenied",
+    external=PERMISSION_DENIED,
+    message="Caller does not have access to the requested model.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_RESOURCE_NOT_FOUND = InternalErrorDef(
+    name="gateway.ResourceNotFound",
+    external=RESOURCE_NOT_FOUND,
+    message="The requested {resource} does not exist.",
+    allow_retry=False,
+    vars=["resource"],
+    cause="",
+    solution="",
+)
+
+GATEWAY_MODEL_NOT_FOUND = InternalErrorDef(
+    name="gateway.ModelNotFound",
+    external=RESOURCE_NOT_FOUND,
+    message="The requested model does not exist.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_INVALID_API_KEY = InternalErrorDef(
+    name="gateway.InvalidApiKey",
+    external=AUTH_FAILED,
+    message="Invalid or missing API-key provided.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_INVALID_API_TOKEN = InternalErrorDef(
+    name="gateway.InvalidApiToken",
+    external=AUTH_FAILED,
+    message="Invalid or expired API Token provided.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_WORKSPACE_ACCESS_DENIED = InternalErrorDef(
+    name="gateway.WorkspaceAccessDenied",
+    external=PERMISSION_DENIED,
+    message="Workspace access denied.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_ENDPOINT_ACCESS_DENIED = InternalErrorDef(
+    name="gateway.EndpointAccessDenied",
+    external=PERMISSION_DENIED,
+    message="Workspace endpoint access denied.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_I_P_ACCESS_DENIED = InternalErrorDef(
+    name="gateway.IPAccessDenied",
+    external=PERMISSION_DENIED,
+    message="IP access denied by API-Key restrictions.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_USER_BLACKLISTED = InternalErrorDef(
+    name="gateway.UserBlacklisted",
+    external=PERMISSION_DENIED,
+    message="User is blacklisted; access denied.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_ENTITY_UNPURCHASED = InternalErrorDef(
+    name="gateway.EntityUnpurchased",
+    external=PERMISSION_DENIED,
+    message="Access to model denied. The entity has not been purchased.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_TOKEN_PLAN_EXPIRED = InternalErrorDef(
+    name="gateway.TokenPlanExpired",
+    external=PERMISSION_DENIED,
+    message="Token-plan subscription has expired.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_TOKEN_PLAN_QUOTA_EXHAUSTED = InternalErrorDef(
+    name="gateway.TokenPlanQuotaExhausted",
+    external=INSUFFICIENT_QUOTA,
+    message="Token-plan quota has been exhausted.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_FREE_QUOTA_EXHAUSTED = InternalErrorDef(
+    name="gateway.FreeQuotaExhausted",
+    external=PERMISSION_DENIED,
+    message="Free allocated quota has been exhausted.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_ILLEGAL_ENDPOINT = InternalErrorDef(
+    name="gateway.IllegalEndpoint",
+    external=INVALID_REQUEST,
+    message="The endpoint does not support the requested operation.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_DATA_INSPECTION_FAILED = InternalErrorDef(
+    name="gateway.DataInspectionFailed",
+    external=CONTENT_POLICY_VIOLATION,
+    message="Data inspection failed; content rejected.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_GATEWAY_TIMEOUT = InternalErrorDef(
+    name="gateway.GatewayTimeout",
+    external=REQUEST_TIMEOUT,
+    message="Gateway operation timed out.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_O_S_S_UPLOAD_FAILED = InternalErrorDef(
+    name="gateway.OSSUploadFailed",
+    external=INTERNAL_ERROR,
+    message="OSS upload failed.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_RESOURCE_ACCESS_DENIED = InternalErrorDef(
+    name="gateway.ResourceAccessDenied",
+    external=PERMISSION_DENIED,
+    message="OSS resource access denied (ownership check failed).",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_ASYNC_SYNC_DENIED = InternalErrorDef(
+    name="gateway.AsyncSyncDenied",
+    external=PERMISSION_DENIED,
+    message="Current user API does not support the requested call mode.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_INTERNAL_ERROR = InternalErrorDef(
+    name="gateway.InternalError",
+    external=INTERNAL_ERROR,
+    message="A system error has occurred, please try again later.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_SERVICE_SITE_UNSUPPORTED = InternalErrorDef(
+    name="gateway.ServiceSiteUnsupported",
+    external=INVALID_REQUEST,
+    message="Model is not supported in current workspace service site.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_APP_ACCESS_DENIED = InternalErrorDef(
+    name="gateway.AppAccessDenied",
+    external=PERMISSION_DENIED,
+    message="App access denied.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_HEADER_ACCESS_DENIED = InternalErrorDef(
+    name="gateway.HeaderAccessDenied",
+    external=PERMISSION_DENIED,
+    message="Header authentication failed.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_RESOURCE_NOT_EXIST = InternalErrorDef(
+    name="gateway.ResourceNotExist",
+    external=INVALID_REQUEST,
+    message="OSS resource not found or inaccessible.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+GATEWAY_REQUEST_TIMEOUT = InternalErrorDef(
+    name="gateway.RequestTimeout",
+    external=REQUEST_TIMEOUT,
+    message="Request timed out, please try again later.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_UNSUPPORTED_MODEL = InternalErrorDef(
+    name="apiserver.UnsupportedModel",
+    external=RESOURCE_NOT_FOUND,
+    message="The requested model is not supported by this operation.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_UNSUPPORTED_OPERATION = InternalErrorDef(
+    name="apiserver.UnsupportedOperation",
+    external=INVALID_REQUEST,
+    message="This operation is not supported for the current request.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_UNSUPPORTED_PARAMETER = InternalErrorDef(
+    name="apiserver.UnsupportedParameter",
+    external=INVALID_REQUEST,
+    message="The provided parameter is not supported in this context.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_INVALID_PARAMETER_COMBINATION = InternalErrorDef(
+    name="apiserver.InvalidParameterCombination",
+    external=INVALID_REQUEST,
+    message="The combination of provided parameters is invalid.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_CONTENT_POLICY_VIOLATION = InternalErrorDef(
+    name="apiserver.ContentPolicyViolation",
+    external=CONTENT_POLICY_VIOLATION,
+    message="Request content violates content safety policy.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_INVALID_U_R_L = InternalErrorDef(
+    name="apiserver.InvalidURL",
+    external=INVALID_URL,
+    message="The provided URL is invalid or unreachable.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_FILE_DOWNLOAD_FAILED = InternalErrorDef(
+    name="apiserver.FileDownloadFailed",
+    external=INVALID_FILE,
+    message="Failed to download file from the provided URL.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_INVALID_FILE = InternalErrorDef(
+    name="apiserver.InvalidFile",
+    external=INVALID_FILE,
+    message="The uploaded or referenced file is invalid.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_UNSUPPORTED_FILE_FORMAT = InternalErrorDef(
+    name="apiserver.UnsupportedFileFormat",
+    external=INVALID_FILE,
+    message="The file format is not supported.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_FILE_TOO_LARGE = InternalErrorDef(
+    name="apiserver.FileTooLarge",
+    external=REQUEST_TOO_LARGE,
+    message="The uploaded file exceeds the maximum allowed size of {limit}.",
+    allow_retry=False,
+    vars=["limit"],
+    cause="",
+    solution="",
+)
+
+APISERVER_INVALID_AUDIO = InternalErrorDef(
+    name="apiserver.InvalidAudio",
+    external=INVALID_FILE,
+    message="The provided audio data is invalid or unreadable.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+APISERVER_TIMEOUT = InternalErrorDef(
+    name="apiserver.Timeout",
+    external=REQUEST_TIMEOUT,
+    message="Upstream processing timed out.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MINT_INTERNAL_PROCESS_ERROR = InternalErrorDef(
+    name="mint.InternalProcessError",
+    external=INTERNAL_ERROR,
+    message="Internal Error during model process.",
+    allow_retry=True,
+    vars=[],
+    cause="服务端内部处理异常",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_JSON_SERIALIZATION_ERROR = InternalErrorDef(
+    name="mint.JsonSerializationError",
+    external=INTERNAL_ERROR,
+    message="The service output is not serializable.",
+    allow_retry=True,
+    vars=[],
+    cause="服务端输出 JSON 序列化失败",
+    solution="联系技术支持",
+)
+
+MINT_OUTPUT_PAYLOAD_SCHEMA_ERROR = InternalErrorDef(
+    name="mint.OutputPayloadSchemaError",
+    external=INTERNAL_ERROR,
+    message="The output payload schema is not valid.",
+    allow_retry=True,
+    vars=[],
+    cause="服务端输出数据结构不合法",
+    solution="联系技术支持",
+)
+
+MINT_MODEL_SERVING_ERROR = InternalErrorDef(
+    name="mint.ModelServingError",
+    external=INTERNAL_ERROR,
+    message="Internal Error calling model processing.",
+    allow_retry=True,
+    vars=[],
+    cause="调用模型服务时发生内部错误",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_MODEL_SERVING_WITH_DETAIL_ERROR = InternalErrorDef(
+    name="mint.ModelServingWithDetailError",
+    external=INTERNAL_ERROR,
+    message=(
+        "An error occurred in model serving with code: {}, "
+        "and the error message is {}"
+    ),
+    allow_retry=True,
+    vars=[],
+    cause="模型服务返回异常",
+    solution="根据错误详情排查，或联系技术支持",
+)
+
+MINT_MODEL_CALL_ERROR = InternalErrorDef(
+    name="mint.ModelCallError",
+    external=INTERNAL_ERROR,
+    message="Failed to invoke the model service",
+    allow_retry=True,
+    vars=[],
+    cause="模型服务调用失败",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_INTERNAL_PREPROCESS_ERROR = InternalErrorDef(
+    name="mint.InternalPreprocessError",
+    external=INTERNAL_ERROR,
+    message="Internal Error during model pre-process.",
+    allow_retry=True,
+    vars=[],
+    cause="请求预处理过程中发生内部错误",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_INTERNAL_POSTPROCESS_ERROR = InternalErrorDef(
+    name="mint.InternalPostprocessError",
+    external=INTERNAL_ERROR,
+    message=(
+        "Internal Error during model post-process. "
+        "The error message is [{}]"
+    ),
+    allow_retry=True,
+    vars=[],
+    cause="响应后处理过程中发生内部错误",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_WANX_CALLING_ERROR = InternalErrorDef(
+    name="mint.WanxCallingError",
+    external=INTERNAL_ERROR,
+    message="Internal Error during calling wanx",
+    allow_retry=True,
+    vars=[],
+    cause="调用 Wanx 服务时发生内部错误",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_INTERNAL_PLUG_ERROR = InternalErrorDef(
+    name="mint.InternalPlugError",
+    external=INTERNAL_ERROR,
+    message="Internal Error during Plug calling.",
+    allow_retry=True,
+    vars=[],
+    cause="插件调用过程中发生内部错误",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_PLUGIN_RESULT_IS_NONE = InternalErrorDef(
+    name="mint.PluginResultIsNone",
+    external=INTERNAL_ERROR,
+    message="Plugin result is null",
+    allow_retry=True,
+    vars=[],
+    cause="插件返回结果为空",
+    solution="检查插件配置后重试",
+)
+
+MINT_PLUGIN_RESULT_PARSE_ERROR = InternalErrorDef(
+    name="mint.PluginResultParseError",
+    external=INTERNAL_ERROR,
+    message="Plugin result parse error",
+    allow_retry=True,
+    vars=[],
+    cause="插件返回结果解析失败",
+    solution="检查插件返回数据格式",
+)
+
+MINT_PLUGIN_EXECUTION_RESULT_FORMAT_ERROR = InternalErrorDef(
+    name="mint.PluginExecutionResultFormatError",
+    external=INTERNAL_ERROR,
+    message="Plugin execution result is not a legal JSON. Result is [{}]",
+    allow_retry=True,
+    vars=[],
+    cause="插件执行结果不是合法 JSON",
+    solution="检查插件实现是否返回正确的 JSON 格式",
+)
+
+MINT_SEARCH_RESULT_FORMAT_ERROR = InternalErrorDef(
+    name="mint.SearchResultFormatError",
+    external=INTERNAL_ERROR,
+    message="Search result error",
+    allow_retry=True,
+    vars=[],
+    cause="搜索结果格式异常",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_INTERNAL_SEARCH_ERROR = InternalErrorDef(
+    name="mint.InternalSearchError",
+    external=INTERNAL_ERROR,
+    message="Internal Error during search phase.",
+    allow_retry=True,
+    vars=[],
+    cause="搜索过程中发生内部错误",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_INTERNAL_AGENT_ERROR = InternalErrorDef(
+    name="mint.InternalAgentError",
+    external=INTERNAL_ERROR,
+    message="An error occurred in agent system",
+    allow_retry=True,
+    vars=[],
+    cause="Agent 系统内部发生错误",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_AGENT_SERVICE_GET_RESULT_ERROR = InternalErrorDef(
+    name="mint.AgentServiceGetResultError",
+    external=INTERNAL_ERROR,
+    message="An error occurred in agent system when getting result",
+    allow_retry=True,
+    vars=[],
+    cause="Agent 系统获取结果时发生错误",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_GENERATOR_RESULT_J_S_O_N_DECODE_ERROR = InternalErrorDef(
+    name="mint.GeneratorResultJSONDecodeError",
+    external=INTERNAL_ERROR,
+    message="JSON decode error in generator:{}",
+    allow_retry=True,
+    vars=[],
+    cause="生成器结果 JSON 解码失败",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_SERVICE_UNAVAILABLE_ERROR = InternalErrorDef(
+    name="mint.ServiceUnavailableError",
+    external=SERVICE_UNAVAILABLE,
+    message=(
+        "Too many requests. Your requests are being throttled due to "
+        "system capacity limits. Please try again later."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="请求过多，系统容量不足触发限流",
+    solution="稍后重试",
+)
+
+MINT_RESPONSE_TIMEOUT_ERROR = InternalErrorDef(
+    name="mint.ResponseTimeoutError",
+    external=REQUEST_TIMEOUT,
+    message="Response timeout.",
+    allow_retry=True,
+    vars=[],
+    cause="服务端响应超时",
+    solution="稍后重试或切换为流式调用",
+)
+
+MINT_V_L_O_C_R_DOCUMENT_PARSING_TIMEOUT_ERROR = InternalErrorDef(
+    name="mint.VLOCRDocumentParsingTimeoutError",
+    external=REQUEST_TIMEOUT,
+    message="VLOCR document_parsing task Response timeout.",
+    allow_retry=True,
+    vars=[],
+    cause="VLOCR 文档解析任务响应超时",
+    solution="减少文档页数或文件大小后重试",
+)
+
+MINT_INVALID_PARAMETER = InternalErrorDef(
+    name="mint.InvalidParameter",
+    external=INVALID_REQUEST,
+    message="InvalidParameter from input",
+    allow_retry=False,
+    vars=[],
+    cause="请求参数不合法",
+    solution="检查请求参数是否符合 API 文档要求",
+)
+
+MINT_MISSING_INPUT = InternalErrorDef(
+    name="mint.MissingInput",
+    external=INVALID_REQUEST,
+    message="Missing input",
+    allow_retry=False,
+    vars=[],
+    cause="请求缺少输入内容",
+    solution="确保请求中包含必要的 input 字段",
+)
+
+MINT_INPUT_FORMAT_ERROR = InternalErrorDef(
+    name="mint.InputFormatError",
+    external=INVALID_REQUEST,
+    message="The input format error",
+    allow_retry=False,
+    vars=[],
+    cause="输入格式错误",
+    solution="检查输入格式是否符合 API 文档要求",
+)
+
+MINT_MODEL_INPUT_FORMAT_ERROR = InternalErrorDef(
+    name="mint.ModelInputFormatError",
+    external=INVALID_REQUEST,
+    message="The model input format error",
+    allow_retry=False,
+    vars=[],
+    cause="模型输入格式错误",
+    solution="检查输入格式是否匹配模型要求",
+)
+
+MINT_INPUT_UNKNOWN_ERROR = InternalErrorDef(
+    name="mint.InputUnknownError",
+    external=INVALID_REQUEST,
+    message="An unknown error occurred due to an unsupported input format.",
+    allow_retry=False,
+    vars=[],
+    cause="不支持的输入格式导致未知错误",
+    solution="检查输入格式是否符合 API 文档要求",
+)
+
+MINT_INPUT_PREPROCESS_ERROR = InternalErrorDef(
+    name="mint.InputPreprocessError",
+    external=INVALID_REQUEST,
+    message="An error during model pre-process.",
+    allow_retry=False,
+    vars=[],
+    cause="输入预处理过程中发生错误",
+    solution="检查输入数据格式",
+)
+
+MINT_ECC_ERROR = InternalErrorDef(
+    name="mint.EccError",
+    external=INVALID_REQUEST,
+    message="The service is ecc check failed",
+    allow_retry=False,
+    vars=[],
+    cause="ECC 校验失败",
+    solution="检查请求内容后重试",
+)
+
+MINT_MESSAGE_ERROR = InternalErrorDef(
+    name="mint.MessageError",
+    external=INVALID_REQUEST,
+    message=(
+        'Role must be in [\\"user\\", \\"assistant\\", \\"system\\", '
+        '\\"function\\", \\"plugin\\", \\"tool\\"] and the role in last '
+        'message must be in [\\"user\\", \\"function\\", \\"tool\\"]'
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="messages 中的 role 不合法",
+    solution="确保 role 在合法范围内，且最后一条消息的 role 正确",
+)
+
+MINT_MESSAGE_CONTENT_FIELD_REQUIRED_ERROR = InternalErrorDef(
+    name="mint.MessageContentFieldRequiredError",
+    external=INVALID_REQUEST,
+    message="The content field is a required field.",
+    allow_retry=False,
+    vars=[],
+    cause="消息中缺少必填的 content 字段",
+    solution="为每条消息添加 content 字段",
+)
+
+MINT_MESSAGE_CONTENT_FIELD_ERROR = InternalErrorDef(
+    name="mint.MessageContentFieldError",
+    external=INVALID_REQUEST,
+    message="Invalid content field provided.",
+    allow_retry=False,
+    vars=[],
+    cause="消息的 content 字段内容不合法",
+    solution="检查 content 字段格式和类型",
+)
+
+MINT_MESSAGE_CONTENT_ITEM_TYPE_ERROR = InternalErrorDef(
+    name="mint.MessageContentItemTypeError",
+    external=INVALID_REQUEST,
+    message=(
+        "When content is a list, each item must be an object "
+        '(e.g. {\\"text\\": \\"...\\"}, {\\"image\\": \\"...\\"})'
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="content 列表中的元素格式不正确",
+    solution="确保每个元素是对象格式而非裸字符串",
+)
+
+MINT_MESSAGE_CONTENT_MULTIMODAL_UNSUPPORTED_ERROR = InternalErrorDef(
+    name="mint.MessageContentMultimodalUnsupportedError",
+    external=INVALID_REQUEST,
+    message=(
+        "The current model only supports text modality and does not support "
+        "image input. Please remove the image content from your messages "
+        "and retry."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持多模态输入",
+    solution="移除消息中的多模态内容",
+)
+
+MINT_MESSAGE_FUNCTION_FIELD_ERROR = InternalErrorDef(
+    name="mint.MessageFunctionFieldError",
+    external=INVALID_REQUEST,
+    message="Invalid function field provided.",
+    allow_retry=False,
+    vars=[],
+    cause="消息的 function 字段内容不合法",
+    solution="检查 function 字段的格式和类型",
+)
+
+MINT_LAST_MESSAGE_MUST_BE_USER = InternalErrorDef(
+    name="mint.LastMessageMustBeUser",
+    external=INVALID_REQUEST,
+    message="The last message must be a user message",
+    allow_retry=False,
+    vars=[],
+    cause="最后一条消息必须是 user 角色",
+    solution="确保 messages 最后一条消息 role 为 user",
+)
+
+MINT_SINGLE_SYSTEM_ROLE_ERROR = InternalErrorDef(
+    name="mint.SingleSystemRoleError",
+    external=INVALID_REQUEST,
+    message=(
+        "The messages list should not contain only one message with role "
+        '\\"system\\". Please include at least one other role in the '
+        "messages."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="messages 列表不能只有一条 system 消息",
+    solution="在 messages 中添加其他角色的消息",
+)
+
+MINT_MESSAGE_CONTAINS_SURROGATE_ERROR = InternalErrorDef(
+    name="mint.MessageContainsSurrogateError",
+    external=INVALID_REQUEST,
+    message=(
+        "Message contains invalid Unicode surrogate characters "
+        "(U+D800-U+DFFF)"
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="消息包含无效 Unicode 代理字符",
+    solution="移除消息中的 U+D800-U+DFFF 范围字符后重试",
+)
+
+MINT_INPUT_MESSAGES_TOO_LONG = InternalErrorDef(
+    name="mint.InputMessagesTooLong",
+    external=INVALID_REQUEST,
+    message=(
+        "The length of the input.messages field has exceeded the limit. "
+        "only one"
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="input.messages 内容长度超出限制",
+    solution="缩短 messages 内容后重试",
+)
+
+MINT_ROLE_ERROR = InternalErrorDef(
+    name="mint.RoleError",
+    external=INVALID_REQUEST,
+    message="Role must be in [user, assistant].",
+    allow_retry=False,
+    vars=[],
+    cause="role 值不合法",
+    solution="确保 role 为合法值",
+)
+
+MINT_INPUT_MESSAGE_FORMAT_ERROR = InternalErrorDef(
+    name="mint.InputMessageFormatError",
+    external=INVALID_REQUEST,
+    message=(
+        "The input format supports only the messages format, "
+        "not the prompt format."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="输入格式仅支持 messages 格式",
+    solution="使用 messages 格式替代 prompt 格式",
+)
+
+MINT_TEMPERATURE_TYPE_ERROR = InternalErrorDef(
+    name="mint.TemperatureTypeError",
+    external=INVALID_REQUEST,
+    message="Type of temperature should be float",
+    allow_retry=False,
+    vars=[],
+    cause="temperature 参数类型错误",
+    solution="确保 temperature 为 float 类型",
+)
+
+MINT_TOP_K_RANGE_ERROR = InternalErrorDef(
+    name="mint.TopKRangeError",
+    external=INVALID_REQUEST,
+    message=(
+        "Parameter top_k be greater than or equal to "
+        "{base_configure.PARAM_TOP_K_MIN}"
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="top_k 参数超出合法范围",
+    solution="将 top_k 调整到合法范围内",
+)
+
+MINT_TOP_P_RANGE_ERROR = InternalErrorDef(
+    name="mint.TopPRangeError",
+    external=INVALID_REQUEST,
+    message="Range of top_p should be",
+    allow_retry=False,
+    vars=[],
+    cause="top_p 参数超出合法范围",
+    solution="将 top_p 调整到合法范围内",
+)
+
+MINT_INPUT_CONTENT_TOO_LONG = InternalErrorDef(
+    name="mint.InputContentTooLong",
+    external=INVALID_REQUEST,
+    message="The length of the input.content field has exceeded the limit.",
+    allow_retry=False,
+    vars=[],
+    cause="input.content 字段长度超出限制",
+    solution="缩短 content 内容后重试",
+)
+
+MINT_REPETITION_PENALTY_TYPE_ERROR = InternalErrorDef(
+    name="mint.RepetitionPenaltyTypeError",
+    external=INVALID_REQUEST,
+    message="Type of repetition_penalty should be float",
+    allow_retry=False,
+    vars=[],
+    cause="repetition_penalty 参数类型错误",
+    solution="确保 repetition_penalty 为 float 类型",
+)
+
+MINT_HEAD_RESPONSE_PER_TOKENS_TYPE_ERROR = InternalErrorDef(
+    name="mint.HeadResponsePerTokensTypeError",
+    external=INVALID_REQUEST,
+    message="Type of head_response_per_tokens should be int",
+    allow_retry=False,
+    vars=[],
+    cause="head_response_per_tokens 参数类型错误",
+    solution="确保为 int 类型",
+)
+
+MINT_HEAD_RESPONSE_PER_TOKENS_RANGE_ERROR = InternalErrorDef(
+    name="mint.HeadResponsePerTokensRangeError",
+    external=INVALID_REQUEST,
+    message=(
+        "Parameter head_response_per_tokens should be in "
+        "{base_configure.PARAM_HEAD_RESPONSE_PER_TOKENS_MIN}, "
+        "{base_configure.PARAM_HEAD_RESPONSE_PER_TOKENS_MAX}"
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="head_response_per_tokens 参数超出合法范围",
+    solution="将参数调整到合法范围内",
+)
+
+MINT_ENABLE_THINKING_ERROR = InternalErrorDef(
+    name="mint.EnableThinkingError",
+    external=INVALID_REQUEST,
+    message="The value of the enable_thinking parameter is restricted to {}.",
+    allow_retry=False,
+    vars=[],
+    cause="enable_thinking 参数值不合法",
+    solution="将 enable_thinking 设置为合法值",
+)
+
+MINT_THINKING_MODE_N_ERROR = InternalErrorDef(
+    name="mint.ThinkingModeNError",
+    external=INVALID_REQUEST,
+    message="The n parameter must be 1 when enable_thinking is true",
+    allow_retry=False,
+    vars=[],
+    cause="开启 thinking 时 n 必须为 1",
+    solution="将 n 参数设置为 1，或关闭 thinking",
+)
+
+MINT_SEED_TYPE_ERROR = InternalErrorDef(
+    name="mint.SeedTypeError",
+    external=INVALID_REQUEST,
+    message="Type of seed should be int",
+    allow_retry=False,
+    vars=[],
+    cause="seed 参数类型错误",
+    solution="确保 seed 为 int 类型",
+)
+
+MINT_PRESENCE_PENALTY_RANGE_ERROR = InternalErrorDef(
+    name="mint.PresencePenaltyRangeError",
+    external=INVALID_REQUEST,
+    message=(
+        "Presence_penalty should be in "
+        "[{base_configure.PARAM_PRESENCE_PENALTY_MIN}, "
+        "{base_configure.PARAM_PRESENCE_PENALTY_MAX}]"
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="presence_penalty 参数超出合法范围",
+    solution="将 presence_penalty 调整到合法范围内",
+)
+
+MINT_FREQUENCY_PENALTY_RANGE_ERROR = InternalErrorDef(
+    name="mint.FrequencyPenaltyRangeError",
+    external=INVALID_REQUEST,
+    message=(
+        "Frequency_penalty should be in "
+        "[{base_configure.PARAM_FREQUENCY_PENALTY_MIN}, "
+        "{base_configure.PARAM_FREQUENCY_PENALTY_MAX}]"
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="frequency_penalty 参数超出合法范围",
+    solution="将 frequency_penalty 调整到合法范围内",
+)
+
+MINT_N_RANGE_ERROR = InternalErrorDef(
+    name="mint.NRangeError",
+    external=INVALID_REQUEST,
+    message="Range of n should be [1, {base_configure.PARAM_N_MAX}]",
+    allow_retry=False,
+    vars=[],
+    cause="n 参数超出合法范围",
+    solution="将 n 调整到合法范围内",
+)
+
+MINT_INCREMENTAL_OUTPUT_ERROR = InternalErrorDef(
+    name="mint.IncrementalOutputError",
+    external=INVALID_REQUEST,
+    message="The incremental_output parameter only supports streaming mode.",
+    allow_retry=False,
+    vars=[],
+    cause="incremental_output 仅支持流式模式",
+    solution="使用流式调用或关闭 incremental_output",
+)
+
+MINT_INCREMENTAL_OUTPUT_VALUE_ERROR = InternalErrorDef(
+    name="mint.IncrementalOutputValueError",
+    external=INVALID_REQUEST,
+    message="The model does not support incremental output.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持 incremental_output",
+    solution="移除 incremental_output 参数",
+)
+
+MINT_ONLY_SUPPORT_INCREMENTAL = InternalErrorDef(
+    name="mint.OnlySupportIncremental",
+    external=INVALID_REQUEST,
+    message="This model only supports incremental_output set to True.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型仅支持 incremental_output 为 True",
+    solution="将 incremental_output 设置为 true",
+)
+
+MINT_FORCE_INCREMENTAL_OUTPUT_ERROR = InternalErrorDef(
+    name="mint.ForceIncrementalOutputError",
+    external=INVALID_REQUEST,
+    message=(
+        "The incremental_output parameter of this model cannot be set "
+        "to False."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="当前模型的 incremental_output 不可设为 False",
+    solution="将 incremental_output 设置为 true",
+)
+
+MINT_OMNI_INCREMENTAL_OUTPUT_ERROR = InternalErrorDef(
+    name="mint.OmniIncrementalOutputError",
+    external=INVALID_REQUEST,
+    message=(
+        "The parameter enable_omni_output_audio_url must be set to true "
+        "when using the Omni model in non-streaming mode."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="Omni 模型非流式模式下需开启 enable_omni_output_audio_url",
+    solution="将 enable_omni_output_audio_url 设置为 true",
+)
+
+MINT_INPUT_TOO_MANY_ARGUMENTS_ERROR = InternalErrorDef(
+    name="mint.InputTooManyArgumentsError",
+    external=INVALID_REQUEST,
+    message="Only one of the parameters",
+    allow_retry=False,
+    vars=[],
+    cause="输入参数过多，存在互斥参数",
+    solution="检查并移除多余的请求参数",
+)
+
+MINT_INPUT_NOTHING_ERROR = InternalErrorDef(
+    name="mint.InputNothingError",
+    external=INVALID_REQUEST,
+    message="Either",
+    allow_retry=False,
+    vars=[],
+    cause="缺少必要的输入参数",
+    solution="确保请求中包含必要的输入参数",
+)
+
+MINT_PROMPT_ERROR = InternalErrorDef(
+    name="mint.PromptError",
+    external=INVALID_REQUEST,
+    message="Missing prompt in input or type of prompt is not string",
+    allow_retry=False,
+    vars=[],
+    cause="缺少 prompt 输入或 prompt 类型错误",
+    solution="确保 prompt 字段存在且为字符串类型",
+)
+
+MINT_USE_RAW_PROMPT_ERROR = InternalErrorDef(
+    name="mint.UseRawPromptError",
+    external=INVALID_REQUEST,
+    message=(
+        "When using prompt input, the use_raw_prompt parameter must be "
+        "set to true."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="使用 prompt 输入时需开启 use_raw_prompt",
+    solution="将 use_raw_prompt 参数设置为 true",
+)
+
+MINT_NON_STREAM_TIMEOUT_ERROR = InternalErrorDef(
+    name="mint.NonStreamTimeoutError",
+    external=INVALID_REQUEST,
+    message=(
+        "Model generation timed out. Please switch to streaming mode "
+        "for your request."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="非流式模式下模型生成超时",
+    solution="切换为流式调用后重试",
+)
+
+MINT_SEARCH_PARAMETER_ERROR = InternalErrorDef(
+    name="mint.SearchParameterError",
+    external=INVALID_REQUEST,
+    message="InvalidParameter from input",
+    allow_retry=False,
+    vars=[],
+    cause="搜索参数配置错误",
+    solution="检查搜索相关参数是否符合文档要求",
+)
+
+MINT_ENABLE_SEARCH_TYPE_ERROR = InternalErrorDef(
+    name="mint.EnableSearchTypeError",
+    external=INVALID_REQUEST,
+    message="Type of enable_search should be bool",
+    allow_retry=False,
+    vars=[],
+    cause="enable_search 参数类型错误",
+    solution="确保 enable_search 为 bool 类型",
+)
+
+MINT_MODEL_NOT_SUPPORT_SEARCH = InternalErrorDef(
+    name="mint.ModelNotSupportSearch",
+    external=INVALID_REQUEST,
+    message="This model does not support enable_search.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持搜索功能",
+    solution="使用支持搜索的模型或关闭搜索功能",
+)
+
+MINT_UNSUPPORTED_LANGUAGE_TYPE = InternalErrorDef(
+    name="mint.UnsupportedLanguageType",
+    external=INVALID_REQUEST,
+    message="Language code",
+    allow_retry=False,
+    vars=[],
+    cause="不支持当前设置的语种",
+    solution="检查 language 参数是否在支持列表中",
+)
+
+MINT_NOT_ALLOW_SYSTEM_INPUT_ERROR = InternalErrorDef(
+    name="mint.NotAllowSystemInputError",
+    external=INVALID_REQUEST,
+    message=(
+        "Input with the role system is temporarily not allowed for "
+        "this model."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不允许 system 角色输入",
+    solution="移除 messages 中的 system 消息",
+)
+
+MINT_PARAM_NOT_SUPPORT_ERROR = InternalErrorDef(
+    name="mint.ParamNotSupportError",
+    external=INVALID_REQUEST,
+    message="The parameters {} is not supported.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持该参数",
+    solution="检查模型文档，移除不支持的参数",
+)
+
+MINT_MAX_TOKENS_NOT_SUPPORT_ERROR = InternalErrorDef(
+    name="mint.MaxTokensNotSupportError",
+    external=INVALID_REQUEST,
+    message=(
+        "Parameter max_tokens is not supported for this model. "
+        "Please use max_completion_tokens instead."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持 max_tokens 参数",
+    solution="移除 max_tokens 参数或使用支持的模型",
+)
+
+MINT_INVALID_VOICE_ERROR = InternalErrorDef(
+    name="mint.InvalidVoiceError",
+    external=INVALID_REQUEST,
+    message="Invalid voice parameter",
+    allow_retry=False,
+    vars=[],
+    cause="voice 参数值不合法",
+    solution="检查 voice 参数是否在支持列表中",
+)
+
+MINT_INVALID_INSTRUCTION_LENGTH_ERROR = InternalErrorDef(
+    name="mint.InvalidInstructionLengthError",
+    external=INVALID_REQUEST,
+    message="TTS instruction exceeds maximum allowed length.",
+    allow_retry=False,
+    vars=[],
+    cause="instruction 参数长度超出限制",
+    solution="缩短 instruction 内容",
+)
+
+MINT_FRESHNESS_TYPE_ERROR = InternalErrorDef(
+    name="mint.FreshnessTypeError",
+    external=INVALID_REQUEST,
+    message="Parameter freshness must be of type",
+    allow_retry=False,
+    vars=[],
+    cause="freshness 参数类型错误",
+    solution="确保 freshness 参数为合法类型",
+)
+
+MINT_TOOL_CHOICE_SCHEMA_ERROR = InternalErrorDef(
+    name="mint.ToolChoiceSchemaError",
+    external=INVALID_REQUEST,
+    message="Invalid value for tool_choice. Only named tools,",
+    allow_retry=False,
+    vars=[],
+    cause="tool_choice 参数格式错误",
+    solution="检查 tool_choice 格式是否符合文档要求",
+)
+
+MINT_INPUT_TOOL_CALL_REPETITION_ERROR = InternalErrorDef(
+    name="mint.InputToolCallRepetitionError",
+    external=INVALID_REQUEST,
+    message=(
+        "Repetitive tool calls detected in the conversation history. "
+        "The same tool call with identical name and arguments has been "
+        "repeated across multiple consecutive rounds. Please modify your "
+        "request or adjust the tool call arguments to avoid infinite loops."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="tool_calls 中存在重复调用",
+    solution="检查并移除重复的 tool_call",
+)
+
+MINT_JSON_RESPONSE_OUTPUT_ABNORMAL_ERROR = InternalErrorDef(
+    name="mint.JsonResponseOutputAbnormalError",
+    external=INVALID_REQUEST,
+    message=(
+        "Model output became abnormal while generating a JSON response "
+        "for response_format. The generation was aborted because the "
+        "partial output may be incomplete or invalid JSON. Please retry "
+        "the request or adjust your prompt or JSON schema."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="JSON 响应输出异常",
+    solution="检查 response_format 配置后重试",
+)
+
+MINT_USER_DEFINED_FUNCTION_ERROR = InternalErrorDef(
+    name="mint.UserDefinedFunctionError",
+    external=INVALID_REQUEST,
+    message=(
+        "Please provide the function result for the user-defined function."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="用户自定义函数执行异常",
+    solution="检查函数实现逻辑后重试",
+)
+
+MINT_AGENT_TOOL_EXECUTION_TIMEOUT_ERROR = InternalErrorDef(
+    name="mint.AgentToolExecutionTimeoutError",
+    external=INVALID_REQUEST,
+    message="Agent tool execution timeout.",
+    allow_retry=False,
+    vars=[],
+    cause="Agent 工具执行超时",
+    solution="简化任务或稍后重试",
+)
+
+MINT_GET_TOOL_CHOICE_NAME_ERROR = InternalErrorDef(
+    name="mint.GetToolChoiceNameError",
+    external=INTERNAL_ERROR,
+    message="Fail to get tool choice name, the error is {}",
+    allow_retry=True,
+    vars=[],
+    cause="获取 tool_choice 名称时发生内部错误",
+    solution="检查 tools 配置后重试",
+)
+
+MINT_M_M_G_P_T3_ITEM_ERROR = InternalErrorDef(
+    name="mint.MMGPT3ItemError",
+    external=INVALID_REQUEST,
+    message="The item of content should be a message of a certain modal",
+    allow_retry=False,
+    vars=[],
+    cause="多模态 GPT3 消息元素错误",
+    solution="检查消息中各元素的格式",
+)
+
+MINT_INVALID_TEXT_ERROR = InternalErrorDef(
+    name="mint.InvalidTextError",
+    external=INVALID_REQUEST,
+    message="The special words {} is not allowed in input messages",
+    allow_retry=False,
+    vars=[],
+    cause="文本内容不合法",
+    solution="检查输入文本内容",
+)
+
+MINT_MIN_PIXELS_RANGE_ERROR = InternalErrorDef(
+    name="mint.MinPixelsRangeError",
+    external=INVALID_REQUEST,
+    message="Parameter min_pixels must be greater than or equal to {}",
+    allow_retry=False,
+    vars=[],
+    cause="min_pixels 参数超出合法范围",
+    solution="将 min_pixels 调整到合法范围内",
+)
+
+MINT_MAX_PIXELS_RANGE_ERROR = InternalErrorDef(
+    name="mint.MaxPixelsRangeError",
+    external=INVALID_REQUEST,
+    message="Parameter max_pixels must be smaller than or equal to {}",
+    allow_retry=False,
+    vars=[],
+    cause="max_pixels 参数超出合法范围",
+    solution="将 max_pixels 调整到合法范围内",
+)
+
+MINT_TOTAL_PIXELS_RANGE_ERROR = InternalErrorDef(
+    name="mint.TotalPixelsRangeError",
+    external=INVALID_REQUEST,
+    message="Parameter total_pixels must be smaller than or equal to {}",
+    allow_retry=False,
+    vars=[],
+    cause="total_pixels 参数超出合法范围",
+    solution="将 total_pixels 调整到合法范围内",
+)
+
+MINT_MAX_FRAME_RANGE_ERROR = InternalErrorDef(
+    name="mint.MaxFrameRangeError",
+    external=INVALID_REQUEST,
+    message="Parameter max_frames must be smaller than or equal to {}",
+    allow_retry=False,
+    vars=[],
+    cause="max_frames 参数超出合法范围",
+    solution="将 max_frames 调整到合法范围内",
+)
+
+MINT_MIN_MAX_PIXELS_RANGE_ERROR = InternalErrorDef(
+    name="mint.MinMaxPixelsRangeError",
+    external=INVALID_REQUEST,
+    message="Parameter max_pixels be greater than or equal to min_pixels",
+    allow_retry=False,
+    vars=[],
+    cause="max_pixels 应大于等于 min_pixels",
+    solution="确保 max_pixels >= min_pixels",
+)
+
+MINT_FPS_RANGE_ERROR = InternalErrorDef(
+    name="mint.FpsRangeError",
+    external=INVALID_REQUEST,
+    message="Range of fps should be [0.1, 10]",
+    allow_retry=False,
+    vars=[],
+    cause="fps 参数超出合法范围",
+    solution="将 fps 调整到合法范围内",
+)
+
+MINT_NON_VISION_PIXELS_ERROR = InternalErrorDef(
+    name="mint.NonVisionPixelsError",
+    external=INVALID_REQUEST,
+    message=(
+        "For non-vision objects, the min_pixels or max_pixels parameter "
+        "was input."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="非视觉类模型不支持 pixels 参数",
+    solution="移除 min_pixels/max_pixels 参数",
+)
+
+MINT_NON_VIDEO_FPS_ERROR = InternalErrorDef(
+    name="mint.NonVideoFpsError",
+    external=INVALID_REQUEST,
+    message="For non-vision objects, the fps parameter was input.",
+    allow_retry=False,
+    vars=[],
+    cause="非视频类模型不支持 fps 参数",
+    solution="移除 fps 参数",
+)
+
+MINT_MODAL_INPUT_ERROR = InternalErrorDef(
+    name="mint.ModalInputError",
+    external=INVALID_REQUEST,
+    message=(
+        "An incorrect modal {} was entered, which may not be supported "
+        "by the model or was placed in the wrong position (e.g., in "
+        "system/assistant)."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="输入的 modal 参数不正确",
+    solution="检查 modal 参数是否匹配模型支持的能力",
+)
+
+MINT_OMNI_MODALITY_ERROR = InternalErrorDef(
+    name="mint.OmniModalityError",
+    external=INVALID_REQUEST,
+    message=(
+        "Multiple inputs of the same modality or mixed modality inputs "
+        "are currently not applicable to the omni model."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="Omni 模型不支持同模态多输入或混合模态输入",
+    solution="调整输入模态配置",
+)
+
+MINT_MODALITIES_EMPTY_ERROR = InternalErrorDef(
+    name="mint.ModalitiesEmptyError",
+    external=INVALID_REQUEST,
+    message="The modalities parameter cannot be empty.",
+    allow_retry=False,
+    vars=[],
+    cause="modalities 参数不能为空",
+    solution="为 modalities 指定至少一种模态",
+)
+
+MINT_MODALITIES_NON_TEXT_ERROR = InternalErrorDef(
+    name="mint.ModalitiesNonTextError",
+    external=INVALID_REQUEST,
+    message="The model does not support the modalities without text.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持非文本模态",
+    solution="仅使用 text 模态",
+)
+
+MINT_MODALITIES_DISABLE_AUDIO_ERROR = InternalErrorDef(
+    name="mint.ModalitiesDisableAudioError",
+    external=INVALID_REQUEST,
+    message=(
+        "The current model does not support the modalities parameter "
+        "containing audio."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持音频模态",
+    solution="从 modalities 中移除 audio",
+)
+
+MINT_INVALID_FUNCTION_NAME = InternalErrorDef(
+    name="mint.InvalidFunctionName",
+    external=INVALID_REQUEST,
+    message="Tool names are not allowed to be [{}]",
+    allow_retry=False,
+    vars=[],
+    cause="工具名称不合法",
+    solution="检查 tool name 是否在允许范围内",
+)
+
+MINT_FUNCTION_ARGUMENTS_INVALID_JSON = InternalErrorDef(
+    name="mint.FunctionArgumentsInvalidJson",
+    external=INVALID_REQUEST,
+    message="Input tool arguments are invalid json.",
+    allow_retry=False,
+    vars=[],
+    cause="tool arguments 不是合法 JSON",
+    solution="确保 tool arguments 为合法的 JSON 字符串",
+)
+
+MINT_INVALID_FUNCTION_NAME_PREFIX = InternalErrorDef(
+    name="mint.InvalidFunctionNamePrefix",
+    external=INVALID_REQUEST,
+    message="Tool names are not to have the prefix [tongyi]",
+    allow_retry=False,
+    vars=[],
+    cause="工具名称不允许使用 tongyi 前缀",
+    solution="移除 tool name 中的 tongyi 前缀",
+)
+
+MINT_INVALID_FUNCTION_NAME_LENGTH = InternalErrorDef(
+    name="mint.InvalidFunctionNameLength",
+    external=INVALID_REQUEST,
+    message="The length of the tool name cannot exceed 64.",
+    allow_retry=False,
+    vars=[],
+    cause="工具名称长度不能超过 64 个字符",
+    solution="缩短 tool name 长度",
+)
+
+MINT_PLUGIN_NOT_SUPPORT_SEARCH = InternalErrorDef(
+    name="mint.PluginNotSupportSearch",
+    external=INVALID_REQUEST,
+    message="Plugins don't support enable_search",
+    allow_retry=False,
+    vars=[],
+    cause="插件不支持 enable_search 功能",
+    solution="移除 enable_search 参数或不使用插件",
+)
+
+MINT_PLUGIN_NOT_SUPPORT_COMPLETION = InternalErrorDef(
+    name="mint.PluginNotSupportCompletion",
+    external=INVALID_REQUEST,
+    message="Plugins don't support use_raw_prompt",
+    allow_retry=False,
+    vars=[],
+    cause="插件不支持 use_raw_prompt 功能",
+    solution="移除 use_raw_prompt 参数或不使用插件",
+)
+
+MINT_PLUGIN_NOT_SUPPORT_INCREMENT = InternalErrorDef(
+    name="mint.PluginNotSupportIncrement",
+    external=INVALID_REQUEST,
+    message="Plugins=[{}] don't support incremental_output",
+    allow_retry=False,
+    vars=[],
+    cause="指定插件不支持 incremental_output",
+    solution="移除 incremental_output 参数或更换插件",
+)
+
+MINT_QWEN_AGENT_NOT_SUPPORT_TOOLS_ERROR = InternalErrorDef(
+    name="mint.QwenAgentNotSupportToolsError",
+    external=INVALID_REQUEST,
+    message=(
+        "Agent mode does not support tools. You need to either avoid "
+        "using enable_code_interpreter or avoid using the agent mode "
+        "with enable_search."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="Qwen Agent 不支持当前 tools 配置",
+    solution="检查并调整 tools 配置",
+)
+
+MINT_QWEN_AGENT_NOT_SUPPORT_C_I_ON_INSTRUCT = InternalErrorDef(
+    name="mint.QwenAgentNotSupportCIOnInstruct",
+    external=INVALID_REQUEST,
+    message=(
+        "Normal mode does not support Code interpreter. Please set "
+        "enable_thinking to true."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="普通模式不支持 Code Interpreter",
+    solution="将 enable_thinking 设置为 true",
+)
+
+MINT_QWEN_AGENT_NOT_SUPPORT_WEB_EXTRACTOR_ON_INSTRUCT = InternalErrorDef(
+    name="mint.QwenAgentNotSupportWebExtractorOnInstruct",
+    external=INVALID_REQUEST,
+    message=(
+        "Normal mode does not support web_extractor. "
+        "Please set enable_thinking to true."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="普通模式不支持 web_extractor",
+    solution="将 enable_thinking 设置为 true",
+)
+
+MINT_QWEN_AGENT_NOT_SUPPORT_SEARCH_AGENT_ON_THINKING = InternalErrorDef(
+    name="mint.QwenAgentNotSupportSearchAgentOnThinking",
+    external=INVALID_REQUEST,
+    message="Thinking mode does not support the",
+    allow_retry=False,
+    vars=[],
+    cause="thinking 模式下不支持搜索 Agent",
+    solution="关闭 thinking 或移除搜索 Agent",
+)
+
+MINT_NON_STREAM_MODE_NOT_SUPPORT_C_I = InternalErrorDef(
+    name="mint.NonStreamModeNotSupportCI",
+    external=INVALID_REQUEST,
+    message="Non-streaming mode does not support Code interpreter.",
+    allow_retry=False,
+    vars=[],
+    cause="非流式模式不支持 Code Interpreter",
+    solution="切换为流式调用",
+)
+
+MINT_NON_STREAM_MODE_NOT_SUPPORT_WEB_EXTRACTOR = InternalErrorDef(
+    name="mint.NonStreamModeNotSupportWebExtractor",
+    external=INVALID_REQUEST,
+    message="Non-streaming mode does not support Web Extractor.",
+    allow_retry=False,
+    vars=[],
+    cause="非流式模式不支持 Web Extractor",
+    solution="切换为流式调用",
+)
+
+MINT_NON_STREAM_MODE_NOT_SUPPORT_WEB_SEARCH = InternalErrorDef(
+    name="mint.NonStreamModeNotSupportWebSearch",
+    external=INVALID_REQUEST,
+    message="Non-streaming mode does not support Web Search.",
+    allow_retry=False,
+    vars=[],
+    cause="非流式模式不支持 Web Search",
+    solution="切换为流式调用",
+)
+
+MINT_SEARCH_AGENT_NOT_SUPPORTED_IN_NORMAL_MODE_ERROR = InternalErrorDef(
+    name="mint.SearchAgentNotSupportedInNormalModeError",
+    external=INVALID_REQUEST,
+    message="The current model does not support the",
+    allow_retry=False,
+    vars=[],
+    cause="普通模式下不支持搜索 Agent",
+    solution="切换到支持搜索 Agent 的模式",
+)
+
+MINT_SEARCH_AGENT_MAX_NOT_SUPPORTED_IN_NORMAL_MODE_ERROR = InternalErrorDef(
+    name="mint.SearchAgentMaxNotSupportedInNormalModeError",
+    external=INVALID_REQUEST,
+    message="The current model mode does not support the",
+    allow_retry=False,
+    vars=[],
+    cause="普通模式下不支持搜索 Agent Max",
+    solution="切换到支持的模式",
+)
+
+MINT_AGENT_NOT_SUPPORTED_WEB_SEARCH_ERROR = InternalErrorDef(
+    name="mint.AgentNotSupportedWebSearchError",
+    external=INVALID_REQUEST,
+    message="The current model does not support the web_search tool.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持 web_search 工具",
+    solution="使用支持 web_search 的模型",
+)
+
+MINT_AGENT_NOT_SUPPORTED_CODE_INTERPRETER_ERROR = InternalErrorDef(
+    name="mint.AgentNotSupportedCodeInterpreterError",
+    external=INVALID_REQUEST,
+    message="The current model does not support the code_interpreter tool.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持 code_interpreter 工具",
+    solution="使用支持 code_interpreter 的模型",
+)
+
+MINT_AGENT_NOT_SUPPORTED_WEB_EXTRACTOR_ERROR = InternalErrorDef(
+    name="mint.AgentNotSupportedWebExtractorError",
+    external=INVALID_REQUEST,
+    message="The current model does not support the web_extractor tool.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持 web_extractor 工具",
+    solution="使用支持 web_extractor 的模型",
+)
+
+MINT_AGENT_WEB_EXTRACTOR_WITHOUT_SEARCH = InternalErrorDef(
+    name="mint.AgentWebExtractorWithoutSearch",
+    external=INVALID_REQUEST,
+    message="The web_extractor tool must be executed with web_search tool.",
+    allow_retry=False,
+    vars=[],
+    cause="web_extractor 必须配合 web_search 使用",
+    solution="同时添加 web_search 和 web_extractor 工具",
+)
+
+MINT_AGENT_NOT_SUPPORTED_IMAGE_SEARCH_ERROR = InternalErrorDef(
+    name="mint.AgentNotSupportedImageSearchError",
+    external=INVALID_REQUEST,
+    message="The current model does not support the image_search tool.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持 image_search 工具",
+    solution="使用支持 image_search 的模型",
+)
+
+MINT_AGENT_NOT_SUPPORTED_WEB_SEARCH_IMAGE_ERROR = InternalErrorDef(
+    name="mint.AgentNotSupportedWebSearchImageError",
+    external=INVALID_REQUEST,
+    message="The current model does not support the web_search_image tool.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持 web_search_image 工具",
+    solution="使用支持 web_search_image 的模型",
+)
+
+MINT_AGENT_NOT_SUPPORTED_FILE_SEARCH_ERROR = InternalErrorDef(
+    name="mint.AgentNotSupportedFileSearchError",
+    external=INVALID_REQUEST,
+    message="The current model does not support the file_search tool.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型不支持 file_search 工具",
+    solution="使用支持 file_search 的模型",
+)
+
+MINT_O_M_N_I_MODEL_ONLY_SUPPORT_SEARCH_AGENT = InternalErrorDef(
+    name="mint.OMNIModelOnlySupportSearchAgent",
+    external=INVALID_REQUEST,
+    message="This model only supports search_strategy=",
+    allow_retry=False,
+    vars=[],
+    cause="OMNI 模型仅支持特定 search_strategy",
+    solution="检查并调整 search_strategy 参数",
+)
+
+MINT_AGENT_API_NOT_ENABLED_ERROR = InternalErrorDef(
+    name="mint.AgentApiNotEnabledError",
+    external=INVALID_REQUEST,
+    message="Agent capabilities are not enabled for the current model.",
+    allow_retry=False,
+    vars=[],
+    cause="当前模型未启用 Agent 能力",
+    solution="启用 Agent 能力或使用支持 Agent 的模型",
+)
+
+MINT_INVALID_U_R_L = InternalErrorDef(
+    name="mint.InvalidURL",
+    external=INVALID_URL,
+    message="Invalid URL provided in your request.",
+    allow_retry=False,
+    vars=[],
+    cause="请求中的 URL 无效",
+    solution="检查 URL 格式是否正确",
+)
+
+MINT_V_L_O_C_R_DOCUMENT_PARSING_INVALID_PARAMETER = InternalErrorDef(
+    name="mint.VLOCRDocumentParsingInvalidParameter",
+    external=INVALID_FILE,
+    message="VLOCR document_parsing task invalid parameter: {}.",
+    allow_retry=False,
+    vars=[],
+    cause="VLOCR 文档解析参数无效",
+    solution="检查文档解析相关参数",
+)
+
+MINT_V_L_O_C_R_DOCUMENT_PARSING_INPUT_TYPE_ERROR = InternalErrorDef(
+    name="mint.VLOCRDocumentParsingInputTypeError",
+    external=INVALID_FILE,
+    message="VLOCR document_parsing task input type error",
+    allow_retry=False,
+    vars=[],
+    cause="VLOCR 文档解析输入类型错误",
+    solution="检查输入文件类型是否支持",
+)
+
+MINT_V_L_O_C_R_DOCUMENT_PARSING_P_D_F_INPUT_PAGE_COUNT_ERROR = (
+    InternalErrorDef(
+        name="mint.VLOCRDocumentParsingPDFInputPageCountError",
+        external=INVALID_FILE,
+        message=(
+            "VLOCR document_parsing task input PDF is beyond the page "
+            "count limitation"
+        ),
+        allow_retry=False,
+        vars=[],
+        cause="VLOCR 文档解析 PDF 页数超限",
+        solution="减少 PDF 页数后重试",
+    )
+)
+
+MINT_V_L_O_C_R_DOCUMENT_PARSING_INPUT_SIZE_ERROR = InternalErrorDef(
+    name="mint.VLOCRDocumentParsingInputSizeError",
+    external=INVALID_FILE,
+    message=(
+        "VLOCR document_parsing task file size is beyond "
+        "the size limitation"
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="VLOCR 文档解析文件大小超限",
+    solution="减小文件大小后重试",
+)
+
+MINT_V_L_O_C_R_DOCUMENT_PARSING_IMAGE_INPUT_SIZE_ERROR = InternalErrorDef(
+    name="mint.VLOCRDocumentParsingImageInputSizeError",
+    external=INVALID_FILE,
+    message=(
+        "VLOCR document_parsing task input image file size "
+        "({}MB) exceeds limit ({}MB)"
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="VLOCR 文档解析图片文件过大",
+    solution="压缩图片后重试",
+)
+
+MINT_V_L_O_C_R_P_D_F_PAGE_COUNT_ERROR = InternalErrorDef(
+    name="mint.VLOCRPDFPageCountError",
+    external=INVALID_FILE,
+    message="VLOCR input PDF page count ({}) exceeds limit ({})",
+    allow_retry=False,
+    vars=[],
+    cause="VLOCR 输入 PDF 页数超限",
+    solution="减少 PDF 页数后重试",
+)
+
+MINT_V_L_O_C_R_P_D_F_INPUT_SIZE_ERROR = InternalErrorDef(
+    name="mint.VLOCRPDFInputSizeError",
+    external=INVALID_FILE,
+    message="VLOCR input PDF file size ({}MB) exceeds limit ({}MB)",
+    allow_retry=False,
+    vars=[],
+    cause="VLOCR 输入 PDF 文件大小超限",
+    solution="压缩 PDF 文件后重试",
+)
+
+MINT_NOT_SUPPORT_TASK = InternalErrorDef(
+    name="mint.NotSupportTask",
+    external=INVALID_REQUEST,
+    message="The current task is an unsupported task.",
+    allow_retry=False,
+    vars=[],
+    cause="当前任务类型不受支持",
+    solution="检查 task 参数是否在支持列表中",
+)
+
+MINT_URL_ERROR = InternalErrorDef(
+    name="mint.UrlError",
+    external=INVALID_URL,
+    message=(
+        "The provided URL does not appear to be valid. "
+        "Ensure it is correctly formatted."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="提供的 URL 格式不正确",
+    solution="确保 URL 格式正确且可访问",
+)
+
+MINT_DOWNLOAD_ERROR = InternalErrorDef(
+    name="mint.DownloadError",
+    external=INVALID_FILE,
+    message="Failed to download multimodal content",
+    allow_retry=False,
+    vars=[],
+    cause="下载多模态内容失败",
+    solution="检查资源链接是否有效且可访问",
+)
+
+MINT_FILE_OPEN_ERROR = InternalErrorDef(
+    name="mint.FileOpenError",
+    external=INVALID_FILE,
+    message="The file format is illegal and cannot be opened",
+    allow_retry=False,
+    vars=[],
+    cause="文件格式非法，无法打开",
+    solution="检查文件格式是否正确",
+)
+
+MINT_FIM_USE_ERROR = InternalErrorDef(
+    name="mint.FimUseError",
+    external=INVALID_REQUEST,
+    message=(
+        "Please ensure that the enable_fim parameter is set "
+        "when using the fim function."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="使用 FIM 功能时未设置 enable_fim",
+    solution="将 enable_fim 参数设置为 true",
+)
+
+MINT_IMAGE_OPEN_ERROR = InternalErrorDef(
+    name="mint.ImageOpenError",
+    external=INVALID_FILE,
+    message="The image format is illegal and cannot be opened",
+    allow_retry=False,
+    vars=[],
+    cause="图片格式非法，无法打开",
+    solution="检查图片格式是否正确（如 JPEG/PNG）",
+)
+
+MINT_ALGO_UNKNOWN_ERROR = InternalErrorDef(
+    name="mint.AlgoUnknownError",
+    external=INTERNAL_ERROR,
+    message="An unknown error occurred during the algorithm execution.",
+    allow_retry=True,
+    vars=[],
+    cause="算法执行过程中发生未知错误",
+    solution="稍后重试或联系技术支持",
+)
+
+MINT_INPUT_PARAMETER_LIMIT_ERROR = InternalErrorDef(
+    name="mint.InputParameterLimitError",
+    external=INVALID_REQUEST,
+    message="Parameter limit exceeded",
+    allow_retry=False,
+    vars=[],
+    cause="参数超出限制",
+    solution="检查并调整参数值",
+)
+
+MINT_LANGUAGE_ERROR = InternalErrorDef(
+    name="mint.LanguageError",
+    external=INVALID_REQUEST,
+    message="Language is not supported.",
+    allow_retry=False,
+    vars=[],
+    cause="不支持当前设置的语种",
+    solution="检查 language 参数是否在支持列表中",
+)
+
+MINT_HEADER_VERIFY_ERROR = InternalErrorDef(
+    name="mint.HeaderVerifyError",
+    external=INVALID_REQUEST,
+    message="HeaderVerifyError",
+    allow_retry=False,
+    vars=[],
+    cause="请求头校验失败",
+    solution="检查请求头参数是否正确",
+)
+
+MINT_BASE_DATA_INSPECTION_ERROR = InternalErrorDef(
+    name="mint.BaseDataInspectionError",
+    external=CONTENT_POLICY_VIOLATION,
+    message="BaseDataInspectionError",
+    allow_retry=False,
+    vars=[],
+    cause="内容安全审核基类错误",
+    solution="检查输入/输出内容是否符合安全规范",
+)
+
+MINT_UNSAFE_INPUT_CONTEXT_ERROR = InternalErrorDef(
+    name="mint.UnsafeInputContextError",
+    external=CONTENT_POLICY_VIOLATION,
+    message="Input {} data may contain inappropriate content.",
+    allow_retry=False,
+    vars=[],
+    cause="输入内容可能包含不当内容",
+    solution="检查并修改输入内容后重试",
+)
+
+MINT_UNSAFE_OUTPUT_CONTEXT_ERROR = InternalErrorDef(
+    name="mint.UnsafeOutputContextError",
+    external=CONTENT_POLICY_VIOLATION,
+    message="Output data may contain inappropriate content.",
+    allow_retry=False,
+    vars=[],
+    cause="输出内容可能包含不当内容",
+    solution="调整输入内容或稍后重试",
+)
+
+MINT_DATA_INSPECTION_FAILED = InternalErrorDef(
+    name="mint.DataInspectionFailed",
+    external=CONTENT_POLICY_VIOLATION,
+    message="Output data may contain inappropriate content.",
+    allow_retry=False,
+    vars=[],
+    cause="输出内容可能包含不当内容",
+    solution="调整输入内容或稍后重试",
+)
+
+MINT_INPUT_HEADER_INVALID = InternalErrorDef(
+    name="mint.InputHeaderInvalid",
+    external=INVALID_REQUEST,
+    message="Input header required by data inspection is invalid",
+    allow_retry=False,
+    vars=[],
+    cause="内容安全审核所需的请求头无效",
+    solution="检查数据审核相关的请求头参数",
+)
+
+MINT_UNSAFE_INVALID_DATA_ERROR = InternalErrorDef(
+    name="mint.UnsafeInvalidDataError",
+    external=CONTENT_POLICY_VIOLATION,
+    message="The input multimodal data has issues.",
+    allow_retry=False,
+    vars=[],
+    cause="输入的多模态数据存在问题",
+    solution="检查输入的多模态数据格式和内容",
+)
+
+MINT_UNSUPPORTED_FORMAT_DATA_ERROR = InternalErrorDef(
+    name="mint.UnsupportedFormatDataError",
+    external=CONTENT_POLICY_VIOLATION,
+    message=(
+        "The media format is not supported or incorrect for "
+        "the data inspection."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="媒体格式不被支持或格式错误",
+    solution="转换为支持的媒体格式后重试",
+)
+
+MINT_DOWNLOAD_FAILED_ERROR = InternalErrorDef(
+    name="mint.DownloadFailedError",
+    external=INVALID_FILE,
+    message=(
+        "Failed to find the requested media resource during "
+        "the data inspection process."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="内容审核过程中无法找到请求的媒体资源",
+    solution="检查资源链接是否有效",
+)
+
+MINT_DATA_INSPECTION_INVALID_PARAMETER_ERROR = InternalErrorDef(
+    name="mint.DataInspectionInvalidParameterError",
+    external=CONTENT_POLICY_VIOLATION,
+    message="The input multimodal data has issues.",
+    allow_retry=False,
+    vars=[],
+    cause="输入的多模态数据存在问题",
+    solution="检查输入的多模态数据",
+)
+
+MINT_DATA_INSPECTION_INVALID_PARAMETER_MSG_ERROR = InternalErrorDef(
+    name="mint.DataInspectionInvalidParameterMsgError",
+    external=CONTENT_POLICY_VIOLATION,
+    message="{}",
+    allow_retry=False,
+    vars=[],
+    cause="数据审核参数错误",
+    solution="检查数据审核相关参数",
+)
+
+MINT_QWEN_GUARD_PARAMETER_ERROR = InternalErrorDef(
+    name="mint.QwenGuardParameterError",
+    external=CONTENT_POLICY_VIOLATION,
+    message="The data_inspection parameter qwen_guard only supports n=1.",
+    allow_retry=False,
+    vars=[],
+    cause="data_inspection 参数 qwen_guard 仅支持 n=1",
+    solution="将 n 参数设置为 1",
+)
+
+MINT_RATE_LIMIT_EXCEEDED_ERROR = InternalErrorDef(
+    name="mint.RateLimitExceededError",
+    external=RATE_LIMIT_EXCEEDED,
+    message="Allocated quota exceeded, please increase your quota limit.",
+    allow_retry=False,
+    vars=[],
+    cause="配额超限",
+    solution="增加配额或等待后重试",
+)
+
+API_CLIENT_ERROR = InternalErrorDef(
+    name="api.ClientError",
+    external=INVALID_REQUEST,
+    message="Client error!",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_CLIENT_DISCONNECT = InternalErrorDef(
+    name="api.ClientDisconnect",
+    external=INVALID_REQUEST,
+    message="Client disconnected!",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_INVALID_PARAMETER = InternalErrorDef(
+    name="api.InvalidParameter",
+    external=MISSING_PARAMETER,
+    message="Invalid parameter!",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_ARREARAGE_PTU_OVER_LIMIT = InternalErrorDef(
+    name="api.Arrearage.PtuOverLimit",
+    external=INVALID_REQUEST,
+    message=(
+        "Access denied, please make sure your account is in good standing "
+        "while ptu over limit."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_THROTTLING_BURST_RATE = InternalErrorDef(
+    name="api.Throttling.BurstRate",
+    external=RATE_LIMIT_EXCEEDED,
+    message=(
+        "Request rate increased too quickly. To ensure system stability, "
+        "please adjust your client logic to scale requests more smoothly "
+        "over time."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_THROTTLING_CONCURRENCY = InternalErrorDef(
+    name="api.Throttling.Concurrency",
+    external=CONCURRENCY_LIMIT_EXCEEDED,
+    message="Too many concurrent requests.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_THROTTLING_USER_INPUT_TOKEN = InternalErrorDef(
+    name="api.Throttling.UserInputToken",
+    external=RATE_LIMIT_EXCEEDED,
+    message="User input token tpm over limit.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_THROTTLING_USER_THINKING_OUTPUT_TOKEN = InternalErrorDef(
+    name="api.Throttling.UserThinkingOutputToken",
+    external=RATE_LIMIT_EXCEEDED,
+    message="User thinking output token tpm over limit.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_THROTTLING_USER_NOTHINKING_OUTPUT_TOKEN = InternalErrorDef(
+    name="api.Throttling.UserNothinkingOutputToken",
+    external=RATE_LIMIT_EXCEEDED,
+    message="User nothinking output token tpm over limit.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_THROTTLING_USER_OUTPUT_TOKEN = InternalErrorDef(
+    name="api.Throttling.UserOutputToken",
+    external=RATE_LIMIT_EXCEEDED,
+    message="User output token tpm over limit.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_INTERNAL_ERROR = InternalErrorDef(
+    name="api.InternalError",
+    external=INTERNAL_ERROR,
+    message="Internal server error.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_ROUTE_ERROR = InternalErrorDef(
+    name="api.RouteError",
+    external=INTERNAL_ERROR,
+    message="Route error!",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_BALANCE_ERROR = InternalErrorDef(
+    name="api.BalanceError",
+    external=INTERNAL_ERROR,
+    message="Balance error.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_INTERNAL_ERROR_CONNECT_TIMEOUT = InternalErrorDef(
+    name="api.InternalError.ConnectTimeout",
+    external=INTERNAL_ERROR,
+    message="Connect timeout.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_INTERNAL_ERROR_SOCKET_TIMEOUT = InternalErrorDef(
+    name="api.InternalError.SocketTimeout",
+    external=INTERNAL_ERROR,
+    message="Socket timeout.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_INTERNAL_ERROR_ENGINE_ERROR = InternalErrorDef(
+    name="api.InternalError.EngineError",
+    external=INTERNAL_ERROR,
+    message="Inference engine error.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_INTERNAL_ERROR_ENGINE_ABORT = InternalErrorDef(
+    name="api.InternalError.EngineAbort",
+    external=INTERNAL_ERROR,
+    message="Inference engine abort.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_SERVICE_UNAVAILABLE = InternalErrorDef(
+    name="api.ServiceUnavailable",
+    external=SERVICE_UNAVAILABLE,
+    message=(
+        "Too many requests. Your requests are being throttled due to "
+        "system capacity limits. Please try again later."
+    ),
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_ROUTER_INSTANCE_OVERLOADED = InternalErrorDef(
+    name="api.RouterInstanceOverloaded",
+    external=SERVICE_UNAVAILABLE,
+    message="Router backend instance overloaded.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_RESPONSE_TIMEOUT = InternalErrorDef(
+    name="api.ResponseTimeout",
+    external=REQUEST_TIMEOUT,
+    message="Response timeout.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+API_INTERNAL_ERROR_JSON_PARSE_ERROR = InternalErrorDef(
+    name="api.InternalError.JsonParseError",
+    external=INTERNAL_ERROR,
+    message="Failed to parse json.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+TURBO_INTERNAL_ERROR = InternalErrorDef(
+    name="turbo.InternalError",
+    external=INTERNAL_ERROR,
+    message="Turbo service encountered an internal error.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+TURBO_UPLOAD_FAILED = InternalErrorDef(
+    name="turbo.UploadFailed",
+    external=SERVICE_UNAVAILABLE,
+    message="File upload to Turbo service failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+TURBO_FILE_UPLOAD_FAILED = InternalErrorDef(
+    name="turbo.FileUploadFailed",
+    external=SERVICE_UNAVAILABLE,
+    message="File upload operation failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+TURBO_RESPONSE_TIMEOUT = InternalErrorDef(
+    name="turbo.ResponseTimeout",
+    external=REQUEST_TIMEOUT,
+    message="Turbo service response timed out.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_TASK_LIST_FULL = InternalErrorDef(
+    name="model.TaskListFull",
+    external=INTERNAL_ERROR,
+    message="Internal error: task list full.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_TIME_OUT_FOR_FIRST_TOKEN = InternalErrorDef(
+    name="model.TimeOutForFirstToken",
+    external=INTERNAL_ERROR,
+    message="Internal error: time out for first token.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_STOP_FROM_ENGINE = InternalErrorDef(
+    name="model.StopFromEngine",
+    external=INTERNAL_ERROR,
+    message="Internal error: stop from engine.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_STOP_ENGINE_PARAM = InternalErrorDef(
+    name="model.StopEngineParam",
+    external=INVALID_REQUEST,
+    message="Request error: stop engine param.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_STOP_ENGINE_ERROR = InternalErrorDef(
+    name="model.StopEngineError",
+    external=INTERNAL_ERROR,
+    message="Internal error: stop engine.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_ABORT = InternalErrorDef(
+    name="model.Abort",
+    external=INTERNAL_ERROR,
+    message="Internal error: abort.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_PREFILL_PREEMPTED = InternalErrorDef(
+    name="model.PrefillPreempted",
+    external=INTERNAL_ERROR,
+    message="Internal error: prefill preempted.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_DECODE_PREEMPTED = InternalErrorDef(
+    name="model.DecodePreempted",
+    external=INTERNAL_ERROR,
+    message="Internal error: decode preempted.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_STOP_TIMEOUT = InternalErrorDef(
+    name="model.StopTimeout",
+    external=INTERNAL_ERROR,
+    message="Internal error: stop timeout.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_INNER_ENGINE_STUCK = InternalErrorDef(
+    name="model.InnerEngineStuck",
+    external=INTERNAL_ERROR,
+    message="Internal error: inner engine stuck.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_INNER_ENGINE_ERROR = InternalErrorDef(
+    name="model.InnerEngineError",
+    external=INTERNAL_ERROR,
+    message="Internal error: inner engine.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_INNER_GENERATE_EXIT = InternalErrorDef(
+    name="model.InnerGenerateExit",
+    external=INTERNAL_ERROR,
+    message="Internal error: inner generate exit.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+MODEL_STOP_ENGINE_INVALID_OUTPUT = InternalErrorDef(
+    name="model.StopEngineInvalidOutput",
+    external=INTERNAL_ERROR,
+    message="Internal error: stop engine invalid output.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+# -- Client Internal Errors ----------------------------------------
+
+AGENTIC_RL_INVALID_API_KEY = InternalErrorDef(
+    name="agentic_rl.InvalidApiKey",
+    external=AUTH_FAILED,
+    message="Invalid API key configuration for AgenticRL.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_FUNCTION_REGISTRATION_FAILED = InternalErrorDef(
+    name="agentic_rl.FunctionRegistrationFailed",
+    external=INTERNAL_ERROR,
+    message="Function component registration failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_DATASETS_UPLOAD_FAILED = InternalErrorDef(
+    name="agentic_rl.DatasetsUploadFailed",
+    external=INTERNAL_ERROR,
+    message="Datasets upload failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_DUPLICATE_FUNCTION_NAMES = InternalErrorDef(
+    name="agentic_rl.DuplicateFunctionNames",
+    external=INVALID_REQUEST,
+    message="Duplicate function names detected.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_JOB_SUBMISSION_FAILED = InternalErrorDef(
+    name="agentic_rl.JobSubmissionFailed",
+    external=INTERNAL_ERROR,
+    message="Job submission failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_WORKFLOW_FAILED = InternalErrorDef(
+    name="agentic_rl.WorkflowFailed",
+    external=INTERNAL_ERROR,
+    message="RL tuning workflow failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE = InternalErrorDef(
+    name="agentic_rl.UnsupportedFunctionType",
+    external=INVALID_REQUEST,
+    message="Unsupported function type.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_FUNCTION_TEST_FAILED = InternalErrorDef(
+    name="agentic_rl.FunctionTestFailed",
+    external=INTERNAL_ERROR,
+    message="Function test failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_FUNCTION_TEST_TIMEOUT = InternalErrorDef(
+    name="agentic_rl.FunctionTestTimeout",
+    external=REQUEST_TIMEOUT,
+    message="Function test timed out.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+# -- AgenticRL Exception Class Errors ---------------------------------
+
+AGENTIC_RL_INPUT_ERROR = InternalErrorDef(
+    name="agentic_rl.InputError",
+    external=INVALID_REQUEST,
+    message="Invalid input data detected during validation.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_OUTPUT_ERROR = InternalErrorDef(
+    name="agentic_rl.OutputError",
+    external=INTERNAL_ERROR,
+    message="Service response failed output validation checks.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_BASE_CONNECTION_ERROR = InternalErrorDef(
+    name="agentic_rl.BaseConnectionError",
+    external=INTERNAL_ERROR,
+    message="Connection-related error occurred.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_OSS_CONNECTION_ERROR = InternalErrorDef(
+    name="agentic_rl.OSSConnectionError",
+    external=INTERNAL_ERROR,
+    message="Connecting to OSS storage service failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_OSS_UPLOAD_ERROR = InternalErrorDef(
+    name="agentic_rl.OSSUploadError",
+    external=INTERNAL_ERROR,
+    message="File upload operation to OSS failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_DEPLOYMENT_ERROR = InternalErrorDef(
+    name="agentic_rl.DeploymentError",
+    external=INTERNAL_ERROR,
+    message="Deployment-related error occurred.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_REGISTRATION_ERROR = InternalErrorDef(
+    name="agentic_rl.RegistrationError",
+    external=INTERNAL_ERROR,
+    message="Function registration failed in the deployment system.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_FUNCTION_LOAD_ERROR = InternalErrorDef(
+    name="agentic_rl.FunctionLoadError",
+    external=INTERNAL_ERROR,
+    message="Loading a registered function into runtime failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_INSTANCE_WARMUP_ERROR = InternalErrorDef(
+    name="agentic_rl.InstanceWarmupError",
+    external=INTERNAL_ERROR,
+    message="Function instance health check failed after deployment.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_INSTANCE_QUERY_ERROR = InternalErrorDef(
+    name="agentic_rl.InstanceQueryError",
+    external=INTERNAL_ERROR,
+    message="Querying function instance status failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_FUNCTION_LAYER_ERROR = InternalErrorDef(
+    name="agentic_rl.FunctionLayerError",
+    external=INTERNAL_ERROR,
+    message="Creating a layer of function failed.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_DATASETS_ERROR = InternalErrorDef(
+    name="agentic_rl.DatasetsError",
+    external=INTERNAL_ERROR,
+    message="Update datasets failed in the deployment system.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_VALIDATION_ERROR = InternalErrorDef(
+    name="agentic_rl.ValidationError",
+    external=INVALID_REQUEST,
+    message="Data validation failed.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_CONFIGURATION_ERROR = InternalErrorDef(
+    name="agentic_rl.ConfigurationError",
+    external=INVALID_REQUEST,
+    message="Invalid system configuration detected.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_BASE_PERMISSION_ERROR = InternalErrorDef(
+    name="agentic_rl.BasePermissionError",
+    external=PERMISSION_DENIED,
+    message="Operation lacks required permissions.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_IO_ERROR_WITH_CODE = InternalErrorDef(
+    name="agentic_rl.IOErrorWithCode",
+    external=INTERNAL_ERROR,
+    message="General I/O operation failure.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+
+# -- Catalogs ------------------------------------------------------
+PUBLIC_ERRORS = [
+    INVALID_REQUEST,
+    MISSING_PARAMETER,
+    CONTENT_POLICY_VIOLATION,
+    INVALID_URL,
+    INVALID_FILE,
+    AUTH_FAILED,
+    INVALID_API_KEY,
+    PERMISSION_DENIED,
+    RESOURCE_NOT_FOUND,
+    REQUEST_TOO_LARGE,
+    RATE_LIMIT_EXCEEDED,
+    CONCURRENCY_LIMIT_EXCEEDED,
+    INSUFFICIENT_QUOTA,
+    INTERNAL_ERROR,
+    SERVICE_UNAVAILABLE,
+    REQUEST_TIMEOUT,
+]
+INTERNAL_ERRORS = [
+    GATEWAY_INVALID_REQUEST,
+    GATEWAY_MISSING_INPUT,
+    GATEWAY_INVALID_PARAMETER,
+    GATEWAY_INVALID_REQUEST_BODY,
+    GATEWAY_REQUEST_TOO_LARGE,
+    GATEWAY_RATE_LIMIT_EXCEEDED,
+    GATEWAY_BURST_RATE_EXCEEDED,
+    GATEWAY_CONCURRENCY_LIMIT_EXCEEDED,
+    GATEWAY_QUOTA_EXCEEDED,
+    GATEWAY_ACCOUNT_IN_ARREARS,
+    GATEWAY_PERMISSION_DENIED,
+    GATEWAY_MODEL_ACCESS_DENIED,
+    GATEWAY_RESOURCE_NOT_FOUND,
+    GATEWAY_MODEL_NOT_FOUND,
+    GATEWAY_INVALID_API_KEY,
+    GATEWAY_INVALID_API_TOKEN,
+    GATEWAY_WORKSPACE_ACCESS_DENIED,
+    GATEWAY_ENDPOINT_ACCESS_DENIED,
+    GATEWAY_I_P_ACCESS_DENIED,
+    GATEWAY_USER_BLACKLISTED,
+    GATEWAY_ENTITY_UNPURCHASED,
+    GATEWAY_TOKEN_PLAN_EXPIRED,
+    GATEWAY_TOKEN_PLAN_QUOTA_EXHAUSTED,
+    GATEWAY_FREE_QUOTA_EXHAUSTED,
+    GATEWAY_ILLEGAL_ENDPOINT,
+    GATEWAY_DATA_INSPECTION_FAILED,
+    GATEWAY_GATEWAY_TIMEOUT,
+    GATEWAY_O_S_S_UPLOAD_FAILED,
+    GATEWAY_RESOURCE_ACCESS_DENIED,
+    GATEWAY_ASYNC_SYNC_DENIED,
+    GATEWAY_INTERNAL_ERROR,
+    GATEWAY_SERVICE_SITE_UNSUPPORTED,
+    GATEWAY_APP_ACCESS_DENIED,
+    GATEWAY_HEADER_ACCESS_DENIED,
+    GATEWAY_RESOURCE_NOT_EXIST,
+    GATEWAY_REQUEST_TIMEOUT,
+    APISERVER_UNSUPPORTED_MODEL,
+    APISERVER_UNSUPPORTED_OPERATION,
+    APISERVER_UNSUPPORTED_PARAMETER,
+    APISERVER_INVALID_PARAMETER_COMBINATION,
+    APISERVER_CONTENT_POLICY_VIOLATION,
+    APISERVER_INVALID_U_R_L,
+    APISERVER_FILE_DOWNLOAD_FAILED,
+    APISERVER_INVALID_FILE,
+    APISERVER_UNSUPPORTED_FILE_FORMAT,
+    APISERVER_FILE_TOO_LARGE,
+    APISERVER_INVALID_AUDIO,
+    APISERVER_TIMEOUT,
+    MINT_INTERNAL_PROCESS_ERROR,
+    MINT_JSON_SERIALIZATION_ERROR,
+    MINT_OUTPUT_PAYLOAD_SCHEMA_ERROR,
+    MINT_MODEL_SERVING_ERROR,
+    MINT_MODEL_SERVING_WITH_DETAIL_ERROR,
+    MINT_MODEL_CALL_ERROR,
+    MINT_INTERNAL_PREPROCESS_ERROR,
+    MINT_INTERNAL_POSTPROCESS_ERROR,
+    MINT_WANX_CALLING_ERROR,
+    MINT_INTERNAL_PLUG_ERROR,
+    MINT_PLUGIN_RESULT_IS_NONE,
+    MINT_PLUGIN_RESULT_PARSE_ERROR,
+    MINT_PLUGIN_EXECUTION_RESULT_FORMAT_ERROR,
+    MINT_SEARCH_RESULT_FORMAT_ERROR,
+    MINT_INTERNAL_SEARCH_ERROR,
+    MINT_INTERNAL_AGENT_ERROR,
+    MINT_AGENT_SERVICE_GET_RESULT_ERROR,
+    MINT_GENERATOR_RESULT_J_S_O_N_DECODE_ERROR,
+    MINT_SERVICE_UNAVAILABLE_ERROR,
+    MINT_RESPONSE_TIMEOUT_ERROR,
+    MINT_V_L_O_C_R_DOCUMENT_PARSING_TIMEOUT_ERROR,
+    MINT_INVALID_PARAMETER,
+    MINT_MISSING_INPUT,
+    MINT_INPUT_FORMAT_ERROR,
+    MINT_MODEL_INPUT_FORMAT_ERROR,
+    MINT_INPUT_UNKNOWN_ERROR,
+    MINT_INPUT_PREPROCESS_ERROR,
+    MINT_ECC_ERROR,
+    MINT_MESSAGE_ERROR,
+    MINT_MESSAGE_CONTENT_FIELD_REQUIRED_ERROR,
+    MINT_MESSAGE_CONTENT_FIELD_ERROR,
+    MINT_MESSAGE_CONTENT_ITEM_TYPE_ERROR,
+    MINT_MESSAGE_CONTENT_MULTIMODAL_UNSUPPORTED_ERROR,
+    MINT_MESSAGE_FUNCTION_FIELD_ERROR,
+    MINT_LAST_MESSAGE_MUST_BE_USER,
+    MINT_SINGLE_SYSTEM_ROLE_ERROR,
+    MINT_MESSAGE_CONTAINS_SURROGATE_ERROR,
+    MINT_INPUT_MESSAGES_TOO_LONG,
+    MINT_ROLE_ERROR,
+    MINT_INPUT_MESSAGE_FORMAT_ERROR,
+    MINT_TEMPERATURE_TYPE_ERROR,
+    MINT_TOP_K_RANGE_ERROR,
+    MINT_TOP_P_RANGE_ERROR,
+    MINT_INPUT_CONTENT_TOO_LONG,
+    MINT_REPETITION_PENALTY_TYPE_ERROR,
+    MINT_HEAD_RESPONSE_PER_TOKENS_TYPE_ERROR,
+    MINT_HEAD_RESPONSE_PER_TOKENS_RANGE_ERROR,
+    MINT_ENABLE_THINKING_ERROR,
+    MINT_THINKING_MODE_N_ERROR,
+    MINT_SEED_TYPE_ERROR,
+    MINT_PRESENCE_PENALTY_RANGE_ERROR,
+    MINT_FREQUENCY_PENALTY_RANGE_ERROR,
+    MINT_N_RANGE_ERROR,
+    MINT_INCREMENTAL_OUTPUT_ERROR,
+    MINT_INCREMENTAL_OUTPUT_VALUE_ERROR,
+    MINT_ONLY_SUPPORT_INCREMENTAL,
+    MINT_FORCE_INCREMENTAL_OUTPUT_ERROR,
+    MINT_OMNI_INCREMENTAL_OUTPUT_ERROR,
+    MINT_INPUT_TOO_MANY_ARGUMENTS_ERROR,
+    MINT_INPUT_NOTHING_ERROR,
+    MINT_PROMPT_ERROR,
+    MINT_USE_RAW_PROMPT_ERROR,
+    MINT_NON_STREAM_TIMEOUT_ERROR,
+    MINT_SEARCH_PARAMETER_ERROR,
+    MINT_ENABLE_SEARCH_TYPE_ERROR,
+    MINT_MODEL_NOT_SUPPORT_SEARCH,
+    MINT_UNSUPPORTED_LANGUAGE_TYPE,
+    MINT_NOT_ALLOW_SYSTEM_INPUT_ERROR,
+    MINT_PARAM_NOT_SUPPORT_ERROR,
+    MINT_MAX_TOKENS_NOT_SUPPORT_ERROR,
+    MINT_INVALID_VOICE_ERROR,
+    MINT_INVALID_INSTRUCTION_LENGTH_ERROR,
+    MINT_FRESHNESS_TYPE_ERROR,
+    MINT_TOOL_CHOICE_SCHEMA_ERROR,
+    MINT_INPUT_TOOL_CALL_REPETITION_ERROR,
+    MINT_JSON_RESPONSE_OUTPUT_ABNORMAL_ERROR,
+    MINT_USER_DEFINED_FUNCTION_ERROR,
+    MINT_AGENT_TOOL_EXECUTION_TIMEOUT_ERROR,
+    MINT_GET_TOOL_CHOICE_NAME_ERROR,
+    MINT_M_M_G_P_T3_ITEM_ERROR,
+    MINT_INVALID_TEXT_ERROR,
+    MINT_MIN_PIXELS_RANGE_ERROR,
+    MINT_MAX_PIXELS_RANGE_ERROR,
+    MINT_TOTAL_PIXELS_RANGE_ERROR,
+    MINT_MAX_FRAME_RANGE_ERROR,
+    MINT_MIN_MAX_PIXELS_RANGE_ERROR,
+    MINT_FPS_RANGE_ERROR,
+    MINT_NON_VISION_PIXELS_ERROR,
+    MINT_NON_VIDEO_FPS_ERROR,
+    MINT_MODAL_INPUT_ERROR,
+    MINT_OMNI_MODALITY_ERROR,
+    MINT_MODALITIES_EMPTY_ERROR,
+    MINT_MODALITIES_NON_TEXT_ERROR,
+    MINT_MODALITIES_DISABLE_AUDIO_ERROR,
+    MINT_INVALID_FUNCTION_NAME,
+    MINT_FUNCTION_ARGUMENTS_INVALID_JSON,
+    MINT_INVALID_FUNCTION_NAME_PREFIX,
+    MINT_INVALID_FUNCTION_NAME_LENGTH,
+    MINT_PLUGIN_NOT_SUPPORT_SEARCH,
+    MINT_PLUGIN_NOT_SUPPORT_COMPLETION,
+    MINT_PLUGIN_NOT_SUPPORT_INCREMENT,
+    MINT_QWEN_AGENT_NOT_SUPPORT_TOOLS_ERROR,
+    MINT_QWEN_AGENT_NOT_SUPPORT_C_I_ON_INSTRUCT,
+    MINT_QWEN_AGENT_NOT_SUPPORT_WEB_EXTRACTOR_ON_INSTRUCT,
+    MINT_QWEN_AGENT_NOT_SUPPORT_SEARCH_AGENT_ON_THINKING,
+    MINT_NON_STREAM_MODE_NOT_SUPPORT_C_I,
+    MINT_NON_STREAM_MODE_NOT_SUPPORT_WEB_EXTRACTOR,
+    MINT_NON_STREAM_MODE_NOT_SUPPORT_WEB_SEARCH,
+    MINT_SEARCH_AGENT_NOT_SUPPORTED_IN_NORMAL_MODE_ERROR,
+    MINT_SEARCH_AGENT_MAX_NOT_SUPPORTED_IN_NORMAL_MODE_ERROR,
+    MINT_AGENT_NOT_SUPPORTED_WEB_SEARCH_ERROR,
+    MINT_AGENT_NOT_SUPPORTED_CODE_INTERPRETER_ERROR,
+    MINT_AGENT_NOT_SUPPORTED_WEB_EXTRACTOR_ERROR,
+    MINT_AGENT_WEB_EXTRACTOR_WITHOUT_SEARCH,
+    MINT_AGENT_NOT_SUPPORTED_IMAGE_SEARCH_ERROR,
+    MINT_AGENT_NOT_SUPPORTED_WEB_SEARCH_IMAGE_ERROR,
+    MINT_AGENT_NOT_SUPPORTED_FILE_SEARCH_ERROR,
+    MINT_O_M_N_I_MODEL_ONLY_SUPPORT_SEARCH_AGENT,
+    MINT_AGENT_API_NOT_ENABLED_ERROR,
+    MINT_INVALID_U_R_L,
+    MINT_V_L_O_C_R_DOCUMENT_PARSING_INVALID_PARAMETER,
+    MINT_V_L_O_C_R_DOCUMENT_PARSING_INPUT_TYPE_ERROR,
+    MINT_V_L_O_C_R_DOCUMENT_PARSING_P_D_F_INPUT_PAGE_COUNT_ERROR,
+    MINT_V_L_O_C_R_DOCUMENT_PARSING_INPUT_SIZE_ERROR,
+    MINT_V_L_O_C_R_DOCUMENT_PARSING_IMAGE_INPUT_SIZE_ERROR,
+    MINT_V_L_O_C_R_P_D_F_PAGE_COUNT_ERROR,
+    MINT_V_L_O_C_R_P_D_F_INPUT_SIZE_ERROR,
+    MINT_NOT_SUPPORT_TASK,
+    MINT_URL_ERROR,
+    MINT_DOWNLOAD_ERROR,
+    MINT_FILE_OPEN_ERROR,
+    MINT_FIM_USE_ERROR,
+    MINT_IMAGE_OPEN_ERROR,
+    MINT_ALGO_UNKNOWN_ERROR,
+    MINT_INPUT_PARAMETER_LIMIT_ERROR,
+    MINT_LANGUAGE_ERROR,
+    MINT_HEADER_VERIFY_ERROR,
+    MINT_BASE_DATA_INSPECTION_ERROR,
+    MINT_UNSAFE_INPUT_CONTEXT_ERROR,
+    MINT_UNSAFE_OUTPUT_CONTEXT_ERROR,
+    MINT_DATA_INSPECTION_FAILED,
+    MINT_INPUT_HEADER_INVALID,
+    MINT_UNSAFE_INVALID_DATA_ERROR,
+    MINT_UNSUPPORTED_FORMAT_DATA_ERROR,
+    MINT_DOWNLOAD_FAILED_ERROR,
+    MINT_DATA_INSPECTION_INVALID_PARAMETER_ERROR,
+    MINT_DATA_INSPECTION_INVALID_PARAMETER_MSG_ERROR,
+    MINT_QWEN_GUARD_PARAMETER_ERROR,
+    MINT_RATE_LIMIT_EXCEEDED_ERROR,
+    API_CLIENT_ERROR,
+    API_CLIENT_DISCONNECT,
+    API_INVALID_PARAMETER,
+    API_ARREARAGE_PTU_OVER_LIMIT,
+    API_THROTTLING_BURST_RATE,
+    API_THROTTLING_CONCURRENCY,
+    API_THROTTLING_USER_INPUT_TOKEN,
+    API_THROTTLING_USER_THINKING_OUTPUT_TOKEN,
+    API_THROTTLING_USER_NOTHINKING_OUTPUT_TOKEN,
+    API_THROTTLING_USER_OUTPUT_TOKEN,
+    API_INTERNAL_ERROR,
+    API_ROUTE_ERROR,
+    API_BALANCE_ERROR,
+    API_INTERNAL_ERROR_CONNECT_TIMEOUT,
+    API_INTERNAL_ERROR_SOCKET_TIMEOUT,
+    API_INTERNAL_ERROR_ENGINE_ERROR,
+    API_INTERNAL_ERROR_ENGINE_ABORT,
+    API_SERVICE_UNAVAILABLE,
+    API_ROUTER_INSTANCE_OVERLOADED,
+    API_RESPONSE_TIMEOUT,
+    API_INTERNAL_ERROR_JSON_PARSE_ERROR,
+    TURBO_INTERNAL_ERROR,
+    TURBO_UPLOAD_FAILED,
+    TURBO_FILE_UPLOAD_FAILED,
+    TURBO_RESPONSE_TIMEOUT,
+    MODEL_TASK_LIST_FULL,
+    MODEL_TIME_OUT_FOR_FIRST_TOKEN,
+    MODEL_STOP_FROM_ENGINE,
+    MODEL_STOP_ENGINE_PARAM,
+    MODEL_STOP_ENGINE_ERROR,
+    MODEL_ABORT,
+    MODEL_PREFILL_PREEMPTED,
+    MODEL_DECODE_PREEMPTED,
+    MODEL_STOP_TIMEOUT,
+    MODEL_INNER_ENGINE_STUCK,
+    MODEL_INNER_ENGINE_ERROR,
+    MODEL_INNER_GENERATE_EXIT,
+    MODEL_STOP_ENGINE_INVALID_OUTPUT,
+    AGENTIC_RL_INVALID_API_KEY,
+    AGENTIC_RL_FUNCTION_REGISTRATION_FAILED,
+    AGENTIC_RL_DATASETS_UPLOAD_FAILED,
+    AGENTIC_RL_DUPLICATE_FUNCTION_NAMES,
+    AGENTIC_RL_JOB_SUBMISSION_FAILED,
+    AGENTIC_RL_WORKFLOW_FAILED,
+    AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE,
+    AGENTIC_RL_FUNCTION_TEST_FAILED,
+    AGENTIC_RL_FUNCTION_TEST_TIMEOUT,
+    AGENTIC_RL_INPUT_ERROR,
+    AGENTIC_RL_OUTPUT_ERROR,
+    AGENTIC_RL_BASE_CONNECTION_ERROR,
+    AGENTIC_RL_OSS_CONNECTION_ERROR,
+    AGENTIC_RL_OSS_UPLOAD_ERROR,
+    AGENTIC_RL_DEPLOYMENT_ERROR,
+    AGENTIC_RL_REGISTRATION_ERROR,
+    AGENTIC_RL_FUNCTION_LOAD_ERROR,
+    AGENTIC_RL_INSTANCE_WARMUP_ERROR,
+    AGENTIC_RL_INSTANCE_QUERY_ERROR,
+    AGENTIC_RL_FUNCTION_LAYER_ERROR,
+    AGENTIC_RL_DATASETS_ERROR,
+    AGENTIC_RL_VALIDATION_ERROR,
+    AGENTIC_RL_CONFIGURATION_ERROR,
+    AGENTIC_RL_BASE_PERMISSION_ERROR,
+    AGENTIC_RL_IO_ERROR_WITH_CODE,
+]
