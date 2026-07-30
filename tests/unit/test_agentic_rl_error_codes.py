@@ -459,14 +459,16 @@ class TestInternalLogCodes:
     @patch("dashscope.finetune.agentic_rl.set_api_key")
     @patch("dashscope.finetune.agentic_rl.logger")
     def test_init_logs_code_3001(self, mock_logger, mock_set_api_key):
-        """__init__ should log internal code 3001."""
+        """__init__ should log agentic_rl.InvalidApiKey error."""
         mock_set_api_key.side_effect = ValueError("bad")
 
         with pytest.raises(AuthenticationError):
             AgenticRL(api_key="x")
 
         mock_logger.error.assert_called_once()
-        assert "code=3001" in mock_logger.error.call_args[0][0]
+        # Logger uses placeholder format: "[%s] %s | %s",
+        # name, message, exception
+        assert mock_logger.error.call_args[0][1] == "agentic_rl.InvalidApiKey"
 
     @pytest.mark.asyncio
     @patch(
@@ -479,7 +481,8 @@ class TestInternalLogCodes:
         mock_logger,
         _mock_parent_init,
     ):
-        """register_functions should log internal code 3002."""
+        """register_functions should log
+        agentic_rl.FunctionRegistrationFailed error."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
         agent.tuning.register_functions = AsyncMock(
@@ -490,7 +493,12 @@ class TestInternalLogCodes:
             await agent.register_functions()
 
         mock_logger.error.assert_called_once()
-        assert "code=3002" in mock_logger.error.call_args[0][0]
+        # Logger uses placeholder format: "[%s] %s | %s",
+        # name, message, exception
+        assert (
+            mock_logger.error.call_args[0][1]
+            == "agentic_rl.FunctionRegistrationFailed"
+        )
 
     @pytest.mark.asyncio
     @patch(
@@ -503,7 +511,8 @@ class TestInternalLogCodes:
         mock_logger,
         _mock_parent_init,
     ):
-        """upload_datasets should log internal code 3003."""
+        """upload_datasets should log
+        agentic_rl.DatasetsUploadFailed error."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
         agent.tuning.upload_datasets = AsyncMock(side_effect=IOError("fail"))
@@ -512,7 +521,12 @@ class TestInternalLogCodes:
             await agent.upload_datasets()
 
         mock_logger.error.assert_called_once()
-        assert "code=3003" in mock_logger.error.call_args[0][0]
+        # Logger uses placeholder format: "[%s] %s | %s",
+        # name, message, exception
+        assert (
+            mock_logger.error.call_args[0][1]
+            == "agentic_rl.DatasetsUploadFailed"
+        )
 
     @patch(
         "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
@@ -529,7 +543,8 @@ class TestInternalLogCodes:
         _mock_random_id,
         _mock_parent_init,
     ):
-        """submit_job duplicate names should log internal code 3004."""
+        """submit_job duplicate names should log
+        agentic_rl.DuplicateFunctionNames error."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
         agent.tuning.name = "test-job"
@@ -545,7 +560,11 @@ class TestInternalLogCodes:
             agent.submit_job()
 
         mock_logger.error.assert_called_once()
-        assert "code=3004" in mock_logger.error.call_args[0][0]
+        # Logger uses placeholder format: "[%s] %s", name, message
+        assert (
+            mock_logger.error.call_args[0][1]
+            == "agentic_rl.DuplicateFunctionNames"
+        )
 
     @patch(
         "dashscope.finetune.agentic_rl.AgenticRLTuning.__init__",
@@ -564,7 +583,8 @@ class TestInternalLogCodes:
         _mock_random_id,
         _mock_parent_init,
     ):
-        """submit_job call failure should log internal code 3005."""
+        """submit_job call failure should log
+        agentic_rl.JobSubmissionFailed error."""
         mock_call.side_effect = RuntimeError("API down")
 
         agent = AgenticRL.__new__(AgenticRL)
@@ -582,7 +602,12 @@ class TestInternalLogCodes:
             agent.submit_job()
 
         mock_logger.error.assert_called_once()
-        assert "code=3005" in mock_logger.error.call_args[0][0]
+        # Logger uses placeholder format: "[%s] %s | %s",
+        # name, message, exception
+        assert (
+            mock_logger.error.call_args[0][1]
+            == "agentic_rl.JobSubmissionFailed"
+        )
 
     @pytest.mark.asyncio
     @patch(
@@ -590,8 +615,12 @@ class TestInternalLogCodes:
         return_value=None,
     )
     @patch("dashscope.finetune.agentic_rl.logger")
-    async def test_run_logs_code_3006(self, mock_logger, _mock_parent_init):
-        """run should log internal code 3006 on failure."""
+    async def test_run_logs_code_3006(
+        self,
+        mock_logger,
+        _mock_parent_init,
+    ):
+        """run should log agentic_rl.WorkflowFailed error on failure."""
         agent = AgenticRL.__new__(AgenticRL)
         object.__setattr__(agent, "tuning", MagicMock())
         object.__setattr__(
@@ -604,7 +633,9 @@ class TestInternalLogCodes:
             await agent.run()
 
         mock_logger.error.assert_called_once()
-        assert "code=3006" in mock_logger.error.call_args[0][0]
+        # Logger uses placeholder format: "[%s] %s | %s",
+        # name, message, exception
+        assert mock_logger.error.call_args[0][1] == "agentic_rl.WorkflowFailed"
 
     @pytest.mark.asyncio
     @patch("dashscope.finetune.agentic_rl.set_api_key")
@@ -615,7 +646,7 @@ class TestInternalLogCodes:
         _mock_set_api_key,
     ):
         """test_functions unsupported type should log
-        internal code 3007 only (not 3008)."""
+        agentic_rl.UnsupportedFunctionType error."""
         with pytest.raises(InvalidParameter):
             await AgenticRL.test_functions(
                 instance_id="inst-1",
@@ -623,11 +654,10 @@ class TestInternalLogCodes:
                 input_data={},
             )
 
-        error_messages = [
-            call[0][0] for call in mock_logger.error.call_args_list
-        ]
-        assert any("code=3007" in msg for msg in error_messages)
-        assert not any("code=3008" in msg for msg in error_messages)
+        # Check all logged messages for the error name
+        error_names = [call[0][1] for call in mock_logger.error.call_args_list]
+        assert "agentic_rl.UnsupportedFunctionType" in error_names
+        assert "agentic_rl.FunctionTestFailed" not in error_names
 
     @pytest.mark.asyncio
     @patch("dashscope.finetune.agentic_rl.set_api_key")
@@ -637,7 +667,8 @@ class TestInternalLogCodes:
         mock_logger,
         _mock_set_api_key,
     ):
-        """test_functions validation failure should log internal code 3008."""
+        """test_functions validation failure should log
+        agentic_rl.FunctionTestFailed error."""
         with patch(
             "dashscope.finetune.agentic_rl.RolloutInput.model_validate",
             side_effect=ValueError("bad input"),
@@ -650,7 +681,12 @@ class TestInternalLogCodes:
                 )
 
         mock_logger.error.assert_called_once()
-        assert "code=3008" in mock_logger.error.call_args[0][0]
+        # Logger uses placeholder format: "[%s] %s | %s",
+        # name, message, exception
+        assert (
+            mock_logger.error.call_args[0][1]
+            == "agentic_rl.FunctionTestFailed"
+        )
 
 
 class TestPassthroughAttributeCompleteness:
