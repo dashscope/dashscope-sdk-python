@@ -243,7 +243,7 @@ class TestAgenticRLTuning:
             await agentic_rl_tuning.tuning.register_functions()
 
         assert "Registration failed" in str(exc_info.value)
-        assert exc_info.value.error_code == 2052
+        assert exc_info.value.error_code == "agentic_rl.RegistrationError"
 
     # pylint: disable=redefined-outer-name
     @pytest.mark.asyncio

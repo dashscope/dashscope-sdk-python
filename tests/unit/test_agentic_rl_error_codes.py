@@ -745,19 +745,25 @@ class TestMultipleUnderlyingExceptionTypes:
         return_value=None,
     )
     @pytest.mark.parametrize(
-        "underlying_exc",
+        "underlying_exc, expected_status, expected_code",
         [
-            IOError("disk error"),
-            TimeoutError("timed out"),
-            ConnectionError("connection refused"),
-            PermissionError("access denied"),
-            MemoryError("out of memory"),
+            (IOError("disk error"), 500, "InternalServerError"),
+            (TimeoutError("timed out"), 504, "GatewayTimeoutError"),
+            (
+                ConnectionError("connection refused"),
+                500,
+                "InternalServerError",
+            ),
+            (PermissionError("access denied"), 500, "InternalServerError"),
+            (MemoryError("out of memory"), 500, "InternalServerError"),
         ],
     )
     async def test_register_functions_handles_various_exceptions(
         self,
         _mock_parent_init,
         underlying_exc,
+        expected_status,
+        expected_code,
     ):
         """register_functions should convert various
         exception types to DashScopeException."""
@@ -768,8 +774,8 @@ class TestMultipleUnderlyingExceptionTypes:
         with pytest.raises(DashScopeException) as exc_info:
             await agent.register_functions()
 
-        assert exc_info.value.status_code == 500
-        assert exc_info.value.error_code == "InternalServerError"
+        assert exc_info.value.status_code == expected_status
+        assert exc_info.value.error_code == expected_code
         assert exc_info.value.__cause__ is underlying_exc
 
     @pytest.mark.asyncio

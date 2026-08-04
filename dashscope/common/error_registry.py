@@ -2933,6 +2933,37 @@ AGENTIC_RL_IO_ERROR_WITH_CODE = InternalErrorDef(
 )
 
 
+AGENTIC_RL_AGENTIC_RL_ERROR = InternalErrorDef(
+    name="agentic_rl.AgenticRLError",
+    external=INTERNAL_ERROR,
+    message="Base Agentic RL error occurred.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_RUNTIME_ERROR_WITH_CODE = InternalErrorDef(
+    name="agentic_rl.RuntimeErrorWithCode",
+    external=INTERNAL_ERROR,
+    message="Runtime error occurred in AgenticRL.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+AGENTIC_RL_VALUE_ERROR_WITH_CODE = InternalErrorDef(
+    name="agentic_rl.ValueErrorWithCode",
+    external=INVALID_REQUEST,
+    message="Invalid value encountered in AgenticRL.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution="",
+)
+
+
 # -- Catalogs ------------------------------------------------------
 PUBLIC_ERRORS = [
     INVALID_REQUEST,
@@ -3213,4 +3244,7 @@ INTERNAL_ERRORS = [
     AGENTIC_RL_CONFIGURATION_ERROR,
     AGENTIC_RL_BASE_PERMISSION_ERROR,
     AGENTIC_RL_IO_ERROR_WITH_CODE,
+    AGENTIC_RL_AGENTIC_RL_ERROR,
+    AGENTIC_RL_RUNTIME_ERROR_WITH_CODE,
+    AGENTIC_RL_VALUE_ERROR_WITH_CODE,
 ]

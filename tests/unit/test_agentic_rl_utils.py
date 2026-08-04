@@ -310,7 +310,9 @@ class TestAsyncHttpRequestRootCause:
                     retry_times=1,
                 )
 
-            assert exc_info.value.error_code == 4002
+            assert (
+                exc_info.value.error_code == "agentic_rl.RuntimeErrorWithCode"
+            )
             root = exc_info.value.__cause__
             assert isinstance(root, aiohttp.ClientConnectionError)
             assert "Cannot write to transport" in str(root)
@@ -332,7 +334,9 @@ class TestAsyncHttpRequestRootCause:
                     retry_times=1,
                 )
 
-            assert exc_info.value.error_code == 4003
+            assert (
+                exc_info.value.error_code == "agentic_rl.RuntimeErrorWithCode"
+            )
             assert isinstance(
                 exc_info.value.__cause__,
                 asyncio.TimeoutError,

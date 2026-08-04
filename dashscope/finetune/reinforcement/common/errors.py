@@ -74,9 +74,9 @@ class AgenticRLError(_RootCauseMixin, Exception):
     def __str__(self):
         registry_msg = self._get_registry_message(self.error_code)
         if registry_msg:
-            base = f"[{self.error_code}] {registry_msg} | {self.message}"
+            base = f"{registry_msg} | {self.message}"
         else:
-            base = f"[{self.error_code}] {self.message}"
+            base = self.message
         return f"{base}{self._format_cause()}"
 
 
@@ -111,11 +111,8 @@ class RuntimeErrorWithCode(_RootCauseMixin, RuntimeError):
     def __str__(self):
         registry_msg = self._get_registry_message(self.error_code)
         if registry_msg:
-            return (
-                f"[{self.error_code}] {registry_msg} | "
-                f"{self.message}{self._format_cause()}"
-            )
-        return f"[{self.error_code}] {self.message}{self._format_cause()}"
+            return f"{registry_msg} | {self.message}{self._format_cause()}"
+        return f"{self.message}{self._format_cause()}"
 
 
 class ValueErrorWithCode(_RootCauseMixin, ValueError):
@@ -134,11 +131,8 @@ class ValueErrorWithCode(_RootCauseMixin, ValueError):
     def __str__(self):
         registry_msg = self._get_registry_message(self.error_code)
         if registry_msg:
-            return (
-                f"[{self.error_code}] {registry_msg} | "
-                f"{self.message}{self._format_cause()}"
-            )
-        return f"[{self.error_code}] {self.message}{self._format_cause()}"
+            return f"{registry_msg} | {self.message}{self._format_cause()}"
+        return f"{self.message}{self._format_cause()}"
 
 
 class InputError(AgenticRLError):
