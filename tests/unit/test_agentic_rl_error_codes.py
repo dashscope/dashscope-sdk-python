@@ -468,7 +468,7 @@ class TestInternalLogCodes:
         mock_logger.error.assert_called_once()
         # Logger uses placeholder format: "[%s] %s | %s",
         # name, message, exception
-        assert mock_logger.error.call_args[0][1] == "agentic_rl.InvalidApiKey"
+        assert mock_logger.error.call_args[0][1] == "client.InvalidApiKey"
 
     @pytest.mark.asyncio
     @patch(
@@ -497,7 +497,7 @@ class TestInternalLogCodes:
         # name, message, exception
         assert (
             mock_logger.error.call_args[0][1]
-            == "agentic_rl.FunctionRegistrationFailed"
+            == "client.FunctionRegistrationFailed"
         )
 
     @pytest.mark.asyncio
@@ -525,7 +525,7 @@ class TestInternalLogCodes:
         # name, message, exception
         assert (
             mock_logger.error.call_args[0][1]
-            == "agentic_rl.DatasetsUploadFailed"
+            == "client.DatasetsUploadFailed"
         )
 
     @patch(
@@ -563,7 +563,7 @@ class TestInternalLogCodes:
         # Logger uses placeholder format: "[%s] %s", name, message
         assert (
             mock_logger.error.call_args[0][1]
-            == "agentic_rl.DuplicateFunctionNames"
+            == "client.DuplicateFunctionNames"
         )
 
     @patch(
@@ -606,7 +606,7 @@ class TestInternalLogCodes:
         # name, message, exception
         assert (
             mock_logger.error.call_args[0][1]
-            == "agentic_rl.JobSubmissionFailed"
+            == "client.JobSubmissionFailed"
         )
 
     @pytest.mark.asyncio
@@ -635,7 +635,7 @@ class TestInternalLogCodes:
         mock_logger.error.assert_called_once()
         # Logger uses placeholder format: "[%s] %s | %s",
         # name, message, exception
-        assert mock_logger.error.call_args[0][1] == "agentic_rl.WorkflowFailed"
+        assert mock_logger.error.call_args[0][1] == "client.WorkflowFailed"
 
     @pytest.mark.asyncio
     @patch("dashscope.finetune.agentic_rl.set_api_key")
@@ -656,8 +656,8 @@ class TestInternalLogCodes:
 
         # Check all logged messages for the error name
         error_names = [call[0][1] for call in mock_logger.error.call_args_list]
-        assert "agentic_rl.UnsupportedFunctionType" in error_names
-        assert "agentic_rl.FunctionTestFailed" not in error_names
+        assert "client.UnsupportedFunctionType" in error_names
+        assert "client.FunctionTestFailed" not in error_names
 
     @pytest.mark.asyncio
     @patch("dashscope.finetune.agentic_rl.set_api_key")
@@ -685,7 +685,7 @@ class TestInternalLogCodes:
         # name, message, exception
         assert (
             mock_logger.error.call_args[0][1]
-            == "agentic_rl.FunctionTestFailed"
+            == "client.FunctionTestFailed"
         )
 
 
