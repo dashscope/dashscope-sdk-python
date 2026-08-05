@@ -90,7 +90,7 @@ class IOErrorWithCode(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "sdk.IOErrorWithCode",
+        error_code: str = "agentic_rl.IOErrorWithCode",
         path: Optional[str] = None,
         operation: Optional[str] = None,
     ):
@@ -106,7 +106,7 @@ class RuntimeErrorWithCode(_RootCauseMixin, RuntimeError):
     def __init__(
         self,
         message: str,
-        error_code: str = "sdk.RuntimeErrorWithCode",
+        error_code: str = "agentic_rl.RuntimeErrorWithCode",
     ):
         super().__init__(message)
         self.error_code = error_code
@@ -126,7 +126,7 @@ class ValueErrorWithCode(_RootCauseMixin, ValueError):
     def __init__(
         self,
         message: str,
-        error_code: str = "sdk.ValueErrorWithCode",
+        error_code: str = "agentic_rl.ValueErrorWithCode",
     ):
         super().__init__(message)
         self.error_code = error_code
@@ -171,7 +171,7 @@ class BaseConnectionError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "sdk.BaseConnectionError",
+        error_code: str = "agentic_rl.BaseConnectionError",
         endpoint: Optional[str] = None,
     ):
         super().__init__(message, error_code)
@@ -184,7 +184,7 @@ class OSSConnectionError(BaseConnectionError):
     def __init__(
         self,
         message: str,
-        error_code: str = "sdk.OSSConnectionError",
+        error_code: str = "agentic_rl.OSSConnectionError",
         endpoint: str = None,
     ):
         super().__init__(
@@ -200,7 +200,7 @@ class OSSUploadError(BaseConnectionError):
     def __init__(
         self,
         message: str,
-        error_code: str = "sdk.OSSUploadError",
+        error_code: str = "agentic_rl.OSSUploadError",
         endpoint: str = None,
         bucket: Optional[str] = None,
         object_key: Optional[str] = None,

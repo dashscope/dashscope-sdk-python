@@ -2809,8 +2809,8 @@ AGENTIC_RL_OUTPUT_ERROR = ClientErrorDef(
     solution="",
 )
 
-SDK_BASE_CONNECTION_ERROR = ClientErrorDef(
-    name="sdk.BaseConnectionError",
+AGENTIC_RL_BASE_CONNECTION_ERROR = ClientErrorDef(
+    name="agentic_rl.BaseConnectionError",
     external=INTERNAL_ERROR,
     message="Connection-related error occurred.",
     allow_retry=True,
@@ -2819,8 +2819,8 @@ SDK_BASE_CONNECTION_ERROR = ClientErrorDef(
     solution="",
 )
 
-SDK_OSS_CONNECTION_ERROR = ClientErrorDef(
-    name="sdk.OSSConnectionError",
+AGENTIC_RL_OSS_CONNECTION_ERROR = ClientErrorDef(
+    name="agentic_rl.OSSConnectionError",
     external=INTERNAL_ERROR,
     message="Connecting to OSS storage service failed.",
     allow_retry=True,
@@ -2829,8 +2829,8 @@ SDK_OSS_CONNECTION_ERROR = ClientErrorDef(
     solution="",
 )
 
-SDK_OSS_UPLOAD_ERROR = ClientErrorDef(
-    name="sdk.OSSUploadError",
+AGENTIC_RL_OSS_UPLOAD_ERROR = ClientErrorDef(
+    name="agentic_rl.OSSUploadError",
     external=INTERNAL_ERROR,
     message="File upload operation to OSS failed.",
     allow_retry=True,
@@ -2939,8 +2939,8 @@ AGENTIC_RL_BASE_PERMISSION_ERROR = ClientErrorDef(
     solution="",
 )
 
-SDK_IO_ERROR_WITH_CODE = ClientErrorDef(
-    name="sdk.IOErrorWithCode",
+AGENTIC_RL_IO_ERROR_WITH_CODE = ClientErrorDef(
+    name="agentic_rl.IOErrorWithCode",
     external=INTERNAL_ERROR,
     message="General I/O operation failure.",
     allow_retry=True,
@@ -2950,8 +2950,8 @@ SDK_IO_ERROR_WITH_CODE = ClientErrorDef(
 )
 
 
-SDK_ERROR = ClientErrorDef(
-    name="sdk.Error",
+AGENTIC_RL_ERROR = ClientErrorDef(
+    name="agentic_rl.Error",
     external=INTERNAL_ERROR,
     message="Base client error occurred.",
     allow_retry=True,
@@ -2960,8 +2960,8 @@ SDK_ERROR = ClientErrorDef(
     solution="",
 )
 
-SDK_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
-    name="sdk.RuntimeErrorWithCode",
+AGENTIC_RL_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
+    name="agentic_rl.RuntimeErrorWithCode",
     external=INTERNAL_ERROR,
     message="Runtime error occurred in client.",
     allow_retry=True,
@@ -2970,8 +2970,8 @@ SDK_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
     solution="",
 )
 
-SDK_VALUE_ERROR_WITH_CODE = ClientErrorDef(
-    name="sdk.ValueErrorWithCode",
+AGENTIC_RL_VALUE_ERROR_WITH_CODE = ClientErrorDef(
+    name="agentic_rl.ValueErrorWithCode",
     external=INVALID_REQUEST,
     message="Invalid value encountered in client.",
     allow_retry=False,
@@ -3249,9 +3249,9 @@ CLIENT_ERRORS = [
     AGENTIC_RL_FUNCTION_TEST_TIMEOUT,
     AGENTIC_RL_INPUT_ERROR,
     AGENTIC_RL_OUTPUT_ERROR,
-    SDK_BASE_CONNECTION_ERROR,
-    SDK_OSS_CONNECTION_ERROR,
-    SDK_OSS_UPLOAD_ERROR,
+    AGENTIC_RL_BASE_CONNECTION_ERROR,
+    AGENTIC_RL_OSS_CONNECTION_ERROR,
+    AGENTIC_RL_OSS_UPLOAD_ERROR,
     AGENTIC_RL_DEPLOYMENT_ERROR,
     AGENTIC_RL_REGISTRATION_ERROR,
     AGENTIC_RL_FUNCTION_LOAD_ERROR,
@@ -3262,8 +3262,8 @@ CLIENT_ERRORS = [
     AGENTIC_RL_VALIDATION_ERROR,
     AGENTIC_RL_CONFIGURATION_ERROR,
     AGENTIC_RL_BASE_PERMISSION_ERROR,
-    SDK_IO_ERROR_WITH_CODE,
-    SDK_ERROR,
-    SDK_RUNTIME_ERROR_WITH_CODE,
-    SDK_VALUE_ERROR_WITH_CODE,
+    AGENTIC_RL_IO_ERROR_WITH_CODE,
+    AGENTIC_RL_ERROR,
+    AGENTIC_RL_RUNTIME_ERROR_WITH_CODE,
+    AGENTIC_RL_VALUE_ERROR_WITH_CODE,
 ]
