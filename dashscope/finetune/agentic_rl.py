@@ -51,15 +51,15 @@ from dashscope.common.error_registry import (
     INTERNAL_ERROR,
     PERMISSION_DENIED,
     REQUEST_TIMEOUT,
-    CLIENT_INVALID_API_KEY,
-    CLIENT_FUNCTION_REGISTRATION_FAILED,
-    CLIENT_DATASETS_UPLOAD_FAILED,
-    CLIENT_DUPLICATE_FUNCTION_NAMES,
-    CLIENT_JOB_SUBMISSION_FAILED,
-    CLIENT_WORKFLOW_FAILED,
-    CLIENT_UNSUPPORTED_FUNCTION_TYPE,
-    CLIENT_FUNCTION_TEST_FAILED,
-    CLIENT_FUNCTION_TEST_TIMEOUT,
+    SDK_INVALID_API_KEY,
+    AGENTIC_RL_FUNCTION_REGISTRATION_FAILED,
+    AGENTIC_RL_DATASETS_UPLOAD_FAILED,
+    AGENTIC_RL_DUPLICATE_FUNCTION_NAMES,
+    AGENTIC_RL_JOB_SUBMISSION_FAILED,
+    AGENTIC_RL_WORKFLOW_FAILED,
+    AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE,
+    AGENTIC_RL_FUNCTION_TEST_FAILED,
+    AGENTIC_RL_FUNCTION_TEST_TIMEOUT,
 )
 from dashscope.finetune.reinforcement.common.errors import (
     BasePermissionError,
@@ -114,8 +114,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         except Exception as e:
             logger.error(
                 "[%s] %s | %s",
-                CLIENT_INVALID_API_KEY.name,
-                CLIENT_INVALID_API_KEY.format_message(),
+                SDK_INVALID_API_KEY.name,
+                SDK_INVALID_API_KEY.format_message(),
                 e,
                 exc_info=True,
             )
@@ -173,8 +173,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             inner_code = getattr(e, "error_code", None)
             logger.error(
                 "[%s] %s | [%s] %s",
-                CLIENT_FUNCTION_REGISTRATION_FAILED.name,
-                CLIENT_FUNCTION_REGISTRATION_FAILED.format_message(),
+                AGENTIC_RL_FUNCTION_REGISTRATION_FAILED.name,
+                AGENTIC_RL_FUNCTION_REGISTRATION_FAILED.format_message(),
                 inner_code or "unknown",
                 e,
                 exc_info=True,
@@ -228,8 +228,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             inner_code = getattr(e, "error_code", None)
             logger.error(
                 "[%s] %s | [%s] %s",
-                CLIENT_DATASETS_UPLOAD_FAILED.name,
-                CLIENT_DATASETS_UPLOAD_FAILED.format_message(),
+                AGENTIC_RL_DATASETS_UPLOAD_FAILED.name,
+                AGENTIC_RL_DATASETS_UPLOAD_FAILED.format_message(),
                 inner_code or "unknown",
                 e,
                 exc_info=True,
@@ -305,8 +305,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         if not self.tuning.check_function_names():
             logger.error(
                 "[%s] %s",
-                CLIENT_DUPLICATE_FUNCTION_NAMES.name,
-                CLIENT_DUPLICATE_FUNCTION_NAMES.format_message(),
+                AGENTIC_RL_DUPLICATE_FUNCTION_NAMES.name,
+                AGENTIC_RL_DUPLICATE_FUNCTION_NAMES.format_message(),
             )
             exc = InvalidParameter(INVALID_REQUEST.format_msg())
             exc.status_code = INVALID_REQUEST.status_code
@@ -364,8 +364,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             inner_code = getattr(e, "error_code", None)
             logger.error(
                 "[%s] %s | [%s] %s",
-                CLIENT_JOB_SUBMISSION_FAILED.name,
-                CLIENT_JOB_SUBMISSION_FAILED.format_message(),
+                AGENTIC_RL_JOB_SUBMISSION_FAILED.name,
+                AGENTIC_RL_JOB_SUBMISSION_FAILED.format_message(),
                 inner_code or "unknown",
                 e,
                 exc_info=True,
@@ -449,8 +449,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             inner_code = getattr(e, "error_code", None)
             logger.error(
                 "[%s] %s | [%s] %s",
-                CLIENT_WORKFLOW_FAILED.name,
-                CLIENT_WORKFLOW_FAILED.format_message(),
+                AGENTIC_RL_WORKFLOW_FAILED.name,
+                AGENTIC_RL_WORKFLOW_FAILED.format_message(),
                 inner_code or "unknown",
                 e,
                 exc_info=True,
@@ -577,8 +577,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         if model_cls is None:
             logger.error(
                 "[%s] %s | functype=%s",
-                CLIENT_UNSUPPORTED_FUNCTION_TYPE.name,
-                CLIENT_UNSUPPORTED_FUNCTION_TYPE.format_message(),
+                AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE.name,
+                AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE.format_message(),
                 functype,
             )
             exc = InvalidParameter(INVALID_REQUEST.format_msg())
@@ -640,9 +640,9 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
                 public_error = INTERNAL_ERROR
 
             if public_error == REQUEST_TIMEOUT:
-                internal_error_def = CLIENT_FUNCTION_TEST_TIMEOUT
+                internal_error_def = AGENTIC_RL_FUNCTION_TEST_TIMEOUT
             else:
-                internal_error_def = CLIENT_FUNCTION_TEST_FAILED
+                internal_error_def = AGENTIC_RL_FUNCTION_TEST_FAILED
 
             logger.error(
                 "[%s] %s | [%s] %s",

@@ -468,7 +468,7 @@ class TestInternalLogCodes:
         mock_logger.error.assert_called_once()
         # Logger uses placeholder format: "[%s] %s | %s",
         # name, message, exception
-        assert mock_logger.error.call_args[0][1] == "client.InvalidApiKey"
+        assert mock_logger.error.call_args[0][1] == "sdk.InvalidApiKey"
 
     @pytest.mark.asyncio
     @patch(
@@ -497,7 +497,7 @@ class TestInternalLogCodes:
         # name, message, exception
         assert (
             mock_logger.error.call_args[0][1]
-            == "client.FunctionRegistrationFailed"
+            == "agentic_rl.FunctionRegistrationFailed"
         )
 
     @pytest.mark.asyncio
@@ -524,7 +524,8 @@ class TestInternalLogCodes:
         # Logger uses placeholder format: "[%s] %s | %s",
         # name, message, exception
         assert (
-            mock_logger.error.call_args[0][1] == "client.DatasetsUploadFailed"
+            mock_logger.error.call_args[0][1]
+            == "agentic_rl.DatasetsUploadFailed"
         )
 
     @patch(
@@ -562,7 +563,7 @@ class TestInternalLogCodes:
         # Logger uses placeholder format: "[%s] %s", name, message
         assert (
             mock_logger.error.call_args[0][1]
-            == "client.DuplicateFunctionNames"
+            == "agentic_rl.DuplicateFunctionNames"
         )
 
     @patch(
@@ -604,7 +605,8 @@ class TestInternalLogCodes:
         # Logger uses placeholder format: "[%s] %s | %s",
         # name, message, exception
         assert (
-            mock_logger.error.call_args[0][1] == "client.JobSubmissionFailed"
+            mock_logger.error.call_args[0][1]
+            == "agentic_rl.JobSubmissionFailed"
         )
 
     @pytest.mark.asyncio
@@ -633,7 +635,7 @@ class TestInternalLogCodes:
         mock_logger.error.assert_called_once()
         # Logger uses placeholder format: "[%s] %s | %s",
         # name, message, exception
-        assert mock_logger.error.call_args[0][1] == "client.WorkflowFailed"
+        assert mock_logger.error.call_args[0][1] == "agentic_rl.WorkflowFailed"
 
     @pytest.mark.asyncio
     @patch("dashscope.finetune.agentic_rl.set_api_key")
@@ -654,8 +656,8 @@ class TestInternalLogCodes:
 
         # Check all logged messages for the error name
         error_names = [call[0][1] for call in mock_logger.error.call_args_list]
-        assert "client.UnsupportedFunctionType" in error_names
-        assert "client.FunctionTestFailed" not in error_names
+        assert "agentic_rl.UnsupportedFunctionType" in error_names
+        assert "agentic_rl.FunctionTestFailed" not in error_names
 
     @pytest.mark.asyncio
     @patch("dashscope.finetune.agentic_rl.set_api_key")
@@ -681,7 +683,10 @@ class TestInternalLogCodes:
         mock_logger.error.assert_called_once()
         # Logger uses placeholder format: "[%s] %s | %s",
         # name, message, exception
-        assert mock_logger.error.call_args[0][1] == "client.FunctionTestFailed"
+        assert (
+            mock_logger.error.call_args[0][1]
+            == "agentic_rl.FunctionTestFailed"
+        )
 
 
 class TestPassthroughAttributeCompleteness:

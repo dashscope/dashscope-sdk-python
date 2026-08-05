@@ -44,25 +44,9 @@ class InternalErrorDef:
 
 
 @dataclass(frozen=True)
-class ClientError:
-    key: str
-    status_code: int
-    error_code: str
-    error_msg: str
-    anthropic_error_code: str
-
-    def format_msg(self, variables: Dict[str, str] = None) -> str:
-        msg = self.error_msg
-        if variables:
-            for k, v in variables.items():
-                msg = msg.replace("{" + k + "}", v)
-        return msg
-
-
-@dataclass(frozen=True)
 class ClientErrorDef:
     name: str
-    external: ClientError
+    external: PublicError
     message: str
     allow_retry: bool = False
     vars: List[str] = field(default_factory=list)
@@ -2714,8 +2698,8 @@ MODEL_STOP_ENGINE_INVALID_OUTPUT = InternalErrorDef(
 
 # -- Client Errors ----------------------------------------
 
-CLIENT_INVALID_API_KEY = ClientErrorDef(
-    name="client.InvalidApiKey",
+SDK_INVALID_API_KEY = ClientErrorDef(
+    name="sdk.InvalidApiKey",
     external=AUTH_FAILED,
     message="Invalid API key configuration for client.",
     allow_retry=False,
@@ -2724,8 +2708,8 @@ CLIENT_INVALID_API_KEY = ClientErrorDef(
     solution="",
 )
 
-CLIENT_FUNCTION_REGISTRATION_FAILED = ClientErrorDef(
-    name="client.FunctionRegistrationFailed",
+AGENTIC_RL_FUNCTION_REGISTRATION_FAILED = ClientErrorDef(
+    name="agentic_rl.FunctionRegistrationFailed",
     external=INTERNAL_ERROR,
     message="Function component registration failed.",
     allow_retry=True,
@@ -2734,8 +2718,8 @@ CLIENT_FUNCTION_REGISTRATION_FAILED = ClientErrorDef(
     solution="",
 )
 
-CLIENT_DATASETS_UPLOAD_FAILED = ClientErrorDef(
-    name="client.DatasetsUploadFailed",
+AGENTIC_RL_DATASETS_UPLOAD_FAILED = ClientErrorDef(
+    name="agentic_rl.DatasetsUploadFailed",
     external=INTERNAL_ERROR,
     message="Datasets upload failed.",
     allow_retry=True,
@@ -2744,8 +2728,8 @@ CLIENT_DATASETS_UPLOAD_FAILED = ClientErrorDef(
     solution="",
 )
 
-CLIENT_DUPLICATE_FUNCTION_NAMES = ClientErrorDef(
-    name="client.DuplicateFunctionNames",
+AGENTIC_RL_DUPLICATE_FUNCTION_NAMES = ClientErrorDef(
+    name="agentic_rl.DuplicateFunctionNames",
     external=INVALID_REQUEST,
     message="Duplicate function names detected.",
     allow_retry=False,
@@ -2754,8 +2738,8 @@ CLIENT_DUPLICATE_FUNCTION_NAMES = ClientErrorDef(
     solution="",
 )
 
-CLIENT_JOB_SUBMISSION_FAILED = ClientErrorDef(
-    name="client.JobSubmissionFailed",
+AGENTIC_RL_JOB_SUBMISSION_FAILED = ClientErrorDef(
+    name="agentic_rl.JobSubmissionFailed",
     external=INTERNAL_ERROR,
     message="Job submission failed.",
     allow_retry=True,
@@ -2764,8 +2748,8 @@ CLIENT_JOB_SUBMISSION_FAILED = ClientErrorDef(
     solution="",
 )
 
-CLIENT_WORKFLOW_FAILED = ClientErrorDef(
-    name="client.WorkflowFailed",
+AGENTIC_RL_WORKFLOW_FAILED = ClientErrorDef(
+    name="agentic_rl.WorkflowFailed",
     external=INTERNAL_ERROR,
     message="RL tuning workflow failed.",
     allow_retry=True,
@@ -2774,8 +2758,8 @@ CLIENT_WORKFLOW_FAILED = ClientErrorDef(
     solution="",
 )
 
-CLIENT_UNSUPPORTED_FUNCTION_TYPE = ClientErrorDef(
-    name="client.UnsupportedFunctionType",
+AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE = ClientErrorDef(
+    name="agentic_rl.UnsupportedFunctionType",
     external=INVALID_REQUEST,
     message="Unsupported function type.",
     allow_retry=False,
@@ -2784,8 +2768,8 @@ CLIENT_UNSUPPORTED_FUNCTION_TYPE = ClientErrorDef(
     solution="",
 )
 
-CLIENT_FUNCTION_TEST_FAILED = ClientErrorDef(
-    name="client.FunctionTestFailed",
+AGENTIC_RL_FUNCTION_TEST_FAILED = ClientErrorDef(
+    name="agentic_rl.FunctionTestFailed",
     external=INTERNAL_ERROR,
     message="Function test failed.",
     allow_retry=True,
@@ -2794,8 +2778,8 @@ CLIENT_FUNCTION_TEST_FAILED = ClientErrorDef(
     solution="",
 )
 
-CLIENT_FUNCTION_TEST_TIMEOUT = ClientErrorDef(
-    name="client.FunctionTestTimeout",
+AGENTIC_RL_FUNCTION_TEST_TIMEOUT = ClientErrorDef(
+    name="agentic_rl.FunctionTestTimeout",
     external=REQUEST_TIMEOUT,
     message="Function test timed out.",
     allow_retry=True,
@@ -2805,8 +2789,8 @@ CLIENT_FUNCTION_TEST_TIMEOUT = ClientErrorDef(
 )
 
 
-CLIENT_INPUT_ERROR = ClientErrorDef(
-    name="client.InputError",
+AGENTIC_RL_INPUT_ERROR = ClientErrorDef(
+    name="agentic_rl.InputError",
     external=INVALID_REQUEST,
     message="Invalid input data detected during validation.",
     allow_retry=False,
@@ -2815,8 +2799,8 @@ CLIENT_INPUT_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_OUTPUT_ERROR = ClientErrorDef(
-    name="client.OutputError",
+AGENTIC_RL_OUTPUT_ERROR = ClientErrorDef(
+    name="agentic_rl.OutputError",
     external=INTERNAL_ERROR,
     message="Service response failed output validation checks.",
     allow_retry=False,
@@ -2825,8 +2809,8 @@ CLIENT_OUTPUT_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_BASE_CONNECTION_ERROR = ClientErrorDef(
-    name="client.BaseConnectionError",
+SDK_BASE_CONNECTION_ERROR = ClientErrorDef(
+    name="sdk.BaseConnectionError",
     external=INTERNAL_ERROR,
     message="Connection-related error occurred.",
     allow_retry=True,
@@ -2835,8 +2819,8 @@ CLIENT_BASE_CONNECTION_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_OSS_CONNECTION_ERROR = ClientErrorDef(
-    name="client.OSSConnectionError",
+SDK_OSS_CONNECTION_ERROR = ClientErrorDef(
+    name="sdk.OSSConnectionError",
     external=INTERNAL_ERROR,
     message="Connecting to OSS storage service failed.",
     allow_retry=True,
@@ -2845,8 +2829,8 @@ CLIENT_OSS_CONNECTION_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_OSS_UPLOAD_ERROR = ClientErrorDef(
-    name="client.OSSUploadError",
+SDK_OSS_UPLOAD_ERROR = ClientErrorDef(
+    name="sdk.OSSUploadError",
     external=INTERNAL_ERROR,
     message="File upload operation to OSS failed.",
     allow_retry=True,
@@ -2855,8 +2839,8 @@ CLIENT_OSS_UPLOAD_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_DEPLOYMENT_ERROR = ClientErrorDef(
-    name="client.DeploymentError",
+AGENTIC_RL_DEPLOYMENT_ERROR = ClientErrorDef(
+    name="agentic_rl.DeploymentError",
     external=INTERNAL_ERROR,
     message="Deployment-related error occurred.",
     allow_retry=True,
@@ -2865,8 +2849,8 @@ CLIENT_DEPLOYMENT_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_REGISTRATION_ERROR = ClientErrorDef(
-    name="client.RegistrationError",
+AGENTIC_RL_REGISTRATION_ERROR = ClientErrorDef(
+    name="agentic_rl.RegistrationError",
     external=INTERNAL_ERROR,
     message="Function registration failed in the deployment system.",
     allow_retry=True,
@@ -2875,8 +2859,8 @@ CLIENT_REGISTRATION_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_FUNCTION_LOAD_ERROR = ClientErrorDef(
-    name="client.FunctionLoadError",
+AGENTIC_RL_FUNCTION_LOAD_ERROR = ClientErrorDef(
+    name="agentic_rl.FunctionLoadError",
     external=INTERNAL_ERROR,
     message="Loading a registered function into runtime failed.",
     allow_retry=True,
@@ -2885,8 +2869,8 @@ CLIENT_FUNCTION_LOAD_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_INSTANCE_WARMUP_ERROR = ClientErrorDef(
-    name="client.InstanceWarmupError",
+AGENTIC_RL_INSTANCE_WARMUP_ERROR = ClientErrorDef(
+    name="agentic_rl.InstanceWarmupError",
     external=INTERNAL_ERROR,
     message="Function instance health check failed after deployment.",
     allow_retry=True,
@@ -2895,8 +2879,8 @@ CLIENT_INSTANCE_WARMUP_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_INSTANCE_QUERY_ERROR = ClientErrorDef(
-    name="client.InstanceQueryError",
+AGENTIC_RL_INSTANCE_QUERY_ERROR = ClientErrorDef(
+    name="agentic_rl.InstanceQueryError",
     external=INTERNAL_ERROR,
     message="Querying function instance status failed.",
     allow_retry=True,
@@ -2905,8 +2889,8 @@ CLIENT_INSTANCE_QUERY_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_FUNCTION_LAYER_ERROR = ClientErrorDef(
-    name="client.FunctionLayerError",
+AGENTIC_RL_FUNCTION_LAYER_ERROR = ClientErrorDef(
+    name="agentic_rl.FunctionLayerError",
     external=INTERNAL_ERROR,
     message="Creating a layer of function failed.",
     allow_retry=True,
@@ -2915,8 +2899,8 @@ CLIENT_FUNCTION_LAYER_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_DATASETS_ERROR = ClientErrorDef(
-    name="client.DatasetsError",
+AGENTIC_RL_DATASETS_ERROR = ClientErrorDef(
+    name="agentic_rl.DatasetsError",
     external=INTERNAL_ERROR,
     message="Update datasets failed in the deployment system.",
     allow_retry=True,
@@ -2925,8 +2909,8 @@ CLIENT_DATASETS_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_VALIDATION_ERROR = ClientErrorDef(
-    name="client.ValidationError",
+AGENTIC_RL_VALIDATION_ERROR = ClientErrorDef(
+    name="agentic_rl.ValidationError",
     external=INVALID_REQUEST,
     message="Data validation failed.",
     allow_retry=False,
@@ -2935,8 +2919,8 @@ CLIENT_VALIDATION_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_CONFIGURATION_ERROR = ClientErrorDef(
-    name="client.ConfigurationError",
+AGENTIC_RL_CONFIGURATION_ERROR = ClientErrorDef(
+    name="agentic_rl.ConfigurationError",
     external=INVALID_REQUEST,
     message="Invalid system configuration detected.",
     allow_retry=False,
@@ -2945,8 +2929,8 @@ CLIENT_CONFIGURATION_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_BASE_PERMISSION_ERROR = ClientErrorDef(
-    name="client.BasePermissionError",
+AGENTIC_RL_BASE_PERMISSION_ERROR = ClientErrorDef(
+    name="agentic_rl.BasePermissionError",
     external=PERMISSION_DENIED,
     message="Operation lacks required permissions.",
     allow_retry=False,
@@ -2955,8 +2939,8 @@ CLIENT_BASE_PERMISSION_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_IO_ERROR_WITH_CODE = ClientErrorDef(
-    name="client.IOErrorWithCode",
+SDK_IO_ERROR_WITH_CODE = ClientErrorDef(
+    name="sdk.IOErrorWithCode",
     external=INTERNAL_ERROR,
     message="General I/O operation failure.",
     allow_retry=True,
@@ -2966,8 +2950,8 @@ CLIENT_IO_ERROR_WITH_CODE = ClientErrorDef(
 )
 
 
-CLIENT_ERROR = ClientErrorDef(
-    name="client.Error",
+SDK_ERROR = ClientErrorDef(
+    name="sdk.Error",
     external=INTERNAL_ERROR,
     message="Base client error occurred.",
     allow_retry=True,
@@ -2976,8 +2960,8 @@ CLIENT_ERROR = ClientErrorDef(
     solution="",
 )
 
-CLIENT_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
-    name="client.RuntimeErrorWithCode",
+SDK_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
+    name="sdk.RuntimeErrorWithCode",
     external=INTERNAL_ERROR,
     message="Runtime error occurred in client.",
     allow_retry=True,
@@ -2986,8 +2970,8 @@ CLIENT_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
     solution="",
 )
 
-CLIENT_VALUE_ERROR_WITH_CODE = ClientErrorDef(
-    name="client.ValueErrorWithCode",
+SDK_VALUE_ERROR_WITH_CODE = ClientErrorDef(
+    name="sdk.ValueErrorWithCode",
     external=INVALID_REQUEST,
     message="Invalid value encountered in client.",
     allow_retry=False,
@@ -3252,32 +3236,34 @@ INTERNAL_ERRORS = [
     MODEL_INNER_ENGINE_ERROR,
     MODEL_INNER_GENERATE_EXIT,
     MODEL_STOP_ENGINE_INVALID_OUTPUT,
-    CLIENT_INVALID_API_KEY,
-    CLIENT_FUNCTION_REGISTRATION_FAILED,
-    CLIENT_DATASETS_UPLOAD_FAILED,
-    CLIENT_DUPLICATE_FUNCTION_NAMES,
-    CLIENT_JOB_SUBMISSION_FAILED,
-    CLIENT_WORKFLOW_FAILED,
-    CLIENT_UNSUPPORTED_FUNCTION_TYPE,
-    CLIENT_FUNCTION_TEST_FAILED,
-    CLIENT_FUNCTION_TEST_TIMEOUT,
-    CLIENT_INPUT_ERROR,
-    CLIENT_OUTPUT_ERROR,
-    CLIENT_BASE_CONNECTION_ERROR,
-    CLIENT_OSS_CONNECTION_ERROR,
-    CLIENT_OSS_UPLOAD_ERROR,
-    CLIENT_DEPLOYMENT_ERROR,
-    CLIENT_REGISTRATION_ERROR,
-    CLIENT_FUNCTION_LOAD_ERROR,
-    CLIENT_INSTANCE_WARMUP_ERROR,
-    CLIENT_INSTANCE_QUERY_ERROR,
-    CLIENT_FUNCTION_LAYER_ERROR,
-    CLIENT_DATASETS_ERROR,
-    CLIENT_VALIDATION_ERROR,
-    CLIENT_CONFIGURATION_ERROR,
-    CLIENT_BASE_PERMISSION_ERROR,
-    CLIENT_IO_ERROR_WITH_CODE,
-    CLIENT_ERROR,
-    CLIENT_RUNTIME_ERROR_WITH_CODE,
-    CLIENT_VALUE_ERROR_WITH_CODE,
+]
+CLIENT_ERRORS = [
+    SDK_INVALID_API_KEY,
+    AGENTIC_RL_FUNCTION_REGISTRATION_FAILED,
+    AGENTIC_RL_DATASETS_UPLOAD_FAILED,
+    AGENTIC_RL_DUPLICATE_FUNCTION_NAMES,
+    AGENTIC_RL_JOB_SUBMISSION_FAILED,
+    AGENTIC_RL_WORKFLOW_FAILED,
+    AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE,
+    AGENTIC_RL_FUNCTION_TEST_FAILED,
+    AGENTIC_RL_FUNCTION_TEST_TIMEOUT,
+    AGENTIC_RL_INPUT_ERROR,
+    AGENTIC_RL_OUTPUT_ERROR,
+    SDK_BASE_CONNECTION_ERROR,
+    SDK_OSS_CONNECTION_ERROR,
+    SDK_OSS_UPLOAD_ERROR,
+    AGENTIC_RL_DEPLOYMENT_ERROR,
+    AGENTIC_RL_REGISTRATION_ERROR,
+    AGENTIC_RL_FUNCTION_LOAD_ERROR,
+    AGENTIC_RL_INSTANCE_WARMUP_ERROR,
+    AGENTIC_RL_INSTANCE_QUERY_ERROR,
+    AGENTIC_RL_FUNCTION_LAYER_ERROR,
+    AGENTIC_RL_DATASETS_ERROR,
+    AGENTIC_RL_VALIDATION_ERROR,
+    AGENTIC_RL_CONFIGURATION_ERROR,
+    AGENTIC_RL_BASE_PERMISSION_ERROR,
+    SDK_IO_ERROR_WITH_CODE,
+    SDK_ERROR,
+    SDK_RUNTIME_ERROR_WITH_CODE,
+    SDK_VALUE_ERROR_WITH_CODE,
 ]

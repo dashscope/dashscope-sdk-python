@@ -48,11 +48,15 @@ class _RootCauseMixin:
         Returns empty string if not found.
         """
         try:
-            from dashscope.common.error_registry import INTERNAL_ERRORS
+            from dashscope.common.error_registry import (
+                INTERNAL_ERRORS,
+                CLIENT_ERRORS,
+            )
 
-            for err_def in INTERNAL_ERRORS:
-                if err_def.name == error_code:
-                    return err_def.format_message()
+            for err_list in [INTERNAL_ERRORS, CLIENT_ERRORS]:
+                for err_def in err_list:
+                    if err_def.name == error_code:
+                        return err_def.format_message()
         except Exception:
             pass
         return ""
@@ -86,7 +90,7 @@ class IOErrorWithCode(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.IOErrorWithCode",
+        error_code: str = "sdk.IOErrorWithCode",
         path: Optional[str] = None,
         operation: Optional[str] = None,
     ):
@@ -102,7 +106,7 @@ class RuntimeErrorWithCode(_RootCauseMixin, RuntimeError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.RuntimeErrorWithCode",
+        error_code: str = "sdk.RuntimeErrorWithCode",
     ):
         super().__init__(message)
         self.error_code = error_code
@@ -122,7 +126,7 @@ class ValueErrorWithCode(_RootCauseMixin, ValueError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.ValueErrorWithCode",
+        error_code: str = "sdk.ValueErrorWithCode",
     ):
         super().__init__(message)
         self.error_code = error_code
@@ -167,7 +171,7 @@ class BaseConnectionError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.BaseConnectionError",
+        error_code: str = "sdk.BaseConnectionError",
         endpoint: Optional[str] = None,
     ):
         super().__init__(message, error_code)
@@ -180,7 +184,7 @@ class OSSConnectionError(BaseConnectionError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.OSSConnectionError",
+        error_code: str = "sdk.OSSConnectionError",
         endpoint: str = None,
     ):
         super().__init__(
@@ -196,7 +200,7 @@ class OSSUploadError(BaseConnectionError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.OSSUploadError",
+        error_code: str = "sdk.OSSUploadError",
         endpoint: str = None,
         bucket: Optional[str] = None,
         object_key: Optional[str] = None,
