@@ -524,8 +524,7 @@ class TestInternalLogCodes:
         # Logger uses placeholder format: "[%s] %s | %s",
         # name, message, exception
         assert (
-            mock_logger.error.call_args[0][1]
-            == "client.DatasetsUploadFailed"
+            mock_logger.error.call_args[0][1] == "client.DatasetsUploadFailed"
         )
 
     @patch(
@@ -605,8 +604,7 @@ class TestInternalLogCodes:
         # Logger uses placeholder format: "[%s] %s | %s",
         # name, message, exception
         assert (
-            mock_logger.error.call_args[0][1]
-            == "client.JobSubmissionFailed"
+            mock_logger.error.call_args[0][1] == "client.JobSubmissionFailed"
         )
 
     @pytest.mark.asyncio
@@ -683,10 +681,7 @@ class TestInternalLogCodes:
         mock_logger.error.assert_called_once()
         # Logger uses placeholder format: "[%s] %s | %s",
         # name, message, exception
-        assert (
-            mock_logger.error.call_args[0][1]
-            == "client.FunctionTestFailed"
-        )
+        assert mock_logger.error.call_args[0][1] == "client.FunctionTestFailed"
 
 
 class TestPassthroughAttributeCompleteness:
