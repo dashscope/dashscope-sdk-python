@@ -2708,8 +2708,8 @@ SDK_INVALID_API_KEY = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_FUNCTION_REGISTRATION_FAILED = ClientErrorDef(
-    name="agentic_rl.FunctionRegistrationFailed",
+SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED = ClientErrorDef(
+    name="sdk.agentic_rl.FunctionRegistrationFailed",
     external=INTERNAL_ERROR,
     message="Function component registration failed.",
     allow_retry=True,
@@ -2718,8 +2718,8 @@ AGENTIC_RL_FUNCTION_REGISTRATION_FAILED = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_DATASETS_UPLOAD_FAILED = ClientErrorDef(
-    name="agentic_rl.DatasetsUploadFailed",
+SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED = ClientErrorDef(
+    name="sdk.agentic_rl.DatasetsUploadFailed",
     external=INTERNAL_ERROR,
     message="Datasets upload failed.",
     allow_retry=True,
@@ -2728,8 +2728,8 @@ AGENTIC_RL_DATASETS_UPLOAD_FAILED = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_DUPLICATE_FUNCTION_NAMES = ClientErrorDef(
-    name="agentic_rl.DuplicateFunctionNames",
+SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES = ClientErrorDef(
+    name="sdk.agentic_rl.DuplicateFunctionNames",
     external=INVALID_REQUEST,
     message="Duplicate function names detected.",
     allow_retry=False,
@@ -2738,8 +2738,8 @@ AGENTIC_RL_DUPLICATE_FUNCTION_NAMES = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_JOB_SUBMISSION_FAILED = ClientErrorDef(
-    name="agentic_rl.JobSubmissionFailed",
+SDK_AGENTIC_RL_JOB_SUBMISSION_FAILED = ClientErrorDef(
+    name="sdk.agentic_rl.JobSubmissionFailed",
     external=INTERNAL_ERROR,
     message="Job submission failed.",
     allow_retry=True,
@@ -2748,8 +2748,8 @@ AGENTIC_RL_JOB_SUBMISSION_FAILED = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_WORKFLOW_FAILED = ClientErrorDef(
-    name="agentic_rl.WorkflowFailed",
+SDK_AGENTIC_RL_WORKFLOW_FAILED = ClientErrorDef(
+    name="sdk.agentic_rl.WorkflowFailed",
     external=INTERNAL_ERROR,
     message="RL tuning workflow failed.",
     allow_retry=True,
@@ -2758,8 +2758,8 @@ AGENTIC_RL_WORKFLOW_FAILED = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE = ClientErrorDef(
-    name="agentic_rl.UnsupportedFunctionType",
+SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE = ClientErrorDef(
+    name="sdk.agentic_rl.UnsupportedFunctionType",
     external=INVALID_REQUEST,
     message="Unsupported function type.",
     allow_retry=False,
@@ -2768,8 +2768,8 @@ AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_FUNCTION_TEST_FAILED = ClientErrorDef(
-    name="agentic_rl.FunctionTestFailed",
+SDK_AGENTIC_RL_FUNCTION_TEST_FAILED = ClientErrorDef(
+    name="sdk.agentic_rl.FunctionTestFailed",
     external=INTERNAL_ERROR,
     message="Function test failed.",
     allow_retry=True,
@@ -2778,8 +2778,8 @@ AGENTIC_RL_FUNCTION_TEST_FAILED = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_FUNCTION_TEST_TIMEOUT = ClientErrorDef(
-    name="agentic_rl.FunctionTestTimeout",
+SDK_AGENTIC_RL_FUNCTION_TEST_TIMEOUT = ClientErrorDef(
+    name="sdk.agentic_rl.FunctionTestTimeout",
     external=REQUEST_TIMEOUT,
     message="Function test timed out.",
     allow_retry=True,
@@ -2789,8 +2789,8 @@ AGENTIC_RL_FUNCTION_TEST_TIMEOUT = ClientErrorDef(
 )
 
 
-AGENTIC_RL_INPUT_ERROR = ClientErrorDef(
-    name="agentic_rl.InputError",
+SDK_AGENTIC_RL_INPUT_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.InputError",
     external=INVALID_REQUEST,
     message="Invalid input data detected during validation.",
     allow_retry=False,
@@ -2799,8 +2799,8 @@ AGENTIC_RL_INPUT_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_OUTPUT_ERROR = ClientErrorDef(
-    name="agentic_rl.OutputError",
+SDK_AGENTIC_RL_OUTPUT_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.OutputError",
     external=INTERNAL_ERROR,
     message="Service response failed output validation checks.",
     allow_retry=False,
@@ -2809,8 +2809,8 @@ AGENTIC_RL_OUTPUT_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_BASE_CONNECTION_ERROR = ClientErrorDef(
-    name="agentic_rl.BaseConnectionError",
+SDK_AGENTIC_RL_BASE_CONNECTION_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.BaseConnectionError",
     external=INTERNAL_ERROR,
     message="Connection-related error occurred.",
     allow_retry=True,
@@ -2819,8 +2819,8 @@ AGENTIC_RL_BASE_CONNECTION_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_OSS_CONNECTION_ERROR = ClientErrorDef(
-    name="agentic_rl.OSSConnectionError",
+SDK_AGENTIC_RL_OSS_CONNECTION_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.OSSConnectionError",
     external=INTERNAL_ERROR,
     message="Connecting to OSS storage service failed.",
     allow_retry=True,
@@ -2829,8 +2829,8 @@ AGENTIC_RL_OSS_CONNECTION_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_OSS_UPLOAD_ERROR = ClientErrorDef(
-    name="agentic_rl.OSSUploadError",
+SDK_AGENTIC_RL_OSS_UPLOAD_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.OSSUploadError",
     external=INTERNAL_ERROR,
     message="File upload operation to OSS failed.",
     allow_retry=True,
@@ -2839,8 +2839,8 @@ AGENTIC_RL_OSS_UPLOAD_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_DEPLOYMENT_ERROR = ClientErrorDef(
-    name="agentic_rl.DeploymentError",
+SDK_AGENTIC_RL_DEPLOYMENT_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.DeploymentError",
     external=INTERNAL_ERROR,
     message="Deployment-related error occurred.",
     allow_retry=True,
@@ -2849,8 +2849,8 @@ AGENTIC_RL_DEPLOYMENT_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_REGISTRATION_ERROR = ClientErrorDef(
-    name="agentic_rl.RegistrationError",
+SDK_AGENTIC_RL_REGISTRATION_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.RegistrationError",
     external=INTERNAL_ERROR,
     message="Function registration failed in the deployment system.",
     allow_retry=True,
@@ -2859,8 +2859,8 @@ AGENTIC_RL_REGISTRATION_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_FUNCTION_LOAD_ERROR = ClientErrorDef(
-    name="agentic_rl.FunctionLoadError",
+SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.FunctionLoadError",
     external=INTERNAL_ERROR,
     message="Loading a registered function into runtime failed.",
     allow_retry=True,
@@ -2869,8 +2869,8 @@ AGENTIC_RL_FUNCTION_LOAD_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_INSTANCE_WARMUP_ERROR = ClientErrorDef(
-    name="agentic_rl.InstanceWarmupError",
+SDK_AGENTIC_RL_INSTANCE_WARMUP_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.InstanceWarmupError",
     external=INTERNAL_ERROR,
     message="Function instance health check failed after deployment.",
     allow_retry=True,
@@ -2879,8 +2879,8 @@ AGENTIC_RL_INSTANCE_WARMUP_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_INSTANCE_QUERY_ERROR = ClientErrorDef(
-    name="agentic_rl.InstanceQueryError",
+SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.InstanceQueryError",
     external=INTERNAL_ERROR,
     message="Querying function instance status failed.",
     allow_retry=True,
@@ -2889,8 +2889,8 @@ AGENTIC_RL_INSTANCE_QUERY_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_FUNCTION_LAYER_ERROR = ClientErrorDef(
-    name="agentic_rl.FunctionLayerError",
+SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.FunctionLayerError",
     external=INTERNAL_ERROR,
     message="Creating a layer of function failed.",
     allow_retry=True,
@@ -2899,8 +2899,8 @@ AGENTIC_RL_FUNCTION_LAYER_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_DATASETS_ERROR = ClientErrorDef(
-    name="agentic_rl.DatasetsError",
+SDK_AGENTIC_RL_DATASETS_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.DatasetsError",
     external=INTERNAL_ERROR,
     message="Update datasets failed in the deployment system.",
     allow_retry=True,
@@ -2909,8 +2909,8 @@ AGENTIC_RL_DATASETS_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_VALIDATION_ERROR = ClientErrorDef(
-    name="agentic_rl.ValidationError",
+SDK_AGENTIC_RL_VALIDATION_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.ValidationError",
     external=INVALID_REQUEST,
     message="Data validation failed.",
     allow_retry=False,
@@ -2919,8 +2919,8 @@ AGENTIC_RL_VALIDATION_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_CONFIGURATION_ERROR = ClientErrorDef(
-    name="agentic_rl.ConfigurationError",
+SDK_AGENTIC_RL_CONFIGURATION_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.ConfigurationError",
     external=INVALID_REQUEST,
     message="Invalid system configuration detected.",
     allow_retry=False,
@@ -2929,8 +2929,8 @@ AGENTIC_RL_CONFIGURATION_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_BASE_PERMISSION_ERROR = ClientErrorDef(
-    name="agentic_rl.BasePermissionError",
+SDK_AGENTIC_RL_BASE_PERMISSION_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.BasePermissionError",
     external=PERMISSION_DENIED,
     message="Operation lacks required permissions.",
     allow_retry=False,
@@ -2939,8 +2939,8 @@ AGENTIC_RL_BASE_PERMISSION_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_IO_ERROR_WITH_CODE = ClientErrorDef(
-    name="agentic_rl.IOErrorWithCode",
+SDK_AGENTIC_RL_IO_ERROR_WITH_CODE = ClientErrorDef(
+    name="sdk.agentic_rl.IOErrorWithCode",
     external=INTERNAL_ERROR,
     message="General I/O operation failure.",
     allow_retry=True,
@@ -2950,8 +2950,8 @@ AGENTIC_RL_IO_ERROR_WITH_CODE = ClientErrorDef(
 )
 
 
-AGENTIC_RL_ERROR = ClientErrorDef(
-    name="agentic_rl.Error",
+SDK_AGENTIC_RL_ERROR = ClientErrorDef(
+    name="sdk.agentic_rl.Error",
     external=INTERNAL_ERROR,
     message="Base client error occurred.",
     allow_retry=True,
@@ -2960,8 +2960,8 @@ AGENTIC_RL_ERROR = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
-    name="agentic_rl.RuntimeErrorWithCode",
+SDK_AGENTIC_RL_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
+    name="sdk.agentic_rl.RuntimeErrorWithCode",
     external=INTERNAL_ERROR,
     message="Runtime error occurred in client.",
     allow_retry=True,
@@ -2970,8 +2970,8 @@ AGENTIC_RL_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
     solution="",
 )
 
-AGENTIC_RL_VALUE_ERROR_WITH_CODE = ClientErrorDef(
-    name="agentic_rl.ValueErrorWithCode",
+SDK_AGENTIC_RL_VALUE_ERROR_WITH_CODE = ClientErrorDef(
+    name="sdk.agentic_rl.ValueErrorWithCode",
     external=INVALID_REQUEST,
     message="Invalid value encountered in client.",
     allow_retry=False,
@@ -3239,31 +3239,31 @@ INTERNAL_ERRORS = [
 ]
 CLIENT_ERRORS = [
     SDK_INVALID_API_KEY,
-    AGENTIC_RL_FUNCTION_REGISTRATION_FAILED,
-    AGENTIC_RL_DATASETS_UPLOAD_FAILED,
-    AGENTIC_RL_DUPLICATE_FUNCTION_NAMES,
-    AGENTIC_RL_JOB_SUBMISSION_FAILED,
-    AGENTIC_RL_WORKFLOW_FAILED,
-    AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE,
-    AGENTIC_RL_FUNCTION_TEST_FAILED,
-    AGENTIC_RL_FUNCTION_TEST_TIMEOUT,
-    AGENTIC_RL_INPUT_ERROR,
-    AGENTIC_RL_OUTPUT_ERROR,
-    AGENTIC_RL_BASE_CONNECTION_ERROR,
-    AGENTIC_RL_OSS_CONNECTION_ERROR,
-    AGENTIC_RL_OSS_UPLOAD_ERROR,
-    AGENTIC_RL_DEPLOYMENT_ERROR,
-    AGENTIC_RL_REGISTRATION_ERROR,
-    AGENTIC_RL_FUNCTION_LOAD_ERROR,
-    AGENTIC_RL_INSTANCE_WARMUP_ERROR,
-    AGENTIC_RL_INSTANCE_QUERY_ERROR,
-    AGENTIC_RL_FUNCTION_LAYER_ERROR,
-    AGENTIC_RL_DATASETS_ERROR,
-    AGENTIC_RL_VALIDATION_ERROR,
-    AGENTIC_RL_CONFIGURATION_ERROR,
-    AGENTIC_RL_BASE_PERMISSION_ERROR,
-    AGENTIC_RL_IO_ERROR_WITH_CODE,
-    AGENTIC_RL_ERROR,
-    AGENTIC_RL_RUNTIME_ERROR_WITH_CODE,
-    AGENTIC_RL_VALUE_ERROR_WITH_CODE,
+    SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED,
+    SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED,
+    SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES,
+    SDK_AGENTIC_RL_JOB_SUBMISSION_FAILED,
+    SDK_AGENTIC_RL_WORKFLOW_FAILED,
+    SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE,
+    SDK_AGENTIC_RL_FUNCTION_TEST_FAILED,
+    SDK_AGENTIC_RL_FUNCTION_TEST_TIMEOUT,
+    SDK_AGENTIC_RL_INPUT_ERROR,
+    SDK_AGENTIC_RL_OUTPUT_ERROR,
+    SDK_AGENTIC_RL_BASE_CONNECTION_ERROR,
+    SDK_AGENTIC_RL_OSS_CONNECTION_ERROR,
+    SDK_AGENTIC_RL_OSS_UPLOAD_ERROR,
+    SDK_AGENTIC_RL_DEPLOYMENT_ERROR,
+    SDK_AGENTIC_RL_REGISTRATION_ERROR,
+    SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR,
+    SDK_AGENTIC_RL_INSTANCE_WARMUP_ERROR,
+    SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR,
+    SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR,
+    SDK_AGENTIC_RL_DATASETS_ERROR,
+    SDK_AGENTIC_RL_VALIDATION_ERROR,
+    SDK_AGENTIC_RL_CONFIGURATION_ERROR,
+    SDK_AGENTIC_RL_BASE_PERMISSION_ERROR,
+    SDK_AGENTIC_RL_IO_ERROR_WITH_CODE,
+    SDK_AGENTIC_RL_ERROR,
+    SDK_AGENTIC_RL_RUNTIME_ERROR_WITH_CODE,
+    SDK_AGENTIC_RL_VALUE_ERROR_WITH_CODE,
 ]

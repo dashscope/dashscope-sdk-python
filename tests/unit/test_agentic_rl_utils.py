@@ -311,7 +311,8 @@ class TestAsyncHttpRequestRootCause:
                 )
 
             assert (
-                exc_info.value.error_code == "agentic_rl.RuntimeErrorWithCode"
+                exc_info.value.error_code
+                == "sdk.agentic_rl.RuntimeErrorWithCode"
             )
             root = exc_info.value.__cause__
             assert isinstance(root, aiohttp.ClientConnectionError)
@@ -335,7 +336,8 @@ class TestAsyncHttpRequestRootCause:
                 )
 
             assert (
-                exc_info.value.error_code == "agentic_rl.RuntimeErrorWithCode"
+                exc_info.value.error_code
+                == "sdk.agentic_rl.RuntimeErrorWithCode"
             )
             assert isinstance(
                 exc_info.value.__cause__,

@@ -68,7 +68,7 @@ class AgenticRLError(_RootCauseMixin, Exception):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.AgenticRLError",
+        error_code: str = "sdk.agentic_rl.AgenticRLError",
     ):
         super().__init__(message)
         self.error_code = error_code
@@ -90,7 +90,7 @@ class IOErrorWithCode(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.IOErrorWithCode",
+        error_code: str = "sdk.agentic_rl.IOErrorWithCode",
         path: Optional[str] = None,
         operation: Optional[str] = None,
     ):
@@ -106,7 +106,7 @@ class RuntimeErrorWithCode(_RootCauseMixin, RuntimeError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.RuntimeErrorWithCode",
+        error_code: str = "sdk.agentic_rl.RuntimeErrorWithCode",
     ):
         super().__init__(message)
         self.error_code = error_code
@@ -126,7 +126,7 @@ class ValueErrorWithCode(_RootCauseMixin, ValueError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.ValueErrorWithCode",
+        error_code: str = "sdk.agentic_rl.ValueErrorWithCode",
     ):
         super().__init__(message)
         self.error_code = error_code
@@ -145,7 +145,7 @@ class InputError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.InputError",
+        error_code: str = "sdk.agentic_rl.InputError",
         field: Optional[str] = None,
     ):
         super().__init__(message, error_code)
@@ -158,7 +158,7 @@ class OutputError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.OutputError",
+        error_code: str = "sdk.agentic_rl.OutputError",
         response: Optional[Dict] = None,
     ):
         super().__init__(message, error_code)
@@ -171,7 +171,7 @@ class BaseConnectionError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.BaseConnectionError",
+        error_code: str = "sdk.agentic_rl.BaseConnectionError",
         endpoint: Optional[str] = None,
     ):
         super().__init__(message, error_code)
@@ -184,7 +184,7 @@ class OSSConnectionError(BaseConnectionError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.OSSConnectionError",
+        error_code: str = "sdk.agentic_rl.OSSConnectionError",
         endpoint: str = None,
     ):
         super().__init__(
@@ -200,7 +200,7 @@ class OSSUploadError(BaseConnectionError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.OSSUploadError",
+        error_code: str = "sdk.agentic_rl.OSSUploadError",
         endpoint: str = None,
         bucket: Optional[str] = None,
         object_key: Optional[str] = None,
@@ -222,7 +222,7 @@ class DeploymentError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.DeploymentError",
+        error_code: str = "sdk.agentic_rl.DeploymentError",
         resource_id: Optional[str] = None,
     ):
         super().__init__(message, error_code)
@@ -235,7 +235,7 @@ class RegistrationError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.RegistrationError",
+        error_code: str = "sdk.agentic_rl.RegistrationError",
         resource_id: Optional[str] = None,
     ):
         super().__init__(
@@ -251,7 +251,7 @@ class DatasetsError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.DatasetsError",
+        error_code: str = "sdk.agentic_rl.DatasetsError",
     ):
         super().__init__(
             f"Datasets failed: {message}",
@@ -265,7 +265,7 @@ class FunctionLoadError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.FunctionLoadError",
+        error_code: str = "sdk.agentic_rl.FunctionLoadError",
         entity_id: str = None,
         error_log: Optional[str] = None,
     ):
@@ -284,7 +284,7 @@ class FunctionLayerError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.FunctionLayerError",
+        error_code: str = "sdk.agentic_rl.FunctionLayerError",
         layer_name: str = None,
         error_log: Optional[str] = None,
     ):
@@ -303,7 +303,7 @@ class InstanceWarmupError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.InstanceWarmupError",
+        error_code: str = "sdk.agentic_rl.InstanceWarmupError",
         instance_url: str = None,
         timeout: float = 0.0,
         retry_after: Optional[float] = None,
@@ -323,7 +323,7 @@ class InstanceQueryError(DeploymentError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.InstanceQueryError",
+        error_code: str = "sdk.agentic_rl.InstanceQueryError",
         instance_id: str = None,
         query_attempts: int = 1,
     ):
@@ -341,7 +341,7 @@ class ValidationError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.ValidationError",
+        error_code: str = "sdk.agentic_rl.ValidationError",
         invalid_data: Optional[Dict] = None,
         validation_rules: Optional[Dict] = None,
     ):
@@ -359,7 +359,7 @@ class ConfigurationError(ValidationError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.ConfigurationError",
+        error_code: str = "sdk.agentic_rl.ConfigurationError",
         config_path: Optional[str] = None,
     ):
         super().__init__(message, error_code=error_code)
@@ -372,7 +372,7 @@ class BasePermissionError(AgenticRLError):
     def __init__(
         self,
         message: str,
-        error_code: str = "agentic_rl.BasePermissionError",
+        error_code: str = "sdk.agentic_rl.BasePermissionError",
         operation: str = None,
         resource: str = None,
     ):
