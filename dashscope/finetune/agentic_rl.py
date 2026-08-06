@@ -174,7 +174,9 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             logger.error(
                 "[%s] %s | [%s] %s",
                 SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED.name,
-                SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED.format_message(),
+                SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED.format_message(
+                    {"inner_code": inner_code or "unknown"},
+                ),
                 inner_code or "unknown",
                 e,
                 exc_info=True,
@@ -229,7 +231,9 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             logger.error(
                 "[%s] %s | [%s] %s",
                 SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED.name,
-                SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED.format_message(),
+                SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED.format_message(
+                    {"inner_code": inner_code or "unknown"},
+                ),
                 inner_code or "unknown",
                 e,
                 exc_info=True,
@@ -306,7 +310,9 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             logger.error(
                 "[%s] %s",
                 SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES.name,
-                SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES.format_message(),
+                SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES.format_message(
+                    {"names": "check_function_names() failed"},
+                ),
             )
             exc = InvalidParameter(INVALID_REQUEST.format_msg())
             exc.status_code = INVALID_REQUEST.status_code
@@ -365,7 +371,9 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             logger.error(
                 "[%s] %s | [%s] %s",
                 SDK_AGENTIC_RL_JOB_SUBMISSION_FAILED.name,
-                SDK_AGENTIC_RL_JOB_SUBMISSION_FAILED.format_message(),
+                SDK_AGENTIC_RL_JOB_SUBMISSION_FAILED.format_message(
+                    {"inner_code": inner_code or "unknown"},
+                ),
                 inner_code or "unknown",
                 e,
                 exc_info=True,
@@ -450,7 +458,9 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             logger.error(
                 "[%s] %s | [%s] %s",
                 SDK_AGENTIC_RL_WORKFLOW_FAILED.name,
-                SDK_AGENTIC_RL_WORKFLOW_FAILED.format_message(),
+                SDK_AGENTIC_RL_WORKFLOW_FAILED.format_message(
+                    {"inner_code": inner_code or "unknown"},
+                ),
                 inner_code or "unknown",
                 e,
                 exc_info=True,
@@ -578,7 +588,9 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             logger.error(
                 "[%s] %s | functype=%s",
                 SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE.name,
-                SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE.format_message(),
+                SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE.format_message(
+                    {"functype": str(functype)},
+                ),
                 functype,
             )
             exc = InvalidParameter(INVALID_REQUEST.format_msg())
@@ -647,7 +659,12 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             logger.error(
                 "[%s] %s | [%s] %s",
                 internal_error_def.name,
-                internal_error_def.format_message(),
+                internal_error_def.format_message(
+                    {
+                        "inner_code": inner_code or "unknown",
+                        "timeout": "unknown",
+                    },
+                ),
                 inner_code or "unknown",
                 e,
                 exc_info=True,

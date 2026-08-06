@@ -5,7 +5,7 @@ import asyncio
 import json
 import uuid
 from http import HTTPStatus
-from typing import Tuple, Union, Dict
+from typing import Tuple, Union
 
 import aiohttp
 

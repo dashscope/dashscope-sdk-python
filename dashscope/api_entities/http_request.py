@@ -487,6 +487,7 @@ class HttpRequest(AioBaseRequest):
             yield _handle_http_failed_response(response)
 
     def _handle_request(self):  # pylint: disable=too-many-branches
+        session = None
         try:
             # Use external session if provided,
             # otherwise use shared session with connection pooling
@@ -514,14 +515,40 @@ class HttpRequest(AioBaseRequest):
                     body = json.dumps(obj, ensure_ascii=False).encode(
                         "utf-8",
                     )
+                    response = session.post(
+                        url=self.url,
+                        data=body,
+                        headers=self.headers,
+                        timeout=self.timeout,
+                    )
                 for rsp in self._handle_response(response):
                     yield rsp
-            finally:
-                # Only close if we created the session
-                if should_close:
-                    session.close()
+            elif self.method == HTTPMethod.GET:
+                params = {}
+                if hasattr(self, "data") and self.data is not None:
+                    params = getattr(self.data, "parameters", {})
+                if params:
+                    params = self.__handle_parameters(params)
+                response = session.get(
+                    url=self.url,
+                    params=params,
+                    headers=self.headers,
+                    timeout=self.timeout,
+                )
+                for rsp in self._handle_response(response):
+                    yield rsp
+            else:
+                raise UnsupportedHTTPMethod(
+                    f"Unsupported http method: {self.method}",
+                )
         except Exception as e:
             logger.error(f"Sync request failed: {e}", exc_info=True)
             from dashscope.common.error import DashScopeException
 
             raise DashScopeException(str(e)) from e
+        finally:
+            # Note: We don't close the session here because:
+            # - External sessions are managed by the caller
+            # - Shared sessions use connection pooling and are
+            #   managed centrally by _get_shared_sync_session()
+            pass

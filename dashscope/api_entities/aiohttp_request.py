@@ -3,7 +3,7 @@
 
 import json
 from http import HTTPStatus
-from typing import Optional, Dict
+from typing import Optional
 
 import aiohttp
 
@@ -15,7 +15,6 @@ from dashscope.common.constants import (
     SSE_CONTENT_TYPE,
     HTTPMethod,
 )
-from dashscope.common.error import UnsupportedHTTPMethod
 from dashscope.common.logging import logger
 from dashscope.common.error_registry import INTERNAL_ERROR
 from dashscope.common.utils import (
@@ -274,16 +273,16 @@ class AioHttpRequest(AioBaseRequest):
                     body = json.dumps(obj, ensure_ascii=False).encode(
                         "utf-8",
                     )
+                    response = await session.post(
+                        url=self.url,
+                        data=body,
+                        headers=self.headers,
+                        timeout=request_timeout,
+                    )
                 logger.debug("Response returned: %s", self.url)
                 async with response:
                     async for rsp in self._handle_response(response):
                         yield rsp
-            finally:
-                # Note: We don't close the session here because:
-                # - External sessions are managed by the caller
-                # - Shared sessions use connection pooling and are
-                #   managed centrally by get_shared_aio_session()
-                pass
         except Exception as e:
             logger.error(
                 "Request failed: url=%s, method=%s, error=%s",
@@ -297,3 +296,9 @@ class AioHttpRequest(AioBaseRequest):
             raise DashScopeException(
                 f"Request failed: {str(e)}",
             ) from e
+        finally:
+            # Note: We don't close the session here because:
+            # - External sessions are managed by the caller
+            # - Shared sessions use connection pooling and are
+            #   managed centrally by get_shared_aio_session()
+            pass

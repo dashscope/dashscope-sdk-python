@@ -50,10 +50,9 @@ class _RootCauseMixin:
         try:
             from dashscope.common.error_registry import (
                 INTERNAL_ERRORS,
-                CLIENT_ERRORS,
             )
 
-            for err_list in [INTERNAL_ERRORS, CLIENT_ERRORS]:
+            for err_list in [INTERNAL_ERRORS]:
                 for err_def in err_list:
                     if err_def.name == error_code:
                         return err_def.format_message()

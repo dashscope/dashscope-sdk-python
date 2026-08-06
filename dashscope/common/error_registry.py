@@ -2705,87 +2705,123 @@ SDK_INVALID_API_KEY = ClientErrorDef(
     allow_retry=False,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Set the DASHSCOPE_API_KEY environment variable or pass a valid "
+        "api_key to AgenticRL(). You can obtain an API key at "
+        "https://dashscope.console.aliyun.com/apiKey."
+    ),
 )
 
 SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED = ClientErrorDef(
     name="sdk.agentic_rl.FunctionRegistrationFailed",
     external=INTERNAL_ERROR,
-    message="Function component registration failed.",
+    message="Function component registration failed: [{inner_code}].",
     allow_retry=True,
-    vars=[],
+    vars=["inner_code"],
     cause="",
-    solution="",
+    solution=(
+        "Check the inner error code for details. Ensure the function code "
+        "package is valid and the deployment service is reachable. Retry the "
+        "register_functions() call."
+    ),
 )
 
 SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED = ClientErrorDef(
     name="sdk.agentic_rl.DatasetsUploadFailed",
     external=INTERNAL_ERROR,
-    message="Datasets upload failed.",
+    message="Datasets upload failed: [{inner_code}].",
     allow_retry=True,
-    vars=[],
+    vars=["inner_code"],
     cause="",
-    solution="",
+    solution=(
+        "Verify your dataset files exist and are readable. Check OSS "
+        "credentials and network connectivity. Retry the upload_datasets() "
+        "call."
+    ),
 )
 
 SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES = ClientErrorDef(
     name="sdk.agentic_rl.DuplicateFunctionNames",
     external=INVALID_REQUEST,
-    message="Duplicate function names detected.",
+    message="Duplicate function names detected: {names}.",
     allow_retry=False,
-    vars=[],
+    vars=["names"],
     cause="",
-    solution="",
+    solution=(
+        "Each registered function must have a unique name. Review your "
+        "RolloutFunctionComponent and RewardFunctionComponent definitions and "
+        "remove any duplicate names before calling submit_job()."
+    ),
 )
 
 SDK_AGENTIC_RL_JOB_SUBMISSION_FAILED = ClientErrorDef(
     name="sdk.agentic_rl.JobSubmissionFailed",
     external=INTERNAL_ERROR,
-    message="Job submission failed.",
+    message="Job submission failed: [{inner_code}].",
     allow_retry=True,
-    vars=[],
+    vars=["inner_code"],
     cause="",
-    solution="",
+    solution=(
+        "Check the inner error code for details. Ensure the model name is "
+        "valid and your account has sufficient quota. Retry submit_job() "
+        "after fixing the underlying issue."
+    ),
 )
 
 SDK_AGENTIC_RL_WORKFLOW_FAILED = ClientErrorDef(
     name="sdk.agentic_rl.WorkflowFailed",
     external=INTERNAL_ERROR,
-    message="RL tuning workflow failed.",
+    message="RL tuning workflow failed: [{inner_code}].",
     allow_retry=True,
-    vars=[],
+    vars=["inner_code"],
     cause="",
-    solution="",
+    solution=(
+        "This error wraps a failure in the run() workflow. Inspect the inner "
+        "error code to identify which step failed (registration, upload, or "
+        "submission), fix that issue, and retry run()."
+    ),
 )
 
 SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE = ClientErrorDef(
     name="sdk.agentic_rl.UnsupportedFunctionType",
     external=INVALID_REQUEST,
-    message="Unsupported function type.",
+    message="Unsupported function type: {functype}.",
     allow_retry=False,
-    vars=[],
+    vars=["functype"],
     cause="",
-    solution="",
+    solution=(
+        "Only ROLLOUT, REWARD, and GROUP_REWARD function types are supported. "
+        "Pass a valid FunctionType enum value to test_functions()."
+    ),
 )
 
 SDK_AGENTIC_RL_FUNCTION_TEST_FAILED = ClientErrorDef(
     name="sdk.agentic_rl.FunctionTestFailed",
     external=INTERNAL_ERROR,
-    message="Function test failed.",
+    message="Function test failed: [{inner_code}].",
     allow_retry=True,
-    vars=[],
+    vars=["inner_code"],
     cause="",
-    solution="",
+    solution=(
+        "Check the inner error code and the function logs for details. Verify "
+        "that the function code runs correctly with the provided input_data. "
+        "Fix the function and retry test_functions()."
+    ),
 )
 
 SDK_AGENTIC_RL_FUNCTION_TEST_TIMEOUT = ClientErrorDef(
     name="sdk.agentic_rl.FunctionTestTimeout",
     external=REQUEST_TIMEOUT,
-    message="Function test timed out.",
+    message="Function test timed out after {timeout} seconds.",
     allow_retry=True,
-    vars=[],
+    vars=["timeout"],
     cause="",
-    solution="",
+    solution=(
+        "The function did not return within the timeout period. Profile your "
+        "function for slow operations (e.g. large model inference, network "
+        "calls) and optimize it. Consider increasing the timeout if the "
+        "function legitimately takes longer."
+    ),
 )
 
 
@@ -2796,7 +2832,11 @@ SDK_AGENTIC_RL_INPUT_ERROR = ClientErrorDef(
     allow_retry=False,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Check the input data passed to the function. Ensure all required "
+        "fields are present and have valid types. Refer to the RolloutInput / "
+        "RewardInput / GroupRewardInput schema documentation."
+    ),
 )
 
 SDK_AGENTIC_RL_OUTPUT_ERROR = ClientErrorDef(
@@ -2806,7 +2846,11 @@ SDK_AGENTIC_RL_OUTPUT_ERROR = ClientErrorDef(
     allow_retry=False,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "The function output did not pass validation. Ensure your function "
+        "returns a valid RolloutOutput / RewardOutput / GroupRewardOutput "
+        "object with all required fields populated."
+    ),
 )
 
 SDK_AGENTIC_RL_BASE_CONNECTION_ERROR = ClientErrorDef(
@@ -2816,7 +2860,10 @@ SDK_AGENTIC_RL_BASE_CONNECTION_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Check your network connectivity and ensure the target service "
+        "endpoint is reachable. Verify firewall rules and proxy settings."
+    ),
 )
 
 SDK_AGENTIC_RL_OSS_CONNECTION_ERROR = ClientErrorDef(
@@ -2826,7 +2873,11 @@ SDK_AGENTIC_RL_OSS_CONNECTION_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Verify that the OSS endpoint URL is correct and the OSS service is "
+        "accessible. Check your API key permissions for OSS access. Ensure "
+        "you are in a region that supports OSS connectivity."
+    ),
 )
 
 SDK_AGENTIC_RL_OSS_UPLOAD_ERROR = ClientErrorDef(
@@ -2836,7 +2887,11 @@ SDK_AGENTIC_RL_OSS_UPLOAD_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Check that the file exists, is readable, and does not exceed the "
+        "upload size limit. Verify your OSS bucket permissions allow write "
+        "operations."
+    ),
 )
 
 SDK_AGENTIC_RL_DEPLOYMENT_ERROR = ClientErrorDef(
@@ -2846,7 +2901,11 @@ SDK_AGENTIC_RL_DEPLOYMENT_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Check the deployment service status and logs. Ensure the function "
+        "code package and dependencies are valid. Retry after the deployment "
+        "service recovers."
+    ),
 )
 
 SDK_AGENTIC_RL_REGISTRATION_ERROR = ClientErrorDef(
@@ -2856,7 +2915,11 @@ SDK_AGENTIC_RL_REGISTRATION_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "The function could not be registered in the deployment system. "
+        "Verify the function name is unique and the code package is valid. "
+        "Check the inner error for deployment-specific details."
+    ),
 )
 
 SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR = ClientErrorDef(
@@ -2866,7 +2929,11 @@ SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "The function could not be loaded into the runtime after "
+        "registration. Check the error logs for import errors or missing "
+        "dependencies in the function layer."
+    ),
 )
 
 SDK_AGENTIC_RL_INSTANCE_WARMUP_ERROR = ClientErrorDef(
@@ -2876,7 +2943,12 @@ SDK_AGENTIC_RL_INSTANCE_WARMUP_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "The function instance health check failed after deployment. Check "
+        "the instance logs for startup errors. Ensure the function "
+        "initializes correctly and the health endpoint responds within the "
+        "timeout."
+    ),
 )
 
 SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR = ClientErrorDef(
@@ -2886,7 +2958,11 @@ SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Could not query the function instance status. The instance may not "
+        "be ready yet. Wait and retry, or check the deployment logs for "
+        "errors."
+    ),
 )
 
 SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR = ClientErrorDef(
@@ -2896,7 +2972,11 @@ SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Failed to create the function dependency layer. Check that the "
+        "requirements.txt or setup.py is valid and all dependencies are "
+        "installable. Review the layer build logs for details."
+    ),
 )
 
 SDK_AGENTIC_RL_DATASETS_ERROR = ClientErrorDef(
@@ -2906,7 +2986,11 @@ SDK_AGENTIC_RL_DATASETS_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Failed to update datasets in the deployment system. Verify the "
+        "dataset IDs are valid and the dataset files are accessible. Retry "
+        "after fixing the underlying issue."
+    ),
 )
 
 SDK_AGENTIC_RL_VALIDATION_ERROR = ClientErrorDef(
@@ -2916,7 +3000,11 @@ SDK_AGENTIC_RL_VALIDATION_ERROR = ClientErrorDef(
     allow_retry=False,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "One or more data fields failed validation. Check the error message "
+        "for the specific field and fix the value according to the schema "
+        "documentation."
+    ),
 )
 
 SDK_AGENTIC_RL_CONFIGURATION_ERROR = ClientErrorDef(
@@ -2926,7 +3014,12 @@ SDK_AGENTIC_RL_CONFIGURATION_ERROR = ClientErrorDef(
     allow_retry=False,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Check your YAML configuration file or initialization parameters. "
+        "Ensure all required fields (model, functions, datasets) are "
+        "correctly specified. Refer to the AgenticRL configuration "
+        "documentation."
+    ),
 )
 
 SDK_AGENTIC_RL_BASE_PERMISSION_ERROR = ClientErrorDef(
@@ -2936,7 +3029,11 @@ SDK_AGENTIC_RL_BASE_PERMISSION_ERROR = ClientErrorDef(
     allow_retry=False,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "Your API key does not have the required permissions. Ensure your "
+        "account has access to AgenticRL, OSS, and Function Compute services. "
+        "Contact your administrator to grant the necessary permissions."
+    ),
 )
 
 SDK_AGENTIC_RL_IO_ERROR_WITH_CODE = ClientErrorDef(
@@ -2946,7 +3043,11 @@ SDK_AGENTIC_RL_IO_ERROR_WITH_CODE = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "A file or network I/O operation failed. Check file paths, "
+        "permissions, and network connectivity. Review the error message for "
+        "the specific operation that failed."
+    ),
 )
 
 
@@ -2957,7 +3058,11 @@ SDK_AGENTIC_RL_ERROR = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "An unexpected AgenticRL error occurred. Check the error message and "
+        "logs for details. If the issue persists, submit a bug report at "
+        "https://github.com/dashscope/dashscope-sdk-python/issues."
+    ),
 )
 
 SDK_AGENTIC_RL_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
@@ -2967,7 +3072,11 @@ SDK_AGENTIC_RL_RUNTIME_ERROR_WITH_CODE = ClientErrorDef(
     allow_retry=True,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "An unexpected runtime error occurred. Check the error message and "
+        "traceback for details. If the issue persists, submit a bug report at "
+        "https://github.com/dashscope/dashscope-sdk-python/issues."
+    ),
 )
 
 SDK_AGENTIC_RL_VALUE_ERROR_WITH_CODE = ClientErrorDef(
@@ -2977,7 +3086,11 @@ SDK_AGENTIC_RL_VALUE_ERROR_WITH_CODE = ClientErrorDef(
     allow_retry=False,
     vars=[],
     cause="",
-    solution="",
+    solution=(
+        "An invalid value was encountered. Check the function parameters and "
+        "input data. Ensure all values conform to the expected types and "
+        "ranges."
+    ),
 )
 
 
