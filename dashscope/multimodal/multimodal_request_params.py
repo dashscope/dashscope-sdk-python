@@ -308,6 +308,7 @@ class RequestParameters(DashPayloadParameters):
 class RequestToRespondParameters(DashPayloadParameters):
     images: list = field(default=None)  # type: ignore[arg-type]
     biz_params: BizParams = field(default=None)
+    pass_through_params: dict = field(default=None)  # type: ignore[arg-type]
 
     def to_dict(self):
         params = {}
@@ -315,6 +316,8 @@ class RequestToRespondParameters(DashPayloadParameters):
             params["images"] = self.images
         if self.biz_params is not None:
             params["biz_params"] = self.biz_params.to_dict()
+        if self.pass_through_params is not None:
+            params.update(self.pass_through_params)
         return params
 
 

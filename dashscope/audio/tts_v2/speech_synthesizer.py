@@ -242,7 +242,7 @@ class Request:
         }
         return json.dumps(cmd)
 
-    def get_finish_request(self):
+    def get_finish_request(self, directive: str = None):
         cmd = {
             HEADER: {
                 ACTION_KEY: ActionType.FINISHED,
@@ -253,6 +253,8 @@ class Request:
                 "input": {},
             },
         }
+        if directive is not None:
+            cmd["payload"]["input"]["directive"] = directive
         return json.dumps(cmd)
 
     def get_flush_request(self):
@@ -671,21 +673,50 @@ class SpeechSynthesizer:
         )
         thread.start()
 
-    def streaming_cancel(self):
+    def streaming_cancel(self, complete_timeout_millis=10000):
         """
         Immediately terminate the streaming input speech synthesis task
         and discard any remaining audio that is not yet delivered.
+
+        A finish-task message with payload.input.directive=cancel is sent
+        to notify the server to stop synthesis in advance. The server will
+        then respond with a task-finished message, after which the
+        connection is closed.
+
+        Parameters:
+        -----------
+        complete_timeout_millis: int
+            If it times out waiting for the server's task-finished message,
+            the connection is force-closed and a warning is logged. If the
+            timeout is not None and greater than zero, it will wait for the
+            corresponding number of milliseconds; otherwise, it will wait
+            indefinitely.
         """
 
         if not self._is_started:
             raise InvalidTask("speech synthesizer has not been started.")
         if self._stopped.is_set():
             return
-        request = self.request.get_finish_request()
+        request = self.request.get_finish_request(directive="cancel")
         self.__send_str(request)
-        self.ws.close()
-        self.start_event.set()
-        self.complete_event.set()
+        if complete_timeout_millis is not None and complete_timeout_millis > 0:
+            if not self.complete_event.wait(
+                timeout=complete_timeout_millis / 1000,
+            ):
+                logger.warning(
+                    "speech synthesizer wait for task-finished "
+                    "after cancel timeout %sms, force closing.",
+                    complete_timeout_millis,
+                )
+                self.close()
+            elif self._close_ws_after_use:
+                self.close()
+        else:
+            self.complete_event.wait()
+            if self._close_ws_after_use:
+                self.close()
+        self._stopped.set()
+        self._is_started = False
 
     # Callback for listening to messages
     def on_message(  # pylint: disable=unused-argument,too-many-branches

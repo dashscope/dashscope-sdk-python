@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+import warnings
 from typing import Dict, List, Optional
 
 from dashscope.client.base_api import (
@@ -14,8 +15,24 @@ from dashscope.threads.thread_types import ThreadMessage, ThreadMessageList
 
 __all__ = ["Messages"]
 
+# Deprecation warning message
+_DEPRECATION_MSG = (
+    "The Assistants API (dashscope.threads) is deprecated and will be "
+    "removed in a future release. Please migrate to the Responses API. "
+    "See https://help.aliyun.com/zh/model-studio/"
+    "synchronous-call-api-reference for migration details."
+)
+
 
 class Messages(CreateMixin, ListObjectMixin, GetStatusMixin, UpdateMixin):
+    """
+    .. deprecated::
+        The Messages API (Assistants API) is deprecated and will be removed
+        in a future release. Please migrate to the Responses API.
+        See https://help.aliyun.com/zh/model-studio/
+        synchronous-call-api-reference for migration details.
+    """
+
     SUB_PATH = "messages"  # useless
 
     @classmethod
@@ -90,6 +107,11 @@ class Messages(CreateMixin, ListObjectMixin, GetStatusMixin, UpdateMixin):
         Returns:
             ThreadMessage: The `ThreadMessage` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         cls.SUB_PATH = f"{thread_id}/messages"
         data = {}
         if not thread_id or not content:
@@ -160,6 +182,11 @@ class Messages(CreateMixin, ListObjectMixin, GetStatusMixin, UpdateMixin):
         Returns:
             ThreadMessage: The `ThreadMessage` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not message_id or not thread_id:
             raise InputRequired("thread id, message id are required!")
         response = super().get(
@@ -201,6 +228,11 @@ class Messages(CreateMixin, ListObjectMixin, GetStatusMixin, UpdateMixin):
         Returns:
             ThreadMessageList: The `ThreadMessageList` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not thread_id:
             raise InputRequired("thread id is required!")
         response = super().list(

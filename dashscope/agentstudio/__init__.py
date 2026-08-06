@@ -67,6 +67,8 @@ from .types.params import (
     SessionUpdateParams,
     EnvironmentCreateParams,
     EnvironmentUpdateParams,
+    DeploymentCreateParams,
+    DeploymentUpdateParams,
     SessionEventSendParams,
 )
 
@@ -114,5 +116,7 @@ __all__ = [
     "SessionUpdateParams",
     "EnvironmentCreateParams",
     "EnvironmentUpdateParams",
+    "DeploymentCreateParams",
+    "DeploymentUpdateParams",
     "SessionEventSendParams",
 ]

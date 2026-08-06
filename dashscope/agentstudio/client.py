@@ -10,6 +10,12 @@ from typing import Any, Optional, Tuple, Union
 import httpx
 
 from dashscope.agentstudio.resources.agents import Agents, AsyncAgents
+from dashscope.agentstudio.resources.deployments import (
+    AsyncDeploymentRuns,
+    AsyncDeployments,
+    DeploymentRuns,
+    Deployments,
+)
 from dashscope.agentstudio.resources.environments import (
     Environments,
     AsyncEnvironments,
@@ -116,6 +122,8 @@ class Client:
             http_client=http_client,
         )
         self.agents = Agents(self)
+        self.deployments = Deployments(self)
+        self.deployment_runs = DeploymentRuns(self)
         self.sessions = Sessions(self)
         self.environments = Environments(self)
         self.files = Files(self)
@@ -186,6 +194,8 @@ class AsyncClient:
             http_client=http_client,
         )
         self.agents = AsyncAgents(self)
+        self.deployments = AsyncDeployments(self)
+        self.deployment_runs = AsyncDeploymentRuns(self)
         self.sessions = AsyncSessions(self)
         self.environments = AsyncEnvironments(self)
         self.files = AsyncFiles(self)

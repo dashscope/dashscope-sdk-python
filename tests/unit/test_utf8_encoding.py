@@ -162,7 +162,7 @@ class TestAioHttpRequestUtf8Headers:
 class TestHttpRequestUtf8Body:
     # pylint: disable=protected-access
 
-    @patch("dashscope.api_entities.http_request.requests.Session")
+    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
     def test_body_is_utf8_bytes(self, mock_session_cls):
         mock_session = _make_mock_sync_session()
         mock_session_cls.return_value = mock_session
@@ -186,7 +186,7 @@ class TestHttpRequestUtf8Body:
         assert isinstance(sent_body, bytes), "Body must be bytes, not str"
         assert sent_body == EXPECTED_BODY
 
-    @patch("dashscope.api_entities.http_request.requests.Session")
+    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
     def test_no_unicode_escapes_in_body(self, mock_session_cls):
         mock_session = _make_mock_sync_session()
         mock_session_cls.return_value = mock_session
@@ -212,7 +212,7 @@ class TestHttpRequestUtf8Body:
         assert "Оцени идею" in body_str
         assert "こんにちは" in body_str
 
-    @patch("dashscope.api_entities.http_request.requests.Session")
+    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
     def test_body_is_smaller_than_ascii_escaped(self, mock_session_cls):
         mock_session = _make_mock_sync_session()
         mock_session_cls.return_value = mock_session

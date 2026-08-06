@@ -501,6 +501,123 @@ class DeleteResponse(BaseModel):
     _fields = ("id", "type", "request_id")
 
 
+class DeploymentAgentReference(BaseModel):
+    """Agent version reference stored on a deployment run."""
+
+    _fields = ("id", "version")
+
+
+class DeploymentSchedule(BaseModel):
+    """Cron schedule returned with a deployment."""
+
+    _fields = (
+        "type",
+        "expression",
+        "timezone",
+        "last_run_at",
+        "next_run_at",
+    )
+
+
+class DeploymentResource(BaseModel):
+    """Resource mounted into sessions created by a deployment."""
+
+    _fields = ("type", "file_id", "mount_path")
+
+
+class DeploymentError(BaseModel):
+    """Error information attached to a failed run or automatic pause."""
+
+    _fields = ("code", "message")
+
+
+class DeploymentPausedReason(BaseModel):
+    """Why a deployment is paused (``manual`` or ``error``)."""
+
+    _fields = ("type", "error")
+
+    def __init__(self, **kwargs: Any) -> None:
+        error = kwargs.get("error")
+        if isinstance(error, Mapping):
+            kwargs["error"] = DeploymentError(**dict(error))
+        super().__init__(**kwargs)
+
+
+class Deployment(BaseModel):
+    """Managed Agent deployment."""
+
+    metadata: Optional[Dict[str, str]]
+
+    _fields = (
+        "id",
+        "type",
+        "name",
+        "description",
+        "agent",
+        "environment_id",
+        "schedule",
+        "initial_events",
+        "resources",
+        "vault_ids",
+        "metadata",
+        "status",
+        "paused_reason",
+        "archived_at",
+        "created_at",
+        "updated_at",
+        "request_id",
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        agent = kwargs.get("agent")
+        if isinstance(agent, Mapping):
+            kwargs["agent"] = Agent(**dict(agent))
+        schedule = kwargs.get("schedule")
+        if isinstance(schedule, Mapping):
+            kwargs["schedule"] = DeploymentSchedule(**dict(schedule))
+        resources = kwargs.get("resources")
+        if isinstance(resources, list):
+            kwargs["resources"] = [
+                DeploymentResource(**dict(resource))
+                if isinstance(resource, Mapping)
+                else resource
+                for resource in resources
+            ]
+        paused_reason = kwargs.get("paused_reason")
+        if isinstance(paused_reason, Mapping):
+            kwargs["paused_reason"] = DeploymentPausedReason(
+                **dict(paused_reason),
+            )
+        super().__init__(**kwargs)
+
+
+class DeploymentRun(BaseModel):
+    """A single manual or scheduled deployment execution."""
+
+    _fields = (
+        "id",
+        "type",
+        "deployment_id",
+        "agent",
+        "session_id",
+        "trigger_source",
+        "status",
+        "error",
+        "started_at",
+        "finished_at",
+        "request_id",
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        agent = kwargs.get("agent")
+        if isinstance(agent, Mapping):
+            kwargs["agent"] = DeploymentAgentReference(**dict(agent))
+        error = kwargs.get("error")
+        if isinstance(error, Mapping):
+            kwargs["error"] = DeploymentError(**dict(error))
+        super().__init__(**kwargs)
+
+
 # ===========================================================================
 # Section 4 – Unified Message class  (replaces server_events.py)
 # ===========================================================================

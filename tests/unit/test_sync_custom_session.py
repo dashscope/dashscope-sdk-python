@@ -119,12 +119,12 @@ class TestSyncSessionUsage:
         # 验证自定义 session 没有被关闭
         mock_session.close.assert_not_called()
 
-    @patch("requests.Session")
-    def test_temporary_session_is_created_when_no_custom_session(
+    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    def test_shared_session_is_used_when_no_custom_session(
         self,
-        mock_session_class,
+        mock_get_session,
     ):
-        """测试没有自定义 session 时会创建临时 session"""
+        """测试没有自定义 session 时使用共享 session"""
         # 创建 mock session
         mock_session = Mock()
         mock_response = Mock()
@@ -132,7 +132,7 @@ class TestSyncSessionUsage:
         mock_response.headers = {"content-type": "application/json"}
         mock_response.text = '{"status": "success"}'
         mock_session.post.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_get_session.return_value = mock_session
 
         # 创建 HttpRequest 不传 session
         http_request = HttpRequest(
@@ -163,11 +163,11 @@ class TestSyncSessionUsage:
         ):
             _ = http_request.call()
 
-        # 验证临时 session 被创建
-        mock_session_class.assert_called_once()
+        # 验证共享 session 被使用
+        mock_get_session.assert_called_once()
 
-        # 验证临时 session 被关闭
-        mock_session.close.assert_called_once()
+        # 验证共享 session 没有被关闭
+        mock_session.close.assert_not_called()
 
 
 class TestSyncSessionResourceManagement:
@@ -212,16 +212,16 @@ class TestSyncSessionResourceManagement:
         # 验证自定义 session 没有被关闭
         custom_session.close.assert_not_called()
 
-    @patch("requests.Session")
-    def test_temporary_session_closed_on_success(self, mock_session_class):
-        """测试临时 session 在成功后被关闭"""
+    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    def test_shared_session_not_closed_on_success(self, mock_get_session):
+        """测试共享 session 在成功后不被关闭"""
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
         mock_response.text = '{"status": "success"}'
         mock_session.post.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_get_session.return_value = mock_session
 
         http_request = HttpRequest(
             url="http://example.com/api",
@@ -249,15 +249,15 @@ class TestSyncSessionResourceManagement:
         ):
             _ = http_request.call()
 
-        # 验证临时 session 被关闭
-        mock_session.close.assert_called_once()
+        # 验证共享 session 没有被关闭
+        mock_session.close.assert_not_called()
 
-    @patch("requests.Session")
-    def test_temporary_session_closed_on_exception(self, mock_session_class):
-        """测试临时 session 在异常时也被关闭"""
+    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    def test_shared_session_not_closed_on_exception(self, mock_get_session):
+        """测试共享 session 在异常时不被关闭"""
         mock_session = Mock()
         mock_session.post.side_effect = Exception("Network error")
-        mock_session_class.return_value = mock_session
+        mock_get_session.return_value = mock_session
 
         http_request = HttpRequest(
             url="http://example.com/api",
@@ -282,8 +282,8 @@ class TestSyncSessionResourceManagement:
         with pytest.raises(Exception, match="Network error"):
             _ = http_request.call()
 
-        # 验证临时 session 仍然被关闭
-        mock_session.close.assert_called_once()
+        # 验证共享 session 没有被关闭
+        mock_session.close.assert_not_called()
 
 
 class TestSyncSessionWithCustomConfiguration:
@@ -472,16 +472,16 @@ class TestSyncBackwardCompatibility:
         assert http_request.url == "http://example.com/api"
         assert http_request.method == HTTPMethod.POST
 
-    @patch("requests.Session")
-    def test_default_behavior_unchanged(self, mock_session_class):
-        """测试默认行为未改变"""
+    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    def test_default_behavior_unchanged(self, mock_get_session):
+        """测试默认行为：使用共享 session"""
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
         mock_response.text = '{"status": "success"}'
         mock_session.post.return_value = mock_response
-        mock_session_class.return_value = mock_session
+        mock_get_session.return_value = mock_session
 
         # 不传 session 参数
         http_request = HttpRequest(
@@ -510,6 +510,7 @@ class TestSyncBackwardCompatibility:
         ):
             _ = http_request.call()
 
-        # 验证临时 session 被创建和关闭（原有行为）
-        mock_session_class.assert_called_once()
-        mock_session.close.assert_called_once()
+        # 验证共享 session 被使用
+        mock_get_session.assert_called_once()
+        # 验证共享 session 没有被关闭
+        mock_session.close.assert_not_called()

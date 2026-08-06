@@ -16,6 +16,12 @@ Usage::
 """
 
 from dashscope.agentstudio.resources.agents import Agents, AsyncAgents
+from dashscope.agentstudio.resources.deployments import (
+    AsyncDeploymentRuns,
+    AsyncDeployments,
+    DeploymentRuns,
+    Deployments,
+)
 from dashscope.agentstudio.resources.environments import (
     Environments,
     AsyncEnvironments,
@@ -44,6 +50,10 @@ from dashscope.agentstudio.resources.vaults import (
 __all__ = [
     "Agents",
     "AsyncAgents",
+    "Deployments",
+    "AsyncDeployments",
+    "DeploymentRuns",
+    "AsyncDeploymentRuns",
     "Credentials",
     "AsyncCredentials",
     "Environments",

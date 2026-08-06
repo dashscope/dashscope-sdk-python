@@ -2,6 +2,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import time
+import warnings
 from http import HTTPStatus
 from typing import Dict, List, Optional
 
@@ -30,6 +31,14 @@ from dashscope.threads.thread_types import (
 
 __all__ = ["Runs"]
 
+# Deprecation warning message
+_DEPRECATION_MSG = (
+    "The Assistants API (dashscope.threads) is deprecated and will be "
+    "removed in a future release. Please migrate to the Responses API. "
+    "See https://help.aliyun.com/zh/model-studio/"
+    "synchronous-call-api-reference for migration details."
+)
+
 
 class Runs(
     CreateMixin,
@@ -38,6 +47,14 @@ class Runs(
     GetStatusMixin,
     UpdateMixin,
 ):
+    """
+    .. deprecated::
+        The Runs API (Assistants API) is deprecated and will be removed
+        in a future release. Please migrate to the Responses API.
+        See https://help.aliyun.com/zh/model-studio/
+        synchronous-call-api-reference for migration details.
+    """
+
     SUB_PATH = "RUNS"  # useless
 
     @classmethod
@@ -57,6 +74,31 @@ class Runs(
         api_key: str = None,
         **kwargs,
     ) -> Run:
+        """Create a thread and run it with an assistant.
+
+        Args:
+            assistant_id (str): The assistant id to run.
+            thread (Optional[Dict], optional): The thread to create.
+            model (Optional[str], optional): The model to use.
+            instructions (Optional[str], optional): The instructions.
+            additional_instructions (Optional[str], optional):
+                Additional instructions.
+            tools (Optional[List[Dict]], optional): The tools to use.
+            stream (Optional[bool], optional):
+                Whether to stream. Defaults to False.
+            metadata (Optional[Dict], optional): The metadata.
+            workspace (str, optional): The workspace id.
+            extra_body (Optional[Dict], optional): Extra body parameters.
+            api_key (str, optional): The api key.
+
+        Returns:
+            Run: The run object.
+        """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not assistant_id:
             raise InputRequired("assistant_id is required")
         data = {"assistant_id": assistant_id}
@@ -140,6 +182,11 @@ class Runs(
         Returns:
             Run: The `Run` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not thread_id or not assistant_id:
             raise InputRequired("thread_id and assistant_id is required")
         data = {"assistant_id": assistant_id}
@@ -309,6 +356,11 @@ class Runs(
         Returns:
             RunList: The list of runs.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not thread_id:
             raise InputRequired("thread_id is required!")
         response = super().list(
@@ -345,6 +397,11 @@ class Runs(
         Returns:
             Run: The `Run` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not thread_id or not run_id:
             raise InputRequired("thread_id and run_id are required!")
         response = super().get(
@@ -399,7 +456,7 @@ class Runs(
         api_key: str = None,
         **kwargs,
     ) -> Run:
-        """_summary_
+        """Submit tool outputs.
 
         Args:
             thread_id (str): The thread id.
@@ -415,6 +472,11 @@ class Runs(
         Returns:
             Run: The 'Run`.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not tool_outputs:
             raise InputRequired("tool_outputs is required!")
         if not thread_id or not run_id:
@@ -568,6 +630,11 @@ class Runs(
         Returns:
             Run: The `Run` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not thread_id or not run_id:
             raise InputRequired("thread id and run id are required!")
         response = super().cancel(

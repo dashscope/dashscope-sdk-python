@@ -2,6 +2,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import datetime
 import json
+import threading
 from http import HTTPStatus
 from typing import Optional, Dict, Union
 
@@ -26,6 +27,24 @@ from dashscope.common.utils import (
     _handle_stream,
 )
 from dashscope.api_entities.encryption import Encryption
+
+# Shared synchronous session for connection pooling
+_shared_sync_session: Optional[requests.Session] = None
+_shared_sync_session_lock = threading.Lock()
+
+
+def _get_shared_sync_session() -> requests.Session:
+    """Return a shared requests.Session for connection pooling.
+
+    The session is created lazily and reused for the process lifetime;
+    it is never closed explicitly.
+    """
+    global _shared_sync_session
+    if _shared_sync_session is None:
+        with _shared_sync_session_lock:
+            if _shared_sync_session is None:
+                _shared_sync_session = requests.Session()
+    return _shared_sync_session
 
 
 class HttpRequest(AioBaseRequest):
@@ -124,7 +143,7 @@ class HttpRequest(AioBaseRequest):
             self.headers["X-Accel-Buffering"] = "no"
             self.headers["X-DashScope-SSE"] = "enable"
         if self.query:
-            self.url = self.url.replace("api", "api-task")
+            self.url = self.url.replace("/api/", "/api-task/", 1)
             self.url += f"{task_id}"
         if timeout is None:
             self.timeout = DEFAULT_REQUEST_TIMEOUT_SECONDS
@@ -134,8 +153,8 @@ class HttpRequest(AioBaseRequest):
     def add_header(self, key: str, value: str) -> None:
         self.headers[key] = value
 
-    def add_headers(self, headers: Dict[str, str]) -> None:
-        self.headers = {**self.headers, **headers}
+    def add_headers(self, headers):
+        self.headers.update(headers)
 
     def call(self):
         response = self._handle_request()
@@ -444,10 +463,10 @@ class HttpRequest(AioBaseRequest):
             logger.debug("Response: %s", json_content)
             output = None
             usage = None
-            if "task_id" in json_content:
-                output = {"task_id": json_content["task_id"]}
             if "output" in json_content:
                 output = json_content["output"]
+            elif "task_id" in json_content:
+                output = {"task_id": json_content["task_id"]}
             if "usage" in json_content:
                 usage = json_content["usage"]
             if "request_id" in json_content:
@@ -470,54 +489,30 @@ class HttpRequest(AioBaseRequest):
     def _handle_request(self):  # pylint: disable=too-many-branches
         try:
             # Use external session if provided,
-            # otherwise create temporary session
+            # otherwise use shared session with connection pooling
             if self._external_session is not None:
                 session = self._external_session
-                should_close = False
             else:
-                session = requests.Session()
-                should_close = True
+                session = _get_shared_sync_session()
 
-            try:
-                if self.method == HTTPMethod.POST:
-                    is_form, form, obj = False, None, {}
-                    if hasattr(self, "data") and self.data is not None:
-                        is_form, form, obj = self.data.get_http_payload()
-                    if is_form:
-                        headers = {**self.headers}
-                        headers.pop("Content-Type")
-                        response = session.post(
-                            url=self.url,
-                            data=obj,
-                            files=form,
-                            headers=headers,
-                            timeout=self.timeout,
-                        )
-                    else:
-                        logger.debug("Request body: %s", obj)
-                        body = json.dumps(obj, ensure_ascii=False).encode(
-                            "utf-8",
-                        )
-                        response = session.post(
-                            url=self.url,
-                            stream=self.stream,
-                            data=body,
-                            headers={**self.headers},
-                            timeout=self.timeout,
-                        )
-                elif self.method == HTTPMethod.GET:
-                    params = {}
-                    if hasattr(self, "data") and self.data is not None:
-                        params = getattr(self.data, "parameters", {})
-                    response = session.get(
+            if self.method == HTTPMethod.POST:
+                is_form, form, obj = False, None, {}
+                if hasattr(self, "data") and self.data is not None:
+                    is_form, form, obj = self.data.get_http_payload()
+                if is_form:
+                    headers = {**self.headers}
+                    headers.pop("Content-Type")
+                    response = session.post(
                         url=self.url,
-                        params=params,
-                        headers=self.headers,
+                        data=obj,
+                        files=form,
+                        headers=headers,
                         timeout=self.timeout,
                     )
                 else:
-                    raise UnsupportedHTTPMethod(
-                        f"Unsupported http method: {self.method}",
+                    logger.debug("Request body: %s", obj)
+                    body = json.dumps(obj, ensure_ascii=False).encode(
+                        "utf-8",
                     )
                 for rsp in self._handle_response(response):
                     yield rsp
