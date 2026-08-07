@@ -10,38 +10,26 @@ The AgentStudio service returns errors in the canonical CMA shape::
         "request_id": "req_..."
     }
 
-The pre-release backend currently emits ``error_code``/``error_message``
-instead of nested ``error.{code,message}``. We accept both shapes and
-normalize to the documented form. The compatibility branch is marked
-with ``# TODO(bma-fix)`` so we can remove it once the backend aligns.
-
-Codes and default messages come from :mod:`dashscope.common.error_registry`
-(the single source of truth). :func:`from_response` normalizes to that
-taxonomy — rewriting legacy aliases and falling back to the per-status code
-— so ``.code`` is always unified; the server's raw payload stays on ``.raw``.
+Codes come from :mod:`dashscope.common.error_registry` (the single source of
+truth). Because a HTTP response was received, :func:`from_response` always
+yields a status error: it keeps the server's code when recognized and
+otherwise falls back to generic ``api_error`` rather than guessing a public
+code from the status number. The raw payload stays on ``.raw``.
 """
 
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, Mapping, Optional
 
 from dashscope.common import error_registry as _error_registry
 from dashscope.common.error import DashScopeException
 from dashscope.common.error_registry import (
-    AUTH_FAILED,
     INTERNAL_ERROR,
-    INVALID_REQUEST,
-    PERMISSION_DENIED,
     PublicError,
-    RATE_LIMIT_EXCEEDED,
-    REQUEST_TIMEOUT,
-    RESOURCE_NOT_FOUND,
     SDK_AGENTSTUDIO_API_CONNECTION_ERROR,
     SDK_AGENTSTUDIO_API_TIMEOUT_ERROR,
     SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR,
     SDK_AGENTSTUDIO_STREAM_ERROR,
-    SERVICE_UNAVAILABLE,
 )
 
 
@@ -126,8 +114,6 @@ class AuthenticationError(APIStatusError):
 
 
 class PermissionDeniedError(APIStatusError):
-    # Unified external standard (registry anthropic_error_code / the
-    # canonical Anthropic API error type).
     code = "permission_error"
 
 
@@ -173,35 +159,7 @@ class StreamClosedError(StreamError):
 # ---------------------------------------------------------------------------
 
 
-_STATUS_TO_DEFAULT: Dict[int, type] = {
-    400: InvalidRequestError,
-    401: AuthenticationError,
-    403: PermissionDeniedError,
-    404: NotFoundError,
-    409: ConflictError,
-    429: RateLimitError,
-    500: InternalServerError,
-    502: InternalServerError,
-    503: OverloadedError,
-    504: InternalServerError,
-}
-
-# Registry row per status, for the default code/message when the server
-# omits one. 409 has no row and falls back to a bare HTTP status.
-_STATUS_TO_PUBLIC: Dict[int, PublicError] = {
-    400: INVALID_REQUEST,
-    401: AUTH_FAILED,
-    403: PERMISSION_DENIED,
-    404: RESOURCE_NOT_FOUND,
-    429: RATE_LIMIT_EXCEEDED,
-    500: INTERNAL_ERROR,
-    502: INTERNAL_ERROR,
-    503: SERVICE_UNAVAILABLE,
-    504: REQUEST_TIMEOUT,
-}
-
-# Class routing: normalized code -> exception type. Legacy aliases are
-# rewritten to their canonical form by ``_normalize_code`` before routing.
+# Class routing: normalized code -> exception type.
 _CODE_TO_CLASS: Dict[str, type] = {
     "invalid_request_error": InvalidRequestError,
     "authentication_error": AuthenticationError,
@@ -221,45 +179,15 @@ _REGISTRY_CODES = frozenset(
     if isinstance(pe, PublicError)
 )
 
-# Pre-standard codes the backend has emitted historically, mapped to their
-# normalized form so old exceptions still resolve to a unified code.
-_LEGACY_CODE_ALIASES: Dict[str, str] = {
-    "permission_denied_error": "permission_error",  # TODO(bma-fix)
-}
-
-_PLACEHOLDER_RE = re.compile(r"\s*:?\s*\{[^}]+\}")
-
 
 def _normalize_code(code: Optional[str]) -> Optional[str]:
-    """Map a server-supplied code to the unified taxonomy.
-
-    Returns the canonical code for a known alias, the code itself when it is
-    already a registry code, or ``None`` when the SDK does not recognize it
-    (the caller then falls back to the registry's per-status code).
+    """Return ``code`` when it is a recognized registry code, else ``None``
+    (the caller then falls back to generic ``api_error``).
     """
 
-    if code is None:
-        return None
-    if code in _LEGACY_CODE_ALIASES:
-        return _LEGACY_CODE_ALIASES[code]
-    if code in _REGISTRY_CODES:
+    if code is not None and code in _REGISTRY_CODES:
         return code
     return None
-
-
-def _default_message(public: PublicError) -> str:
-    """Placeholder-free default message from a registry entry.
-
-    Registry ``error_msg`` values may embed ``{var}`` templates the server
-    fills in (e.g. ``"...not found: {resource}."``). When falling back to a
-    default we have no values, so strip the unresolved placeholders for a
-    clean sentence.
-    """
-
-    msg = _PLACEHOLDER_RE.sub("", public.error_msg).strip()
-    if msg and not msg.endswith("."):
-        msg += "."
-    return msg
 
 
 def from_response(
@@ -270,10 +198,9 @@ def from_response(
 ) -> AgentStudioError:
     """Build an :class:`AgentStudioError` instance from a HTTP response.
 
-    Accepts both the documented ``{type, error:{code,message}, request_id}``
-    shape and the pre-release ``{type, error:{error_code, error_message}}``
-    shape. Falls back to a Spring default ``{timestamp,status,error,path}``
-    when the body is not JSON-serializable.
+    Accepts the documented ``{type, error:{code,message}, request_id}`` shape
+    and the classic flat DashScope ``{code, message, request_id}`` envelope,
+    and falls back to a Spring default ``{timestamp,status,error,path}`` page.
 
     The ``x-request-id`` response header is preferred over the body
     ``request_id`` field (server-generated IDs are more reliable for tracing).
@@ -290,15 +217,11 @@ def from_response(
     if isinstance(body, Mapping):
         # Body request_id as fallback (snake_case canonical).
         if request_id is None:
-            request_id = body.get("request_id") or body.get(
-                "requestId",
-            )  # TODO(bma-fix)
+            request_id = body.get("request_id")
         err = body.get("error")
         if isinstance(err, Mapping):
-            code = err.get("code") or err.get("error_code")  # TODO(bma-fix)
-            message = err.get("message") or err.get(
-                "error_message",
-            )  # TODO(bma-fix)
+            code = err.get("code")
+            message = err.get("message")
         # Spring default fallback.
         if (
             message is None
@@ -306,33 +229,21 @@ def from_response(
             and isinstance(body["error"], str)
         ):
             message = body["error"]
-            code = body.get("error") or "api_error"
+        # Flat DashScope envelope: code/message at the top level. An
+        # unrecognized code still normalizes to api_error below.
+        if code is None:
+            code = body.get("code")
         if message is None:
             message = body.get("message")
 
-    public = _STATUS_TO_PUBLIC.get(status_code)
-
-    # Normalized SDK code wins; unknown/omitted falls back to the status row.
-    normalized = _normalize_code(code)
-    if normalized is not None:
-        code = normalized
-    elif public is not None:
-        code = public.anthropic_error_code
-    else:
-        code = _STATUS_TO_DEFAULT.get(  # type: ignore[attr-defined]
-            status_code,
-            APIStatusError,
-        ).code
+    # Keep the server's code when recognized; otherwise fall back to generic
+    # api_error rather than guessing from the status number.
+    code = _normalize_code(code) or INTERNAL_ERROR.anthropic_error_code
 
     if message is None:
-        # Registry default (placeholder-free); else a bare HTTP status.
-        message = _default_message(public) if public else f"HTTP {status_code}"
+        message = f"HTTP {status_code}"
 
-    cls = (
-        _CODE_TO_CLASS.get(code)
-        or _STATUS_TO_DEFAULT.get(status_code)
-        or APIStatusError
-    )
+    cls = _CODE_TO_CLASS.get(code) or APIStatusError
     return cls(
         message,
         code=code,
