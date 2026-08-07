@@ -37,6 +37,10 @@ from dashscope.common.error_registry import (
     RATE_LIMIT_EXCEEDED,
     REQUEST_TIMEOUT,
     RESOURCE_NOT_FOUND,
+    SDK_AGENTSTUDIO_API_CONNECTION_ERROR,
+    SDK_AGENTSTUDIO_API_TIMEOUT_ERROR,
+    SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR,
+    SDK_AGENTSTUDIO_STREAM_ERROR,
     SERVICE_UNAVAILABLE,
 )
 
@@ -93,13 +97,13 @@ class AgentStudioError(DashScopeException):
 class APIConnectionError(AgentStudioError):
     """Raised when the HTTP request fails before a response is read."""
 
-    code = "api_connection_error"
+    code = SDK_AGENTSTUDIO_API_CONNECTION_ERROR.name
 
 
 class APITimeoutError(APIConnectionError):
     """Raised on connect / read timeouts."""
 
-    code = "api_timeout_error"
+    code = SDK_AGENTSTUDIO_API_TIMEOUT_ERROR.name
 
 
 # ---------------------------------------------------------------------------
@@ -155,13 +159,13 @@ class InternalServerError(APIStatusError):
 class StreamError(AgentStudioError):
     """Raised when an SSE stream encounters a fatal protocol error."""
 
-    code = "stream_error"
+    code = SDK_AGENTSTUDIO_STREAM_ERROR.name
 
 
 class StreamClosedError(StreamError):
     """Raised when consumers attempt I/O on an already-closed stream."""
 
-    code = "stream_closed"
+    code = SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR.name
 
 
 # ---------------------------------------------------------------------------

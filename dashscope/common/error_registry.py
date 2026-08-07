@@ -586,6 +586,59 @@ SDK_AGENTIC_RL_VALUE_ERROR_WITH_CODE = InternalErrorDef(
     ),
 )
 
+SDK_AGENTSTUDIO_API_CONNECTION_ERROR = InternalErrorDef(
+    name="sdk.agentstudio.APIConnectionError",
+    external=INTERNAL_ERROR,
+    message="Failed to connect to the AgentStudio service.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution=(
+        "Check your network connectivity and ensure the AgentStudio endpoint "
+        "(base_url / region) is reachable. Verify firewall and proxy "
+        "settings."
+    ),
+)
+
+SDK_AGENTSTUDIO_API_TIMEOUT_ERROR = InternalErrorDef(
+    name="sdk.agentstudio.APITimeoutError",
+    external=REQUEST_TIMEOUT,
+    message="The request to the AgentStudio service timed out.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution=(
+        "The request did not complete within the timeout period. Increase the "
+        "client timeout or retry the request."
+    ),
+)
+
+SDK_AGENTSTUDIO_STREAM_ERROR = InternalErrorDef(
+    name="sdk.agentstudio.StreamError",
+    external=INTERNAL_ERROR,
+    message="The SSE stream encountered a fatal protocol error.",
+    allow_retry=True,
+    vars=[],
+    cause="",
+    solution=(
+        "Retry the streaming request. If the error persists, report it at "
+        "https://github.com/dashscope/dashscope-sdk-python/issues."
+    ),
+)
+
+SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR = InternalErrorDef(
+    name="sdk.agentstudio.StreamClosedError",
+    external=INVALID_REQUEST,
+    message="Attempted I/O on an already-closed stream.",
+    allow_retry=False,
+    vars=[],
+    cause="",
+    solution=(
+        "Do not read from a stream after it has been closed. Consume the "
+        "stream within its context manager or before calling close()."
+    ),
+)
+
 
 # -- Catalogs ------------------------------------------------------
 PUBLIC_ERRORS = [
@@ -635,4 +688,8 @@ INTERNAL_ERRORS = [
     SDK_AGENTIC_RL_ERROR,
     SDK_AGENTIC_RL_RUNTIME_ERROR_WITH_CODE,
     SDK_AGENTIC_RL_VALUE_ERROR_WITH_CODE,
+    SDK_AGENTSTUDIO_API_CONNECTION_ERROR,
+    SDK_AGENTSTUDIO_API_TIMEOUT_ERROR,
+    SDK_AGENTSTUDIO_STREAM_ERROR,
+    SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR,
 ]
