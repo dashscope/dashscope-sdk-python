@@ -159,8 +159,7 @@ class StreamClosedError(StreamError):
 # ---------------------------------------------------------------------------
 
 
-# Class routing: normalized code -> exception type. Legacy aliases are
-# rewritten to their canonical form by ``_normalize_code`` before routing.
+# Class routing: normalized code -> exception type.
 _CODE_TO_CLASS: Dict[str, type] = {
     "invalid_request_error": InvalidRequestError,
     "authentication_error": AuthenticationError,
@@ -230,7 +229,6 @@ def from_response(
             and isinstance(body["error"], str)
         ):
             message = body["error"]
-            code = body.get("error") or "api_error"
         # Flat DashScope envelope: code/message at the top level. An
         # unrecognized code still normalizes to api_error below.
         if code is None:
