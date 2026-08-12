@@ -514,3 +514,88 @@ class TestSyncBackwardCompatibility:
         mock_get_session.assert_called_once()
         # 验证共享 session 没有被关闭
         mock_session.close.assert_not_called()
+
+
+class TestSyncConnectionRetry:
+    """测试池化连接被远端关闭后的重试行为"""
+
+    def _build_post_request(self):
+        http_request = HttpRequest(
+            url="http://example.com/api",
+            api_key="fake-api-key",
+            http_method=HTTPMethod.POST,
+            stream=False,
+        )
+        http_request.data = ApiRequestData(
+            model="test-model",
+            task_group="test",
+            task="test",
+            function="test",
+            input_data={"test": "data"},
+            form=None,
+            is_binary_input=False,
+            api_protocol=ApiProtocol.HTTPS,
+        )
+        return http_request
+
+    @staticmethod
+    def _ok_response():
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.text = '{"status": "success"}'
+        return mock_response
+
+    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    def test_retry_once_on_connection_error(self, mock_get_session):
+        """连接被远端关闭时重试一次并成功"""
+        mock_session = Mock()
+        mock_response = self._ok_response()
+        mock_session.post.side_effect = [
+            requests.exceptions.ConnectionError(
+                "Connection aborted.",
+            ),
+            mock_response,
+        ]
+        mock_get_session.return_value = mock_session
+
+        http_request = self._build_post_request()
+
+        with patch.object(
+            http_request,
+            "_handle_response",
+            return_value=iter([mock_response]),
+        ):
+            _ = http_request.call()
+
+        assert mock_session.post.call_count == 2
+
+    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    def test_retry_exhausted_raises(self, mock_get_session):
+        """连续两次 ConnectionError 后向上抛出"""
+        mock_session = Mock()
+        mock_session.post.side_effect = requests.exceptions.ConnectionError(
+            "Connection aborted.",
+        )
+        mock_get_session.return_value = mock_session
+
+        http_request = self._build_post_request()
+
+        with pytest.raises(requests.exceptions.ConnectionError):
+            _ = http_request.call()
+
+        assert mock_session.post.call_count == 2
+
+    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    def test_no_retry_on_other_exceptions(self, mock_get_session):
+        """非连接类异常不重试"""
+        mock_session = Mock()
+        mock_session.post.side_effect = ValueError("bad request")
+        mock_get_session.return_value = mock_session
+
+        http_request = self._build_post_request()
+
+        with pytest.raises(ValueError, match="bad request"):
+            _ = http_request.call()
+
+        assert mock_session.post.call_count == 1
