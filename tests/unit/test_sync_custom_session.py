@@ -574,8 +574,8 @@ class TestSyncConnectionRetry:
     def test_retry_exhausted_raises(self, mock_get_session):
         """连续两次 ConnectionError 后向上抛出"""
         mock_session = Mock()
-        mock_session.post.side_effect = (
-            requests.exceptions.ConnectionError("Connection aborted.")
+        mock_session.post.side_effect = requests.exceptions.ConnectionError(
+            "Connection aborted.",
         )
         mock_get_session.return_value = mock_session
 
