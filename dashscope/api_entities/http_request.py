@@ -4,7 +4,7 @@ import datetime
 import json
 import threading
 from http import HTTPStatus
-from typing import Optional, Dict, Union
+from typing import Callable, Optional, Dict, Union
 
 import aiohttp
 import requests
@@ -44,6 +44,26 @@ def _get_shared_sync_session() -> requests.Session:
             if _shared_sync_session is None:
                 _shared_sync_session = requests.Session()
     return _shared_sync_session
+
+
+def _send_with_retry(
+    send: Callable[[], requests.Response],
+) -> requests.Response:
+    """Send a request, retrying once on a dropped pooled connection.
+
+    A keep-alive connection idle in the pool may have been closed by the
+    server or an intermediate LB; reusing it raises ConnectionError before
+    any response bytes arrive, so the request was not processed and is
+    safe to resend on a fresh connection.
+    """
+    try:
+        return send()
+    except requests.exceptions.ConnectionError as e:
+        logger.debug(
+            "Connection dropped before response, retrying once: %s",
+            e,
+        )
+        return send()
 
 
 class HttpRequest(AioBaseRequest):
@@ -505,22 +525,26 @@ class HttpRequest(AioBaseRequest):
                     body = json.dumps(obj, ensure_ascii=False).encode(
                         "utf-8",
                     )
-                    response = session.post(
-                        url=self.url,
-                        stream=self.stream,
-                        data=body,
-                        headers={**self.headers},
-                        timeout=self.timeout,
+                    response = _send_with_retry(
+                        lambda: session.post(
+                            url=self.url,
+                            stream=self.stream,
+                            data=body,
+                            headers={**self.headers},
+                            timeout=self.timeout,
+                        ),
                     )
             elif self.method == HTTPMethod.GET:
                 params = {}
                 if hasattr(self, "data") and self.data is not None:
                     params = getattr(self.data, "parameters", {})
-                response = session.get(
-                    url=self.url,
-                    params=params,
-                    headers=self.headers,
-                    timeout=self.timeout,
+                response = _send_with_retry(
+                    lambda: session.get(
+                        url=self.url,
+                        params=params,
+                        headers=self.headers,
+                        timeout=self.timeout,
+                    ),
                 )
             else:
                 raise UnsupportedHTTPMethod(
