@@ -7,7 +7,10 @@ from typing import Optional
 
 import aiohttp
 
-from dashscope.api_entities.aio_session import get_shared_aio_session
+from dashscope.api_entities.aio_session import (
+    get_shared_aio_session,
+    send_with_retry_async,
+)
 from dashscope.api_entities.base_request import AioBaseRequest
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.common.constants import (
@@ -294,22 +297,26 @@ class AioHttpRequest(AioBaseRequest):
                     body = json.dumps(obj, ensure_ascii=False).encode(
                         "utf-8",
                     )
-                    response = await session.request(
-                        "POST",
-                        url=self.url,
-                        data=body,
-                        headers=self.headers,
-                        timeout=request_timeout,
+                    response = await send_with_retry_async(
+                        lambda: session.request(
+                            "POST",
+                            url=self.url,
+                            data=body,
+                            headers=self.headers,
+                            timeout=request_timeout,
+                        ),
                     )
             elif self.method == HTTPMethod.GET:
                 params = {}
                 if hasattr(self, "data") and self.data is not None:
                     params = getattr(self.data, "parameters", {})
-                response = await session.get(
-                    url=self.url,
-                    params=params,
-                    headers=self.headers,
-                    timeout=request_timeout,
+                response = await send_with_retry_async(
+                    lambda: session.get(
+                        url=self.url,
+                        params=params,
+                        headers=self.headers,
+                        timeout=request_timeout,
+                    ),
                 )
             else:
                 raise UnsupportedHTTPMethod(
