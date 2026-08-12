@@ -30,6 +30,7 @@ from dashscope.audio.http_tts.http_speech_synthesizer import (
 )
 from dashscope.audio.tts.speech_synthesizer import SpeechSynthesizer
 from dashscope.api_entities.aio_session import close_shared_aio_session
+from dashscope.api_entities.sync_session import close_shared_sync_session
 from dashscope.common.api_key import save_api_key
 from dashscope.common.env import (
     api_key,
@@ -37,6 +38,7 @@ from dashscope.common.env import (
     base_compatible_api_url,
     base_http_api_url,
     base_websocket_api_url,
+    http_connection_pool_size,
 )
 from dashscope.finetune.deployments import Deployments
 from dashscope.finetune.finetunes import FineTunes
@@ -87,6 +89,8 @@ __all__ = [
     "api_key_file_path",
     "save_api_key",
     "close_shared_aio_session",
+    "close_shared_sync_session",
+    "http_connection_pool_size",
     "AioGeneration",
     "Conversation",
     "Generation",

@@ -29,3 +29,14 @@ base_compatible_api_url = os.environ.get(
     "DASHSCOPE_COMPATIBLE_BASE_URL",
     f"https://dashscope.aliyuncs.com/compatible-mode/{api_version}",
 )
+
+# HTTP connection pool configuration
+# Can be set via environment variable or module-level variable
+# Example:
+#   import dashscope
+#   dashscope.http_connection_pool_size = 50
+# Or:
+#   export DASHSCOPE_HTTP_CONNECTION_POOL_SIZE=50
+http_connection_pool_size = int(
+    os.environ.get("DASHSCOPE_HTTP_CONNECTION_POOL_SIZE", "20"),
+)

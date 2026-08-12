@@ -16,6 +16,8 @@ from typing import Optional
 import aiohttp
 import certifi
 
+import dashscope
+
 _shared_ssl_context: Optional[ssl.SSLContext] = None
 _aio_sessions: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
 _lock = threading.RLock()
@@ -45,7 +47,14 @@ async def get_shared_aio_session() -> aiohttp.ClientSession:
         if session is not None and not session.closed:
             return session
 
-        connector = aiohttp.TCPConnector(ssl=get_ssl_context())
+        # Configure connection pool size from dashscope config
+        pool_size = getattr(dashscope, "http_connection_pool_size", 20)
+
+        connector = aiohttp.TCPConnector(
+            ssl=get_ssl_context(),
+            limit=pool_size,  # Total connection pool size
+            limit_per_host=pool_size,  # Connections per host
+        )
         session = aiohttp.ClientSession(connector=connector, trust_env=True)
 
         _aio_sessions[loop] = session

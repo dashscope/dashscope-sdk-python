@@ -11,6 +11,7 @@ import requests
 
 import dashscope
 from dashscope.api_entities.api_request_factory import _build_api_request
+from dashscope.api_entities.sync_session import get_shared_sync_session
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.common.api_key import get_default_api_key
 from dashscope.common.constants import (
@@ -595,15 +596,15 @@ class AsyncTaskGetMixin:
                 **custom_headers,
                 **headers,
             }
-        with requests.Session() as session:
-            logger.debug("Starting request: %s", status_url)
-            response = session.get(
-                status_url,
-                headers=headers,
-                timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS,
-            )
-            logger.debug("Starting processing response: %s", status_url)
-            return _handle_http_response(response)
+        session = get_shared_sync_session()
+        logger.debug("Starting request: %s", status_url)
+        response = session.get(
+            status_url,
+            headers=headers,
+            timeout=DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
+        logger.debug("Starting processing response: %s", status_url)
+        return _handle_http_response(response)
 
 
 class BaseAsyncApi(AsyncTaskGetMixin):
@@ -682,15 +683,15 @@ class BaseAsyncApi(AsyncTaskGetMixin):
         task_id = cls._get_task_id(task)
         base_url = kwargs.pop("base_address", None)
         url = _normalization_url(base_url, "tasks", task_id, "cancel")
-        with requests.Session() as session:
-            response = session.post(
-                url,
-                headers={
-                    **_workspace_header(workspace),
-                    **default_headers(api_key),
-                },
-            )
-            return _handle_http_response(response)
+        session = get_shared_sync_session()
+        response = session.post(
+            url,
+            headers={
+                **_workspace_header(workspace),
+                **default_headers(api_key),
+            },
+        )
+        return _handle_http_response(response)
 
     @classmethod
     def list(
@@ -745,31 +746,31 @@ class BaseAsyncApi(AsyncTaskGetMixin):
         if status is not None:
             params["status"] = status
 
-        with requests.Session() as session:
-            response = session.get(
-                url,
-                params=params,
-                headers={
-                    **_workspace_header(workspace),
-                    **default_headers(api_key),
-                },
+        session = get_shared_sync_session()
+        response = session.get(
+            url,
+            params=params,
+            headers={
+                **_workspace_header(workspace),
+                **default_headers(api_key),
+            },
+        )
+        if response.status_code == HTTPStatus.OK:
+            json_content = response.json()
+            request_id = ""
+            if "request_id" in json_content:
+                request_id = json_content["request_id"]
+                json_content.pop("request_id")
+            return DashScopeAPIResponse(
+                request_id=request_id,
+                status_code=response.status_code,
+                code=None,  # type: ignore[arg-type]
+                output=json_content,
+                usage=None,
+                message="",
             )
-            if response.status_code == HTTPStatus.OK:
-                json_content = response.json()
-                request_id = ""
-                if "request_id" in json_content:
-                    request_id = json_content["request_id"]
-                    json_content.pop("request_id")
-                return DashScopeAPIResponse(
-                    request_id=request_id,
-                    status_code=response.status_code,
-                    code=None,  # type: ignore[arg-type]
-                    output=json_content,
-                    usage=None,
-                    message="",
-                )
-            else:
-                return _handle_http_failed_response(response)
+        else:
+            return _handle_http_failed_response(response)
 
     @classmethod
     def fetch(
@@ -952,20 +953,20 @@ def _get(
         REQUEST_TIMEOUT_KEYWORD,
         DEFAULT_REQUEST_TIMEOUT_SECONDS,
     )
-    with requests.Session() as session:
-        logger.debug("Starting request: %s", url)
-        response = session.get(
-            url,
-            headers={
-                **_workspace_header(workspace),
-                **default_headers(api_key),
-                **kwargs.pop("headers", {}),
-            },
-            params=params,
-            timeout=timeout,
-        )
-        logger.debug("Starting processing response: %s", url)
-        return _handle_http_response(response, flattened_output)
+    session = get_shared_sync_session()
+    logger.debug("Starting request: %s", url)
+    response = session.get(
+        url,
+        headers={
+            **_workspace_header(workspace),
+            **default_headers(api_key),
+            **kwargs.pop("headers", {}),
+        },
+        params=params,
+        timeout=timeout,
+    )
+    logger.debug("Starting processing response: %s", url)
+    return _handle_http_response(response, flattened_output)
 
 
 def _get_url(custom_base_url, default_path, path):
@@ -1219,19 +1220,19 @@ class DeleteMixin:
             REQUEST_TIMEOUT_KEYWORD,
             DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
-        with requests.Session() as session:
-            logger.debug("Starting request: %s", url)
-            response = session.delete(
-                url,
-                headers={
-                    **_workspace_header(workspace),
-                    **default_headers(api_key),
-                    **kwargs.pop("headers", {}),
-                },
-                timeout=timeout,
-            )
-            logger.debug("Starting processing response: %s", url)
-            return _handle_http_response(response, flattened_output)
+        session = get_shared_sync_session()
+        logger.debug("Starting request: %s", url)
+        response = session.delete(
+            url,
+            headers={
+                **_workspace_header(workspace),
+                **default_headers(api_key),
+                **kwargs.pop("headers", {}),
+            },
+            timeout=timeout,
+        )
+        logger.debug("Starting processing response: %s", url)
+        return _handle_http_response(response, flattened_output)
 
 
 class CreateMixin:
@@ -1265,32 +1266,32 @@ class CreateMixin:
             DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
         flattened_output = kwargs.pop("flattened_output", False)
-        with requests.Session() as session:
-            logger.debug("Starting request: %s", url)
-            body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-            response = session.post(
-                url,
-                data=body,
-                stream=stream,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    **_workspace_header(workspace),
-                    **default_headers(api_key),
-                    **kwargs.pop("headers", {}),
-                },
-                timeout=timeout,
-            )
-            logger.debug("Starting processing response: %s", url)
-            response = _handle_http_stream_response(response, flattened_output)
-            if stream:
-                return (item for item in response)  # type: ignore
-            else:
-                _, output = next(response)
-                try:
-                    next(response)
-                except StopIteration:
-                    pass
-                return output
+        session = get_shared_sync_session()
+        logger.debug("Starting request: %s", url)
+        body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        response = session.post(
+            url,
+            data=body,
+            stream=stream,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                **_workspace_header(workspace),
+                **default_headers(api_key),
+                **kwargs.pop("headers", {}),
+            },
+            timeout=timeout,
+        )
+        logger.debug("Starting processing response: %s", url)
+        response = _handle_http_stream_response(response, flattened_output)
+        if stream:
+            return (item for item in response)  # type: ignore
+        else:
+            _, output = next(response)
+            try:
+                next(response)
+            except StopIteration:
+                pass
+            return output
 
 
 class UpdateMixin:
@@ -1332,35 +1333,35 @@ class UpdateMixin:
         flattened_output = kwargs.pop("flattened_output", False)
         import json as _json  # pylint: disable=reimported
 
-        with requests.Session() as session:
-            logger.debug("Starting request: %s", url)
-            body = _json.dumps(json, ensure_ascii=False).encode("utf-8")
-            if method == "post":
-                response = session.post(
-                    url,
-                    data=body,
-                    headers={
-                        "Content-Type": "application/json; charset=utf-8",
-                        **_workspace_header(workspace),
-                        **default_headers(api_key),
-                        **kwargs.pop("headers", {}),
-                    },
-                    timeout=timeout,
-                )
-            else:
-                response = session.patch(
-                    url,
-                    data=body,
-                    headers={
-                        "Content-Type": "application/json; charset=utf-8",
-                        **_workspace_header(workspace),
-                        **default_headers(api_key),
-                        **kwargs.pop("headers", {}),
-                    },
-                    timeout=timeout,
-                )
-            logger.debug("Starting processing response: %s", url)
-            return _handle_http_response(response, flattened_output)
+        session = get_shared_sync_session()
+        logger.debug("Starting request: %s", url)
+        body = _json.dumps(json, ensure_ascii=False).encode("utf-8")
+        if method == "post":
+            response = session.post(
+                url,
+                data=body,
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    **_workspace_header(workspace),
+                    **default_headers(api_key),
+                    **kwargs.pop("headers", {}),
+                },
+                timeout=timeout,
+            )
+        else:
+            response = session.patch(
+                url,
+                data=body,
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    **_workspace_header(workspace),
+                    **default_headers(api_key),
+                    **kwargs.pop("headers", {}),
+                },
+                timeout=timeout,
+            )
+        logger.debug("Starting processing response: %s", url)
+        return _handle_http_response(response, flattened_output)
 
 
 class PutMixin:
@@ -1400,22 +1401,22 @@ class PutMixin:
         )
         import json as _json  # pylint: disable=reimported
 
-        with requests.Session() as session:
-            logger.debug("Starting request: %s", url)
-            body = _json.dumps(json, ensure_ascii=False).encode("utf-8")
-            response = session.put(
-                url,
-                data=body,
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    **_workspace_header(workspace),
-                    **default_headers(api_key),
-                    **kwargs.pop("headers", {}),
-                },
-                timeout=timeout,
-            )
-            logger.debug("Starting processing response: %s", url)
-            return _handle_http_response(response)
+        session = get_shared_sync_session()
+        logger.debug("Starting request: %s", url)
+        body = _json.dumps(json, ensure_ascii=False).encode("utf-8")
+        response = session.put(
+            url,
+            data=body,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                **_workspace_header(workspace),
+                **default_headers(api_key),
+                **kwargs.pop("headers", {}),
+            },
+            timeout=timeout,
+        )
+        logger.debug("Starting processing response: %s", url)
+        return _handle_http_response(response)
 
 
 class FileUploadMixin:
@@ -1454,21 +1455,21 @@ class FileUploadMixin:
             REQUEST_TIMEOUT_KEYWORD,
             DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
-        with requests.Session() as session:
-            logger.debug("Starting request: %s", url)
-            response = session.post(
-                url,
-                data=js,
-                headers={
-                    **_workspace_header(workspace),
-                    **default_headers(api_key),
-                    **kwargs.pop("headers", {}),
-                },
-                files=files,
-                timeout=timeout,
-            )
-            logger.debug("Starting processing response: %s", url)
-            return _handle_http_response(response)
+        session = get_shared_sync_session()
+        logger.debug("Starting request: %s", url)
+        response = session.post(
+            url,
+            data=js,
+            headers={
+                **_workspace_header(workspace),
+                **default_headers(api_key),
+                **kwargs.pop("headers", {}),
+            },
+            files=files,
+            timeout=timeout,
+        )
+        logger.debug("Starting processing response: %s", url)
+        return _handle_http_response(response)
 
 
 class CancelMixin:
@@ -1505,19 +1506,19 @@ class CancelMixin:
             DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
         flattened_output = kwargs.pop("flattened_output", False)
-        with requests.Session() as session:
-            logger.debug("Starting request: %s", url)
-            response = session.post(
-                url,
-                headers={
-                    **_workspace_header(workspace),
-                    **default_headers(api_key),
-                    **kwargs.pop("headers", {}),
-                },
-                timeout=timeout,
-            )
-            logger.debug("Starting processing response: %s", url)
-            return _handle_http_response(response, flattened_output)
+        session = get_shared_sync_session()
+        logger.debug("Starting request: %s", url)
+        response = session.post(
+            url,
+            headers={
+                **_workspace_header(workspace),
+                **default_headers(api_key),
+                **kwargs.pop("headers", {}),
+            },
+            timeout=timeout,
+        )
+        logger.debug("Starting processing response: %s", url)
+        return _handle_http_response(response, flattened_output)
 
 
 class StreamEventMixin:
@@ -1612,18 +1613,18 @@ class StreamEventMixin:
             REQUEST_TIMEOUT_KEYWORD,
             DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
-        with requests.Session() as session:
-            logger.debug("Starting request: %s", url)
-            response = session.get(
-                url,
-                headers={
-                    **_workspace_header(workspace),
-                    **default_headers(api_key),
-                    **kwargs.pop("headers", {}),
-                },
-                stream=True,
-                timeout=timeout,
-            )
-            logger.debug("Starting processing response: %s", url)
-            for rsp in cls._handle_response(response):
-                yield rsp
+        session = get_shared_sync_session()
+        logger.debug("Starting request: %s", url)
+        response = session.get(
+            url,
+            headers={
+                **_workspace_header(workspace),
+                **default_headers(api_key),
+                **kwargs.pop("headers", {}),
+            },
+            stream=True,
+            timeout=timeout,
+        )
+        logger.debug("Starting processing response: %s", url)
+        for rsp in cls._handle_response(response):
+            yield rsp
