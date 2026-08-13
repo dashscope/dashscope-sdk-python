@@ -138,6 +138,3 @@ cython_debug/
 .pypirc
 
 /.acli/
-.qoder/
-md/
-scripts/
