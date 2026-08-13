@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Trace logging for agent execution.
 Records LLM calls, tool executions, and decision points to JSONL files.
@@ -119,7 +120,11 @@ class TraceLogger:
     def tail_events(self, limit: int = 5) -> list[dict[str, Any]]:
         return list(self.iter_events())[-limit:]
 
-    def search_events(self, keyword: str, limit: int = 20) -> list[dict[str, Any]]:
+    def search_events(
+        self,
+        keyword: str,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
         kw = keyword.lower()
         matches = [
             e
@@ -184,7 +189,9 @@ def generate_report(trace_logger: TraceLogger | None) -> dict | None:
     return {
         "total_llm_calls": llm_calls,
         "total_tool_calls": tool_calls,
-        "tool_success_rate": (tool_successes / tool_calls) if tool_calls else 0.0,
+        "tool_success_rate": (tool_successes / tool_calls)
+        if tool_calls
+        else 0.0,
         "avg_response_time": avg_response_time,
         "top_tools": top_tools,
     }

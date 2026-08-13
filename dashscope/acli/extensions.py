@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Layer-1 extension system: TOML-driven custom providers + HTTP capabilities.
 
 Users can describe new LLM providers (OpenAI-compatible) and new HTTP-based
@@ -22,6 +23,7 @@ Security model for API keys (loader enforces this — see _validate_provider):
 
 Files written by /dev get chmod 600 so other local users can't read.
 """
+# pylint: disable=too-many-branches,too-many-return-statements
 
 from __future__ import annotations
 
@@ -158,7 +160,11 @@ def loaded_key_targets() -> dict | None:
     return getattr(mod, "KEY_TARGETS", None) if mod is not None else None
 
 
-def provider_key_for_env(config, env_name: str, key_targets: dict | None = None) -> str:
+def provider_key_for_env(
+    config,
+    env_name: str,
+    key_targets: dict | None = None,
+) -> str:
     """Key already stored for a built-in provider whose env var matches
     ``env_name`` (e.g. DASHSCOPE_API_KEY → config.tongyi_api_key). Lets an
     extension capability reuse a key the user entered once via /provider key
@@ -238,7 +244,9 @@ def load_extensions() -> CustomExtensions:
         for raw in data.get("providers", []):
             err = _validate_provider(raw)
             if err:
-                ext.errors.append(f"{path}: provider {raw.get('name', '?')}: {err}")
+                ext.errors.append(
+                    f"{path}: provider {raw.get('name', '?')}: {err}",
+                )
                 continue
             p = CustomProvider(
                 name=raw["name"],
@@ -263,7 +271,9 @@ def load_extensions() -> CustomExtensions:
         for raw in data.get("capabilities", []):
             err = _validate_capability(raw)
             if err:
-                ext.errors.append(f"{path}: capability {raw.get('key', '?')}: {err}")
+                ext.errors.append(
+                    f"{path}: capability {raw.get('key', '?')}: {err}",
+                )
                 continue
             cap = CustomCapability(
                 key=raw["key"],
@@ -281,7 +291,8 @@ def load_extensions() -> CustomExtensions:
                 terr = _validate_tool(traw)
                 if terr:
                     ext.errors.append(
-                        f"{path}: capability {cap.key} tool {traw.get('name', '?')}: {terr}"
+                        f"{path}: capability {cap.key} tool "
+                        f"{traw.get('name', '?')}: {terr}",
                     )
                     continue
                 cap.tools.append(
@@ -299,14 +310,15 @@ def load_extensions() -> CustomExtensions:
                         type=(traw.get("type", "http") or "http").lower(),
                         provider=traw.get("provider", "") or "",
                         model=traw.get("model", "") or "",
-                    )
+                    ),
                 )
             by_capability[cap.key] = cap
 
         for raw in data.get("skills", []):
             if not raw.get("name") or not raw.get("prompt_template"):
                 ext.errors.append(
-                    f"{path}: skill {raw.get('name', '?')}: missing name or prompt_template"
+                    f"{path}: skill {raw.get('name', '?')}: "
+                    f"missing name or prompt_template",
                 )
                 continue
             by_skill[raw["name"]] = CustomSkill(
@@ -321,7 +333,8 @@ def load_extensions() -> CustomExtensions:
         for raw in data.get("shell_tools", []):
             if not raw.get("name") or not raw.get("command_template"):
                 ext.errors.append(
-                    f"{path}: shell_tool {raw.get('name', '?')}: missing name or command_template"
+                    f"{path}: shell_tool {raw.get('name', '?')}: "
+                    f"missing name or command_template",
                 )
                 continue
             by_shell_tool[raw["name"]] = CustomShellTool(
@@ -346,8 +359,16 @@ def _validate_provider(raw: dict) -> str:
     if not raw.get("base_url"):
         return "missing 'base_url'"
     protocol = str(raw.get("protocol", "openai")).lower()
-    if protocol not in ("openai", "openai_compatible", "anthropic", "dashscope"):
-        return "protocol must be 'openai', 'openai_compatible', 'anthropic', or 'dashscope'"
+    if protocol not in (
+        "openai",
+        "openai_compatible",
+        "anthropic",
+        "dashscope",
+    ):
+        return (
+            "protocol must be 'openai', 'openai_compatible', "
+            "'anthropic', or 'dashscope'"
+        )
     auth = raw.get("auth", True)
     if not auth:
         # No-auth providers (e.g. ollama) skip key validation entirely.
@@ -375,10 +396,13 @@ def _validate_capability(raw: dict) -> str:
     if not key or "." not in key:
         return "key must be in 'vendor.feature' form (e.g. dashscope.web)"
     raw_key = raw.get("api_key", "")
-    if raw_key and not (isinstance(raw_key, str) and raw_key.startswith("ENC:")):
+    if raw_key and not (
+        isinstance(raw_key, str) and raw_key.startswith("ENC:")
+    ):
         return (
             "plaintext api_key in toml is refused for security. "
-            'Use api_key_env = "FOO_TOKEN" or run /capability enable to set the key.'
+            'Use api_key_env = "FOO_TOKEN" or run /capability enable '
+            "to set the key."
         )
     return ""
 
@@ -430,7 +454,9 @@ def _validate_tool(raw: dict) -> str:
         or auth.startswith("apikey-header:")
         or auth == "none"
     ):
-        return "auth must be 'none', 'bearer:$ENV', or 'apikey-header:NAME:$ENV'"
+        return (
+            "auth must be 'none', 'bearer:$ENV', or 'apikey-header:NAME:$ENV'"
+        )
     return ""
 
 
@@ -438,7 +464,8 @@ def _validate_tool(raw: dict) -> str:
 
 
 def merge_providers_into_catalog(
-    ext: CustomExtensions, provider_models: dict[str, list[str]]
+    ext: CustomExtensions,
+    provider_models: dict[str, list[str]],
 ) -> dict[str, CustomProvider]:
     """Fold custom providers into PROVIDER_MODELS. Returns a name → spec
     map so get_provider can later look up base_url + key resolver."""
@@ -490,7 +517,10 @@ def _render_url_template(template: str, params: dict[str, Any]) -> str:
     return out
 
 
-def _resolve_auth_header(auth: str, fallback_key: str = "") -> tuple[str, str] | None:
+def _resolve_auth_header(
+    auth: str,
+    fallback_key: str = "",
+) -> tuple[str, str] | None:
     """Translate a capability/tool auth spec into a (header_name, value)
     pair. `fallback_key` is used when the env var named by the auth spec
     is unset (typical source: capability.resolve_auth_key() returning the
@@ -549,7 +579,8 @@ def build_http_tool(cap: CustomCapability, tool: CustomTool):
                 pair = ("Authorization", f"Bearer {fallback}")
             elif cap.api_key_env or cap.api_key_enc:
                 return (
-                    f"错误: 工具 {tool.name} 需要凭证 (env: {cap.api_key_env or '未配置'})，"
+                    f"错误: 工具 {tool.name} 需要凭证 "
+                    f"(env: {cap.api_key_env or '未配置'})，"
                     f"但环境变量未设、toml 中也无加密 key。"
                     f"运行 /capability enable {cap.key} 录入。"
                 )
@@ -558,7 +589,8 @@ def build_http_tool(cap: CustomCapability, tool: CustomTool):
         elif auth_spec and auth_spec != "none":
             return (
                 f"错误: 工具 {tool.name} 需要凭证 ({auth_spec})，但 env 未设、"
-                f"toml 中也无加密 key。运行 [bold]/capability enable {cap.key}[/bold] 录入。"
+                f"toml 中也无加密 key。运行 "
+                f"[bold]/capability enable {cap.key}[/bold] 录入。"
             )
 
         try:
@@ -649,7 +681,7 @@ def build_vision_tool(cap: CustomCapability, tool: CustomTool):
                         {"type": "text", "text": question},
                         {"type": "image_url", "image_url": {"url": data_url}},
                     ],
-                }
+                },
             ]
             response = await provider.chat(messages)
             return response.content
@@ -741,7 +773,11 @@ def remove_provider(target: Path, name: str) -> bool:
     return True
 
 
-def append_capability_scaffold(target: Path, key: str, display: str = "") -> None:
+def append_capability_scaffold(
+    target: Path,
+    key: str,
+    display: str = "",
+) -> None:
     """Write a commented [[capabilities]] template the user can fill in
     with their text editor. Includes one example tool block."""
     lines = []
@@ -756,33 +792,49 @@ def append_capability_scaffold(target: Path, key: str, display: str = "") -> Non
         lines.append("")
 
     lines.append("[[capabilities]]")
-    lines.append(f'key = "{key}"                       # required, vendor.feature form')
+    lines.append(
+        f'key = "{key}"                       # required, vendor.feature form',
+    )
     lines.append(f'display = "{display or key}"')
     lines.append(
-        "# default auth used by tools that omit their own; comment out for none"
+        "# default auth used by tools that omit their own; "
+        "comment out for none",
     )
     lines.append('# auth = "bearer:$YOUR_API_KEY_ENV"')
     lines.append("")
-    lines.append(f"[[capabilities.tools]]")
-    lines.append(f'name = "example_tool"               # function name LLM will see')
-    lines.append(f'description = "describe what this tool does and when to call it"')
-    lines.append(f'endpoint = "https://api.example.com/v1/something"')
-    lines.append(f'http_method = "POST"                # GET/POST/PUT/DELETE/PATCH')
-    lines.append(f'permission = "auto"                 # auto / confirm / dangerous')
+    lines.append("[[capabilities.tools]]")
+    lines.append(
+        'name = "example_tool"               # function name LLM will see',
+    )
+    lines.append(
+        'description = "describe what this tool does and when to call it"',
+    )
+    lines.append('endpoint = "https://api.example.com/v1/something"')
+    lines.append(
+        'http_method = "POST"                # GET/POST/PUT/DELETE/PATCH',
+    )
+    lines.append(
+        'permission = "auto"                 # auto / confirm / dangerous',
+    )
     lines.append("# Optional per-tool auth (overrides capability default):")
     lines.append('# auth = "bearer:$OTHER_ENV"')
     lines.append("params = [")
     lines.append(
-        '  {name="query", type="string", required=true, description="search query"},'
+        '  {name="query", type="string", required=true, '
+        'description="search query"},',
     )
     lines.append(
-        '  {name="count", type="integer", default=10, description="result count"},'
+        '  {name="count", type="integer", default=10, '
+        'description="result count"},',
     )
     lines.append("]")
     lines.append(
-        "# body_template: mustache-style {{var}} substitution; values JSON-encoded."
+        "# body_template: mustache-style {{var}} substitution; "
+        "values JSON-encoded.",
     )
-    lines.append('body_template = \'{"query": {{query}}, "count": {{count}}}\'')
+    lines.append(
+        'body_template = \'{"query": {{query}}, "count": {{count}}}\'',
+    )
     lines.append("# Optional: extract a sub-field of the JSON response")
     lines.append('# result_jsonpath = "data.results"')
     lines.append("")
@@ -1037,7 +1089,9 @@ def _toml_kv(k: str, v: Any) -> str:
                         pairs.append(f"{ik}={iv}")
                 inline.append("{" + ", ".join(pairs) + "}")
             return f"{k} = [{', '.join(inline)}]"
-        rendered = ", ".join(toml_str(x) if isinstance(x, str) else str(x) for x in v)
+        rendered = ", ".join(
+            toml_str(x) if isinstance(x, str) else str(x) for x in v
+        )
         return f"{k} = [{rendered}]"
     if isinstance(v, dict):
         # Best-effort inline table
@@ -1109,7 +1163,9 @@ def find_capability(key: str) -> CustomCapability | None:
     return None
 
 
-def apply_extensions(provider_models: dict[str, list[str]]) -> CustomExtensions:
+def apply_extensions(
+    provider_models: dict[str, list[str]],
+) -> CustomExtensions:
     """Load extensions and fold them into PROVIDER_MODELS. Capability
     registration is handled inside tools/platform.py by consulting
     current() — kept there so it ties into the same tracking that the
@@ -1167,18 +1223,27 @@ def _register_custom_skills(ext: CustomExtensions) -> None:
                 mcp_service=s.mcp_service,
                 prompt_template=s.prompt_template,
                 arguments=s.arguments,
-            )
+            ),
         )
 
 
 def _register_custom_shell_tools(ext: CustomExtensions) -> None:
-    """Register custom shell-command tools from extensions into the tool registry."""
+    """Register custom shell-command tools from extensions into the tool
+    registry."""
     import subprocess as sp
 
-    from dashscope.acli.tools.registry import PermissionLevel, ToolDefinition, registry
+    from dashscope.acli.tools.registry import (
+        PermissionLevel,
+        ToolDefinition,
+        registry,
+    )
 
     for t in ext.shell_tools:
-        perm = getattr(PermissionLevel, t.permission.upper(), PermissionLevel.CONFIRM)
+        perm = getattr(
+            PermissionLevel,
+            t.permission.upper(),
+            PermissionLevel.CONFIRM,
+        )
         params_schema: dict = {"type": "object", "properties": {}}
         required: list[str] = []
         for p in t.params:
@@ -1210,6 +1275,7 @@ def _register_custom_shell_tools(ext: CustomExtensions) -> None:
                         capture_output=True,
                         text=True,
                         timeout=60,
+                        check=False,
                     )
                     output = result.stdout
                     if result.returncode != 0 and result.stderr:
@@ -1229,5 +1295,5 @@ def _register_custom_shell_tools(ext: CustomExtensions) -> None:
                 permission=perm,
                 func=_make_fn(t.command_template),
                 parameters=params_schema,
-            )
+            ),
         )

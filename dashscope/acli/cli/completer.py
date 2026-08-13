@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 """Prompt completion and history management."""
+# pylint: disable=too-many-branches,too-many-return-statements,unused-argument
 
 from __future__ import annotations
 
@@ -26,7 +28,7 @@ from dashscope.acli.skills import BUILTIN_SKILLS, KNOWN_MCP_SERVICES
 from dashscope.acli.utils import sanitize_text
 
 if TYPE_CHECKING:
-    from dashscope.acli.cli import _mcp_clients, _scheduler
+    pass
 
 
 class SafeFileHistory(FileHistory):
@@ -35,7 +37,8 @@ class SafeFileHistory(FileHistory):
     def store_string(self, string: str) -> None:
         sanitized = _SECRET_PATTERN.sub(r"\1***", string)
         sanitized = sanitize_text(sanitized)
-        # Ensure parent directory exists (FileHistory silently drops on failure)
+        # Ensure parent directory exists (FileHistory silently drops on
+        # failure)
         Path(self.filename).parent.mkdir(parents=True, exist_ok=True)
         super().store_string(sanitized)
 
@@ -72,7 +75,7 @@ class _HintProcessor(Processor):
         hint = _get_arg_hint(text)
         if hint:
             fragments: StyleAndTextTuples = transformation_input.fragments + [
-                ("class:hint", hint)
+                ("class:hint", hint),
             ]
             return Transformation(fragments)
         return Transformation(transformation_input.fragments)
@@ -242,7 +245,9 @@ class AcliCompleter(Completer):
             return []
 
         if cmd == "/subagents":
-            from dashscope.acli.agents.subagents import SUBAGENT_CAPABILITY_KEYS
+            from dashscope.acli.agents.subagents import (
+                SUBAGENT_CAPABILITY_KEYS,
+            )
 
             if arg_index == 1:
                 return _SUBCOMMANDS["/subagents"]
@@ -294,7 +299,14 @@ class AcliCompleter(Completer):
                     return list(BUILTIN_SKILLS.keys())
                 if prev in ("every", "at", "cron"):
                     return []
-                return ["every", "at", "cron", "skill", "condition", "no-subagent"]
+                return [
+                    "every",
+                    "at",
+                    "cron",
+                    "skill",
+                    "condition",
+                    "no-subagent",
+                ]
             return []
 
         # Generic fallback: any command listed in _SUBCOMMANDS gets its

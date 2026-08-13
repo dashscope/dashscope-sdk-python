@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Skill Evolution: Generate new skills from successful trajectories.
 
 Based on the Skill Evolution pattern (Weng 2026): Agent analyzes successful
@@ -9,12 +10,11 @@ Architecture:
 - Generates skill markdown with proper parameter declarations
 - Stores in the workspace .acli/skills/ for automatic loading
 """
+# pylint: disable=too-many-branches,too-many-return-statements
 
 from __future__ import annotations
 
-import json
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +25,9 @@ def _skills_dir() -> Path:
     return WORKSPACE_DIR / "skills"
 
 
-def analyze_trajectory(messages: list[dict[str, Any]]) -> dict[str, Any] | None:
+def analyze_trajectory(
+    messages: list[dict[str, Any]],
+) -> dict[str, Any] | None:
     """Analyze a conversation trajectory for skill-worthy patterns.
 
     Returns a dict with:
@@ -49,7 +51,8 @@ def analyze_trajectory(messages: list[dict[str, Any]]) -> dict[str, Any] | None:
     if len(tool_sequence) < 2:
         return None  # Single tool use isn't skill-worthy
 
-    # Check if trajectory was successful (heuristic: last assistant message doesn't contain error keywords)
+    # Check if trajectory was successful (heuristic: last assistant
+    # message doesn't contain error keywords)
     last_assistant = None
     for msg in reversed(messages):
         if msg.get("role") == "assistant":
@@ -82,7 +85,10 @@ def analyze_trajectory(messages: list[dict[str, Any]]) -> dict[str, Any] | None:
     return {
         "pattern_name": pattern_name,
         "tools_sequence": tool_sequence,
-        "rationale": f"Successful {len(tool_sequence)}-tool workflow: {' → '.join(tool_sequence[:3])}",
+        "rationale": (
+            f"Successful {len(tool_sequence)}-tool workflow: "
+            f"{' → '.join(tool_sequence[:3])}"
+        ),
         "parameters": parameters,
         "sample_request": first_user[:100],
     }
@@ -129,7 +135,7 @@ def _extract_parameters(user_request: str) -> list[dict[str, str]]:
                 "name": "file_path",
                 "description": "目标文件路径",
                 "example": paths[0],
-            }
+            },
         )
 
     # Commands
@@ -140,7 +146,7 @@ def _extract_parameters(user_request: str) -> list[dict[str, str]]:
                 "name": "command",
                 "description": "要执行的命令",
                 "example": commands[0],
-            }
+            },
         )
 
     return params
@@ -154,42 +160,42 @@ def generate_skill_markdown(analysis: dict[str, Any]) -> str:
 
     # Build skill markdown
     lines = [
-        f"---",
+        "---",
         f"name: {name}",
         f"description: 自动化工作流 - {analysis['rationale']}",
-        f"arguments:",
+        "arguments:",
     ]
 
     for p in params:
         lines.append(f"  - name: {p['name']}")
         lines.append(f"    description: {p['description']}")
-        lines.append(f"    required: true")
+        lines.append("    required: true")
         if "example" in p:
             lines.append(f"    example: {p['example']}")
 
-    lines.append(f"---")
-    lines.append(f"")
+    lines.append("---")
+    lines.append("")
     lines.append(f"# {name}")
-    lines.append(f"")
-    lines.append(f"自动化执行以下工作流:")
-    lines.append(f"")
+    lines.append("")
+    lines.append("自动化执行以下工作流:")
+    lines.append("")
     for i, tool in enumerate(tools, 1):
         lines.append(f"{i}. `{tool}`")
-    lines.append(f"")
-    lines.append(f"## 使用示例")
-    lines.append(f"")
-    lines.append(f"```")
+    lines.append("")
+    lines.append("## 使用示例")
+    lines.append("")
+    lines.append("```")
     lines.append(f"/{name} {params[0]['example'] if params else '<参数>'}")
-    lines.append(f"```")
-    lines.append(f"")
-    lines.append(f"## 工作流程")
-    lines.append(f"")
-    lines.append(f"按以下步骤自动执行:")
-    lines.append(f"")
+    lines.append("```")
+    lines.append("")
+    lines.append("## 工作流程")
+    lines.append("")
+    lines.append("按以下步骤自动执行:")
+    lines.append("")
     for i, tool in enumerate(tools, 1):
         lines.append(f"{i}. 调用 `{tool}` 工具")
-    lines.append(f"")
-    lines.append(f"完成后汇报结果。")
+    lines.append("")
+    lines.append("完成后汇报结果。")
 
     return "\n".join(lines)
 

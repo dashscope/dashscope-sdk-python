@@ -1,4 +1,6 @@
-"""Sensitive data sanitization — redact API keys, tokens, and secrets before persisting to disk.
+# -*- coding: utf-8 -*-
+"""Sensitive data sanitization — redact API keys, tokens, and secrets
+before persisting to disk.
 
 Security improvements:
 - Expanded pattern coverage (Alibaba Cloud RAM, WeChat, DingTalk, JWT, etc.)
@@ -20,10 +22,12 @@ _PATTERNS: list[tuple[re.Pattern, bool]] = [
     # Generic key=value / key: value assignments (>= 8 char values)
     (
         re.compile(
-            r"(?i)((?:api[_-]?key|api[_-]?secret|password|passwd|token|secret|access[_-]?key"
-            r"|secret[_-]?key|auth[_-]?token|credentials?|private[_-]?key|encryption[_-]?key"
-            r"|client[_-]?secret|app[_-]?secret|session[_-]?token|refresh[_-]?token"
-            r"|signing[_-]?key|hmac[_-]?key)\s*[=:]\s*[\"']?)"
+            r"(?i)((?:api[_-]?key|api[_-]?secret|password|passwd|token|"
+            r"secret|access[_-]?key|secret[_-]?key|auth[_-]?token|"
+            r"credentials?|private[_-]?key|encryption[_-]?key|"
+            r"client[_-]?secret|app[_-]?secret|session[_-]?token|"
+            r"refresh[_-]?token|signing[_-]?key|"
+            r"hmac[_-]?key)\s*[=:]\s*[\"']?)"
             r'[^\s"\']{8,}',
         ),
         True,
@@ -45,15 +49,25 @@ _PATTERNS: list[tuple[re.Pattern, bool]] = [
     (re.compile(r"xox[baprs]-[A-Za-z0-9\-]{10,}"), False),
     # WeChat AppSecret / AccessToken
     (
-        re.compile(r"(?:appsecret|access_token)[\"']?\s*[:=]\s*[\"']?[A-Za-z0-9]{20,}"),
+        re.compile(
+            r"(?:appsecret|access_token)[\"']?\s*[:=]\s*[\"']?"
+            r"[A-Za-z0-9]{20,}",
+        ),
         False,
     ),
     # DingTalk access_token
     (re.compile(r"access_token=[A-Za-z0-9]{30,}"), False),
     # JWT (header.payload.signature)
-    (re.compile(r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"), False),
-    # PEM private keys (RSA, EC, etc.) — match the BEGIN line + first content line
-    (re.compile(r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----[^\n]+\n[^\n]+"), False),
+    (
+        re.compile(r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"),
+        False,
+    ),
+    # PEM private keys (RSA, EC, etc.) — match the BEGIN line + first
+    # content line
+    (
+        re.compile(r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----[^\n]+\n[^\n]+"),
+        False,
+    ),
     # Azure Storage Account Key
     (re.compile(r"AccountKey=[A-Za-z0-9+/=]{40,}"), False),
     # Google Cloud service account key (base64-ish block after "private_key")

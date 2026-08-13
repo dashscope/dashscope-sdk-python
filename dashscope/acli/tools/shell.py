@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=too-many-return-statements,too-many-branches
 from __future__ import annotations
 
 import asyncio
@@ -134,14 +136,13 @@ _SAFE_BINS = frozenset(
         # are NOT here — they can execute code or mutate system state)
         "dir",
         "where",
-        "type",
         "systeminfo",
         "ipconfig",
         "tasklist",
         "set",
         "ver",
         "vol",
-    }
+    },
 )
 
 # Binaries whose first positional sub-command determines safety. E.g.
@@ -168,23 +169,36 @@ _SUBCMD_SAFE: dict[str, frozenset[str]] = {
             "rev-list",
             "name-rev",
             "for-each-ref",
-        }
+        },
     ),
     "pip": frozenset({"list", "show", "freeze", "check", "-V", "--version"}),
     "pip3": frozenset({"list", "show", "freeze", "check", "-V", "--version"}),
-    "npm": frozenset({"list", "ls", "view", "outdated", "audit", "doctor", "config"}),
+    "npm": frozenset(
+        {"list", "ls", "view", "outdated", "audit", "doctor", "config"},
+    ),
     "yarn": frozenset({"list", "info", "audit", "why"}),
     "pnpm": frozenset({"list", "ls", "view", "outdated", "audit", "why"}),
     "docker": frozenset(
-        {"ps", "images", "inspect", "logs", "stats", "version", "info", "history"}
+        {
+            "ps",
+            "images",
+            "inspect",
+            "logs",
+            "stats",
+            "version",
+            "info",
+            "history",
+        },
     ),
     "kubectl": frozenset(
-        {"get", "describe", "logs", "version", "explain", "api-resources"}
+        {"get", "describe", "logs", "version", "explain", "api-resources"},
     ),
     "brew": frozenset({"list", "info", "search", "config", "doctor", "deps"}),
     "go": frozenset({"version", "env", "list", "vet"}),
     "cargo": frozenset({"version", "tree"}),
-    "mvn": frozenset({"-version", "help:effective-pom"}),  # rare; mvn usually writes
+    "mvn": frozenset(
+        {"-version", "help:effective-pom"},
+    ),  # rare; mvn usually writes
     # Python interpreter: only version / help are safe (-c runs arbitrary code)
     "python": frozenset({"--version", "-V", "--help", "-h"}),
     "python3": frozenset({"--version", "-V", "--help", "-h"}),
@@ -242,7 +256,7 @@ _UNSAFE_TOKENS = frozenset(
         "bootrec",
         "sfc",
         "dism",
-    }
+    },
 )
 
 # Redirects / write-side operators that taint any otherwise-safe command.
@@ -311,7 +325,15 @@ _GIT_SUBCMD_DENY: dict[str, frozenset[str]] = {
     "branch": frozenset({"-d", "-D", "-m", "-M", "-c", "-C"}),
     "tag": frozenset({"-d", "-a", "-s", "-m", "-f", "-u"}),
     "remote": frozenset(
-        {"add", "remove", "rm", "rename", "set-url", "set-head", "set-branches"}
+        {
+            "add",
+            "remove",
+            "rm",
+            "rename",
+            "set-url",
+            "set-head",
+            "set-branches",
+        },
     ),
 }
 
@@ -414,7 +436,9 @@ async def run_command(command: str, timeout: int | None = None) -> str:
     # fall back to the default instead of letting asyncio.wait_for raise
     # TypeError on `<= 0`.
     try:
-        timeout = int(timeout) if timeout not in (None, "", 0) else DEFAULT_TIMEOUT
+        timeout = (
+            int(timeout) if timeout not in (None, "", 0) else DEFAULT_TIMEOUT
+        )
     except (TypeError, ValueError):
         timeout = DEFAULT_TIMEOUT
 
@@ -434,7 +458,10 @@ async def run_command(command: str, timeout: int | None = None) -> str:
                 stderr=asyncio.subprocess.PIPE,
                 cwd=os.getcwd(),
             )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(),
+            timeout=timeout,
+        )
     except asyncio.TimeoutError:
         try:
             proc.kill()
@@ -458,11 +485,16 @@ async def run_command(command: str, timeout: int | None = None) -> str:
 
     output = ""
     if stdout:
-        # On Windows, subprocess output may be in system codepage (cp936/cp1252)
-        encoding = "utf-8" if not IS_WINDOWS else (sys.stdout.encoding or "utf-8")
+        # On Windows, subprocess output may be in system codepage
+        # (cp936/cp1252)
+        encoding = (
+            "utf-8" if not IS_WINDOWS else (sys.stdout.encoding or "utf-8")
+        )
         output += stdout.decode(encoding, errors="replace")
     if stderr:
-        encoding = "utf-8" if not IS_WINDOWS else (sys.stdout.encoding or "utf-8")
+        encoding = (
+            "utf-8" if not IS_WINDOWS else (sys.stdout.encoding or "utf-8")
+        )
         output += "\n[stderr]\n" + stderr.decode(encoding, errors="replace")
 
     if len(output) > MAX_OUTPUT_LENGTH:

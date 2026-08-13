@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Hooks system — event-driven callbacks around tool calls and responses.
 
 Loads ``.acli/hooks.toml`` and invokes registered callbacks at lifecycle
@@ -25,7 +26,6 @@ from pathlib import Path
 from typing import Any
 
 from dashscope.acli.config import WORKSPACE_DIR
-from dashscope.acli.executor import Executor
 from dashscope.acli.utils import load_toml
 from dashscope.acli.utils.template import render_brace_template
 
@@ -99,7 +99,9 @@ def _build_variables(ctx: HookContext) -> dict[str, str]:
         "filename_stem": p.stem if p else "",
         "exit_code": "",
         "content": "",
-        "args": json.dumps(ctx.arguments, ensure_ascii=False) if ctx.arguments else "",
+        "args": json.dumps(ctx.arguments, ensure_ascii=False)
+        if ctx.arguments
+        else "",
         "result": (ctx.result or "")[:1000],
         "error": (ctx.result or "")[:1000] if ctx.success is False else "",
     }
@@ -110,7 +112,9 @@ def _build_variables(ctx: HookContext) -> dict[str, str]:
             # Try to extract exit code from result like "exit code: 1\n..."
             if ctx.result and "exit code:" in ctx.result:
                 try:
-                    line = ctx.result.split("exit code:", 1)[1].split("\n", 1)[0]
+                    line = ctx.result.split("exit code:", 1)[1].split("\n", 1)[
+                        0
+                    ]
                     variables["exit_code"] = line.strip()
                 except Exception:
                     pass
@@ -129,7 +133,8 @@ def _match_condition(condition: str | None, path: str) -> bool:
     if not path:
         return False
     return fnmatch.fnmatch(path, condition) or fnmatch.fnmatch(
-        Path(path).name, condition
+        Path(path).name,
+        condition,
     )
 
 
@@ -149,6 +154,7 @@ def _run_shell(command: str) -> tuple[int, str, str]:
             capture_output=True,
             text=True,
             timeout=_HOOK_TIMEOUT,
+            check=False,
         )
         return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
     except subprocess.TimeoutExpired:
@@ -169,7 +175,8 @@ async def _run_shell_async(command: str) -> tuple[int, str, str]:
         )
         try:
             stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=_HOOK_TIMEOUT
+                proc.communicate(),
+                timeout=_HOOK_TIMEOUT,
             )
         except asyncio.TimeoutError:
             proc.kill()
@@ -213,13 +220,18 @@ class Hook:
         # Governance hooks (block/confirm/alert) run before plugin hooks
         # (run/warn/log) so security decisions are never bypassed.
         self.category = (
-            "governance" if self.action in self._GOVERNANCE_ACTIONS else "plugin"
+            "governance"
+            if self.action in self._GOVERNANCE_ACTIONS
+            else "plugin"
         )
 
     def applies_to(self, ctx: HookContext) -> bool:
         if self.event != ctx.event:
             return False
-        if self.match != "*" and not fnmatch.fnmatch(ctx.tool_name, self.match):
+        if self.match != "*" and not fnmatch.fnmatch(
+            ctx.tool_name,
+            self.match,
+        ):
             return False
         if self.condition:
             path = _resolve_path(ctx.arguments)
@@ -233,7 +245,9 @@ class Hook:
                 # The reply body is passed via arguments["content"] (result
                 # stays unset); fall back to result for direct dispatchers.
                 content = ctx.arguments.get("content")
-                text = ctx.result or (content if isinstance(content, str) else "")
+                text = ctx.result or (
+                    content if isinstance(content, str) else ""
+                )
             elif ctx.event == "on_message":
                 # The user message is passed via arguments["input"].
                 content = ctx.arguments.get("input")
@@ -245,7 +259,9 @@ class Hook:
         return True
 
     def _execute_simple(
-        self, ctx: HookContext, variables: dict[str, str]
+        self,
+        ctx: HookContext,
+        variables: dict[str, str],
     ) -> HookActionResult | None:
         """Handle non-run actions; return None for 'run'/unknown actions."""
         result = HookActionResult()
@@ -253,20 +269,23 @@ class Hook:
         if self.action == "block":
             result.blocked = True
             result.warning = render_brace_template(
-                self.message or "操作被 hook 阻止", variables
+                self.message or "操作被 hook 阻止",
+                variables,
             )
             return result
 
         if self.action == "confirm":
             result.confirm = True
             result.warning = render_brace_template(
-                self.message or "需要确认", variables
+                self.message or "需要确认",
+                variables,
             )
             return result
 
         if self.action in ("warn", "alert"):
             msg = render_brace_template(
-                self.message or f"{self.action} from hook", variables
+                self.message or f"{self.action} from hook",
+                variables,
             )
             if self.action == "warn":
                 result.warning = msg
@@ -276,14 +295,18 @@ class Hook:
 
         if self.action == "log":
             result.log = render_brace_template(
-                self.message or f"{ctx.event} {ctx.tool_name}", variables
+                self.message or f"{ctx.event} {ctx.tool_name}",
+                variables,
             )
             return result
 
         return None
 
     def _run_command_result(
-        self, code: int, stdout: str, stderr: str
+        self,
+        code: int,
+        stdout: str,
+        stderr: str,
     ) -> HookActionResult:
         """Build the action result from a finished run-action command."""
         result = HookActionResult()

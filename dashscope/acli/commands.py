@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Shared command definitions and utilities used by both CLI and TUI.
 
 This module contains UI-agnostic pieces of slash-command handling so that
@@ -8,7 +9,6 @@ from __future__ import annotations
 
 import os
 import subprocess as _sp
-from typing import Any
 
 # Single source of truth for the /help menu. CLI and TUI both render from
 # this structure so that adding or renaming a command only requires one edit.
@@ -31,8 +31,14 @@ HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
             ("/history", "对话历史管理 (stats/list/export/clear)"),
             ("/feedback good|bad", "标注任务满意度（存入经验记忆）"),
             ("/report", "生成 trace 性能报告"),
-            ("/log", "查看调试模式记录的 LLM prompt (tail [N]/search <关键词>/clear)，支持翻页"),
-            ("/trace", "查看执行 trace（函数调用/耗时/数据流）(tail [N]/search <关键词>/clear)，支持翻页"),
+            (
+                "/log",
+                "查看调试模式记录的 LLM prompt (tail [N]/search <关键词>/clear)，支持翻页",
+            ),
+            (
+                "/trace",
+                "查看执行 trace（函数调用/耗时/数据流）(tail [N]/search <关键词>/clear)，支持翻页",
+            ),
             ("/exit", "退出"),
         ],
     ),
@@ -67,7 +73,8 @@ HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
             ("/mcp", "MCP 服务 (list/add/remove)"),
             (
                 "/skill",
-                "技能调用与管理 (list/add/remove/install/uninstall/enable/disable/update)",
+                "技能调用与管理 (list/add/remove/install/uninstall/"
+                "enable/disable/update)",
             ),
             ("/cron", "定时任务 (add/list/remove/pause/resume)"),
             ("/audit", "审计日志 (recent [N]/query/clear)"),
@@ -160,6 +167,7 @@ def handle_shell_escape(shell_cmd: str) -> tuple[str, str, int]:
             env=env,
             capture_output=True,
             text=True,
+            check=False,
         )
         return proc.stdout, proc.stderr, proc.returncode
     except Exception as e:

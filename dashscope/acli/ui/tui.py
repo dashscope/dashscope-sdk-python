@@ -1,7 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 Textual-based TUI for AgenticCLI
 Fixed input at bottom + scrolling output above
 """
+# pylint: disable=wrong-import-position,protected-access,unused-import
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements,unused-argument
 
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ import os
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 # The kitty keyboard protocol breaks input in several terminals: iTerm2 then
 # sends e.g. "\x1b[32u" for space, which TextArea silently drops (no spaces),
@@ -33,26 +38,38 @@ _STREAM_FLUSH_LINES = 400 if _IS_JEDITERM else 20
 # 滚轮攒批窗口：JediTerm 上整屏重绘昂贵，降帧换稳定
 _WHEEL_FLUSH_INTERVAL = 0.12 if _IS_JEDITERM else 0.03
 
-from rich.cells import cell_len
-from rich.console import Console
-from rich.markup import render
-from rich.panel import Panel
-from rich.segment import Segment
-from rich.text import Text
-from textual import events
-from textual.app import App, ComposeResult
-from textual.binding import Binding
-from textual.containers import Container
-from textual.geometry import Offset
-from textual.message import Message
-from textual.screen import Screen
-from textual.selection import SelectEnd, Selection
-from textual.strip import Strip
-from textual.widgets import Input, OptionList, RichLog, Static, TextArea
-from textual.widgets.option_list import Option
+from rich.cells import cell_len  # noqa: E402
+from rich.console import Console  # noqa: E402
+from rich.markup import render  # noqa: E402
+from rich.panel import Panel  # noqa: E402
+from rich.segment import Segment  # noqa: E402
+from rich.text import Text  # noqa: E402
+from textual import events  # noqa: E402
+from textual.app import App, ComposeResult  # noqa: E402
+from textual.binding import Binding  # noqa: E402
+from textual.containers import Container  # noqa: E402
+from textual.geometry import Offset  # noqa: E402
+from textual.message import Message  # noqa: E402
+from textual.screen import Screen  # noqa: E402
+from textual.selection import SelectEnd, Selection  # noqa: E402
+from textual.strip import Strip  # noqa: E402
+from textual.widgets import (  # noqa: E402
+    OptionList,
+    RichLog,
+    Static,
+    TextArea,
+)
+from textual.widgets.option_list import Option  # noqa: E402
 
-from dashscope.acli.commands import handle_shell_escape, render_help_text
-from dashscope.acli.utils import UserAbortedTurn, UserSupplement, mask_secret
+from dashscope.acli.commands import (  # noqa: E402
+    handle_shell_escape,
+    render_help_text,
+)
+from dashscope.acli.utils import (  # noqa: E402
+    UserAbortedTurn,
+    UserSupplement,
+    mask_secret,
+)
 
 
 def _relative_luminance(color: str) -> float | None:
@@ -71,7 +88,11 @@ def _relative_luminance(color: str) -> float | None:
     def _linearize(c: float) -> float:
         return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
-    return 0.2126 * _linearize(r) + 0.7152 * _linearize(g) + 0.0722 * _linearize(b)
+    return (
+        0.2126 * _linearize(r)
+        + 0.7152 * _linearize(g)
+        + 0.0722 * _linearize(b)
+    )
 
 
 def _app_theme_for_background(background: str | None) -> str:
@@ -126,7 +147,10 @@ class RichLogWriter(io.StringIO):
             if threading.get_ident() == self._app_thread_id:
                 self.rich_log.write(Text.from_ansi(text))
             else:
-                self.app.call_from_thread(self.rich_log.write, Text.from_ansi(text))
+                self.app.call_from_thread(
+                    self.rich_log.write,
+                    Text.from_ansi(text),
+                )
         super().flush()
 
 
@@ -171,7 +195,9 @@ class OutputLog(RichLog):
         scroll_x, scroll_y = self.scroll_offset
         line_y = scroll_y + y
         strip = self._render_line(
-            line_y, scroll_x, self.scrollable_content_region.width
+            line_y,
+            scroll_x,
+            self.scrollable_content_region.width,
         ).apply_style(self.rich_style)
         selection = self.text_selection if self.is_attached else None
         if selection is not None and line_y < len(self.lines):
@@ -190,7 +216,7 @@ class OutputLog(RichLog):
                 to_x = min(to_x, strip.cell_length)
                 if to_x > from_x:
                     select_style = self.screen.get_component_rich_style(
-                        "screen--selection"
+                        "screen--selection",
                     )
                     # Strip.apply_style 是 pre-style，会被每段自带的底色
                     # (rich_style 的 surface 背景) 覆盖；post-style 才能让
@@ -205,7 +231,7 @@ class OutputLog(RichLog):
                             strip.crop(0, from_x),
                             middle,
                             strip.crop(to_x, None),
-                        ]
+                        ],
                     )
         # Anchor segments to content coordinates so the screen can map mouse
         # drags back to (x, y) content offsets.
@@ -223,7 +249,10 @@ class OutputLog(RichLog):
         if not self.lines:
             return None
         start = selection.start or Offset(0, 0)
-        end = selection.end or Offset(len(self.lines[-1].text), len(self.lines) - 1)
+        end = selection.end or Offset(
+            len(self.lines[-1].text),
+            len(self.lines) - 1,
+        )
         sl, sx = start.y, start.x
         el, ex = end.y, end.x
         try:
@@ -233,7 +262,9 @@ class OutputLog(RichLog):
             if sl == el:
                 return self.lines[sl].text.rstrip()[sx:ex], "\n"
             parts = [self.lines[sl].text.rstrip()[sx:]]
-            parts.extend(self.lines[i].text.rstrip() for i in range(sl + 1, el))
+            parts.extend(
+                self.lines[i].text.rstrip() for i in range(sl + 1, el)
+            )
             parts.append(self.lines[el].text.rstrip()[:ex])
             return "\n".join(parts), "\n"
         except (IndexError, TypeError):
@@ -262,9 +293,14 @@ class OutputLog(RichLog):
         if not screen._selecting or state is None:
             return
         select_widget, select_offset = screen.get_widget_and_offset_at(
-            event.screen_x, event.screen_y
+            event.screen_x,
+            event.screen_y,
         )
-        if select_widget is not self or select_offset is None or self.parent is None:
+        if (
+            select_widget is not self
+            or select_offset is None
+            or self.parent is None
+        ):
             return
         screen._select_state = state.update_end(
             event.screen_offset,
@@ -285,13 +321,15 @@ class AcliScreen(Screen):
     """
 
     _auto_scroll_pointer: Offset | None = None
+    _select_state: Any  # textual Screen internal
 
     def _forward_event(self, event) -> None:
         super()._forward_event(event)
         if not (isinstance(event, events.MouseMove) and self._selecting):
             return
         self._auto_scroll_pointer = Offset(
-            int(event.pointer_screen_x), int(event.pointer_screen_y)
+            int(event.pointer_screen_x),
+            int(event.pointer_screen_y),
         )
         # 拖到屏幕顶/底边缘时，指针可能落在不可滚动控件（下方固定输入框）或
         # 无命中区域（输出区 padding 行的 hit-test 返回 None）——Textual 都
@@ -307,7 +345,10 @@ class AcliScreen(Screen):
         y = event.pointer_screen_y
         if y < lines and output.scroll_y > 0:
             self._start_auto_scroll(output, -1, (lines - y) / lines)
-        elif y >= self.size.height - lines and output.scroll_y < output.max_scroll_y:
+        elif (
+            y >= self.size.height - lines
+            and output.scroll_y < output.max_scroll_y
+        ):
             speed = (y - (self.size.height - lines) + 1) / lines
             self._start_auto_scroll(output, +1, speed)
 
@@ -317,7 +358,8 @@ class AcliScreen(Screen):
         if not self._selecting or state is None:
             return
         select_widget, select_offset = self.get_widget_and_offset_at(
-            pointer.x, pointer.y
+            pointer.x,
+            pointer.y,
         )
         if select_widget is None:
             # 指针在命中盲区（如输出区 padding 行 hit-test 返回 None）：把探测
@@ -348,7 +390,7 @@ class AcliScreen(Screen):
 
 
 @contextlib.contextmanager
-def _capture_console(tui: "acliApp", *, interactive: bool = False):
+def _capture_console(tui: "AgenticCLIApp", *, interactive: bool = False):
     """Temporarily redirect module consoles to the TUI output.
 
     Yields a Console wired either to a RichLogWriter (interactive commands that
@@ -405,7 +447,10 @@ def _capture_console(tui: "acliApp", *, interactive: bool = False):
     import sys as _sys
 
     for name, mod in list(_sys.modules.items()):
-        if name.startswith("dashscope.acli.cli.") and isinstance(mod, types.ModuleType):
+        if name.startswith("dashscope.acli.cli.") and isinstance(
+            mod,
+            types.ModuleType,
+        ):
             _capture(mod)
 
     try:
@@ -418,15 +463,17 @@ def _capture_console(tui: "acliApp", *, interactive: bool = False):
             buf_text = tui_console.export_text(styles=True).rstrip()
             if buf_text:
                 panel_border = (
-                    getattr(tui, "_panel_border", "bright_blue") or "bright_blue"
+                    getattr(tui, "_panel_border", "bright_blue")
+                    or "bright_blue"
                 )
                 tui._write_output(
-                    Panel(Text.from_ansi(buf_text), border_style=panel_border)
+                    Panel(Text.from_ansi(buf_text), border_style=panel_border),
                 )
 
 
 def estimate_tokens(text: str) -> int:
-    """Rough live token estimate: CJK chars ≈ 1 token each, else ≈ 4 chars/token."""
+    """Rough live token estimate: CJK chars ≈ 1 token each, else ≈ 4
+    chars/token."""
     cjk = sum(1 for c in text if ord(c) > 0x2E7F)
     return cjk + (len(text) - cjk + 3) // 4
 
@@ -495,7 +542,11 @@ class Spinner(Static):
         self._api_calls = n
 
     def set_tool_stats(
-        self, tools: int, subagents: int, mcp: int = 0, skills: int = 0
+        self,
+        tools: int,
+        subagents: int,
+        mcp: int = 0,
+        skills: int = 0,
     ) -> None:
         self._tools = tools
         self._subagents = subagents
@@ -617,7 +668,8 @@ class CompletionPopup(Container):
 
 
 class CommandInput(TextArea):
-    """TextArea subclass: Enter submits, Ctrl+J inserts newline, Up/Down for history."""
+    """TextArea subclass: Enter submits, Ctrl+J inserts newline, Up/Down for
+    history."""
 
     class Submitted(Message):
         def __init__(self, text: str) -> None:
@@ -626,7 +678,13 @@ class CommandInput(TextArea):
 
     BINDINGS = [
         Binding("ctrl+j", "newline", "Newline", show=False, priority=True),
-        Binding("escape+enter", "newline", "Newline", show=False, priority=True),
+        Binding(
+            "escape+enter",
+            "newline",
+            "Newline",
+            show=False,
+            priority=True,
+        ),
     ]
 
     def __init__(self, history_path: Path | None = None, **kwargs):
@@ -663,7 +721,9 @@ class CommandInput(TextArea):
             lines: list[str] = []
             for path in (legacy_file, self.history_path):
                 if path.exists():
-                    lines.extend(l for l in path.read_text().splitlines() if l)
+                    lines.extend(
+                        line for line in path.read_text().splitlines() if line
+                    )
             # Deduplicate while preserving order
             seen: set[str] = set()
             self._history = []
@@ -675,7 +735,8 @@ class CommandInput(TextArea):
             if legacy_file.exists():
                 self.history_path.parent.mkdir(parents=True, exist_ok=True)
                 self.history_path.write_text(
-                    "\n".join(self._history) + "\n", encoding="utf-8"
+                    "\n".join(self._history) + "\n",
+                    encoding="utf-8",
                 )
                 legacy_file.unlink()
         except Exception:
@@ -691,7 +752,7 @@ class CommandInput(TextArea):
             # Redact API keys
             sanitized = re.sub(r"(/provider\s+\w+\s+)\S+", r"\1***", text)
             self.history_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.history_path, "a") as f:
+            with open(self.history_path, "a", encoding="utf-8") as f:
                 f.write(sanitized + "\n")
         except Exception:
             pass
@@ -729,7 +790,8 @@ class CommandInput(TextArea):
         if event.key in ("up", "down"):
             now = time.monotonic()
             is_burst = (
-                self._prev_arrow_key == event.key and now - self._prev_arrow_ts < 0.020
+                self._prev_arrow_key == event.key
+                and now - self._prev_arrow_ts < 0.020
             )
             self._prev_arrow_key = event.key
             self._prev_arrow_ts = now
@@ -754,7 +816,10 @@ class CommandInput(TextArea):
             self._arrow_pending_key = event.key
             if self._arrow_timer is not None:
                 self._arrow_timer.stop()
-            self._arrow_timer = self.set_timer(0.022, self._apply_deferred_arrow)
+            self._arrow_timer = self.set_timer(
+                0.022,
+                self._apply_deferred_arrow,
+            )
             return
 
         if self.password_mode:
@@ -814,16 +879,21 @@ class CommandInput(TextArea):
             return
 
         super()._on_key(event)
-        # Debounce completion/hint updates to avoid flickering on every keystroke.
+        # Debounce completion/hint updates to avoid flickering on every
+        # keystroke.
         if self._completion_timer is not None:
             self._completion_timer.stop()
-        self._completion_timer = self.app.set_timer(0.05, self._update_completions)
+        self._completion_timer = self.app.set_timer(
+            0.05,
+            self._update_completions,
+        )
 
     def _queue_wheel_scroll(self, key: str) -> None:
         self._wheel_pending += 1 if key == "down" else -1
         if self._wheel_flush_timer is None:
             self._wheel_flush_timer = self.set_timer(
-                _WHEEL_FLUSH_INTERVAL, self._flush_wheel_scroll
+                _WHEEL_FLUSH_INTERVAL,
+                self._flush_wheel_scroll,
             )
 
     def _flush_wheel_scroll(self) -> None:
@@ -896,11 +966,15 @@ class CommandInput(TextArea):
         # @path completion: replace from the @ token, preserving the @ symbol
         m = _AT_PATH_AT_CURSOR_RE.search(text)
         if m:
-            # No trailing space for directories so the popup stays open for drilling
+            # No trailing space for directories so the popup stays open
+            # for drilling
             suffix = " " if not selected.endswith("/") else ""
             self.text = text[: m.start()] + "@" + selected + suffix
             lines = self.text.splitlines()
-            self.cursor_location = (len(lines) - 1, len(lines[-1]) if lines else 0)
+            self.cursor_location = (
+                len(lines) - 1,
+                len(lines[-1]) if lines else 0,
+            )
             self.app.call_after_refresh(self._update_completions)
             return
 
@@ -968,6 +1042,8 @@ class CommandInput(TextArea):
 
 class AgenticCLIApp(App):
     """Textual-based CLI with fixed input and scrolling output."""
+
+    theme: Any  # textual App property
 
     def get_default_screen(self) -> Screen:
         return AcliScreen()
@@ -1103,7 +1179,9 @@ class AgenticCLIApp(App):
         output = self.query_one("#output", RichLog)
 
         # Store border colors for Panel rendering (Rich) and CSS (Textual)
-        self._theme_border = theme.get("border") or theme.get("accent") or "bright_blue"
+        self._theme_border = (
+            theme.get("border") or theme.get("accent") or "bright_blue"
+        )
         self._panel_border = (
             theme.get("panel_border") or theme.get("border") or "bright_blue"
         )
@@ -1184,7 +1262,13 @@ class AgenticCLIApp(App):
         # priority=True: 从 App 侧优先命中，盖过 Screen 自带的
         # ctrl+c→copy_text（仅 OSC 52，PyCharm/JediTerm 不支持会静默失败）
         Binding("ctrl+c", "smart_quit", "取消/退出", show=True, priority=True),
-        Binding("super+c", "copy_selection", "复制选中", show=False, priority=True),
+        Binding(
+            "super+c",
+            "copy_selection",
+            "复制选中",
+            show=False,
+            priority=True,
+        ),
         Binding("ctrl+t", "voice_input", "Voice", show=False),
         Binding("ctrl+q", "quote_selection", "引用选中", show=False),
     ]
@@ -1239,7 +1323,10 @@ class AgenticCLIApp(App):
             pass
 
         # If voice recording is active, cancel it
-        if getattr(self, "_voice_recording", False) and self._voice_cancel_event:
+        if (
+            getattr(self, "_voice_recording", False)
+            and self._voice_cancel_event
+        ):
             self._voice_cancel_event.set()
             output = self.query_one("#output", RichLog)
             output.write(Text("已取消录音", style="yellow"))
@@ -1265,7 +1352,13 @@ class AgenticCLIApp(App):
             output = self.query_one("#output", RichLog)
             output.write(Text("再按一次 Ctrl+C 退出", style="dim"))
 
-    def __init__(self, config, agent, input_history_path: Path | None = None, **kwargs):
+    def __init__(
+        self,
+        config,
+        agent,
+        input_history_path: Path | None = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.config = config
         self.agent = agent
@@ -1273,7 +1366,7 @@ class AgenticCLIApp(App):
         self._processing = False
         self._pending_commands: list[str] = []
         self._agent_task: asyncio.Task | None = None
-        self._ctrl_c_once: bool = False
+        self._ctrl_c_once = False
         self._confirm_future: asyncio.Future | None = None
         self._confirm_is_dangerous: bool = False
         # Serializes concurrent confirm prompts (created lazily on the
@@ -1294,7 +1387,11 @@ class AgenticCLIApp(App):
 
     def _compute_completions(self, text: str) -> list:
         """Compute completion candidates for slash commands and @ paths."""
-        from dashscope.acli.cli import _AT_PATH_AT_CURSOR_RE, _SUBCOMMANDS, _TOP_LEVEL_COMMANDS
+        from dashscope.acli.cli import (
+            _AT_PATH_AT_CURSOR_RE,
+            _SUBCOMMANDS,
+            _TOP_LEVEL_COMMANDS,
+        )
 
         # @path completion takes priority — works anywhere in the input
         m = _AT_PATH_AT_CURSOR_RE.search(text)
@@ -1345,7 +1442,11 @@ class AgenticCLIApp(App):
 
             parent = tokens[1]
             if parent in _DEV_SUBCOMMANDS:
-                return [s for s in _DEV_SUBCOMMANDS[parent] if s.startswith(current)]
+                return [
+                    s
+                    for s in _DEV_SUBCOMMANDS[parent]
+                    if s.startswith(current)
+                ]
 
         # /tts voice <partial> — show voice names for current TTS model
         if (
@@ -1363,9 +1464,6 @@ class AgenticCLIApp(App):
 
     def _path_completions(self, raw_path: str) -> list:
         """List entries of the directory implied by ``raw_path``."""
-        import os
-        from pathlib import Path
-
         from dashscope.acli.cli import _PATH_COMPLETION_LIMIT, _is_dir_safe
 
         sep = os.sep
@@ -1413,11 +1511,12 @@ class AgenticCLIApp(App):
         return results
 
     def _write_output(self, content) -> None:
-        """Write to the output log (auto-scrolls only when already at the bottom).
+        """Write to the output log (auto-scrolls only when already at the
+        bottom).
 
         Pass the widget's content width explicitly for plain text so long lines
-        are rendered at the full available width rather than wrapping at a narrow
-        fallback. Rich renderables like Panels manage their own width.
+        are rendered at the full available width rather than wrapping at a
+        narrow fallback. Rich renderables like Panels manage their own width.
         """
         output = self.query_one("#output", RichLog)
         width = None
@@ -1437,8 +1536,7 @@ class AgenticCLIApp(App):
             return
         n_lines = len(text.splitlines())
         self.notify(
-            f"已选中 {n_lines} 行：Cmd+C 复制（PyCharm 等终端用 Ctrl+C）；"
-            "Ctrl+Q 引用到输入框",
+            f"已选中 {n_lines} 行：Cmd+C 复制（PyCharm 等终端用 Ctrl+C）；" "Ctrl+Q 引用到输入框",
             timeout=3,
         )
 
@@ -1448,7 +1546,9 @@ class AgenticCLIApp(App):
         if not text or not text.strip():
             self.notify("请先在输出区框选要引用的内容", timeout=3)
             return
-        quote = "\n".join(f"> {line}" for line in text.rstrip("\n").splitlines())
+        quote = "\n".join(
+            f"> {line}" for line in text.rstrip("\n").splitlines()
+        )
         input_widget = self.query_one("#command-input", CommandInput)
         existing = input_widget.text
         # 末尾补一个空行：光标落在引用块下方的新行，直接输入追问
@@ -1460,7 +1560,10 @@ class AgenticCLIApp(App):
         self.screen.clear_selection()
         self._ctrl_c_once = False
 
-    def on_command_input_submitted(self, event: CommandInput.Submitted) -> None:
+    def on_command_input_submitted(
+        self,
+        event: CommandInput.Submitted,
+    ) -> None:
         """Handle Enter key in the command input."""
         command = event.text.strip()
         input_widget = self.query_one("#command-input", CommandInput)
@@ -1471,7 +1574,9 @@ class AgenticCLIApp(App):
             choice = command.lower() or "y"  # Empty = default to yes
             # 危险操作仅接受 y/n，与同步路径一致（不提供 always 授信）
             valid_choices = (
-                ("y", "n") if self._confirm_is_dangerous else ("y", "n", "u", "a", "s")
+                ("y", "n")
+                if self._confirm_is_dangerous
+                else ("y", "n", "u", "a", "s")
             )
             if choice in valid_choices:
                 self._confirm_future.set_result(choice)
@@ -1482,7 +1587,7 @@ class AgenticCLIApp(App):
                     output.write(render("[yellow]请输入 y/n（直接回车=是）[/yellow]"))
                 else:
                     output.write(
-                        render("[yellow]请输入 y/n/u/a/s（直接回车=是）[/yellow]")
+                        render("[yellow]请输入 y/n/u/a/s（直接回车=是）[/yellow]"),
                     )
             input_widget.focus()
             return
@@ -1543,31 +1648,31 @@ class AgenticCLIApp(App):
             Text(
                 "     _                    _   _       ____ _     ___",
                 style="bold cyan",
-            )
+            ),
         )
         output.write(
             Text(
                 "    / \\   __ _  ___ _ __ | |_(_) ___ / ___| |   |_ _|",
                 style="bold cyan",
-            )
+            ),
         )
         output.write(
             Text(
                 "   / _ \\ / _` |/ _ \\ '_ \\| __| |/ __| |   | |    | |",
                 style="bold cyan",
-            )
+            ),
         )
         output.write(
             Text(
                 "  / ___ \\ (_| |  __/ | | | |_| | (__| |___| |___ | |",
                 style="bold cyan",
-            )
+            ),
         )
         output.write(
             Text(
                 " /_/   \\_\\__, |\\___|_| |_|\\__|_|\\___|\\____|_____|___|",
                 style="bold cyan",
-            )
+            ),
         )
         output.write(Text("         |___/", style="bold cyan"))
         output.write("")
@@ -1576,8 +1681,10 @@ class AgenticCLIApp(App):
         from dashscope.acli import __version__
         from dashscope.acli.tools.registry import registry
 
+        embedded_name = getattr(self.config, "_embedded_app_name", None)
         info_lines = [
-            f"[bold]{getattr(self.config, '_embedded_app_name', None) or 'AgenticCLI'}[/bold] v{__version__} — 用自然语言驱动一切\n"
+            f"[bold]{embedded_name or 'AgenticCLI'}[/bold] "
+            f"v{__version__} — 用自然语言驱动一切\n",
         ]
 
         # Provider, Model, User
@@ -1585,7 +1692,7 @@ class AgenticCLIApp(App):
         info_lines.append(
             f"[bold]Provider:[/bold] [cyan]{self.config.provider}[/cyan]  "
             f"[bold]Model:[/bold] [cyan]{self.config.model}[/cyan]  "
-            f"[bold]User:[/bold] [cyan]{user_display}[/cyan]"
+            f"[bold]User:[/bold] [cyan]{user_display}[/cyan]",
         )
 
         # API Key status
@@ -1597,13 +1704,14 @@ class AgenticCLIApp(App):
             key_val = getattr(self.config, key_info["field"], "")
             if key_val:
                 info_lines.append(
-                    f"[bold]API Key:[/bold] [green]✓ {mask_secret(key_val)}[/green] "
-                    f"[dim]({key_info['env']})[/dim]"
+                    f"[bold]API Key:[/bold] [green]✓ "
+                    f"{mask_secret(key_val)}[/green] "
+                    f"[dim]({key_info['env']})[/dim]",
                 )
             else:
                 info_lines.append(
                     f"[bold]API Key:[/bold] [red]✗ 未设置[/red] "
-                    f"[dim]({key_info['env']})[/dim]"
+                    f"[dim]({key_info['env']})[/dim]",
                 )
 
         # Enabled capabilities
@@ -1614,18 +1722,23 @@ class AgenticCLIApp(App):
 
         # Tool count
         tool_count = (
-            len(registry.list_tools()) if hasattr(registry, "list_tools") else "?"
+            len(registry.list_tools())
+            if hasattr(registry, "list_tools")
+            else "?"
         )
         info_lines.append(f"[bold]工具:[/bold] [dim]{tool_count} 个已注册[/dim]")
 
         info_lines.append(
-            f"\n[dim]输入: Enter 提交；Ctrl+J 换行；Ctrl+C 取消/退出 [/dim]"
+            "\n[dim]输入: Enter 提交；Ctrl+J 换行；Ctrl+C 取消/退出 [/dim]",
         )
         info_lines.append(
-            "[dim]输出: 滚轮翻页；拖拽框选后 Cmd+C 复制（PyCharm 等终端用 Ctrl+C）；Ctrl+Q 引用选中到输入框[/dim]"
+            "[dim]输出: 滚轮翻页；拖拽框选后 Cmd+C 复制（PyCharm 等终端用 "
+            "Ctrl+C）；Ctrl+Q 引用选中到输入框[/dim]",
         )
 
-        panel_border = getattr(self, "_panel_border", "bright_blue") or "bright_blue"
+        panel_border = (
+            getattr(self, "_panel_border", "bright_blue") or "bright_blue"
+        )
         output.write(Panel("\n".join(info_lines), border_style=panel_border))
         output.write("")
 
@@ -1653,7 +1766,7 @@ class AgenticCLIApp(App):
                         Text(
                             f"  [已恢复 {restored} 条历史消息]",
                             style="dim",
-                        )
+                        ),
                     )
                 else:
                     output.write(Text("  [当前无历史消息]", style="dim"))
@@ -1691,9 +1804,13 @@ class AgenticCLIApp(App):
             getpass.getpass = self._original_getpass
 
     async def _tui_confirm_callback(
-        self, tool_def, arguments: dict, is_dangerous: bool
+        self,
+        tool_def,
+        arguments: dict,
+        is_dangerous: bool,
     ) -> str:
-        """Async callback for executor — display confirmation in TUI output area.
+        """Async callback for executor — display confirmation in TUI output
+        area.
 
         Concurrent confirmations are serialized through a lock: a second
         prompt waits for the first to resolve instead of clobbering
@@ -1702,10 +1819,17 @@ class AgenticCLIApp(App):
         if self._confirm_lock is None:
             self._confirm_lock = asyncio.Lock()
         async with self._confirm_lock:
-            return await self._prompt_confirm(tool_def, arguments, is_dangerous)
+            return await self._prompt_confirm(
+                tool_def,
+                arguments,
+                is_dangerous,
+            )
 
     async def _prompt_confirm(
-        self, tool_def, arguments: dict, is_dangerous: bool
+        self,
+        tool_def,
+        arguments: dict,
+        is_dangerous: bool,
     ) -> str:
         """Show one confirmation prompt and wait for the user's choice."""
         from dashscope.acli.utils.text import truncate_value
@@ -1718,14 +1842,17 @@ class AgenticCLIApp(App):
         )
         content = f"工具: {tool_def.name}\n参数:\n{args_display}"
 
-        self._write_output(Panel(content, title=title, border_style=border_style))
+        self._write_output(
+            Panel(content, title=title, border_style=border_style),
+        )
 
         # Prompt text
         if is_dangerous:
             prompt_text = Text("是否执行? [y]es / [n]o  [y]", style="bold")
         else:
             prompt_text = Text(
-                "是否执行? [y]es / [n]o / [u]pdate (补充信息，重新规划) / [a]lways (本次对话放行) / [s]top (中止本轮)  [y]",
+                "是否执行? [y]es / [n]o / [u]pdate (补充信息，重新规划) / "
+                "[a]lways (本次对话放行) / [s]top (中止本轮)  [y]",
                 style="bold",
             )
         self._write_output(prompt_text)
@@ -1754,7 +1881,9 @@ class AgenticCLIApp(App):
                 # 平静流式期间 _write_output 不跟随滚动，需显式滚到可见
                 self.query_one("#output", RichLog).scroll_end(animate=False)
                 input_widget.focus()
-                self._supplement_future = asyncio.get_running_loop().create_future()
+                self._supplement_future = (
+                    asyncio.get_running_loop().create_future()
+                )
                 try:
                     supplement = await self._supplement_future
                 except (asyncio.CancelledError, asyncio.InvalidStateError):
@@ -1838,20 +1967,25 @@ class AgenticCLIApp(App):
         if self._processing:
             self._pending_commands.append(command)
             prompt_sym = (
-                getattr(self.config, "_embedded_prompt_symbol", None) or "acli> "
+                getattr(self.config, "_embedded_prompt_symbol", None)
+                or "acli> "
             )
             output.write(Text(prompt_sym, style="bold green") + Text(command))
-            output.write(render(f"[dim](已排队，等待当前任务完成后执行)[/dim]"))
+            output.write(render("[dim](已排队，等待当前任务完成后执行)[/dim]"))
             return
 
-        # Echo user data (skipped for dequeued commands that were already echoed)
+        # Echo user data (skipped for dequeued commands that were already
+        # echoed)
         if _echo:
             sep_width = (output.size.width or 80) - 4
             self._write_output(Text("─" * sep_width, style="dim"))
             prompt_sym = (
-                getattr(self.config, "_embedded_prompt_symbol", None) or "acli> "
+                getattr(self.config, "_embedded_prompt_symbol", None)
+                or "acli> "
             )
-            self._write_output(Text(prompt_sym, style="bold green") + Text(command))
+            self._write_output(
+                Text(prompt_sym, style="bold green") + Text(command),
+            )
 
         if command in ("/exit", "/quit", "/q"):
             self.exit()
@@ -1862,12 +1996,18 @@ class AgenticCLIApp(App):
             if shell_cmd:
                 asyncio.create_task(self._run_shell_escape(shell_cmd))
             else:
-                self._write_output(Text("用法: !<shell command>", style="yellow"))
-        elif command == "/feedback good" or command == "/feedback bad":
+                self._write_output(
+                    Text("用法: !<shell command>", style="yellow"),
+                )
+        elif command in ("/feedback good", "/feedback bad"):
             import dashscope.acli.cli as cli_module
 
             with _capture_console(self):
-                cli_module._handle_slash_command(command, self.agent, self.config)
+                cli_module._handle_slash_command(
+                    command,
+                    self.agent,
+                    self.config,
+                )
         elif command == "/report":
             import dashscope.acli.cli as cli_module
 
@@ -1879,7 +2019,11 @@ class AgenticCLIApp(App):
                 getattr(self, "_panel_border", "bright_blue") or "bright_blue"
             )
             self._write_output(
-                Panel(render(help_text), title="帮助", border_style=panel_border)
+                Panel(
+                    render(help_text),
+                    title="帮助",
+                    border_style=panel_border,
+                ),
             )
         elif command == "/clear":
             output.clear()
@@ -1898,8 +2042,11 @@ class AgenticCLIApp(App):
             interactive_prefixes = ("/provider", "/setup")
             # /tts voice without args is interactive (numbered list + input())
             is_interactive_tts_voice = command.strip() == "/tts voice"
-            # /dev is interactive only for "add" subcommands (which call input())
-            is_interactive_dev = command.startswith("/dev") and " add" in command
+            # /dev is interactive only for "add" subcommands (which call
+            # input())
+            is_interactive_dev = (
+                command.startswith("/dev") and " add" in command
+            )
             # /example download may prompt (repo url, overwrite confirm) and
             # runs blocking git clone + file copies
             is_interactive_example = command.startswith("/example download")
@@ -1925,7 +2072,9 @@ class AgenticCLIApp(App):
             with _capture_console(self):
                 try:
                     result = cli_module._handle_slash_command(
-                        command, self.agent, self.config
+                        command,
+                        self.agent,
+                        self.config,
                     )
                 except Exception as e:
                     self._write_output(Text(f"命令执行出错: {e}", style="red"))
@@ -1949,40 +2098,55 @@ class AgenticCLIApp(App):
                 # Not a recognized slash command, send to agent
                 self._agent_task = asyncio.create_task(self.run_agent(command))
         else:
-            # Apply @ file/directory/image/audio expansion before sending to agent
+            # Apply @ file/directory/image/audio expansion before sending
+            # to agent
             import dashscope.acli.cli as cli_module
             from dashscope.acli.config import is_audio_model, is_vision_model
 
-            expanded_text, images, audio_clips = cli_module._expand_at_references(
-                command
+            (
+                expanded_text,
+                images,
+                audio_clips,
+            ) = cli_module._expand_at_references(
+                command,
             )
             if images and not is_vision_model(self.config.model):
                 output = self.query_one("#output", RichLog)
                 output.write(
                     Text(
-                        f"当前模型 {self.config.model} 不支持图片，{len(images)} 张图片已忽略。切换到视觉模型（如 qwen-vl-max）后重试。",
+                        f"当前模型 {self.config.model} "
+                        f"不支持图片，{len(images)} "
+                        f"张图片已忽略。切换到视觉模型（如 qwen-vl-max）后重试。",
                         style="yellow",
-                    )
+                    ),
                 )
                 images = []
             if audio_clips and not is_audio_model(self.config.model):
                 output = self.query_one("#output", RichLog)
                 output.write(
                     Text(
-                        f"当前模型 {self.config.model} 不支持音频，{len(audio_clips)} 段音频已忽略。切换到音频模型（如 qwen-omni-turbo）后重试。",
+                        f"当前模型 {self.config.model} "
+                        f"不支持音频，{len(audio_clips)} "
+                        f"段音频已忽略。切换到音频模型（如 qwen-omni-turbo）后重试。",
                         style="yellow",
-                    )
+                    ),
                 )
                 audio_clips = []
             agent_input = cli_module._to_multimodal_content(
-                expanded_text, images, audio_clips
+                expanded_text,
+                images,
+                audio_clips,
             )
             self._agent_task = asyncio.create_task(self.run_agent(agent_input))
 
     async def _run_shell_escape(self, shell_cmd: str) -> None:
-        """Run a `!<cmd>` shell escape in a worker thread, then print output."""
+        """Run a `!<cmd>` shell escape in a worker thread, then print
+        output."""
         try:
-            stdout, stderr, rc = await asyncio.to_thread(handle_shell_escape, shell_cmd)
+            stdout, stderr, rc = await asyncio.to_thread(
+                handle_shell_escape,
+                shell_cmd,
+            )
         except Exception as e:
             self._write_output(Text(f"错误: {e}", style="red"))
             return
@@ -2020,8 +2184,6 @@ class AgenticCLIApp(App):
 
     async def _handle_voice_input(self) -> None:
         """Handle /v voice input command."""
-        import threading
-
         from dashscope.acli.ui.voice import voice_input
 
         output = self.query_one("#output", RichLog)
@@ -2040,7 +2202,8 @@ class AgenticCLIApp(App):
 
         def display_callback(text: str):
             if text != last_text[0]:
-                # Style errors in red, diagnostics in cyan, normal ASR output in dim
+                # Style errors in red, diagnostics in cyan, normal ASR
+                # output in dim
                 if text.startswith("[错误]") or text.startswith("[提示]"):
                     output.write(Text(text, style="red"))
                 elif text.startswith("[诊断]") or text.startswith("[警告]"):
@@ -2076,7 +2239,8 @@ class AgenticCLIApp(App):
             input_widget.focus()
 
     async def _async_compress(self) -> None:
-        """Compress conversation context using the shared CLI implementation."""
+        """Compress conversation context using the shared CLI
+        implementation."""
         import dashscope.acli.cli as cli_module
 
         with _capture_console(self):
@@ -2109,9 +2273,9 @@ class AgenticCLIApp(App):
 
         # Interactive commands call input() and must run in a thread executor
         # so they don't block the TUI event loop.
-        interactive = command.startswith(("/provider", "/setup", "/example")) or (
-            command.startswith("/dev") and " add" in command
-        )
+        interactive = command.startswith(
+            ("/provider", "/setup", "/example"),
+        ) or (command.startswith("/dev") and " add" in command)
 
         with _capture_console(self, interactive=interactive):
             try:
@@ -2121,25 +2285,36 @@ class AgenticCLIApp(App):
                     def _run_interactive():
                         if command.startswith("/setup"):
                             asyncio.run(
-                                cli_module._handle_setup(self.config, self.agent)
+                                cli_module._handle_setup(
+                                    self.config,
+                                    self.agent,
+                                ),
                             )
                         elif command.startswith("/provider"):
                             from dashscope.acli.cli.handlers_provider import (
                                 handle_provider_command,
                             )
 
-                            handle_provider_command(command, self.agent, self.config)
+                            handle_provider_command(
+                                command,
+                                self.agent,
+                                self.config,
+                            )
                         elif command.startswith("/dev"):
                             cli_module.handle_dev_command(command, self.config)
                         elif command.startswith("/example"):
                             cli_module._handle_slash_command(
-                                command, self.agent, self.config
+                                command,
+                                self.agent,
+                                self.config,
                             )
 
                     await loop.run_in_executor(None, _run_interactive)
                 else:
                     await cli_module.dispatch_async_command(
-                        command, self.config, self.agent
+                        command,
+                        self.config,
+                        self.agent,
                     )
             except Exception as e:
                 output.write(Text(f"错误: {e}", style="red"))
@@ -2151,7 +2326,8 @@ class AgenticCLIApp(App):
             pass
 
     async def _handle_skill_command(self, command: str) -> None:
-        """Handle /skill — list skills or render a skill prompt and feed to agent."""
+        """Handle /skill — list skills or render a skill prompt and feed to
+        agent."""
         import dashscope.acli.cli as cli_module
 
         output = self.query_one("#output", RichLog)
@@ -2159,10 +2335,14 @@ class AgenticCLIApp(App):
         with _capture_console(self):
             try:
                 rendered = await cli_module._handle_skill_continue(
-                    command, self.config, self.agent
+                    command,
+                    self.config,
+                    self.agent,
                 )
                 if rendered:
-                    self._agent_task = asyncio.create_task(self.run_agent(rendered))
+                    self._agent_task = asyncio.create_task(
+                        self.run_agent(rendered),
+                    )
             except Exception as e:
                 output.write(Text(f"错误: {e}", style="red"))
 
@@ -2201,7 +2381,9 @@ class AgenticCLIApp(App):
             return None
 
     def _refresh_known_input_tokens(
-        self, spinner: Spinner, snap: dict | None
+        self,
+        spinner: Spinner,
+        snap: dict | None,
     ) -> None:
         if snap is None:
             return
@@ -2240,7 +2422,7 @@ class AgenticCLIApp(App):
         has_tokens = False
         cur = self._token_usage_snapshot() if snap is not None else None
         delta_in = delta_out = delta_cached = delta_api = 0
-        if cur is not None:
+        if cur is not None and snap is not None:
             delta_in = cur["input_tokens"] - snap["input_tokens"]
             delta_out = cur["output_tokens"] - snap["output_tokens"]
             delta_cached = cur["cached_tokens"] - snap["cached_tokens"]
@@ -2262,7 +2444,9 @@ class AgenticCLIApp(App):
                     tokens_part += (
                         f" ({delta_cached}/{cur['cached_tokens']} cached)"
                     )
-                    tokens_part += f" ↓{delta_out}/{cur['output_tokens']} tokens"
+                    tokens_part += (
+                        f" ↓{delta_out}/{cur['output_tokens']} tokens"
+                    )
                 parts.append(tokens_part)
                 has_tokens = True
         if prompt_snap is not None:
@@ -2313,7 +2497,9 @@ class AgenticCLIApp(App):
         usage_snap = self._token_usage_snapshot()
         prompt_snap = self._prompt_composition_snapshot()
         spinner.max_out_tokens = getattr(
-            getattr(self.agent, "provider", None), "default_max_tokens", None
+            getattr(self.agent, "provider", None),
+            "default_max_tokens",
+            None,
         )
 
         # 旧版 JediTerm 无 synchronized-output，跟随滚动的每次 flush 都是一次
@@ -2334,14 +2520,17 @@ class AgenticCLIApp(App):
             def _flush_lines() -> None:
                 # 每行一次 write 会逐行触发重绘，聚合后一次写入消除底部屏闪
                 if pending_lines:
-                    self._write_output(Text("\n".join(pending_lines), style="cyan"))
+                    self._write_output(
+                        Text("\n".join(pending_lines), style="cyan"),
+                    )
                     pending_lines.clear()
 
             async for chunk in self.agent.run_stream(command):
                 if not chunk:
                     continue
 
-                # Detect tool trail lines with diffs (e.g. [write_file] → ... --- diff ---)
+                # Detect tool trail lines with diffs (e.g. [write_file] →
+                # ... --- diff ---)
                 stripped = chunk.strip()
                 if stripped.startswith("[") and "] →" in stripped:
                     # Flush any pending text buffer first
@@ -2359,7 +2548,7 @@ class AgenticCLIApp(App):
                 # Flush complete lines as they arrive so each RichLog line
                 # corresponds to a real line of output, not a fixed chunk size.
                 while "\n" in buffer:
-                    line, sep, rest = buffer.partition("\n")
+                    line, _, rest = buffer.partition("\n")
                     pending_lines.append(line)
                     buffer = rest
                 now = loop.time()
@@ -2387,7 +2576,10 @@ class AgenticCLIApp(App):
             self.agent.last_output = full_output
 
             # Auto TTS: speak agent reply if enabled
-            if getattr(self.config, "tts_enabled", False) and full_output.strip():
+            if (
+                getattr(self.config, "tts_enabled", False)
+                and full_output.strip()
+            ):
                 try:
                     self._start_tts_speak(full_output)
                 except Exception:
@@ -2412,7 +2604,10 @@ class AgenticCLIApp(App):
                 pass
         finally:
             stats_line = self._turn_stats_line(
-                turn_start, usage_snap, spinner, prompt_snap
+                turn_start,
+                usage_snap,
+                spinner,
+                prompt_snap,
             )
             self._write_output(Text("\n" + stats_line, style="dim"))
             spinner.stop()
@@ -2424,7 +2619,10 @@ class AgenticCLIApp(App):
                 # 一次性补滚到底（仅一帧）；用户中途向上滚入历史则不拽回
                 # （位置 >= frozen_y 都视为跟随意图：含确认提示的自动滚动、
                 # 以及用户手动滚回底部）
-                if frozen_y is not None and output.scroll_offset.y >= frozen_y - 2:
+                if (
+                    frozen_y is not None
+                    and output.scroll_offset.y >= frozen_y - 2
+                ):
                     output.scroll_end(animate=False)
             else:
                 self._write_output("")
@@ -2459,12 +2657,14 @@ class AgenticCLIApp(App):
                 )
                 if err:
                     self.call_from_thread(
-                        self._write_output, Text(f"TTS: {err}", style="yellow")
+                        self._write_output,
+                        Text(f"TTS: {err}", style="yellow"),
                     )
             except Exception as e:
                 try:
                     self.call_from_thread(
-                        self._write_output, Text(f"TTS 错误: {e}", style="yellow")
+                        self._write_output,
+                        Text(f"TTS 错误: {e}", style="yellow"),
                     )
                 except Exception:
                     pass  # App already shutting down
@@ -2472,12 +2672,14 @@ class AgenticCLIApp(App):
         threading.Thread(target=_bg_speak, daemon=True).start()
 
     def _write_tool_trail(self, line: str) -> None:
-        """Render a `[tool_name] → result` trail line with diff syntax highlighting."""
+        """Render a `[tool_name] → result` trail line with diff syntax
+        highlighting."""
         from rich.syntax import Syntax
 
         light = self._is_light_mode()
         trail_style = _tool_trail_style(
-            getattr(self.config, "theme", None), light=light
+            getattr(self.config, "theme", None),
+            light=light,
         )
         diff_theme = _diff_syntax_theme(light=light)
 
@@ -2489,8 +2691,11 @@ class AgenticCLIApp(App):
             if diff_body:
                 self._write_output(
                     Syntax(
-                        diff_body, "diff", theme=diff_theme, background_color="default"
-                    )
+                        diff_body,
+                        "diff",
+                        theme=diff_theme,
+                        background_color="default",
+                    ),
                 )
             return
 
@@ -2506,8 +2711,11 @@ class AgenticCLIApp(App):
             if diff_body:
                 self._write_output(
                     Syntax(
-                        diff_body, "diff", theme=diff_theme, background_color="default"
-                    )
+                        diff_body,
+                        "diff",
+                        theme=diff_theme,
+                        background_color="default",
+                    ),
                 )
             return
 
@@ -2517,7 +2725,9 @@ class AgenticCLIApp(App):
 def run_tui(config, agent, input_history_path: Path | None = None):
     """Run the Textual TUI."""
     app = AgenticCLIApp(
-        config=config, agent=agent, input_history_path=input_history_path
+        config=config,
+        agent=agent,
+        input_history_path=input_history_path,
     )
     # App captures the mouse so the wheel scrolls the output area only.
     # Without capture the terminal scrolls its own scrollback and the whole

@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=too-many-branches,too-many-statements
 from __future__ import annotations
 
 import json
@@ -58,11 +60,13 @@ class AnthropicProvider:
     ):
         if anthropic is None:
             raise ImportError(
-                "anthropic 包未安装。请运行: pip install 'acli[anthropic]'"
+                "anthropic 包未安装。请运行: pip install 'acli[anthropic]'",
             )
         self.model = model
         self.client = anthropic.AsyncAnthropic(
-            api_key=api_key, base_url=base_url, timeout=timeout
+            api_key=api_key,
+            base_url=base_url,
+            timeout=timeout,
         )
 
     def _convert_tools(self, tools: list[dict] | None) -> list[dict] | None:
@@ -77,7 +81,10 @@ class AnthropicProvider:
             for t in tools
         ]
 
-    def _convert_messages(self, messages: list[dict]) -> tuple[str, list[dict]]:
+    def _convert_messages(
+        self,
+        messages: list[dict],
+    ) -> tuple[str, list[dict]]:
         system = ""
         converted = []
         tool_results: list[dict] = []
@@ -86,7 +93,9 @@ class AnthropicProvider:
             # Consecutive tool-role messages (parallel tool calls) merge
             # into ONE user message so user/assistant alternation holds.
             if tool_results:
-                converted.append({"role": "user", "content": list(tool_results)})
+                converted.append(
+                    {"role": "user", "content": list(tool_results)},
+                )
                 tool_results.clear()
 
         for msg in messages:
@@ -98,7 +107,7 @@ class AnthropicProvider:
                         "type": "tool_result",
                         "tool_use_id": msg.get("tool_use_id", ""),
                         "content": msg["content"],
-                    }
+                    },
                 )
             elif msg["role"] == "assistant" and "tool_calls" in msg:
                 _flush_tool_results()
@@ -115,7 +124,7 @@ class AnthropicProvider:
                             "id": tc["id"],
                             "name": tc["function"]["name"],
                             "input": args,
-                        }
+                        },
                     )
                 converted.append({"role": "assistant", "content": content})
             else:
@@ -131,7 +140,7 @@ class AnthropicProvider:
         self,
         messages: list[dict],
         tools: list[dict] | None = None,
-        response_format: dict | None = None,
+        response_format: dict | None = None,  # pylint: disable=unused-argument
     ) -> LLMResponse:
         system, converted = self._convert_messages(messages)
         kwargs: dict = {
@@ -144,18 +153,19 @@ class AnthropicProvider:
         claude_tools = self._convert_tools(tools)
         if claude_tools:
             kwargs["tools"] = claude_tools
-        # Anthropic API does not support OpenAI-style response_format; ignore it.
+        # Anthropic API does not support OpenAI-style response_format;
+        # ignore it.
 
         try:
             response = await self.client.messages.create(**kwargs)
-        except httpx.TimeoutException:
-            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试")
-        except httpx.ConnectError:
-            raise RuntimeError("无法连接到 API 服务器，请检查网络连接")
+        except httpx.TimeoutException as e:
+            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试") from e
+        except httpx.ConnectError as e:
+            raise RuntimeError("无法连接到 API 服务器，请检查网络连接") from e
         except anthropic.NotFoundError as e:
             raise RuntimeError(
                 "API 端点不存在 (404): base_url 与 protocol 可能不匹配，"
-                "请运行 /provider 检查配置"
+                "请运行 /provider 检查配置",
             ) from e
         except anthropic.APIError as e:
             raise RuntimeError(f"API 请求失败: {e}") from e
@@ -171,7 +181,7 @@ class AnthropicProvider:
                         id=block.id,
                         name=block.name,
                         arguments=block.input,
-                    )
+                    ),
                 )
 
         usage = None
@@ -183,7 +193,11 @@ class AnthropicProvider:
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "total_tokens": input_tokens + output_tokens,
-                "cached_tokens": getattr(resp_usage, "cache_read_input_tokens", 0)
+                "cached_tokens": getattr(
+                    resp_usage,
+                    "cache_read_input_tokens",
+                    0,
+                )
                 or 0,
             }
 
@@ -193,7 +207,7 @@ class AnthropicProvider:
         self,
         messages: list[dict],
         tools: list[dict] | None = None,
-        response_format: dict | None = None,
+        response_format: dict | None = None,  # pylint: disable=unused-argument
     ) -> AsyncIterator[LLMChunk]:
         system, converted = self._convert_messages(messages)
         kwargs: dict = {
@@ -206,7 +220,8 @@ class AnthropicProvider:
         claude_tools = self._convert_tools(tools)
         if claude_tools:
             kwargs["tools"] = claude_tools
-        # Anthropic API does not support OpenAI-style response_format; ignore it.
+        # Anthropic API does not support OpenAI-style response_format;
+        # ignore it.
 
         current_tool: dict | None = None
         tool_input_json = ""
@@ -228,22 +243,30 @@ class AnthropicProvider:
                                 "name": block.name,
                             }
                             tool_input_json = ""
-                        elif block.type == "text" and getattr(block, "text", ""):
+                        elif block.type == "text" and getattr(
+                            block,
+                            "text",
+                            "",
+                        ):
                             received_content = True
-                            # Some OpenAI-compatible backends emit the full text
+                            # Some OpenAI-compatible backends emit the
+                            # full text
                             # on content_block_start instead of as deltas.
                             yield LLMChunk(delta_content=block.text)
                     elif event.type == "content_block_delta":
                         delta = event.delta
-                        # Anthropic SDK uses "text_delta"; some OpenAI-compatible
-                        # backends (e.g. ideatalk) emit "text" or put text directly
-                        # on the delta. Accept any object that carries text.
+                        # Anthropic SDK uses "text_delta"; some
+                        # OpenAI-compatible backends (e.g. ideatalk) emit
+                        # "text" or put text directly on the delta.
+                        # Accept any object that carries text.
                         if getattr(delta, "type", "") == "text_delta":
                             received_content = True
                             yield LLMChunk(delta_content=delta.text)
                         elif getattr(delta, "type", "") == "text":
                             received_content = True
-                            yield LLMChunk(delta_content=getattr(delta, "text", ""))
+                            yield LLMChunk(
+                                delta_content=getattr(delta, "text", ""),
+                            )
                         elif hasattr(delta, "text") and delta.text:
                             received_content = True
                             yield LLMChunk(delta_content=delta.text)
@@ -260,31 +283,39 @@ class AnthropicProvider:
                                 )
                             except json.JSONDecodeError as e:
                                 # LLM produced malformed / truncated JSON.
-                                # Surface it as an empty-args tool call so the
-                                # agent loop can report the error instead of crashing.
+                                # Surface it as an empty-args tool call so
+                                # the agent loop can report the error
+                                # instead of crashing.
                                 args = {}
                                 yield LLMChunk(
-                                    delta_content=(f"[工具参数解析失败: {e}]")
+                                    delta_content=(f"[工具参数解析失败: {e}]"),
                                 )
+                            # pylint: disable=unsubscriptable-object
                             yield LLMChunk(
                                 tool_calls=[
                                     ToolCall(
                                         id=current_tool["id"],
                                         name=current_tool["name"],
                                         arguments=args,
-                                    )
-                                ]
+                                    ),
+                                ],
                             )
+                            # pylint: enable=unsubscriptable-object
                             current_tool = None
                             tool_input_json = ""
                     elif event.type == "message_start":
-                        usage = getattr(getattr(event, "message", None), "usage", None)
+                        usage = getattr(
+                            getattr(event, "message", None),
+                            "usage",
+                            None,
+                        )
                         if usage is not None:
                             stream_usage["input_tokens"] = (
                                 getattr(usage, "input_tokens", 0) or 0
                             )
                             stream_usage["cached_tokens"] = (
-                                getattr(usage, "cache_read_input_tokens", 0) or 0
+                                getattr(usage, "cache_read_input_tokens", 0)
+                                or 0
                             )
                     elif event.type == "message_delta":
                         usage = getattr(event, "usage", None)
@@ -317,16 +348,16 @@ class AnthropicProvider:
                     if stop and stop != "end_turn":
                         raise RuntimeError(f"API 流式响应异常结束: stop_reason={stop}")
                     raise RuntimeError(
-                        "API 流式响应未返回任何内容，可能是限流、模型不可用或服务异常"
+                        "API 流式响应未返回任何内容，可能是限流、模型不可用或服务异常",
                     )
-        except httpx.TimeoutException:
-            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试")
-        except httpx.ConnectError:
-            raise RuntimeError("无法连接到 API 服务器，请检查网络连接")
+        except httpx.TimeoutException as e:
+            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试") from e
+        except httpx.ConnectError as e:
+            raise RuntimeError("无法连接到 API 服务器，请检查网络连接") from e
         except anthropic.NotFoundError as e:
             raise RuntimeError(
                 "API 端点不存在 (404): base_url 与 protocol 可能不匹配，"
-                "请运行 /provider 检查配置"
+                "请运行 /provider 检查配置",
             ) from e
         except anthropic.APIError as e:
             raise RuntimeError(f"API 请求失败: {e}") from e

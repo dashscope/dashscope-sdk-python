@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Lightweight local-only value obfuscation helpers.
 
 These are NOT encryption for security-critical storage: they just keep

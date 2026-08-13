@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 """Streaming output and conversation management functions."""
+# pylint: disable=too-many-branches,too-many-statements
 
 from __future__ import annotations
 
@@ -11,8 +13,15 @@ from rich.text import Text
 
 from dashscope.acli.agent import Agent
 from dashscope.acli.config import Config
-from dashscope.acli.deliverable import collect_deliverables, surface_deliverables
-from dashscope.acli.utils import AsyncSpinner, UserAbortedTurn, message_text_for_compress
+from dashscope.acli.deliverable import (
+    collect_deliverables,
+    surface_deliverables,
+)
+from dashscope.acli.utils import (
+    AsyncSpinner,
+    UserAbortedTurn,
+    message_text_for_compress,
+)
 
 console = Console()
 
@@ -30,7 +39,12 @@ def _render_tool_trail(line: str) -> None:
         diff_body = diff_body.strip("\n")
         if diff_body:
             console.print(
-                Syntax(diff_body, "diff", theme="ansi_dark", background_color="default")
+                Syntax(
+                    diff_body,
+                    "diff",
+                    theme="ansi_dark",
+                    background_color="default",
+                ),
             )
         return
     console.print(Text(line, style="dim cyan"))
@@ -43,7 +57,9 @@ async def _do_compress(agent: Agent) -> None:
     console.print("[dim]正在压缩对话上下文...[/dim]")
     conversation_dump = ""
     for m in agent.messages:
-        conversation_dump += f"[{m.get('role', '?')}]: {message_text_for_compress(m)}\n"
+        conversation_dump += (
+            f"[{m.get('role', '?')}]: {message_text_for_compress(m)}\n"
+        )
     compress_messages = [
         {
             "role": "system",
@@ -72,20 +88,24 @@ async def _do_compress(agent: Agent) -> None:
         agent.save_session()
         new_chars = sum(len(str(m.get("content", ""))) for m in agent.messages)
         console.print(
-            f"[green]已压缩: {old_count} 条消息 → 2 条, {old_chars} 字符 → {new_chars} 字符[/green]"
+            f"[green]已压缩: {old_count} 条消息 → 2 条, "
+            f"{old_chars} 字符 → {new_chars} 字符[/green]",
         )
     except Exception as e:
         console.print(f"[red]压缩失败: {e}[/red]")
 
 
 async def _do_summarize(
-    agent: Agent, messages_to_summarize: list | None = None, silent: bool = False
+    agent: Agent,
+    messages_to_summarize: list | None = None,
+    silent: bool = False,
 ) -> dict | None:
     """Summarize a task and record to experience tracker.
 
     Args:
         agent: The agent instance.
-        messages_to_summarize: Messages to summarize. If None, use agent.messages.
+        messages_to_summarize: Messages to summarize. If None, use
+            agent.messages.
         silent: If True, suppress console output (for auto-trigger).
 
     Returns:
@@ -100,7 +120,9 @@ async def _do_summarize(
         return None
 
     msgs = (
-        messages_to_summarize if messages_to_summarize is not None else agent.messages
+        messages_to_summarize
+        if messages_to_summarize is not None
+        else agent.messages
     )
     if len(msgs) < 2:
         if not silent:
@@ -147,7 +169,7 @@ async def _do_summarize(
         try:
             start = raw.find("{")
             end = raw.rfind("}") + 1
-            if start >= 0 and end > start:
+            if 0 <= start < end:
                 parsed = _json.loads(raw[start:end])
         except Exception:
             parsed = None
@@ -172,10 +194,10 @@ async def _do_summarize(
         )
 
         if not silent:
-            console.print(f"\n[bold green]✓ 任务总结已记录[/bold green]")
+            console.print("\n[bold green]✓ 任务总结已记录[/bold green]")
             console.print(f"  [bold]任务:[/bold] {task}")
             if steps:
-                console.print(f"  [bold]步骤:[/bold]")
+                console.print("  [bold]步骤:[/bold]")
                 for s in steps:
                     console.print(f"    - {s}")
             if lesson and not steps:
@@ -202,7 +224,8 @@ async def _stream_response(agent: Agent, config: Config, user_input):
     spinner = AsyncSpinner("思考中...")
     await spinner.__aenter__()
 
-    # Install SIGINT handler so Ctrl+C aborts the turn instead of killing the process.
+    # Install SIGINT handler so Ctrl+C aborts the turn instead of
+    # killing the process.
     import signal
 
     loop = asyncio.get_running_loop()
@@ -241,7 +264,8 @@ async def _stream_response(agent: Agent, config: Config, user_input):
                 console.print("\n[yellow]已中断[/yellow]")
                 break
 
-            # Stop spinner on first chunk OR empty chunk (tool execution signal)
+            # Stop spinner on first chunk OR empty chunk (tool execution
+            # signal)
             if chunk == "" and spinner_active:
                 await spinner.__aexit__(None, None, None)
                 spinner_active = False

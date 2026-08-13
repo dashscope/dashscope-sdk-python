@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Capability Interface Abstraction: Decouple from Bailian.
 
 Abstracts cloud capabilities into pluggable interfaces.
@@ -25,28 +26,23 @@ class CapabilityInterface(ABC):
     @abstractmethod
     def name(self) -> str:
         """Capability identifier (e.g., 'bailian.mcp', 'bailian.cli')."""
-        pass
 
     @property
     @abstractmethod
     def provider(self) -> str:
         """Provider name (e.g., 'bailian', 'local', 'ollama')."""
-        pass
 
     @abstractmethod
     def is_available(self) -> bool:
         """Check if this capability is currently available."""
-        pass
 
     @abstractmethod
     async def initialize(self) -> None:
         """Initialize the capability (connect, authenticate, etc.)."""
-        pass
 
     @abstractmethod
     async def shutdown(self) -> None:
         """Clean up resources."""
-        pass
 
 
 class MemoryCapability(CapabilityInterface):
@@ -55,22 +51,22 @@ class MemoryCapability(CapabilityInterface):
     @abstractmethod
     async def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
         """Search user memory for relevant information."""
-        pass
 
     @abstractmethod
-    async def add(self, content: str, metadata: dict[str, Any] | None = None) -> str:
+    async def add(
+        self,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
         """Add a memory entry. Returns entry ID."""
-        pass
 
     @abstractmethod
     async def delete(self, entry_id: str) -> bool:
         """Delete a memory entry."""
-        pass
 
     @abstractmethod
     async def list(self, limit: int = 20) -> list[dict[str, Any]]:
         """List recent memory entries."""
-        pass
 
 
 class CapabilityRegistry:

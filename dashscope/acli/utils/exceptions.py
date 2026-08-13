@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Common exception classes used across the CLI."""
 
 from __future__ import annotations

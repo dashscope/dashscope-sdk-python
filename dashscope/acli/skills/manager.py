@@ -1,12 +1,13 @@
+# -*- coding: utf-8 -*-
 """Skill package manager — discovery, activation, and slash commands."""
 
 from __future__ import annotations
 
+import builtins
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from dashscope.acli.config import WORKSPACE_DIR
 from dashscope.acli.hooks import HookBus
 from dashscope.acli.skills import store
 from dashscope.acli.skills.package import (
@@ -38,7 +39,7 @@ class SkillManager:
         for pkg in self.packages:
             unregister_skill_package(pkg, bus)
         self.packages = discover_skill_packages(
-            extra_dirs=[store.get_skills_dir(self._global)]
+            extra_dirs=[store.get_skills_dir(self._global)],
         )
         for pkg in self.packages:
             if bus is not None:
@@ -69,7 +70,9 @@ class SkillManager:
     def install(self, source: str) -> str:
         """Install a skill package and reload."""
         name = store.install(
-            source, global_=self._global, registry_url=self._registry_url
+            source,
+            global_=self._global,
+            registry_url=self._registry_url,
         )
         self.reload()
         return name
@@ -91,29 +94,36 @@ class SkillManager:
 
     def update(self, name: str) -> str:
         """Update a single installed skill package and reload."""
-        store.update(name, global_=self._global, registry_url=self._registry_url)
+        store.update(
+            name,
+            global_=self._global,
+            registry_url=self._registry_url,
+        )
         self.reload()
         return name
 
-    def update_all(self) -> list[tuple[str, str | None]]:
+    def update_all(self) -> builtins.list[tuple[str, str | None]]:
         """Update all installed skill packages and reload."""
         results = store.update_all(
-            global_=self._global, registry_url=self._registry_url
+            global_=self._global,
+            registry_url=self._registry_url,
         )
         self.reload()
         return results
 
-    def search(self, query: str) -> list[dict[str, Any]]:
+    def search(self, query: str) -> builtins.list[dict[str, Any]]:
         """Search installed packages and the registry."""
         return store.search(
-            query, global_=self._global, registry_url=self._registry_url
+            query,
+            global_=self._global,
+            registry_url=self._registry_url,
         )
 
     def publish(self, source_dir: str) -> Path:
         """Validate and package a skill directory."""
         return store.publish(source_dir)
 
-    def active_packages(self, user_input: str) -> list[SkillPackage]:
+    def active_packages(self, user_input: str) -> builtins.list[SkillPackage]:
         """Return packages that should be active for the given user input."""
         active: list[SkillPackage] = []
         for pkg in self.packages:
@@ -125,7 +135,11 @@ class SkillManager:
 
     def active_prompts(self, user_input: str) -> str:
         """Concatenate prompts from active packages."""
-        prompts = [pkg.prompt for pkg in self.active_packages(user_input) if pkg.prompt]
+        prompts = [
+            pkg.prompt
+            for pkg in self.active_packages(user_input)
+            if pkg.prompt
+        ]
         if not prompts:
             return ""
         return "\n\n".join(prompts)

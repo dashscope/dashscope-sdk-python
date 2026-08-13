@@ -1,6 +1,8 @@
+# -*- coding: utf-8 -*-
 """Wrapper around the `bl` CLI (Aliyun Model Studio).
 
-`bl` is a Node-based CLI bundled separately (`npm i -g @bailian/cli` or similar).
+`bl` is a Node-based CLI bundled separately (`npm i -g @bailian/cli`
+or similar).
 We treat it as a *platform capability*: when `bl` is on PATH, we pull its full
 command catalog via `bl config export-schema` and register each subcommand as
 a native function-call tool. The LLM then sees `bailian_text_chat`,
@@ -36,11 +38,16 @@ class CLIResult:
 
 
 def _camel_to_kebab(name: str) -> str:
-    # Split before an uppercase that starts a new word (prev is lowercase/digit)
+    # Split before an uppercase that starts a new word (prev is
+    # lowercase/digit)
     # or that ends an acronym run (next is lowercase): APIKey → api-key.
     import re
 
-    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", "-", name).lower()
+    return re.sub(
+        r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])",
+        "-",
+        name,
+    ).lower()
 
 
 class BailianCLIClient:
@@ -74,11 +81,14 @@ class BailianCLIClient:
                 capture_output=True,
                 text=True,
                 timeout=15,
+                check=False,
             )
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
             raise BailianCLIError(f"bl config export-schema 失败: {e}") from e
         if cp.returncode != 0:
-            raise BailianCLIError(f"bl exit={cp.returncode}: {cp.stderr or cp.stdout}")
+            raise BailianCLIError(
+                f"bl exit={cp.returncode}: {cp.stderr or cp.stdout}",
+            )
         try:
             return json.loads(cp.stdout)
         except json.JSONDecodeError as e:
@@ -124,7 +134,11 @@ class BailianCLIClient:
                 await proc.wait()
             except Exception:
                 pass
-            return CLIResult(code=124, stdout="", stderr=f"超时 ({self.timeout}s)")
+            return CLIResult(
+                code=124,
+                stdout="",
+                stderr=f"超时 ({self.timeout}s)",
+            )
         return CLIResult(
             code=proc.returncode or 0,
             stdout=out.decode("utf-8", errors="replace"),
@@ -132,7 +146,8 @@ class BailianCLIClient:
         )
 
     async def invoke(self, command_path: list[str], params: dict) -> str:
-        """Translate `{kw: val}` into `--kebab-case <value>` flags and call `bl`.
+        """Translate `{kw: val}` into `--kebab-case <value>` flags and
+        call `bl`.
 
         - bool=True    →  --flag
         - bool=False   →  omitted

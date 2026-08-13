@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Tool chain composition — common workflow patterns for effective tool usage.
 Provides guidance on combining tools for multi-step operations.
@@ -5,7 +6,12 @@ Provides guidance on combining tools for multi-step operations.
 
 from __future__ import annotations
 
-from dashscope.acli.utils.keywords import expand_scoring_terms, extract_keywords
+from pathlib import Path
+
+from dashscope.acli.utils.keywords import (
+    expand_scoring_terms,
+    extract_keywords,
+)
 
 # Common tool chain patterns with examples
 TOOL_CHAINS = {
@@ -16,7 +22,10 @@ TOOL_CHAINS = {
             "2. write_file 写入修改后的完整内容",
             "3. 可选: run_command 验证（如 python -m py_compile 检查语法）",
         ],
-        "example": "用户: '修改 config.py 中的端口为 8080'\n→ read_file config.py → 修改内容 → write_file config.py",
+        "example": (
+            "用户: '修改 config.py 中的端口为 8080'\n"
+            "→ read_file config.py → 修改内容 → write_file config.py"
+        ),
     },
     "code_refactor": {
         "description": "重构代码的完整流程",
@@ -27,7 +36,11 @@ TOOL_CHAINS = {
             "4. write_file 逐个修改",
             "5. run_command 运行测试验证",
         ],
-        "example": "用户: '重构 auth 模块，提取公共函数'\n→ search_files 'def auth' → read_file → create_plan → write_file → run_command pytest",
+        "example": (
+            "用户: '重构 auth 模块，提取公共函数'\n"
+            "→ search_files 'def auth' → read_file → create_plan "
+            "→ write_file → run_command pytest"
+        ),
     },
     "bug_fix": {
         "description": "修复 bug 的完整流程",
@@ -37,7 +50,11 @@ TOOL_CHAINS = {
             "3. write_file 修复代码",
             "4. run_command 运行测试验证",
         ],
-        "example": "用户: '修复登录时的空指针错误'\n→ read_file auth.py → search_files 'login' → write_file 修复 → run_command pytest tests/test_auth.py",
+        "example": (
+            "用户: '修复登录时的空指针错误'\n"
+            "→ read_file auth.py → search_files 'login' "
+            "→ write_file 修复 → run_command pytest tests/test_auth.py"
+        ),
     },
     "project_setup": {
         "description": "设置新项目的完整流程",
@@ -47,7 +64,11 @@ TOOL_CHAINS = {
             "3. write_file 创建基础代码文件",
             "4. run_command 初始化（git init, pip install 等）",
         ],
-        "example": "用户: '创建一个 FastAPI 项目'\n→ create_directory → write_file pyproject.toml → write_file main.py → run_command git init",
+        "example": (
+            "用户: '创建一个 FastAPI 项目'\n"
+            "→ create_directory → write_file pyproject.toml "
+            "→ write_file main.py → run_command git init"
+        ),
     },
     "code_review": {
         "description": "审查代码的完整流程",
@@ -57,7 +78,11 @@ TOOL_CHAINS = {
             "3. search_files 搜索潜在问题模式",
             "4. 输出审查报告",
         ],
-        "example": "用户: '审查这个项目的安全性'\n→ list_directory → read_file 关键文件 → search_files 危险模式 → 输出报告",
+        "example": (
+            "用户: '审查这个项目的安全性'\n"
+            "→ list_directory → read_file 关键文件 → search_files 危险模式 "
+            "→ 输出报告"
+        ),
     },
 }
 
@@ -90,7 +115,9 @@ def get_relevant_chains(query: str = "", limit: int = 2) -> str:
         if any(t in lowered for t in triggers):
             matched.append(name)
             continue
-        haystack = (chain["description"] + " " + " ".join(chain["steps"])).lower()
+        haystack = (
+            str(chain["description"]) + " " + " ".join(chain["steps"])
+        ).lower()
         hits = sum(1 for kw in keywords if kw in haystack)
         if hits >= 2:
             matched.append(name)
@@ -118,9 +145,6 @@ def get_fallback_hints(tool_name: str) -> str:
     if hint:
         return f"\n**备选方案**: {hint}"
     return ""
-
-
-from pathlib import Path  # noqa: E402
 
 
 class ToolChainLibrary:

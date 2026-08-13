@@ -9,6 +9,7 @@ Covers:
 - _maybe_offer_example_download: accept/decline/marker/workspace gating.
 - main(): unknown commands route to the agent with cleaned argv (no key leak).
 """
+# pylint: disable=protected-access,redefined-outer-name,unused-argument
 
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from pathlib import Path
 import pytest
 
 import dashscope
-import dashscope.cli as cli
+from dashscope import cli
 
 
 @pytest.fixture()
@@ -31,7 +32,7 @@ def fake_config_dir(tmp_path, monkeypatch):
 
 @pytest.fixture()
 def captured_run(monkeypatch):
-    import dashscope.acli.ui.embedded as embedded
+    from dashscope.acli.ui import embedded
 
     captured: dict = {}
     monkeypatch.setattr(embedded, "run", lambda **kw: captured.update(kw))
@@ -53,13 +54,15 @@ class TestCleanupLegacyExpertSync:
         skills.mkdir()
         managed_skill = skills / "diagnose.md"
         managed_skill.write_text(
-            f"skill body\n\n{cli._MD_MARKER}\n", encoding="utf-8"
+            f"skill body\n\n{cli._MD_MARKER}\n",
+            encoding="utf-8",
         )
         refs = fake_config_dir / "references"
         refs.mkdir()
         managed_ref = refs / "python-sdk.md"
         managed_ref.write_text(
-            f"old index\n\n{cli._MD_MARKER}\n", encoding="utf-8"
+            f"old index\n\n{cli._MD_MARKER}\n",
+            encoding="utf-8",
         )
         build = fake_config_dir / "build_sdk_index.py"
         build.write_text(f"# script\n{cli._PY_MARKER}\n", encoding="utf-8")
@@ -94,13 +97,19 @@ class TestCleanupLegacyExpertSync:
 
 class TestRouteToExpert:
     def test_interactive_run_offers_example_and_runs_agent(
-        self, fake_config_dir, captured_run, monkeypatch, tmp_path
+        self,
+        fake_config_dir,
+        captured_run,
+        monkeypatch,
+        tmp_path,
     ):
         monkeypatch.chdir(tmp_path)
         _make_tty(monkeypatch)
         offered: list = []
         monkeypatch.setattr(
-            cli, "_maybe_offer_example_download", lambda: offered.append(1)
+            cli,
+            "_maybe_offer_example_download",
+            lambda: offered.append(1),
         )
         monkeypatch.setattr(dashscope, "api_key", "sk-test")
 
@@ -113,22 +122,30 @@ class TestRouteToExpert:
         assert captured_run["command"] is None
 
     def test_one_shot_skips_offer_and_passes_command(
-        self, fake_config_dir, captured_run, monkeypatch
+        self,
+        fake_config_dir,
+        captured_run,
+        monkeypatch,
     ):
         called: list = []
         monkeypatch.setattr(
-            cli, "_maybe_offer_example_download", lambda: called.append(1)
+            cli,
+            "_maybe_offer_example_download",
+            lambda: called.append(1),
         )
         monkeypatch.setattr(dashscope, "api_key", None)
 
         cli._route_to_expert("Generation.call 怎么用？")
 
-        assert called == []
+        assert not called
         assert captured_run["command"] == "Generation.call 怎么用？"
         assert captured_run["api_key"] is None
 
     def test_cleanup_runs_before_agent(
-        self, fake_config_dir, captured_run, monkeypatch
+        self,
+        fake_config_dir,
+        captured_run,
+        monkeypatch,
     ):
         monkeypatch.setattr(cli, "_maybe_offer_example_download", lambda: None)
         skills = fake_config_dir / "skills"
@@ -144,7 +161,10 @@ class TestRouteToExpert:
 
 class TestOfferExampleDownload:
     def test_accept_downloads_example(
-        self, fake_config_dir, monkeypatch, tmp_path
+        self,
+        fake_config_dir,
+        monkeypatch,
+        tmp_path,
     ):
         monkeypatch.chdir(tmp_path)
         _make_tty(monkeypatch)
@@ -152,16 +172,21 @@ class TestOfferExampleDownload:
         calls: list = []
         monkeypatch.setattr(
             "dashscope.acli.cli.examples._handle_example_command",
-            lambda args: calls.append(args),
+            calls.append,
         )
 
         cli._maybe_offer_example_download()
 
         assert calls == [["download", "dashscope-sdk-expert"]]
-        assert not (tmp_path / ".acli" / ".dashscope-example-declined").exists()
+        assert not (
+            tmp_path / ".acli" / ".dashscope-example-declined"
+        ).exists()
 
     def test_decline_writes_marker_and_skips_download(
-        self, fake_config_dir, monkeypatch, tmp_path
+        self,
+        fake_config_dir,
+        monkeypatch,
+        tmp_path,
     ):
         monkeypatch.chdir(tmp_path)
         _make_tty(monkeypatch)
@@ -169,23 +194,27 @@ class TestOfferExampleDownload:
         calls: list = []
         monkeypatch.setattr(
             "dashscope.acli.cli.examples._handle_example_command",
-            lambda args: calls.append(args),
+            calls.append,
         )
 
         cli._maybe_offer_example_download()
 
-        assert calls == []
+        assert not calls
         marker = tmp_path / ".acli" / ".dashscope-example-declined"
         assert marker.is_file()
 
     def test_declined_marker_suppresses_future_offers(
-        self, fake_config_dir, monkeypatch, tmp_path
+        self,
+        fake_config_dir,
+        monkeypatch,
+        tmp_path,
     ):
         monkeypatch.chdir(tmp_path)
         _make_tty(monkeypatch)
         (tmp_path / ".acli").mkdir()
         (tmp_path / ".acli" / ".dashscope-example-declined").write_text(
-            "declined\n", encoding="utf-8"
+            "declined\n",
+            encoding="utf-8",
         )
 
         def fail_input(prompt=""):
@@ -195,7 +224,10 @@ class TestOfferExampleDownload:
         cli._maybe_offer_example_download()
 
     def test_existing_workspace_acli_skips_offer(
-        self, fake_config_dir, monkeypatch, tmp_path
+        self,
+        fake_config_dir,
+        monkeypatch,
+        tmp_path,
     ):
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".acli").mkdir()
@@ -208,7 +240,10 @@ class TestOfferExampleDownload:
         cli._maybe_offer_example_download()
 
     def test_non_tty_skips_offer(
-        self, fake_config_dir, monkeypatch, tmp_path
+        self,
+        fake_config_dir,
+        monkeypatch,
+        tmp_path,
     ):
         monkeypatch.chdir(tmp_path)
         # pytest's stdin is already non-TTY (isatty() -> False)
@@ -229,7 +264,9 @@ class TestMainRouting:
             lambda command, tui=False: routed.append(command),
         )
         monkeypatch.setattr(
-            sys, "argv", ["dashscope", "-k", "sk-secret", "你好，未知命令"]
+            sys,
+            "argv",
+            ["dashscope", "-k", "sk-secret", "你好，未知命令"],
         )
 
         cli.main()
@@ -283,7 +320,7 @@ class TestBundledExample:
         from dashscope.acli.cli.examples import _handle_example_command
 
         _handle_example_command(
-            ["download", "dashscope-sdk-expert", "--target", str(tmp_path)]
+            ["download", "dashscope-sdk-expert", "--target", str(tmp_path)],
         )
 
         assert (tmp_path / ".acli" / "system-prompt.md").is_file()

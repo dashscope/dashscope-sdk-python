@@ -1,12 +1,18 @@
+# -*- coding: utf-8 -*-
 """Session/config tools — let the agent switch models, manage capabilities,
 and connect MCP services on behalf of the user."""
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
 
 from typing import Callable
 
 from dashscope.acli.config import PROVIDER_MODELS, Config, normalize_model_name
-from dashscope.acli.tools.registry import PermissionLevel, ToolDefinition, registry
+from dashscope.acli.tools.registry import (
+    PermissionLevel,
+    ToolDefinition,
+    registry,
+)
 
 
 def register_session_tools(
@@ -41,7 +47,10 @@ def register_session_tools(
 
     async def switch_provider(provider_name: str) -> str:
         if provider_name not in PROVIDER_MODELS:
-            return f"未知 Provider: {provider_name}，可选: {', '.join(PROVIDER_MODELS)}"
+            return (
+                f"未知 Provider: {provider_name}，可选: "
+                f"{', '.join(PROVIDER_MODELS)}"
+            )
         agent = get_agent()
         config.provider = provider_name
         config.model = PROVIDER_MODELS[provider_name][0]
@@ -77,7 +86,7 @@ def register_session_tools(
                 },
                 "required": ["model_name"],
             },
-        )
+        ),
     )
     registry.register(
         ToolDefinition(
@@ -88,11 +97,14 @@ def register_session_tools(
             parameters={
                 "type": "object",
                 "properties": {
-                    "provider_name": {"type": "string", "description": "Provider 名称"},
+                    "provider_name": {
+                        "type": "string",
+                        "description": "Provider 名称",
+                    },
                 },
                 "required": ["provider_name"],
             },
-        )
+        ),
     )
     registry.register_mcp_tool(
         name="list_models",
@@ -149,7 +161,10 @@ def register_session_tools(
         return f"已启用 {key}（注册了 {count} 个工具）"
 
     async def capability_disable(key: str) -> str:
-        from dashscope.acli.tools.platform import all_capability_keys, unregister_capability_tools
+        from dashscope.acli.tools.platform import (
+            all_capability_keys,
+            unregister_capability_tools,
+        )
 
         all_keys = all_capability_keys()
         if key not in all_keys:
@@ -189,7 +204,7 @@ def register_session_tools(
                 },
                 "required": ["key"],
             },
-        )
+        ),
     )
     registry.register(
         ToolDefinition(
@@ -204,7 +219,7 @@ def register_session_tools(
                 },
                 "required": ["key"],
             },
-        )
+        ),
     )
 
     # ===== MCP =====
@@ -234,7 +249,9 @@ def register_session_tools(
         if service not in clients:
             return f"{service} 未连接"
         await disconnect_mcp_fn(service)
-        config.mcp_servers = [m for m in config.mcp_servers if m.service != service]
+        config.mcp_servers = [
+            m for m in config.mcp_servers if m.service != service
+        ]
         config.save_workspace()
         return f"已断开 {service}"
 
@@ -255,12 +272,14 @@ def register_session_tools(
                 "properties": {
                     "service": {
                         "type": "string",
-                        "description": "服务名称，如 time、code-interpreter、doc-analysis",
+                        "description": (
+                            "服务名称，如 time、code-interpreter、" "doc-analysis"
+                        ),
                     },
                 },
                 "required": ["service"],
             },
-        )
+        ),
     )
     registry.register(
         ToolDefinition(
@@ -275,7 +294,7 @@ def register_session_tools(
                 },
                 "required": ["service"],
             },
-        )
+        ),
     )
 
     # ===== Plan Management =====
@@ -319,7 +338,7 @@ def register_session_tools(
                 },
                 "required": ["goal", "steps"],
             },
-        )
+        ),
     )
     registry.register(
         ToolDefinition(
@@ -337,7 +356,7 @@ def register_session_tools(
                 },
                 "required": ["step_index"],
             },
-        )
+        ),
     )
     registry.register(
         ToolDefinition(
@@ -346,5 +365,5 @@ def register_session_tools(
             permission=PermissionLevel.AUTO,
             func=get_plan_status,
             parameters={"type": "object", "properties": {}},
-        )
+        ),
     )

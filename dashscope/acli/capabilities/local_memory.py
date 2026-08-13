@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Local Memory Capability Implementation.
 
 Local, privacy-first implementation of the MemoryCapability interface,
@@ -55,9 +56,17 @@ class LocalMemoryCapability(MemoryCapability):
             for n in nodes
         ]
 
-    async def add(self, content: str, metadata: dict[str, Any] | None = None) -> str:
+    async def add(
+        self,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
         """Add a memory entry. Returns entry ID."""
-        nodes = await self._client.add([], custom_content=content, metadata=metadata)
+        nodes = await self._client.add(
+            [],
+            custom_content=content,
+            metadata=metadata,
+        )
         if not nodes:
             return ""
         return nodes[0].id

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """System clipboard helpers.
 
 Used by the TUI to write mouse selections directly to the system clipboard:

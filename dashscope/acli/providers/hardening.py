@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Provider edge-case hardening.
 
 Wraps any LLMProvider with:
@@ -78,9 +79,7 @@ _NON_RETRYABLE_PATTERNS = (
 # Hint appended to a retry when the model produced an empty reply.
 _EMPTY_RECOVERY_HINT = {
     "role": "user",
-    "content": (
-        "你刚才没有输出任何内容。请根据上下文继续，必要时直接调用工具完成用户请求。"
-    ),
+    "content": ("你刚才没有输出任何内容。请根据上下文继续，必要时直接调用工具完成用户请求。"),
 }
 
 
@@ -125,7 +124,9 @@ class HardenedProvider:
         for attempt in range(self.max_retries + 1):
             try:
                 resp = await self.provider.chat(
-                    attempt_messages, tools, response_format=response_format
+                    attempt_messages,
+                    tools,
+                    response_format=response_format,
                 )
             except Exception as e:
                 last_error = e

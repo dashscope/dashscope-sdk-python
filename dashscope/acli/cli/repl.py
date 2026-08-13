@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 """REPL main loop."""
+# pylint: disable=protected-access,too-many-branches,too-many-statements
 
 from __future__ import annotations
 
@@ -13,7 +15,11 @@ from rich.console import Console
 from rich.panel import Panel
 
 from dashscope.acli.agent import Agent
-from dashscope.acli.cli.completer import AcliCompleter, SafeFileHistory, _HintProcessor
+from dashscope.acli.cli.completer import (
+    AcliCompleter,
+    SafeFileHistory,
+    _HintProcessor,
+)
 from dashscope.acli.cli.dispatch import (
     _handle_skill_continue,
     _handle_slash_command,
@@ -23,10 +29,26 @@ from dashscope.acli.cli.handlers_capability import sync_extensions_into_catalog
 from dashscope.acli.cli.handlers_key import ensure_provider_key
 from dashscope.acli.cli.handlers_profile import set_memory_client
 from dashscope.acli.cli.handlers_setup import _handle_setup
-from dashscope.acli.cli.mcp import _connect_mcp, _disconnect_mcp, _init_mcp_servers, _mcp_clients
-from dashscope.acli.cli.multimodal import _expand_at_references, _to_multimodal_content
-from dashscope.acli.cli.startup import _compose_system_prompt, _load_system_prompt, _print_banner
-from dashscope.acli.cli.streaming import _do_compress, _do_summarize, _stream_response
+from dashscope.acli.cli.mcp import (
+    _connect_mcp,
+    _disconnect_mcp,
+    _init_mcp_servers,
+    _mcp_clients,
+)
+from dashscope.acli.cli.multimodal import (
+    _expand_at_references,
+    _to_multimodal_content,
+)
+from dashscope.acli.cli.startup import (
+    _compose_system_prompt,
+    _load_system_prompt,
+    _print_banner,
+)
+from dashscope.acli.cli.streaming import (
+    _do_compress,
+    _do_summarize,
+    _stream_response,
+)
 from dashscope.acli.config import (
     PROVIDER_MODELS,
     WORKSPACE_CONFIG_FILE,
@@ -114,29 +136,40 @@ async def _run_loop(config: Config):
         disabled_caps_provider=lambda: disabled_capabilities_hint(config),
         directives_provider=lambda: config.user_directives,
         system_prompt=_compose_system_prompt(
-            getattr(config, "_embedded_system_prompt", None) or _load_system_prompt()
+            getattr(config, "_embedded_system_prompt", None)
+            or _load_system_prompt(),
         ),
         hook_bus=hook_bus,
     )
 
     # Pin parent agent ref for local.subagent / local.delegate BEFORE platform
     # tool registration so register_one_capability finds a parent to attach to.
-    from dashscope.acli.agents.delegate import set_config as set_delegate_config
-    from dashscope.acli.agents.delegate import set_parent_agent as set_delegate_parent
-    from dashscope.acli.agents.subagent import set_config as set_subagent_config
-    from dashscope.acli.agents.subagent import set_parent_agent as set_subagent_parent
+    from dashscope.acli.agents.delegate import (
+        set_config as set_delegate_config,
+    )
+    from dashscope.acli.agents.delegate import (
+        set_parent_agent as set_delegate_parent,
+    )
+    from dashscope.acli.agents.subagent import (
+        set_config as set_subagent_config,
+    )
+    from dashscope.acli.agents.subagent import (
+        set_parent_agent as set_subagent_parent,
+    )
 
     set_subagent_parent(agent)
     set_subagent_config(config)
     set_delegate_parent(agent)
     set_delegate_config(config)
 
-    # Register platform tools (memory, kb, data, prompt, search, context, mcp, subagent, delegate)
+    # Register platform tools (memory, kb, data, prompt, search, context,
+    # mcp, subagent, delegate)
     from dashscope.acli.tools.platform import register_platform_tools
 
     register_platform_tools(config, connect_mcp_fn=_connect_mcp)
 
-    # Load skill packages (project .acli/skills/<name>/ and global ~/.acli/skills/<name>/).
+    # Load skill packages (project .acli/skills/<name>/ and global
+    # ~/.acli/skills/<name>/).
     from dashscope.acli.skills import get_skill_manager
 
     skill_manager = get_skill_manager()
@@ -144,7 +177,8 @@ async def _run_loop(config: Config):
     skill_manager._global = False
     skill_manager.load(hook_bus=hook_bus)
 
-    # Register session tools (switch model/provider, capability, mcp management)
+    # Register session tools (switch model/provider, capability, mcp
+    # management)
     from dashscope.acli.tools.session import register_session_tools
 
     register_session_tools(
@@ -173,7 +207,7 @@ async def _run_loop(config: Config):
 
         console.print(
             f"[bold green]{_embedded_name}[/bold green] "
-            f"[dim]v{__version__} ({config.provider}/{config.model})[/dim]"
+            f"[dim]v{__version__} ({config.provider}/{config.model})[/dim]",
         )
         console.print(f"[dim]Workspace: {WORKSPACE_DIR}[/dim]")
         # Show SDK index if available
@@ -189,7 +223,7 @@ async def _run_loop(config: Config):
         restored = agent.load_session()
         if restored:
             console.print(
-                f"  [dim]已恢复 {restored} 条历史消息 ({session_path})[/dim]\n"
+                f"  [dim]已恢复 {restored} 条历史消息 ({session_path})[/dim]\n",
             )
         else:
             console.print(f"  [dim]当前无历史消息 ({session_path})[/dim]\n")
@@ -200,7 +234,9 @@ async def _run_loop(config: Config):
     # Skip if essential config (provider/model/API key) is already set globally
     if not WORKSPACE_CONFIG_FILE.exists():
         has_api_key = bool(config.api_key)
-        using_defaults = config.provider == "tongyi" and config.model == "qwen3.7-plus"
+        using_defaults = (
+            config.provider == "tongyi" and config.model == "qwen3.7-plus"
+        )
         if not has_api_key or using_defaults:
             await _handle_setup(config, agent)
 
@@ -223,7 +259,7 @@ async def _run_loop(config: Config):
         return bool(
             state
             and state.current_completion
-            and state.current_completion.text.endswith("/")
+            and state.current_completion.text.endswith("/"),
         )
 
     @_kb.add("enter", filter=has_completions)
@@ -341,7 +377,9 @@ async def _run_loop(config: Config):
     # prompt_toolkit's terminal raw mode — the first Enter gets swallowed.
     # Using the same PromptSession for confirmations fixes this.
     async def _cli_confirm_callback(
-        tool_def, arguments: dict, is_dangerous: bool
+        tool_def,
+        arguments: dict,
+        is_dangerous: bool,
     ) -> str:
         from dashscope.acli.utils.text import truncate_value
 
@@ -356,7 +394,10 @@ async def _run_loop(config: Config):
         if is_dangerous:
             prompt_sym = "是否执行? [y]es / [n]o  [y]: "
         else:
-            prompt_sym = "是否执行? [y]es / [n]o / [u]pdate (补充信息，重新规划) / [a]lways / [s]top  [y]: "
+            prompt_sym = (
+                "是否执行? [y]es / [n]o / [u]pdate (补充信息，重新规划) "
+                "/ [a]lways / [s]top  [y]: "
+            )
 
         try:
             with patch_stdout():
@@ -375,7 +416,7 @@ async def _run_loop(config: Config):
             try:
                 with patch_stdout():
                     supplement = await session.prompt_async(
-                        "[yellow]请输入补充信息:[/yellow] "
+                        "[yellow]请输入补充信息:[/yellow] ",
                     )
             except (KeyboardInterrupt, EOFError):
                 supplement = ""
@@ -394,7 +435,8 @@ async def _run_loop(config: Config):
         try:
             with patch_stdout():
                 _prompt_sym = (
-                    getattr(config, "_embedded_prompt_symbol", None) or "acli> "
+                    getattr(config, "_embedded_prompt_symbol", None)
+                    or "acli> "
                 )
                 user_input = await session.prompt_async(_prompt_sym)
             _last_ctrl_c = 0.0
@@ -438,7 +480,10 @@ async def _run_loop(config: Config):
                 continue
 
         if not user_input:
-            if agent.messages and agent.messages[-1].get("role") == "assistant":
+            if (
+                agent.messages
+                and agent.messages[-1].get("role") == "assistant"
+            ):
                 user_input = "1"
             else:
                 continue
@@ -450,13 +495,14 @@ async def _run_loop(config: Config):
 
                 env = os.environ.copy()
                 env["ACLI_CLI"] = "1"
-                proc = _sp.run(shell_cmd, shell=True, env=env)
+                proc = _sp.run(shell_cmd, shell=True, env=env, check=False)
                 if proc.returncode != 0:
                     print(f"(exit code {proc.returncode})")
             continue
 
         if user_input.startswith("/"):
-            # 勿加 patch_stdout：无 prompt app 运行时它会把输出中的 ESC 全替换成 '?'，导致 slash 命令 Rich 输出乱码
+            # 勿加 patch_stdout：无 prompt app 运行时它会把输出中的 ESC
+            # 全替换成 '?'，导致 slash 命令 Rich 输出乱码
             try:
                 result = _handle_slash_command(user_input, agent, config)
             except Exception as e:
@@ -488,7 +534,9 @@ async def _run_loop(config: Config):
                 continue
             elif result == "skill":
                 skill_result = await _handle_skill_continue(
-                    user_input, config, agent
+                    user_input,
+                    config,
+                    agent,
                 )
                 if skill_result:
                     user_input = skill_result
@@ -504,13 +552,13 @@ async def _run_loop(config: Config):
         if images and not is_vision_model(config.model):
             console.print(
                 f"[yellow]当前模型 {config.model} 不支持图片，{len(images)} 张图片已忽略。"
-                f"切换到视觉模型（如 qwen-vl-max）后重试。[/yellow]"
+                f"切换到视觉模型（如 qwen-vl-max）后重试。[/yellow]",
             )
             images = []
         if audio_clips and not is_audio_model(config.model):
             console.print(
                 f"[yellow]当前模型 {config.model} 不支持音频，{len(audio_clips)} 段音频已忽略。"
-                f"切换到音频模型（如 qwen-omni-turbo）后重试。[/yellow]"
+                f"切换到音频模型（如 qwen-omni-turbo）后重试。[/yellow]",
             )
             audio_clips = []
         user_input = _to_multimodal_content(expanded_text, images, audio_clips)
@@ -525,11 +573,12 @@ async def _run_loop(config: Config):
         except Exception as e:
             console.print(f"\n[red]错误: {e}[/red]\n")
 
-        # Auto-summarize long tasks (>= 6 new messages = user + assistant + tool calls)
+        # Auto-summarize long tasks (>= 6 new messages = user + assistant
+        # + tool calls)
         messages_added = len(agent.messages) - messages_before
         if messages_added >= 6:
             console.print(
-                f"[dim]检测到长任务 ({messages_added} 条消息)，自动总结...[/dim]"
+                f"[dim]检测到长任务 ({messages_added} 条消息)，自动总结...[/dim]",
             )
             await _do_summarize(agent, silent=False)
 

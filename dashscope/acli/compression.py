@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Context compression upgrades for long conversations.
 
 This module replaces the single message-count threshold with a token-budget
@@ -68,7 +69,12 @@ def shrink_old_tool_messages(
 
 
 class _ChatCallable(Protocol):
-    async def __call__(self, messages: list[dict], tools: list[dict]) -> object: ...
+    async def __call__(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> object:
+        ...
 
 
 def _is_cjk(ch: str) -> bool:
@@ -113,7 +119,9 @@ def _estimate_text(msg: dict) -> str:
     """
     content = msg.get("content", "")
     if isinstance(content, list):
-        content = " ".join(c.get("text", "") for c in content if isinstance(c, dict))
+        content = " ".join(
+            c.get("text", "") for c in content if isinstance(c, dict)
+        )
     if msg.get("tool_calls"):
         extras = []
         for tc in msg["tool_calls"]:
@@ -154,17 +162,16 @@ def _prepare_compress_dump(messages: list[dict]) -> str:
 
 async def _summarize(messages: list[dict], chat: _ChatCallable) -> str:
     """Ask the model to summarize the provided messages."""
-    compress_messages = [
+    compress_msgs = [
         {
             "role": "system",
             "content": (
-                "把以下对话压缩为简要摘要，保留关键决策、代码变更、文件路径、"
-                "用户偏好和工具执行结果。直接输出摘要，不要解释。"
+                "把以下对话压缩为简要摘要，保留关键决策、代码变更、文件路径、" "用户偏好和工具执行结果。直接输出摘要，不要解释。"
             ),
         },
         {"role": "user", "content": _prepare_compress_dump(messages)},
     ]
-    resp = await chat(compress_messages, tools=[])
+    resp = await chat(compress_msgs, tools=[])
     return resp.content if hasattr(resp, "content") else str(resp)
 
 
@@ -215,7 +222,9 @@ def _advance_to_safe_boundary(messages: list[dict], split: int) -> int:
                 for m in messages[split + 1 :]
                 if m.get("role") == "tool"
             }
-            pending = [tc for tc in msg["tool_calls"] if tc.get("id") not in answered]
+            pending = [
+                tc for tc in msg["tool_calls"] if tc.get("id") not in answered
+            ]
             if pending:
                 split += 1
                 continue
@@ -224,7 +233,8 @@ def _advance_to_safe_boundary(messages: list[dict], split: int) -> int:
 
 
 def preserve_recent_messages(
-    messages: list[dict], keep: int = PRESERVE_RECENT_MESSAGES
+    messages: list[dict],
+    keep: int = PRESERVE_RECENT_MESSAGES,
 ):
     """Split messages into (older_compressible, recent_preserved).
 
@@ -261,15 +271,9 @@ async def compress_messages(
 
     try:
         summary = await _summarize(older, chat)
-        content = (
-            "以下是本会话早期对话的摘要（系统自动压缩生成，仅作背景参考）：\n"
-            f"{summary}"
-        )
+        content = "以下是本会话早期对话的摘要（系统自动压缩生成，仅作背景参考）：\n" f"{summary}"
     except Exception:
-        content = (
-            f"本会话早期的 {len(older)} 条消息已省略"
-            "（系统自动压缩失败，为控制上下文长度仅保留最近对话）。"
-        )
+        content = f"本会话早期的 {len(older)} 条消息已省略" "（系统自动压缩失败，为控制上下文长度仅保留最近对话）。"
     return [{"role": "user", "content": content}, *recent]
 
 

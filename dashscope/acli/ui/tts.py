@@ -1,8 +1,12 @@
+# -*- coding: utf-8 -*-
 """Voice output: Text-to-Speech using DashScope CosyVoice API.
 
 Supports both streaming playback (low-latency, audio starts before synthesis
-finishes) and one-shot synthesis.  Uses ``dashscope.audio.tts_v2.SpeechSynthesizer``.
+finishes) and one-shot synthesis.  Uses
+``dashscope.audio.tts_v2.SpeechSynthesizer``.
 """
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
 
@@ -97,8 +101,8 @@ MAX_TEXT_LENGTH = 1800
 def is_available() -> tuple[bool, str]:
     """Check if TTS dependencies are installed."""
     try:
-        import dashscope  # noqa: F401
-        import sounddevice  # noqa: F401
+        import dashscope  # noqa: F401  # pylint: disable=unused-import
+        import sounddevice  # noqa: F401  # pylint: disable=unused-import
 
         return True, ""
     except ImportError:
@@ -284,7 +288,9 @@ class TTSPlayer:
                 SpeechSynthesizer,
             )
         except ImportError:
-            return "DashScope TTS v2 不可用，请升级 dashscope: pip install -U dashscope"
+            return (
+                "DashScope TTS v2 不可用，请升级 dashscope: pip install -U dashscope"
+            )
 
         audio_deque: collections.deque[bytes] = collections.deque()
         audio_complete = threading.Event()
@@ -393,7 +399,10 @@ class TTSPlayer:
                             header_size = buf.tell()
                             header_parsed = True
                 except (wave.Error, EOFError):
-                    if len(header_buf) >= 8192 or time.time() > header_deadline:
+                    if (
+                        len(header_buf) >= 8192
+                        or time.time() > header_deadline
+                    ):
                         break
                     audio_complete.wait(timeout=0.05)
 
@@ -419,7 +428,8 @@ class TTSPlayer:
                     return f"TTS 播放失败: {e}"
 
             # Any bytes after the WAV header are already-received audio data.
-            # Put them at the front of the deque so playback order is preserved.
+            # Put them at the front of the deque so playback order is
+            # preserved.
             if header_size < len(header_buf):
                 audio_deque.appendleft(header_buf[header_size:])
 
@@ -468,7 +478,10 @@ class TTSPlayer:
                 audio_complete.wait(timeout=60)
                 # Wait until the callback has drained the queue.
                 drain_deadline = time.time() + 5.0
-                while not playback_complete.is_set() and time.time() < drain_deadline:
+                while (
+                    not playback_complete.is_set()
+                    and time.time() < drain_deadline
+                ):
                     if not audio_deque:
                         playback_complete.set()
                     audio_complete.wait(timeout=0.1)
@@ -536,7 +549,10 @@ class StreamingTTSFeeder:
         """Start the background TTS worker thread."""
         self._stop_event.clear()
         self._done_event.clear()
-        self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker_thread = threading.Thread(
+            target=self._worker_loop,
+            daemon=True,
+        )
         self._worker_thread.start()
 
     def feed(self, text: str):
@@ -608,7 +624,12 @@ class StreamingTTSFeeder:
     def _worker_loop(self):
         """Background worker that processes queued sentences."""
         try:
-            player = TTSPlayer(self.api_key, self.model, self.voice, self.speech_rate)
+            player = TTSPlayer(
+                self.api_key,
+                self.model,
+                self.voice,
+                self.speech_rate,
+            )
 
             while not self._stop_event.is_set():
                 # Get next sentence
@@ -624,7 +645,10 @@ class StreamingTTSFeeder:
                     break
 
                 # Synthesize and play
-                err = player.speak(sentence, strip_md=False)  # Already stripped
+                err = player.speak(
+                    sentence,
+                    strip_md=False,
+                )  # Already stripped
                 if err:
                     self._error.append(err)
                     break

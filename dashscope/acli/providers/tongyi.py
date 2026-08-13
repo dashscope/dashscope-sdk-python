@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=too-many-branches,too-many-statements
 from __future__ import annotations
 
 import json
@@ -56,7 +58,8 @@ class TongyiProvider:
             return None
         result = []
         for t in tools:
-            # Already in OpenAI format (e.g. converted by anthropic_to_openai_request)
+            # Already in OpenAI format (e.g. converted by
+            # anthropic_to_openai_request)
             if t.get("type") == "function" and "function" in t:
                 result.append(t)
             else:
@@ -68,7 +71,7 @@ class TongyiProvider:
                             "description": t["description"],
                             "parameters": t["parameters"],
                         },
-                    }
+                    },
                 )
         return result
 
@@ -92,7 +95,7 @@ class TongyiProvider:
                     id=_safe_get(call, "id", "") or "",
                     name=name,
                     arguments=args,
-                )
+                ),
             )
         return result
 
@@ -128,9 +131,12 @@ class TongyiProvider:
         tools: list[dict] | None = None,
         response_format: dict | None = None,
     ) -> LLMResponse:
-        # If protocol is anthropic, convert input from Anthropic to OpenAI format
+        # If protocol is anthropic, convert input from Anthropic to
+        # OpenAI format
         if self.protocol == "anthropic":
-            from dashscope.acli.providers.adapter import anthropic_to_openai_request
+            from dashscope.acli.providers.adapter import (
+                anthropic_to_openai_request,
+            )
 
             # Agent may send system as first message, extract it
             system_msg = None
@@ -138,36 +144,45 @@ class TongyiProvider:
                 system_msg = messages[0].get("content")
                 messages = messages[1:]
             converted = anthropic_to_openai_request(
-                messages, system=system_msg, tools=tools
+                messages,
+                system=system_msg,
+                tools=tools,
             )
             messages = converted["messages"]
             tools = converted["tools"]
 
         body = self._build_request_body(
-            messages, tools, stream=False, response_format=response_format
+            messages,
+            tools,
+            stream=False,
+            response_format=response_format,
         )
         headers = self._get_headers()
 
         try:
-            async with httpx.AsyncClient(timeout=self.request_timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self.request_timeout,
+            ) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     json=body,
                     headers=headers,
                 )
-        except httpx.TimeoutException:
-            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试")
-        except httpx.ConnectError:
-            raise RuntimeError("无法连接到 API 服务器，请检查网络连接")
+        except httpx.TimeoutException as e:
+            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试") from e
+        except httpx.ConnectError as e:
+            raise RuntimeError("无法连接到 API 服务器，请检查网络连接") from e
 
         if response.status_code != 200:
             raise RuntimeError(
-                f"DashScope API error: {response.status_code} - {response.text}"
+                f"DashScope API error: {response.status_code} - "
+                f"{response.text}",
             )
 
         data = response.json()
 
-        # If protocol is anthropic, convert output from OpenAI to Anthropic format
+        # If protocol is anthropic, convert output from OpenAI to
+        # Anthropic format
         if self.protocol == "anthropic":
             from dashscope.acli.providers.adapter import (
                 anthropic_to_openai_response,
@@ -188,7 +203,8 @@ class TongyiProvider:
                     "output_tokens": usage.get("output_tokens", 0),
                     "total_tokens": usage.get("input_tokens", 0)
                     + usage.get("output_tokens", 0),
-                    "cached_tokens": usage.get("cache_read_input_tokens", 0) or 0,
+                    "cached_tokens": usage.get("cache_read_input_tokens", 0)
+                    or 0,
                 },
             )
 
@@ -212,9 +228,12 @@ class TongyiProvider:
         tools: list[dict] | None = None,
         response_format: dict | None = None,
     ) -> AsyncIterator[LLMChunk]:
-        # If protocol is anthropic, convert input from Anthropic to OpenAI format
+        # If protocol is anthropic, convert input from Anthropic to
+        # OpenAI format
         if self.protocol == "anthropic":
-            from dashscope.acli.providers.adapter import anthropic_to_openai_request
+            from dashscope.acli.providers.adapter import (
+                anthropic_to_openai_request,
+            )
 
             # Agent may send system as first message, extract it
             system_msg = None
@@ -222,20 +241,27 @@ class TongyiProvider:
                 system_msg = messages[0].get("content")
                 messages = messages[1:]
             converted = anthropic_to_openai_request(
-                messages, system=system_msg, tools=tools
+                messages,
+                system=system_msg,
+                tools=tools,
             )
             messages = converted["messages"]
             tools = converted["tools"]
 
         body = self._build_request_body(
-            messages, tools, stream=True, response_format=response_format
+            messages,
+            tools,
+            stream=True,
+            response_format=response_format,
         )
         headers = self._get_headers()
         # Request incremental streaming for DashScope
         body["stream_options"] = {"include_usage": True}
 
         try:
-            async with httpx.AsyncClient(timeout=self.request_timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self.request_timeout,
+            ) as client:
                 async with client.stream(
                     "POST",
                     f"{self.base_url}/chat/completions",
@@ -245,7 +271,8 @@ class TongyiProvider:
                     if response.status_code != 200:
                         error_body = await response.aread()
                         raise RuntimeError(
-                            f"DashScope API error: {response.status_code} - {error_body.decode()}"
+                            f"DashScope API error: {response.status_code} - "
+                            f"{error_body.decode()}",
                         )
 
                     pending_tools: dict[int, dict] = {}
@@ -285,7 +312,9 @@ class TongyiProvider:
                         finish = choice.get("finish_reason")
 
                         content = delta.get("content", "") or ""
-                        delta_reasoning = delta.get("reasoning_content", "") or ""
+                        delta_reasoning = (
+                            delta.get("reasoning_content", "") or ""
+                        )
                         raw_calls = delta.get("tool_calls", []) or []
 
                         # Accumulate tool calls across chunks
@@ -309,14 +338,19 @@ class TongyiProvider:
                                 if isinstance(args, str):
                                     pending_tools[slot]["arguments"] += args
                                 elif isinstance(args, dict):
-                                    pending_tools[slot]["arguments"] = json.dumps(
-                                        args, ensure_ascii=False
+                                    pending_tools[slot][
+                                        "arguments"
+                                    ] = json.dumps(
+                                        args,
+                                        ensure_ascii=False,
                                     )
 
                         if content:
                             yield LLMChunk(delta_content=content)
                         if delta_reasoning:
-                            yield LLMChunk(delta_reasoning_content=delta_reasoning)
+                            yield LLMChunk(
+                                delta_reasoning_content=delta_reasoning,
+                            )
 
                         if finish and finish != "null":
                             tool_calls = []
@@ -325,7 +359,11 @@ class TongyiProvider:
                                     continue
                                 raw_args = tool_data["arguments"]
                                 try:
-                                    args = json.loads(raw_args) if raw_args else {}
+                                    args = (
+                                        json.loads(raw_args)
+                                        if raw_args
+                                        else {}
+                                    )
                                 except json.JSONDecodeError:
                                     # Try to repair truncated JSON
                                     try:
@@ -337,7 +375,7 @@ class TongyiProvider:
                                         id=tool_data["id"],
                                         name=tool_data["name"],
                                         arguments=args,
-                                    )
+                                    ),
                                 )
                             if tool_calls:
                                 yield LLMChunk(
@@ -346,14 +384,18 @@ class TongyiProvider:
                                     usage=last_usage,
                                 )
                             else:
-                                yield LLMChunk(finish_reason=finish, usage=last_usage)
+                                yield LLMChunk(
+                                    finish_reason=finish,
+                                    usage=last_usage,
+                                )
                             usage_sent = usage_sent or last_usage is not None
                             # Prevent re-emission by later finish chunks or
                             # the orphan flush below (duplicate tool calls).
                             pending_tools.clear()
 
                     # Flush pending tool calls if stream ended without
-                    # finish_reason (network drop, rate limit, truncated response).
+                    # finish_reason (network drop, rate limit, truncated
+                    # response).
                     if pending_tools:
                         orphan_calls = []
                         for tool_data in pending_tools.values():
@@ -372,7 +414,7 @@ class TongyiProvider:
                                     id=tool_data["id"],
                                     name=tool_data["name"],
                                     arguments=args,
-                                )
+                                ),
                             )
                         if orphan_calls:
                             yield LLMChunk(
@@ -386,7 +428,7 @@ class TongyiProvider:
                     # 上面 finish 块 yield 时 last_usage 仍为 None，在此补发
                     if last_usage and not usage_sent:
                         yield LLMChunk(usage=last_usage)
-        except httpx.TimeoutException:
-            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试")
-        except httpx.ConnectError:
-            raise RuntimeError("无法连接到 API 服务器，请检查网络连接")
+        except httpx.TimeoutException as e:
+            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试") from e
+        except httpx.ConnectError as e:
+            raise RuntimeError("无法连接到 API 服务器，请检查网络连接") from e

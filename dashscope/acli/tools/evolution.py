@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 """Tools for skill evolution (generate skills from successful workflows)."""
+# pylint: disable=unused-argument
 
 from __future__ import annotations
 
@@ -16,7 +18,10 @@ def register_evolution_tools(get_agent: Callable) -> None:
     @registry.register(
         Tool(
             name="evolve_skill",
-            description="从当前对话的成功工作流中生成新 Skill（Skill Evolution）。分析工具调用序列，提炼为可复用的 Skill 模板。",
+            description=(
+                "从当前对话的成功工作流中生成新 Skill（Skill Evolution）。"
+                "分析工具调用序列，提炼为可复用的 Skill 模板。"
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -27,11 +32,15 @@ def register_evolution_tools(get_agent: Callable) -> None:
                     },
                 },
             },
-        )
+        ),
     )
     async def evolve_skill(force: bool = False) -> str:
-        """Generate a new skill from the current conversation's successful trajectory."""
-        from dashscope.acli.memory.skill_evolution import analyze_trajectory, save_generated_skill
+        """Generate a new skill from the current conversation's
+        successful trajectory."""
+        from dashscope.acli.memory.skill_evolution import (
+            analyze_trajectory,
+            save_generated_skill,
+        )
 
         agent = get_agent()
         if not agent or not agent.messages:

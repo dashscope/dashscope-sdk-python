@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Evaluation framework for agent quality and provider comparison.
 
 Library form (no slash command): import and drive it from scripts or tests.
@@ -7,16 +8,14 @@ Provides:
   - ``EvalRunner``: runs cases against an Agent and scores results
   - ``ProviderComparator``: A/B comparison of two providers on the same cases
 """
+# pylint: disable=too-many-branches
 
 from __future__ import annotations
 
-import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-
-from dashscope.acli.config import WORKSPACE_DIR
 
 
 @dataclass
@@ -71,7 +70,8 @@ class EvalRunner:
     """
 
     def __init__(self, agent_factory: Any = None):
-        """``agent_factory(config) -> Agent`` creates a fresh agent per case."""
+        """``agent_factory(config) -> Agent`` creates a fresh agent per
+        case."""
         self._agent_factory = agent_factory
 
     async def run_case(self, case: EvalCase, agent: Any = None) -> EvalResult:
@@ -98,7 +98,8 @@ class EvalRunner:
         try:
             async for chunk in ag.run_stream(case.input):
                 response_text += chunk
-            # Collect tools used from the last assistant message with tool_calls
+            # Collect tools used from the last assistant message with
+            # tool_calls
             for msg in reversed(ag.messages):
                 if msg.get("role") == "assistant" and "tool_calls" in msg:
                     for tc in msg["tool_calls"]:
@@ -116,7 +117,9 @@ class EvalRunner:
         if case.expected_keywords:
             response_lower = response_text.lower()
             found = sum(
-                1 for kw in case.expected_keywords if kw.lower() in response_lower
+                1
+                for kw in case.expected_keywords
+                if kw.lower() in response_lower
             )
             score += 0.4 * (found / len(case.expected_keywords))
         else:
@@ -134,7 +137,10 @@ class EvalRunner:
         # No forbidden content (0.2)
         if case.must_not_contain:
             response_lower = response_text.lower()
-            if any(term.lower() in response_lower for term in case.must_not_contain):
+            if any(
+                term.lower() in response_lower
+                for term in case.must_not_contain
+            ):
                 errors.append("Response contains forbidden content")
             else:
                 score += 0.2
@@ -208,7 +214,11 @@ class ProviderComparator:
             / max(len(results_a), 1),
             "avg_duration_b": sum(r.duration for r in results_b)
             / max(len(results_b), 1),
-            "winner": label_a if avg_a > avg_b else label_b if avg_b > avg_a else "tie",
+            "winner": label_a
+            if avg_a > avg_b
+            else label_b
+            if avg_b > avg_a
+            else "tie",
             "results_a": [r.to_dict() for r in results_a],
             "results_b": [r.to_dict() for r in results_b],
         }
@@ -217,7 +227,8 @@ class ProviderComparator:
 def load_eval_suite(path: str | Path) -> list[EvalCase]:
     """Load eval cases from a JSON file.
 
-    Format: ``[{"name": "...", "input": "...", "expected_keywords": [...], ...}]``
+    Format:
+    ``[{"name": "...", "input": "...", "expected_keywords": [...], ...}]``
     """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     cases = []
@@ -230,6 +241,6 @@ def load_eval_suite(path: str | Path) -> list[EvalCase]:
                 expected_tools=item.get("expected_tools", []),
                 must_not_contain=item.get("must_not_contain", []),
                 max_turns=item.get("max_turns", 10),
-            )
+            ),
         )
     return cases

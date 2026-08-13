@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Small TOML loader shim using tomllib (3.11+) or tomli."""
 
 from __future__ import annotations

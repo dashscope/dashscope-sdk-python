@@ -1,11 +1,19 @@
+# -*- coding: utf-8 -*-
 """Device and multimedia command handlers (camera, voice, tts)."""
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 
 from dashscope.acli.cli.constants import ASR_MODELS
 from dashscope.acli.config import Config
+
+if TYPE_CHECKING:
+    from dashscope.acli.agent import Agent
 
 console = Console()
 
@@ -24,7 +32,8 @@ def _handle_camera_command(cmd: str) -> None:
         )
         console.print(f"[dim]摄像头状态: {status}[/dim]")
         console.print(
-            f"[dim]用法: /camera capture [file] | /camera record [duration] [file][/dim]"
+            "[dim]用法: /camera capture [file] | "
+            "/camera record [duration] [file][/dim]",
         )
         return
     if parts[1] == "capture":
@@ -44,7 +53,8 @@ def _handle_camera_command(cmd: str) -> None:
         result = record(filename, duration)
     else:
         console.print(
-            "[dim]用法: /camera capture [file] | /camera record [duration] [file][/dim]"
+            "[dim]用法: /camera capture [file] | "
+            "/camera record [duration] [file][/dim]",
         )
         return
     if result.startswith("错误"):
@@ -99,7 +109,9 @@ def _handle_voice_command(cmd: str, config: Config) -> bool | str:
 
     if sub == "silence":
         if len(parts) < 3:
-            console.print(f"[dim]当前停顿阈值: {config.voice_silence_duration}s[/dim]")
+            console.print(
+                f"[dim]当前停顿阈值: {config.voice_silence_duration}s[/dim]",
+            )
             console.print("[dim]用法: /voice silence <seconds>[/dim]")
             return True
         try:
@@ -134,7 +146,7 @@ def _handle_voice_command(cmd: str, config: Config) -> bool | str:
     if sub == "threshold":
         if len(parts) < 3:
             console.print(
-                f"[dim]当前静音 RMS 阈值: {config.voice_silence_threshold}[/dim]"
+                f"[dim]当前静音 RMS 阈值: {config.voice_silence_threshold}[/dim]",
             )
             console.print("[dim]用法: /voice threshold <rms>[/dim]")
             return True
@@ -169,7 +181,11 @@ def _handle_voice_command(cmd: str, config: Config) -> bool | str:
     return True
 
 
-def _handle_tts_command(cmd: str, config: Config, agent: "Agent" = None) -> None:
+def _handle_tts_command(
+    cmd: str,
+    config: Config,
+    agent: "Agent" = None,
+) -> None:
     """/tts — Text-to-Speech voice output control.
 
     /tts on/off           — enable/disable auto TTS on agent replies
@@ -217,7 +233,7 @@ def _handle_tts_command(cmd: str, config: Config, agent: "Agent" = None) -> None
         else:
             console.print("  状态: [dim]关闭[/dim]")
             console.print(
-                "  [yellow]提示: 自动朗读默认关闭，需执行 /tts on 显式开启[/yellow]"
+                "  [yellow]提示: 自动朗读默认关闭，需执行 /tts on 显式开启[/yellow]",
             )
         console.print(f"  模型: [cyan]{config.tts_model}[/cyan]")
         voice_name = VOICE_DISPLAY.get(config.tts_voice, config.tts_voice)
@@ -263,12 +279,18 @@ def _handle_tts_command(cmd: str, config: Config, agent: "Agent" = None) -> None
                 return
             console.print("[bold]选择 TTS 语音[/bold]")
             console.print(
-                f"[dim]当前: {config.tts_voice} ({VOICE_DISPLAY.get(config.tts_voice, config.tts_voice)})[/dim]\n"
+                f"[dim]当前: {config.tts_voice} "
+                f"({VOICE_DISPLAY.get(config.tts_voice, config.tts_voice)}"
+                f")[/dim]\n",
             )
             for i, v in enumerate(voices, 1):
                 display_name = VOICE_DISPLAY.get(v, v)
-                marker = " [green]← 当前[/green]" if v == config.tts_voice else ""
-                console.print(f"  [cyan][{i}][/cyan] {v} — {display_name}{marker}")
+                marker = (
+                    " [green]← 当前[/green]" if v == config.tts_voice else ""
+                )
+                console.print(
+                    f"  [cyan][{i}][/cyan] {v} — {display_name}{marker}",
+                )
             console.print("\n[dim]输入序号选择，q 取消[/dim]")
             try:
                 choice = input("> ").strip()
@@ -285,7 +307,9 @@ def _handle_tts_command(cmd: str, config: Config, agent: "Agent" = None) -> None
                     config.save_workspace()
                     config.save_global()
                     console.print(
-                        f"[green]✓ TTS 语音已切换为: {voices[idx]} ({VOICE_DISPLAY.get(voices[idx], voices[idx])})[/green]"
+                        f"[green]✓ TTS 语音已切换为: {voices[idx]} "
+                        f"({VOICE_DISPLAY.get(voices[idx], voices[idx])}"
+                        f")[/green]",
                     )
                 else:
                     console.print("[red]无效的选择[/red]")
@@ -307,7 +331,8 @@ def _handle_tts_command(cmd: str, config: Config, agent: "Agent" = None) -> None
         config.save_workspace()
         config.save_global()
         console.print(
-            f"[green]✓ TTS 语音已切换为: {voice_name} ({VOICE_DISPLAY.get(voice_name, voice_name)})[/green]"
+            f"[green]✓ TTS 语音已切换为: {voice_name} "
+            f"({VOICE_DISPLAY.get(voice_name, voice_name)})[/green]",
         )
         return
 
@@ -318,7 +343,7 @@ def _handle_tts_command(cmd: str, config: Config, agent: "Agent" = None) -> None
             return
         try:
             speed = float(parts[2])
-            if not (0.5 <= speed <= 2.0):
+            if not 0.5 <= speed <= 2.0:
                 console.print("[red]语速必须在 0.5-2.0 之间[/red]")
                 return
             config.tts_speed = speed
@@ -356,7 +381,7 @@ def _handle_tts_command(cmd: str, config: Config, agent: "Agent" = None) -> None
         if not ok:
             console.print(f"[red]{err}[/red]")
             return
-        console.print(f"[dim]朗读上一次回复...[/dim]")
+        console.print("[dim]朗读上一次回复...[/dim]")
         speak_text(
             config.tongyi_api_key,
             agent.last_output,
@@ -374,5 +399,5 @@ def _handle_tts_command(cmd: str, config: Config, agent: "Agent" = None) -> None
         "  /tts voice <name>     — 切换语音\n"
         "  /tts speed <0.5-2.0>  — 设置语速\n"
         "  /tts say <text>       — 朗读指定文本\n"
-        "  /tts last             — 朗读上一次回复[/dim]"
+        "  /tts last             — 朗读上一次回复[/dim]",
     )

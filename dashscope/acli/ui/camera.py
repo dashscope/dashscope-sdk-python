@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Camera capture: take a photo from the webcam."""
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import time
 def is_available() -> tuple[bool, str]:
     """Check if camera capture is possible."""
     try:
-        import cv2  # noqa: F401
+        import cv2  # noqa: F401  # pylint: disable=unused-import
 
         return True, "opencv"
     except ImportError:
@@ -76,6 +77,7 @@ def _capture_imagesnap(output_path: str) -> str:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if result.returncode != 0:
             return f"错误: imagesnap 失败 - {result.stderr.strip()}"
@@ -93,8 +95,12 @@ def _capture_imagesnap(output_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def record(output_path: str = "camera_record.mp4", duration: float = 5.0) -> str:
-    """Record video from webcam for *duration* seconds. Returns success/error message."""
+def record(
+    output_path: str = "camera_record.mp4",
+    duration: float = 5.0,
+) -> str:
+    """Record video from webcam for *duration* seconds. Returns
+    success/error message."""
     output_path = os.path.expanduser(output_path)
     parent = os.path.dirname(output_path)
     if parent and not os.path.exists(parent):
@@ -154,7 +160,8 @@ def _record_opencv(output_path: str, duration: float) -> str:
     size = os.path.getsize(abs_path)
     actual_dur = time.time() - start
     return (
-        f"已录制保存: {abs_path} ({size / 1024:.1f} KB, {actual_dur:.1f}s, {frames} 帧)"
+        f"已录制保存: {abs_path} ({size / 1024:.1f} KB, "
+        f"{actual_dur:.1f}s, {frames} 帧)"
     )
 
 
@@ -184,6 +191,7 @@ def _record_ffmpeg(output_path: str, duration: float) -> str:
             capture_output=True,
             text=True,
             timeout=duration + 10,
+            check=False,
         )
         if result.returncode != 0:
             return f"错误: ffmpeg 失败 - {result.stderr.strip()[:200]}"

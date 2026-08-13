@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Lightweight stderr spinners used by the CLI and executor."""
 
 from __future__ import annotations
@@ -9,7 +10,8 @@ import time
 
 
 class StderrSpinner:
-    """Lightweight sync spinner — writes to stderr to avoid terminal conflicts."""
+    """Lightweight sync spinner — writes to stderr to avoid terminal
+    conflicts."""
 
     FRAMES = ("·", "▪", "■", "█", "■", "▪", "·")
     COLORS = (
@@ -47,7 +49,8 @@ class StderrSpinner:
             frame = self.FRAMES[i % len(self.FRAMES)]
             color = self.COLORS[(i // 3) % len(self.COLORS)]
             sys.stderr.write(
-                f"\r{color}{frame}{self.RESET} {self.DIM}{self._text}{self.RESET}"
+                f"\r{color}{frame}{self.RESET} "
+                f"{self.DIM}{self._text}{self.RESET}",
             )
             sys.stderr.flush()
             i += 1
@@ -55,7 +58,8 @@ class StderrSpinner:
 
 
 class AsyncSpinner:
-    """Lightweight async spinner — writes to stderr, safe outside patch_stdout()."""
+    """Lightweight async spinner — writes to stderr, safe outside
+    patch_stdout()."""
 
     FRAMES = ("·", "▪", "■", "█", "■", "▪", "·")
     COLORS = (
@@ -96,7 +100,8 @@ class AsyncSpinner:
             frame = self.FRAMES[i % len(self.FRAMES)]
             color = self.COLORS[(i // 3) % len(self.COLORS)]
             sys.stderr.write(
-                f"\r{color}{frame}{self.RESET} {self.DIM}{self._text}{self.RESET}"
+                f"\r{color}{frame}{self.RESET} "
+                f"{self.DIM}{self._text}{self.RESET}",
             )
             sys.stderr.flush()
             i += 1

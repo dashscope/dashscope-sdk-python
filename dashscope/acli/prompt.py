@@ -1,8 +1,10 @@
-"""Prompt assembly helpers — project instruction discovery and safe preprocessing.
+# -*- coding: utf-8 -*-
+"""Prompt assembly helpers — project instruction discovery and safe
+preprocessing.
 
-Hermes separates stable prompt layers (identity, tool guidelines, project context)
-from ephemeral runtime injections. acli keeps its dynamic `_section()` pipeline but
-adds:
+Hermes separates stable prompt layers (identity, tool guidelines,
+project context) from ephemeral runtime injections. acli keeps its
+dynamic `_section()` pipeline but adds:
 
 1. Project-instruction auto-discovery with priority-based first-match loading.
 2. Safety preprocessing: YAML frontmatter stripping, length caps, head-to-tail
@@ -50,12 +52,15 @@ def _sanitize_project_instructions(text: str) -> str:
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = text.strip()
     return truncate_head_tail(
-        text, max_chars=_MAX_PROJECT_INSTRUCTION_CHARS, ratio=_HEAD_TAIL_RATIO
+        text,
+        max_chars=_MAX_PROJECT_INSTRUCTION_CHARS,
+        ratio=_HEAD_TAIL_RATIO,
     )
 
 
 def _load_rules_jsonl(path: Path) -> str:
-    """Load enabled rules from a JSONL file and render them as markdown bullets.
+    """Load enabled rules from a JSONL file and render them as markdown
+    bullets.
 
     Each line is a JSON object.  Required field: ``text``.  Optional fields:
     ``enabled`` (default true), ``id``, ``scope``.  Disabled or malformed lines
@@ -103,7 +108,8 @@ def _candidate_files(start_dir: Path | None = None) -> Iterable[Path]:
 
 
 def discover_project_instructions(start_dir: Path | None = None) -> str | None:
-    """Find and return sanitized project instructions using first-match priority.
+    """Find and return sanitized project instructions using first-match
+    priority.
 
     Searches upward from ``start_dir`` (default current directory) for known
     instruction files and returns the first one found after stripping

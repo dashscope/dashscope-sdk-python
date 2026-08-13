@@ -1,7 +1,9 @@
+# -*- coding: utf-8 -*-
 """Directives Auto-Learning: Propose rules from user behavior patterns.
 
-Based on the ACE/MCE pattern (Weng 2026): Agent observes recurring user behaviors
-and proposes operational rules ("directives") that the user can accept or reject.
+Based on the ACE/MCE pattern (Weng 2026): Agent observes recurring user
+behaviors and proposes operational rules ("directives") that the user
+can accept or reject.
 
 Example: "我发现你总在做 git commit 后立即 git push，要不要加为 rule？"
 
@@ -15,7 +17,7 @@ Architecture:
 from __future__ import annotations
 
 import json
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -73,7 +75,7 @@ def record_tool_sequence(tools: list[str]) -> None:
         {
             "tools": tools,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
+        },
     )
 
     # Keep only last 100 sequences
@@ -121,7 +123,7 @@ def analyze_patterns() -> list[dict[str, Any]]:
                     "frequency": count,
                     "confidence": confidence,
                     "tools": [tool1, tool2],
-                }
+                },
             )
 
     return proposals
@@ -207,7 +209,8 @@ def reject_directive(proposal_id: str) -> bool:
 
 
 def get_directive_proposals_summary() -> str:
-    """Get a summary of pending directive proposals for system prompt injection."""
+    """Get a summary of pending directive proposals for system prompt
+    injection."""
     proposals = list_proposed_directives("pending")
     if not proposals:
         return ""

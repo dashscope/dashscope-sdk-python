@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Argument validation and coercion helpers for tool execution."""
 
 from __future__ import annotations
@@ -58,7 +59,10 @@ def coerce_types(func, arguments: dict) -> dict:
             is_union = is_union or isinstance(expected, types.UnionType)
         if is_union:
             args = getattr(expected, "__args__", ())
-            actual_type = next((a for a in args if a is not type(None)), expected)
+            actual_type = next(
+                (a for a in args if a is not type(None)),
+                expected,
+            )
 
         # Convert string to target type. Some LLMs (DashScope qwen, in
         # particular) emit numeric args as decimal-looking strings even when
@@ -87,7 +91,10 @@ def coerce_types(func, arguments: dict) -> dict:
     return coerced
 
 
-def missing_required_args(tool_def: ToolDefinition, arguments: dict) -> list[str]:
+def missing_required_args(
+    tool_def: ToolDefinition,
+    arguments: dict,
+) -> list[str]:
     """Return the list of required-by-schema arg names that are missing,
     explicitly None, or — for string params — an empty/whitespace-only
     value. Models sometimes emit ``""`` when they mean "not given"; we

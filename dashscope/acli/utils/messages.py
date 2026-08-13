@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 """Shared helpers for converting and inspecting chat messages."""
+# pylint: disable=too-many-branches
 
 from __future__ import annotations
 
@@ -16,7 +18,8 @@ _FULL_DISPLAY_TOOLS = frozenset({"write_file"})
 
 
 def message_text_for_compress(msg: dict) -> str:
-    """Return a human-readable text representation of a message for compression.
+    """Return a human-readable text representation of a message for
+    compression.
 
     Strips raw tool-call scaffolding so the summarization prompt stays clean
     and the resulting summary does not contain XML/noise that pollutes memory.
@@ -24,7 +27,9 @@ def message_text_for_compress(msg: dict) -> str:
     role = msg.get("role", "?")
     content = msg.get("content", "")
     if isinstance(content, list):
-        content = " ".join(c.get("text", "") for c in content if isinstance(c, dict))
+        content = " ".join(
+            c.get("text", "") for c in content if isinstance(c, dict)
+        )
 
     if role == "assistant" and "tool_calls" in msg:
         parts = []
@@ -78,11 +83,12 @@ def normalize_for_model(messages: list[dict], model: str) -> list[dict]:
     through). Text-only models would otherwise hit "Unexpected item type
     in content" from the backend the moment session history contains a
     prior turn with images — e.g., user sent ``@pic.png`` to qwen-vl-max,
-    then switched to qwen-plus via /provider (text-only). We flatten list content to a
-    single string per message: text blocks concatenated, image blocks
-    replaced by a short placeholder so the model still knows an image
-    was there. ``self.messages`` itself is untouched — switching back to
-    a vision model restores the original blocks."""
+    then switched to qwen-plus via /provider (text-only). We flatten
+    list content to a single string per message: text blocks
+    concatenated, image blocks replaced by a short placeholder so the
+    model still knows an image was there. ``self.messages`` itself is
+    untouched — switching back to a vision model restores the original
+    blocks."""
     from dashscope.acli.config import is_audio_model, is_vision_model
 
     supports_vision = is_vision_model(model)
@@ -133,14 +139,14 @@ def normalize_for_model(messages: list[dict], model: str) -> list[dict]:
                     new_blocks.append(blk)
                 else:
                     new_blocks.append(
-                        {"type": "text", "text": "[图片已省略 — 当前模型不支持图片]"}
+                        {"type": "text", "text": "[图片已省略 — 当前模型不支持图片]"},
                     )
             elif t == "input_audio":
                 if supports_audio:
                     new_blocks.append(blk)
                 else:
                     new_blocks.append(
-                        {"type": "text", "text": "[音频已省略 — 当前模型不支持音频]"}
+                        {"type": "text", "text": "[音频已省略 — 当前模型不支持音频]"},
                     )
         new_m = dict(m)
         new_m["content"] = new_blocks
@@ -165,7 +171,10 @@ def tool_result_for_display(tool_name: str, result: str) -> str:
 MAX_TOOL_RESULT_HISTORY_CHARS = 8000
 
 
-def tool_result_for_history(result: str, max_chars: int = MAX_TOOL_RESULT_HISTORY_CHARS) -> str:
+def tool_result_for_history(
+    result: str,
+    max_chars: int = MAX_TOOL_RESULT_HISTORY_CHARS,
+) -> str:
     """Cap a tool result before it is stored in history (head + tail kept)."""
     from dashscope.acli.utils.text import truncate_head_tail
 

@@ -290,7 +290,7 @@ def _maybe_offer_example_download():
         return
     err_console.print(
         "[cyan]首次运行：[/cyan]可下载 dashscope-sdk-expert 示例配置到 ./.acli/\n"
-        "（SDK 问答专家人设 + 技能模板 + SDK 知识索引，纯配置，可随时编辑）。"
+        "（SDK 问答专家人设 + 技能模板 + SDK 知识索引，纯配置，可随时编辑）。",
     )
     try:
         answer = input("下载示例配置? [Y/n] ").strip().lower()
@@ -306,7 +306,8 @@ def _maybe_offer_example_download():
             pass
         err_console.print(
             "[dim]已跳过。之后想定制可随时运行： "
-            "python -m dashscope.acli example download dashscope-sdk-expert[/dim]"
+            "python -m dashscope.acli example download "
+            "dashscope-sdk-expert[/dim]",
         )
         return
     _handle_example_command(["download", _EXPERT_EXAMPLE])
@@ -318,7 +319,8 @@ def _route_to_expert(command, tui=None):
         from dashscope.acli.ui.embedded import run
     except ImportError as exception:
         err_console.print(
-            "[yellow]Tip:[/yellow] Install dashscope[acli] to enable the agent "
+            "[yellow]Tip:[/yellow] Install dashscope[acli] to enable "
+            "the agent "
             f"({exception}).",
         )
         return

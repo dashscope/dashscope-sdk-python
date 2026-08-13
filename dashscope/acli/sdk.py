@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Lightweight programmatic SDK for embedding acli in other applications.
 
 This module exposes a stable, typed API surface on top of the lower-level
@@ -13,11 +14,11 @@ Example::
     result = asyncio.run(run_once("Summarize README.md"))
     print(result)
 """
+# pylint: disable=unused-import
 
 from __future__ import annotations
 
 import asyncio
-import sys
 import uuid
 from pathlib import Path
 from typing import AsyncIterator, Optional
@@ -76,7 +77,9 @@ def create_agent(
 
     from dashscope.acli.cli import _compose_system_prompt, _load_system_prompt
 
-    resolved_prompt = _compose_system_prompt(system_prompt or _load_system_prompt())
+    resolved_prompt = _compose_system_prompt(
+        system_prompt or _load_system_prompt(),
+    )
     provider = get_provider_chain(config)
     executor = Executor()
 

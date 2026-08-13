@@ -1,4 +1,8 @@
-"""Voice input: record from microphone + realtime DashScope ASR streaming with VAD."""
+# -*- coding: utf-8 -*-
+"""Voice input: record from microphone + realtime DashScope ASR streaming
+with VAD."""
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements,protected-access,unused-argument
 
 from __future__ import annotations
 
@@ -12,9 +16,9 @@ from typing import Optional
 def is_available() -> tuple[bool, str]:
     """Check if voice input dependencies are installed."""
     try:
-        import dashscope  # noqa: F401
-        import numpy  # noqa: F401
-        import sounddevice  # noqa: F401
+        import dashscope  # noqa: F401  # pylint: disable=unused-import
+        import numpy  # noqa: F401  # pylint: disable=unused-import
+        import sounddevice  # noqa: F401  # pylint: disable=unused-import
 
         return True, ""
     except ImportError:
@@ -24,7 +28,9 @@ def is_available() -> tuple[bool, str]:
 SAMPLE_RATE = 16000
 CHANNELS = 1
 DTYPE = "int16"
-DEFAULT_SILENCE_THRESHOLD = 500  # RMS below this = silence (speech typically 800+)
+DEFAULT_SILENCE_THRESHOLD = (
+    500  # RMS below this = silence (speech typically 800+)
+)
 DEFAULT_SILENCE_DURATION = 2.0  # seconds of silence to auto-stop
 DEFAULT_MAX_RECORDING_SECONDS = 60  # maximum recording duration
 MAX_ASR_RESTARTS = 3  # max session restarts before giving up
@@ -34,8 +40,8 @@ _voice_cancel_event: Optional[threading.Event] = None
 
 
 def try_cancel_voice_input() -> bool:
-    """Signal an ongoing voice_input call to cancel. Returns True if cancelled."""
-    global _voice_cancel_event
+    """Signal an ongoing voice_input call to cancel. Returns True if
+    cancelled."""
     if _voice_cancel_event is not None and not _voice_cancel_event.is_set():
         _voice_cancel_event.set()
         return True
@@ -44,7 +50,9 @@ def try_cancel_voice_input() -> bool:
 
 class _RealtimeASR:
     """Wraps DashScope Recognition in streaming mode with live partial display.
-    Supports automatic session restart when the server silently drops the connection."""
+    Supports automatic session restart when the server silently drops the
+    connection.
+    """
 
     def __init__(self, api_key: str, model: str):
         os.environ.setdefault("DASHSCOPE_API_KEY", api_key)
@@ -126,7 +134,8 @@ class _RealtimeASR:
             self._callback_log.append("start() called")
 
     def restart(self):
-        """Restart the ASR session. Called when server silently drops connection."""
+        """Restart the ASR session. Called when server silently drops
+        connection."""
         with self._lock:
             if self._stopped:
                 return
@@ -214,10 +223,11 @@ async def voice_input(
     Args:
         api_key: DashScope API key
         model: ASR model name
-        display_callback: Optional callable(text: str) for TUI mode. If provided,
-                         real-time ASR output is sent here instead of rich.console.
-        cancel_event: Optional threading.Event for TUI mode. If provided, set it
-                     to cancel recording instead of pressing Enter.
+        display_callback: Optional callable(text: str) for TUI mode. If
+                         provided, real-time ASR output is sent here
+                         instead of rich.console.
+        cancel_event: Optional threading.Event for TUI mode. If provided,
+                     set it to cancel recording instead of pressing Enter.
         silence_threshold: RMS below this is treated as silence.
         silence_duration: Seconds of silence before auto-stop.
         max_recording_seconds: Maximum recording duration before auto-stop.
@@ -314,7 +324,9 @@ async def _voice_input_impl(
             # Start silence timer even without prior speech (fallback after 5s)
             if silence_start is None:
                 silence_start = time.time()
-            elif has_speech and time.time() - silence_start >= silence_duration:
+            elif (
+                has_speech and time.time() - silence_start >= silence_duration
+            ):
                 # Speech detected, then silence for silence_duration
                 stop_event.set()
             elif (
@@ -343,7 +355,8 @@ async def _voice_input_impl(
 
     if console:
         console.print(
-            "[bold green]🎤 录音中...[/bold green] [dim](说完自动停止，或按 Enter 结束)[/dim]"
+            "[bold green]🎤 录音中...[/bold green] "
+            "[dim](说完自动停止，或按 Enter 结束)[/dim]",
         )
     elif display_callback:
         display_callback("🎤 录音中... (说完自动停止)")
@@ -355,9 +368,16 @@ async def _voice_input_impl(
         # Non-TUI mode: use rich.live.Live and wait for Enter
         if console:
             with Live(
-                "", console=console, refresh_per_second=8, transient=True
+                "",
+                console=console,
+                refresh_per_second=8,
+                transient=True,
             ) as live:
-                enter_future = loop.run_in_executor(None, _wait_for_enter, stop_event)
+                enter_future = loop.run_in_executor(
+                    None,
+                    _wait_for_enter,
+                    stop_event,
+                )
 
                 while not stop_event.is_set():
                     current = asr.current_display
@@ -366,7 +386,8 @@ async def _voice_input_impl(
                         last_display = current
                     try:
                         await asyncio.wait_for(
-                            asyncio.shield(enter_future), timeout=0.15
+                            asyncio.shield(enter_future),
+                            timeout=0.15,
                         )
                         break
                     except asyncio.TimeoutError:
@@ -384,7 +405,7 @@ async def _voice_input_impl(
                 if elapsed >= max_recording_seconds:
                     if display_callback:
                         display_callback(
-                            f"[提示] 达到最大录音时长 ({max_recording_seconds}秒)"
+                            f"[提示] 达到最大录音时长 ({max_recording_seconds}秒)",
                         )
                     stop_event.set()
                     break
@@ -433,12 +454,9 @@ async def _voice_input_impl(
 
 def _wait_for_enter(stop_event: threading.Event) -> None:
     """Block until user presses Enter or stop_event is set."""
-    import os
-
     if os.name == "nt":
         # Windows: use msvcrt for non-blocking keyboard input
         import msvcrt
-        import time
 
         while not stop_event.is_set():
             if msvcrt.kbhit():

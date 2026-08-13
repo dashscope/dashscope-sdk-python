@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Developer / extension commands.
 
 `/dev` 提供两类能力：
@@ -13,6 +14,9 @@
    - `tool`                 新增一个本地工具
    - `skill`                新增一个预置 Skill
 """
+# pylint: disable=wrong-import-position,wrong-import-order,unused-argument
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
 
@@ -57,7 +61,8 @@ def _infer_provider_from_model(model: str) -> str | None:
     """
     model_lower = model.lower()
     for prefix, provider in sorted(
-        _MODEL_PROVIDER_HINTS.items(), key=lambda x: -len(x[0])
+        _MODEL_PROVIDER_HINTS.items(),
+        key=lambda x: -len(x[0]),
     ):
         if model_lower.startswith(prefix):
             return provider
@@ -67,7 +72,8 @@ def _infer_provider_from_model(model: str) -> str | None:
 def _apply_custom_models(config: Config) -> None:
     """Merge config.custom_models into the in-process PROVIDER_MODELS dict.
 
-    Format of each entry: `provider:model`. Unknown providers are skipped silently.
+    Format of each entry: `provider:model`. Unknown providers are skipped
+    silently.
     """
     for entry in getattr(config, "custom_models", []) or []:
         if ":" not in entry:
@@ -88,14 +94,14 @@ def _model_add(config: Config, provider: str, model: str) -> None:
     normalized = normalize_model_name(model)
     if normalized != model.strip():
         console.print(
-            f"[dim]模型名归一化为 {normalized} (API 模型 ID 大小写敏感)[/dim]"
+            f"[dim]模型名归一化为 {normalized} (API 模型 ID 大小写敏感)[/dim]",
         )
     if normalized in {m.lower() for m in PROVIDER_MODELS[provider]}:
         console.print(f"[dim]{provider}/{normalized} 已存在[/dim]")
         return
     register_custom_model(config, provider, normalized)
     console.print(f"[green]✓ 已注册 {provider}/{normalized}[/green]")
-    console.print(f"[dim]切到该模型: /provider[/dim]")
+    console.print("[dim]切到该模型: /provider[/dim]")
 
 
 def _model_remove(config: Config, provider: str, model: str) -> None:
@@ -116,7 +122,9 @@ def _model_list(config: Config) -> None:
     console.print(Markdown(_format_models()))
     if config.custom_models:
         console.print()
-        console.print(f"[dim]Workspace 自定义: {', '.join(config.custom_models)}[/dim]")
+        console.print(
+            f"[dim]Workspace 自定义: {', '.join(config.custom_models)}[/dim]",
+        )
 
 
 # ===== Guides =====
@@ -131,16 +139,18 @@ _GUIDE_PROVIDER = """\
 acli 只内置 3 个协议实现，所有 provider（含内置 tongyi/anthropic/openai/
 deepseek/zhipu/ideatalk/ollama）都通过 `custom-extensions.toml` 配置：
 
-| 协议字段     | 实现类            | 适用场景                                  |
-|--------------|-------------------|-------------------------------------------|
-| `openai`     | `OpenAIProvider`  | OpenAI 兼容端点（Moonshot/Yi/Step/Deepseek/Zhipu/Ollama…） |
-| `anthropic`  | `AnthropicProvider` | Anthropic Messages API（Claude / 代理端） |
-| `dashscope`  | `TongyiProvider`  | DashScope OpenAI-compat 端点（通义千问）  |
+| 协议字段    | 实现类              | 适用场景                   |
+|-------------|---------------------|----------------------------|
+| `openai`    | `OpenAIProvider`    | OpenAI 兼容端点（Moonshot/ |
+|             |                     | Yi/Step/Deepseek/Zhipu/Ollama…） |
+| `anthropic` | `AnthropicProvider` | Anthropic Messages API（Claude / 代理端） |
+| `dashscope` | `TongyiProvider`    | DashScope OpenAI-compat 端点（通义千问） |
 
 **步骤**（Layer-1，推荐）
 
 1. 运行 `/dev provider add`，交互式填 name / base_url / api_key / model / protocol
-2. 或手动在 `~/.acli/custom-extensions.toml`（全局）或 `./.acli/custom-extensions.toml`（workspace）加一段：
+2. 或手动在 `~/.acli/custom-extensions.toml`（全局）或
+   `./.acli/custom-extensions.toml`（workspace）加一段：
 
 ```toml
 # Moonshot / Kimi —— OpenAI 兼容
@@ -193,15 +203,23 @@ _GUIDE_PLATFORM = """\
 
 **步骤**
 
-1. 在 `src/acli/platforms/<vendor>/` 下新建包，写一个客户端类，按 `platforms/base.py` 的 Protocol 之一实现接口（`MemoryProvider` / `KBProvider` / `SearchProvider` / `ContextProvider` / `DataProvider` / `PromptProvider`）
+1. 在 `src/acli/platforms/<vendor>/` 下新建包，写一个客户端类，按
+   `platforms/base.py` 的 Protocol 之一实现接口（`MemoryProvider` /
+   `KBProvider` / `SearchProvider` / `ContextProvider` / `DataProvider` /
+   `PromptProvider`）
    - 若是全新能力类别，先去 `platforms/base.py` 增加新的 Protocol + dataclass
-2. 在 `src/acli/platforms/__init__.py` 加 `get_<cap>_provider(config)` 工厂；缺凭证时返回 `None`
+2. 在 `src/acli/platforms/__init__.py` 加 `get_<cap>_provider(config)`
+   工厂；缺凭证时返回 `None`
 3. 在 `src/acli/cli.py` `CAPABILITY_CATALOG` 加一行：
    ```python
-   {"key": "<vendor>.<cap>", "name": "...", "platform": "<vendor>", "cap": "<cap>", "requires": ["..."]}
+   {"key": "<vendor>.<cap>", "name": "...", "platform": "<vendor>",
+   "cap": "<cap>", "requires": ["..."]}
    ```
-4. 在 `src/acli/tools/platform.py` `register_platform_tools()` 加分支，在能力启用时把 client 包成若干工具注册到 `registry`
-5. 如需 `/<cap>` 子命令，在 `cli.py` 加 `_handle_<cap>_command` 并在 `_handle_slash_command` + `_run_loop` 路由里挂载（注意走 `_require_capability` 网关）
+4. 在 `src/acli/tools/platform.py` `register_platform_tools()` 加分支，
+   在能力启用时把 client 包成若干工具注册到 `registry`
+5. 如需 `/<cap>` 子命令，在 `cli.py` 加 `_handle_<cap>_command` 并在
+   `_handle_slash_command` + `_run_loop` 路由里挂载（注意走
+   `_require_capability` 网关）
 6. 如果想被 `/update` 同步资源，在 `cli.py` `_get_update_targets()` 注册一个 `_sync_<vendor>`
 
 **验证**
@@ -234,9 +252,11 @@ _GUIDE_TOOL = """\
    def my_tool(path: str, limit: int = 10) -> str:
        ...
    ```
-   - 参数 schema 由 `_build_parameters_schema` 从类型注解自动推导（`str/int/float/bool/list/dict` + `Optional`）
+   - 参数 schema 由 `_build_parameters_schema` 从类型注解自动推导
+     （`str/int/float/bool/list/dict` + `Optional`）
    - 返回字符串作为 tool result 喂回 LLM
-2. 在 `src/acli/cli.py` 顶部加一行 `import acli.tools.<name>` 触发注册（看 filesystem/shell 的写法）
+2. 在 `src/acli/cli.py` 顶部加一行 `import acli.tools.<name>`
+   触发注册（看 filesystem/shell 的写法）
 3. 写好 description——它是 LLM 决定要不要调你这个工具的唯一依据，要写清楚 **何时该调 / 何时不该调 / 输入输出**
 
 **权限分级**
@@ -267,17 +287,20 @@ _GUIDE_SKILL = """\
    register(Skill(
        name="my-skill",
        description="一句话说这个 Skill 干嘛",
-       mcp_service="",                          # 若依赖 MCP 服务则填 service 名，会自动尝试连接
+       mcp_service="",  # 若依赖 MCP 服务则填 service 名，会自动尝试连接
        prompt_template="请... {arg1} ... {arg2}",  # f-string 风格的占位符
        arguments=["arg1", "arg2"],              # 最后一个会贪婪匹配剩余 token
    ))
    ```
-2. 在 `src/acli/skills/__init__.py` 的 `from acli.skills import ...` 行追加你的模块名，触发注册副作用
+2. 在 `src/acli/skills/__init__.py` 的 `from acli.skills import ...`
+   行追加你的模块名，触发注册副作用
 3. 调用：`/skill my-skill 值1 值2`；不带参数会打印 usage
 
 **依赖 MCP 服务的写法**
 
-- `mcp_service="time"` 这种填了名字的，`/skill` 会先尝试 auto-connect；要让它在 `/mcp services` 里可见，去 `skills/base.py` 的 `KNOWN_MCP_SERVICES` 加描述
+- `mcp_service="time"` 这种填了名字的，`/skill` 会先尝试 auto-connect；
+  要让它在 `/mcp services` 里可见，去 `skills/base.py` 的
+  `KNOWN_MCP_SERVICES` 加描述
 """
 
 
@@ -333,9 +356,8 @@ _GUIDES = {
 
 # ===== Runtime: extension provider / capability management =====
 
-import getpass
-import os
-from pathlib import Path
+import getpass  # noqa: E402
+import os  # noqa: E402
 
 
 def _prompt(label: str, default: str = "", secret: bool = False) -> str:
@@ -351,11 +373,14 @@ def _prompt(label: str, default: str = "", secret: bool = False) -> str:
 
 def _choose_target(default_global: bool = True):
     """Ask the user whether to write to global or workspace toml file."""
-    from dashscope.acli.extensions import GLOBAL_EXTENSIONS_FILE, WORKSPACE_EXTENSIONS_FILE
+    from dashscope.acli.extensions import (
+        GLOBAL_EXTENSIONS_FILE,
+        WORKSPACE_EXTENSIONS_FILE,
+    )
 
     console.print()
     console.print(
-        f"  [1] 全局: {GLOBAL_EXTENSIONS_FILE}  [dim](跨 workspace 共享)[/dim]"
+        f"  [1] 全局: {GLOBAL_EXTENSIONS_FILE}  [dim](跨 workspace 共享)[/dim]",
     )
     console.print(f"  [2] 当前 workspace: {WORKSPACE_EXTENSIONS_FILE}")
     raw = input("  写入位置 [1]: ").strip() or "1"
@@ -377,7 +402,9 @@ def _hot_reload(config: Config | None = None) -> None:
 
     sync_extensions_into_catalog(ext)
     if config is not None:
-        from dashscope.acli.tools.platform import refresh_extension_capability_tools
+        from dashscope.acli.tools.platform import (
+            refresh_extension_capability_tools,
+        )
 
         refresh_extension_capability_tools(config)
 
@@ -401,7 +428,7 @@ def _provider_add(config: Config) -> None:
         console.print(f"[red]名称冲突: {name} 已存在（内置或扩展）[/red]")
         return
     base_url = _prompt(
-        "API base URL (如 https://dashscope.aliyuncs.com/compatible-mode/v1)"
+        "API base URL (如 https://dashscope.aliyuncs.com/compatible-mode/v1)",
     )
     if not base_url:
         console.print("[red]base_url 不可为空[/red]")
@@ -443,7 +470,7 @@ def _provider_add(config: Config) -> None:
             if not os.environ.get(api_key_env):
                 console.print(
                     f"[yellow]提示: {api_key_env} 当前未导出，本会话不会生效，"
-                    f"export 后重启或下次启动可用。[/yellow]"
+                    f"export 后重启或下次启动可用。[/yellow]",
                 )
 
     target = _choose_target()
@@ -461,7 +488,7 @@ def _provider_add(config: Config) -> None:
     _hot_reload()
     console.print(f"\n[green]✓ provider {name} 已写入 {target}[/green]")
     console.print(
-        f"[dim]立即可用: /provider 切换到 {name}/{default_model or '<model>'}[/dim]"
+        f"[dim]立即可用: /provider 切换到 {name}/{default_model or '<model>'}[/dim]",
     )
 
 
@@ -477,12 +504,15 @@ def _provider_list() -> None:
         auth = (
             f"env={p.api_key_env}"
             if p.api_key_env
-            else "ENC(本机加密)" if p.api_key_enc else "?"
+            else "ENC(本机加密)"
+            if p.api_key_enc
+            else "?"
         )
         console.print(
             f"  • [cyan]{p.name}[/cyan] → {p.base_url} "
-            f"[dim](default={p.default_model}, protocol={p.resolved_protocol()}, "
-            f"auth={auth}, source={p.source})[/dim]"
+            f"[dim](default={p.default_model}, "
+            f"protocol={p.resolved_protocol()}, "
+            f"auth={auth}, source={p.source})[/dim]",
         )
 
 
@@ -507,7 +537,10 @@ def _provider_remove(name: str) -> None:
 def _capability_add(config: Config) -> None:
     """Scaffold a [[capabilities]] block in toml the user then edits in their
     editor — tool definitions are too complex for a smooth one-shot prompt."""
-    from dashscope.acli.extensions import append_capability_scaffold, load_extensions
+    from dashscope.acli.extensions import (
+        append_capability_scaffold,
+        load_extensions,
+    )
 
     console.print("\n[bold]新增 Capability (HTTP tool group)[/bold]")
     console.print("[dim](会写入 toml 模板，编辑器里补全字段更顺手)[/dim]")
@@ -526,7 +559,7 @@ def _capability_add(config: Config) -> None:
     console.print(
         f"[yellow]下一步:[/yellow] 用编辑器打开 {target} 修改 [[capabilities.tools]] "
         f"段填实际 endpoint/params/body_template，然后:\n"
-        f"  acli> /capability enable {key}"
+        f"  acli> /capability enable {key}",
     )
 
 
@@ -536,16 +569,19 @@ def _capability_list() -> None:
     ext = current()
     if not ext.capabilities:
         console.print(
-            "[dim]当前未注册扩展 capability；可用 /dev capability add 添加[/dim]"
+            "[dim]当前未注册扩展 capability；可用 /dev capability add 添加[/dim]",
         )
         return
     console.print("[bold]扩展 Capability:[/bold]")
     for c in ext.capabilities:
         console.print(
-            f"  • [cyan]{c.key}[/cyan] — {c.display} [dim]({len(c.tools)} 工具)[/dim]"
+            f"  • [cyan]{c.key}[/cyan] — {c.display} "
+            f"[dim]({len(c.tools)} 工具)[/dim]",
         )
         for t in c.tools:
-            console.print(f"      [dim]· {t.name} → {t.http_method} {t.endpoint}[/dim]")
+            console.print(
+                f"      [dim]· {t.name} → {t.http_method} {t.endpoint}[/dim]",
+            )
 
 
 def _capability_remove(key: str, config: Config) -> None:
@@ -558,7 +594,9 @@ def _capability_remove(key: str, config: Config) -> None:
     removed = False
     for target in (WORKSPACE_EXTENSIONS_FILE, GLOBAL_EXTENSIONS_FILE):
         if remove_capability(target, key):
-            console.print(f"[yellow]✗ 已从 {target} 删除 capability {key}[/yellow]")
+            console.print(
+                f"[yellow]✗ 已从 {target} 删除 capability {key}[/yellow]",
+            )
             removed = True
     if not removed:
         console.print(f"[dim]未找到扩展 capability: {key}[/dim]")
@@ -570,7 +608,11 @@ def _capability_remove(key: str, config: Config) -> None:
 
 
 def _skill_add() -> None:
-    from dashscope.acli.extensions import CustomSkill, append_skill, load_extensions
+    from dashscope.acli.extensions import (
+        CustomSkill,
+        append_skill,
+        load_extensions,
+    )
     from dashscope.acli.skills.base import BUILTIN_SKILLS, Skill, register
 
     console.print("\n[bold]新增 Skill (Prompt 模板)[/bold]")
@@ -589,7 +631,9 @@ def _skill_add() -> None:
         return
     args_raw = _prompt("参数列表 (逗号分隔，如 city,lang；可空)")
     arguments = (
-        [a.strip() for a in args_raw.split(",") if a.strip()] if args_raw else []
+        [a.strip() for a in args_raw.split(",") if a.strip()]
+        if args_raw
+        else []
     )
     mcp_service = _prompt("依赖的 MCP 服务 (可空)")
 
@@ -610,12 +654,13 @@ def _skill_add() -> None:
             mcp_service=mcp_service,
             prompt_template=prompt_template,
             arguments=arguments,
-        )
+        ),
     )
     _hot_reload()
     console.print(f"\n[green]✓ skill {name} 已写入 {target}[/green]")
     console.print(
-        f"[dim]立即可用: /skill {name} {' '.join(f'<{a}>' for a in arguments)}[/dim]"
+        f"[dim]立即可用: /skill {name} "
+        f"{' '.join(f'<{a}>' for a in arguments)}[/dim]",
     )
 
 
@@ -633,7 +678,8 @@ def _skill_list() -> None:
         console.print(f"  • [cyan]{s.name}[/cyan] {args}{mcp}")
         console.print(f"    {s.description}")
         console.print(
-            f"    [dim]模板: {s.prompt_template[:60]}{'...' if len(s.prompt_template) > 60 else ''}[/dim]"
+            f"    [dim]模板: {s.prompt_template[:60]}"
+            f"{'...' if len(s.prompt_template) > 60 else ''}[/dim]",
         )
 
 
@@ -659,7 +705,11 @@ def _skill_remove(name: str) -> None:
 
 
 def _tool_add() -> None:
-    from dashscope.acli.extensions import CustomShellTool, append_shell_tool, load_extensions
+    from dashscope.acli.extensions import (
+        CustomShellTool,
+        append_shell_tool,
+        load_extensions,
+    )
 
     console.print("\n[bold]新增 Shell 工具[/bold]")
     console.print("[dim](把一个 shell 命令包装成 LLM 可调用的工具)[/dim]")
@@ -692,7 +742,7 @@ def _tool_add() -> None:
                     "type": "string",
                     "required": True,
                     "description": desc or pn,
-                }
+                },
             )
 
     console.print("\n[bold]权限级别[/bold]:")
@@ -715,7 +765,7 @@ def _tool_add() -> None:
     _hot_reload()
     console.print(f"\n[green]✓ shell tool {name} 已写入 {target}[/green]")
     console.print(
-        f"[dim]LLM 可直接调用: {name}({', '.join(pn for pn in param_names)})[/dim]"
+        f"[dim]LLM 可直接调用: {name}({', '.join(pn for pn in param_names)})[/dim]",
     )
 
 
@@ -743,7 +793,9 @@ def _tool_remove(name: str) -> None:
     removed = False
     for target in (WORKSPACE_EXTENSIONS_FILE, GLOBAL_EXTENSIONS_FILE):
         if remove_shell_tool(target, name):
-            console.print(f"[yellow]✗ 已从 {target} 删除 shell tool {name}[/yellow]")
+            console.print(
+                f"[yellow]✗ 已从 {target} 删除 shell tool {name}[/yellow]",
+            )
             removed = True
     if not removed:
         console.print(f"[dim]未找到自定义 shell tool: {name}[/dim]")
@@ -764,7 +816,8 @@ def _debug_tools() -> None:
     console.print(f"[bold]已注册工具 ({len(tools)} 个):[/bold]")
     for t in sorted(tools, key=lambda x: x.name):
         console.print(
-            f"  [cyan]{t.name:30s}[/cyan] [{t.permission.value:8s}]  {t.description[:50]}"
+            f"  [cyan]{t.name:30s}[/cyan] "
+            f"[{t.permission.value:8s}]  {t.description[:50]}",
         )
 
 
@@ -779,7 +832,7 @@ def _debug_schema(name: str) -> None:
         return
     console.print(f"[bold]{tool.name}[/bold] [{tool.permission.value}]")
     console.print(f"  {tool.description}")
-    console.print(f"\n[bold]Parameters JSON Schema:[/bold]")
+    console.print("\n[bold]Parameters JSON Schema:[/bold]")
     console.print(_json.dumps(tool.parameters, ensure_ascii=False, indent=2))
 
 
@@ -810,7 +863,9 @@ async def _debug_call(cmd_parts: list[str]) -> None:
     from dashscope.acli.tools.registry import registry
 
     if len(cmd_parts) < 4:
-        console.print('[dim]用法: /dev debug call <tool_name> {"arg": "val"}[/dim]')
+        console.print(
+            '[dim]用法: /dev debug call <tool_name> {"arg": "val"}[/dim]',
+        )
         return
     name = cmd_parts[3]
     tool = registry.get(name)
@@ -840,7 +895,10 @@ async def _test_provider(name: str, config: Config) -> None:
     import copy as _copy
 
     from dashscope.acli.extensions import find_provider
-    from dashscope.acli.providers import _create_provider, build_profiles_from_config
+    from dashscope.acli.providers import (
+        _create_provider,
+        build_profiles_from_config,
+    )
 
     console.print(f"[dim]测试 provider {name}...[/dim]")
     try:
@@ -876,7 +934,7 @@ async def _test_provider(name: str, config: Config) -> None:
                 console.print(
                     f"[red]✗ {name} 没有配置 API Key[/red]\n"
                     f"  [dim]已检查: ~/.acli/config.toml 的 {name}_api_key、"
-                    f"环境变量 {env_hint}、custom-extensions.toml 加密 key[/dim]"
+                    f"环境变量 {env_hint}、custom-extensions.toml 加密 key[/dim]",
                 )
             else:
                 console.print(f"[red]✗ {name} 没有配置 API Key[/red]")
@@ -892,7 +950,8 @@ async def _test_provider(name: str, config: Config) -> None:
         console.print(f"  响应: {resp.content[:100]}")
         if resp.usage:
             console.print(
-                f"  Token: input={resp.usage.get('input_tokens', '?')}, output={resp.usage.get('output_tokens', '?')}"
+                f"  Token: input={resp.usage.get('input_tokens', '?')}, "
+                f"output={resp.usage.get('output_tokens', '?')}",
             )
     except Exception as e:
         console.print(f"[red]✗ {name} 连接失败: {type(e).__name__}: {e}[/red]")
@@ -906,8 +965,9 @@ def _dev_reload(config: Config) -> None:
 
     ext = current()
     console.print(
-        f"  providers: {len(ext.providers)}, capabilities: {len(ext.capabilities)}, "
-        f"skills: {len(ext.skills)}, shell_tools: {len(ext.shell_tools)}"
+        f"  providers: {len(ext.providers)}, "
+        f"capabilities: {len(ext.capabilities)}, "
+        f"skills: {len(ext.skills)}, shell_tools: {len(ext.shell_tools)}",
     )
 
 
@@ -918,14 +978,14 @@ def _dev_log(config: Config) -> None:
     console.print("[bold]最近 API 调用日志:[/bold]")
     console.print(f"  Provider: {config.provider}")
     console.print(f"  Model: {config.model}")
-    console.print(f"\n[bold]已注册工具统计:[/bold]")
+    console.print("\n[bold]已注册工具统计:[/bold]")
     tools = registry.list_tools()
     by_perm = {}
     for t in tools:
         by_perm.setdefault(t.permission.value, []).append(t.name)
     for perm, names in sorted(by_perm.items()):
         console.print(f"  [{perm}] {len(names)} 个工具")
-    console.print(f"\n[dim]详细 token 统计请使用 /stats 命令[/dim]")
+    console.print("\n[dim]详细 token 统计请使用 /stats 命令[/dim]")
 
 
 # ===== Entry =====
@@ -953,11 +1013,11 @@ def handle_dev_command(cmd: str, config: Config) -> None:
                 if provider is None:
                     console.print(
                         f"[red]无法从模型名 '{model}' 推断 Provider，"
-                        f"请使用完整语法: /dev model add <provider> <name>[/red]"
+                        f"请使用完整语法: /dev model add <provider> <name>[/red]",
                     )
                     console.print(
                         "[dim]可识别前缀: "
-                        f"{', '.join(_MODEL_PROVIDER_HINTS.keys())}[/dim]"
+                        f"{', '.join(_MODEL_PROVIDER_HINTS.keys())}[/dim]",
                     )
                     return
                 _model_add(config, provider, model)
@@ -966,8 +1026,10 @@ def handle_dev_command(cmd: str, config: Config) -> None:
                     "[dim]用法:\n"
                     "  /dev model list                         — 列出可选模型\n"
                     "  /dev model add <provider> <name>        — 注册新模型\n"
-                    "  /dev model add <name>                   — 简写，按模型名前缀推断 provider\n"
-                    "  /dev model remove <provider> <name>     — 移除自定义模型[/dim]"
+                    "  /dev model add <name>                   — "
+                    "简写，按模型名前缀推断 provider\n"
+                    "  /dev model remove <provider> <name>     — "
+                    "移除自定义模型[/dim]",
                 )
         elif action in ("remove", "rm") and len(parts) >= 5:
             _model_remove(config, parts[3], parts[4])
@@ -976,8 +1038,9 @@ def handle_dev_command(cmd: str, config: Config) -> None:
                 "[dim]用法:\n"
                 "  /dev model list                         — 列出可选模型\n"
                 "  /dev model add <provider> <name>        — 注册新模型\n"
-                "  /dev model add <name>                   — 简写，按模型名前缀推断 provider\n"
-                "  /dev model remove <provider> <name>     — 移除自定义模型[/dim]"
+                "  /dev model add <name>                   — "
+                "简写，按模型名前缀推断 provider\n"
+                "  /dev model remove <provider> <name>     — 移除自定义模型[/dim]",
             )
         return
 
@@ -996,7 +1059,7 @@ def handle_dev_command(cmd: str, config: Config) -> None:
                 "[dim]用法:\n"
                 "  /dev provider add          — 交互式新增扩展 provider\n"
                 "  /dev provider list         — 列出扩展 provider\n"
-                "  /dev provider remove <name>    — 删除扩展 provider[/dim]"
+                "  /dev provider remove <name>    — 删除扩展 provider[/dim]",
             )
         return
 
@@ -1013,7 +1076,7 @@ def handle_dev_command(cmd: str, config: Config) -> None:
                 "[dim]用法:\n"
                 "  /dev capability add        — 写入 capability scaffold 模板\n"
                 "  /dev capability list       — 列出扩展 capability\n"
-                "  /dev capability remove <key>   — 删除扩展 capability[/dim]"
+                "  /dev capability remove <key>   — 删除扩展 capability[/dim]",
             )
         return
 
@@ -1030,7 +1093,7 @@ def handle_dev_command(cmd: str, config: Config) -> None:
                 "[dim]用法:\n"
                 "  /dev skill add             — 交互式新增自定义 Skill\n"
                 "  /dev skill list            — 列出自定义 Skill\n"
-                "  /dev skill remove <name>       — 删除自定义 Skill[/dim]"
+                "  /dev skill remove <name>       — 删除自定义 Skill[/dim]",
             )
         return
 
@@ -1047,7 +1110,7 @@ def handle_dev_command(cmd: str, config: Config) -> None:
                 "[dim]用法:\n"
                 "  /dev tool add              — 交互式新增 Shell 工具\n"
                 "  /dev tool list             — 列出自定义 Shell 工具\n"
-                "  /dev tool remove <name>        — 删除自定义 Shell 工具[/dim]"
+                "  /dev tool remove <name>        — 删除自定义 Shell 工具[/dim]",
             )
         return
 
@@ -1078,7 +1141,7 @@ def handle_dev_command(cmd: str, config: Config) -> None:
                 "  /dev debug tools           — 列出所有已注册工具\n"
                 "  /dev debug schema <name>   — 查看工具的 JSON Schema\n"
                 "  /dev debug call <name> {}  — 手动调用工具测试\n"
-                "  /dev debug prompt          — 查看当前 system prompt[/dim]"
+                "  /dev debug prompt          — 查看当前 system prompt[/dim]",
             )
         return
 
@@ -1099,7 +1162,7 @@ def handle_dev_command(cmd: str, config: Config) -> None:
         else:
             console.print(
                 "[dim]用法:\n"
-                "  /dev test provider <name>  — 测试 provider 连通性[/dim]"
+                "  /dev test provider <name>  — 测试 provider 连通性[/dim]",
             )
         return
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Workspace setup command handlers."""
 
 from __future__ import annotations
@@ -6,7 +7,11 @@ import re
 
 from rich.console import Console
 
-from dashscope.acli.cli.constants import ALL_CAPABILITY_KEYS, CAPABILITY_CATALOG, KEY_TARGETS
+from dashscope.acli.cli.constants import (
+    ALL_CAPABILITY_KEYS,
+    CAPABILITY_CATALOG,
+    KEY_TARGETS,
+)
 from dashscope.acli.config import PROVIDER_MODELS, Config, normalize_model_name
 from dashscope.acli.utils.ids import stable_memory_user_id
 
@@ -27,7 +32,9 @@ def _prompt_input(prompt: str, secret: bool = False) -> str:
 
 def _setup_user_name(config: Config) -> None:
     current_name = config.user_name or ""
-    name = input(f"用户名{f' [{current_name}]' if current_name else ''}: ").strip()
+    name = input(
+        f"用户名{f' [{current_name}]' if current_name else ''}: ",
+    ).strip()
     if name:
         config.user_name = name
     elif not current_name:
@@ -61,7 +68,7 @@ def _ensure_provider_key(config: Config) -> None:
         env_hint = f"或环境变量 {key_info['env']} " if key_info.get("env") else ""
         console.print(
             f"[dim]已跳过 {config.provider} key，稍后可用 /provider "
-            f"{env_hint}设置[/dim]"
+            f"{env_hint}设置[/dim]",
         )
 
 
@@ -86,20 +93,27 @@ def _warn_unsatisfiable_capabilities(config: Config) -> None:
     for cap_info in CAPABILITY_CATALOG:
         if cap_info["key"] not in caps_to_check:
             continue
-        missing_before = [f for f in cap_info["requires"] if not getattr(config, f, "")]
+        missing_before = [
+            f for f in cap_info["requires"] if not getattr(config, f, "")
+        ]
         if not missing_before:
             continue
         console.print(
             f"\n[yellow]{cap_info['key']} 需要配置[/yellow] "
-            f"[dim](直接回车跳过该字段，能力保留启用、稍后用 /setup 补即可)[/dim]:"
+            f"[dim](直接回车跳过该字段，能力保留启用、稍后用 /setup 补即可)[/dim]:",
         )
         for field in cap_info["requires"]:
             if getattr(config, field, ""):
                 continue  # already set
-            value = _prompt_input(f"  {field}: ", secret=is_secret_field(field))
+            value = _prompt_input(
+                f"  {field}: ",
+                secret=is_secret_field(field),
+            )
             if value:
                 setattr(config, field, value)
-        missing_after = [f for f in cap_info["requires"] if not getattr(config, f, "")]
+        missing_after = [
+            f for f in cap_info["requires"] if not getattr(config, f, "")
+        ]
         if missing_after:
             deferred.append((cap_info["key"], missing_after))
 
@@ -107,11 +121,11 @@ def _warn_unsatisfiable_capabilities(config: Config) -> None:
         console.print("\n[yellow]以下能力凭证暂缺，已保留启用、暂不可调用:[/yellow]")
         for cap_key, miss in deferred:
             console.print(
-                f"  [dim]·[/dim] [bold]{cap_key}[/bold] 待补: {', '.join(miss)}"
+                f"  [dim]·[/dim] [bold]{cap_key}[/bold] 待补: {', '.join(miss)}",
             )
         console.print(
             "[dim]补完后下次启动自动生效；也可运行 /setup 补齐后 "
-            "[bold]/capability enable <cap>[/bold] 即时触发。[/dim]"
+            "[bold]/capability enable <cap>[/bold] 即时触发。[/dim]",
         )
 
 
@@ -147,7 +161,7 @@ def _setup_finalize(config: Config, agent) -> None:
 
     register_platform_tools(config, connect_mcp_fn=_connect_mcp)
 
-    console.print(f"\n[green]✓ 配置已保存到 .acli/config.toml[/green]")
+    console.print("\n[green]✓ 配置已保存到 .acli/config.toml[/green]")
     caps_display = (
         ALL_CAPABILITY_KEYS
         if config.enabled_capabilities is None
@@ -159,7 +173,8 @@ def _setup_finalize(config: Config, agent) -> None:
     console.print(f"[dim]  用户: {config.user_name}[/dim]")
     console.print(f"[dim]  模型: {config.provider}/{config.model}[/dim]")
     console.print(
-        f"[dim]  能力: {', '.join(caps_display) if caps_display else '(无)'}[/dim]"
+        f"[dim]  能力: "
+        f"{', '.join(caps_display) if caps_display else '(无)'}[/dim]",
     )
     console.print(f"[dim]  工具: {tool_count} 个已注册[/dim]")
 
@@ -207,7 +222,8 @@ async def _setup_preset_custom(config: Config) -> None:
         config.provider = provider_input
 
     models = PROVIDER_MODELS.get(config.provider, []) or ext_providers.get(
-        config.provider, []
+        config.provider,
+        [],
     )
     if models:
         console.print(f"可选模型: {', '.join(models)}")
@@ -228,7 +244,7 @@ async def _setup_preset_custom(config: Config) -> None:
         console.print(f"  [{i}] {cap['key']:20s} — {cap['name']}")
 
     console.print(
-        "\n[bold]请输入要启用的能力编号[/bold] [dim](多个用逗号或空格分隔，直接回车则不启用)[/dim]"
+        "\n[bold]请输入要启用的能力编号[/bold] [dim](多个用逗号或空格分隔，直接回车则不启用)[/dim]",
     )
 
     selection = input("> ").strip()
@@ -257,13 +273,14 @@ async def _handle_setup(config: Config, agent) -> None:
 
     console.print("\n请选择配置模式:")
     console.print(
-        "  [cyan][1][/cyan] [bold]阿里/百炼配置[/bold] (默认) — tongyi/qwen3.7-plus + bailian.mcp/cli"
+        "  [cyan][1][/cyan] [bold]阿里/百炼配置[/bold] (默认) — "
+        "tongyi/qwen3.7-plus + bailian.mcp/cli",
     )
     console.print(
-        "  [cyan][2][/cyan] 国内通用配置          — tongyi/qwen-max + bailian.mcp"
+        "  [cyan][2][/cyan] 国内通用配置          — tongyi/qwen-max + bailian.mcp",
     )
     console.print(
-        "  [cyan][3][/cyan] 个性化配置             — 逐项选择（Provider / 模型 / 能力）"
+        "  [cyan][3][/cyan] 个性化配置             — 逐项选择（Provider / 模型 / 能力）",
     )
 
     choice = input("\n选择 [1]: ").strip() or "1"

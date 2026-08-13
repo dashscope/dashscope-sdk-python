@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -36,11 +37,13 @@ class LLMProvider(Protocol):
         messages: list[dict],
         tools: list[dict] | None = None,
         response_format: dict | None = None,
-    ) -> LLMResponse: ...
+    ) -> LLMResponse:
+        ...
 
-    async def chat_stream(
+    def chat_stream(
         self,
         messages: list[dict],
         tools: list[dict] | None = None,
         response_format: dict | None = None,
-    ) -> AsyncIterator[LLMChunk]: ...
+    ) -> AsyncIterator[LLMChunk]:
+        ...

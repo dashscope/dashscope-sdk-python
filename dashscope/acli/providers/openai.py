@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=too-many-branches,too-many-statements
 from __future__ import annotations
 
 import json
@@ -47,15 +49,16 @@ class OpenAIProvider:
                         "role": "tool",
                         "content": msg["content"],
                         "tool_call_id": msg.get("tool_use_id", ""),
-                    }
+                    },
                 )
             elif msg["role"] == "assistant":
                 out: dict = {
                     "role": "assistant",
                     "content": msg.get("content") or None,
                 }
-                # Reasoning models (deepseek-v4, qwen-thinking, etc.) require the
-                # reasoning_content from prior assistant turns to be echoed back.
+                # Reasoning models (deepseek-v4, qwen-thinking, etc.)
+                # require the reasoning_content from prior assistant
+                # turns to be echoed back.
                 if msg.get("reasoning_content"):
                     out["reasoning_content"] = msg["reasoning_content"]
                 if "tool_calls" in msg:
@@ -67,8 +70,13 @@ class OpenAIProvider:
                                 "name": tc["function"]["name"],
                                 "arguments": (
                                     tc["function"]["arguments"]
-                                    if isinstance(tc["function"]["arguments"], str)
-                                    else json.dumps(tc["function"]["arguments"])
+                                    if isinstance(
+                                        tc["function"]["arguments"],
+                                        str,
+                                    )
+                                    else json.dumps(
+                                        tc["function"]["arguments"],
+                                    )
                                 ),
                             },
                         }
@@ -76,7 +84,9 @@ class OpenAIProvider:
                     ]
                 converted.append(out)
             else:
-                converted.append({"role": msg["role"], "content": msg["content"]})
+                converted.append(
+                    {"role": msg["role"], "content": msg["content"]},
+                )
         return converted
 
     async def chat(
@@ -102,7 +112,7 @@ class OpenAIProvider:
             if getattr(e, "status_code", None) == 404:
                 raise RuntimeError(
                     "API 端点不存在 (404): base_url 与 protocol 可能不匹配，"
-                    "请运行 /provider 检查配置"
+                    "请运行 /provider 检查配置",
                 ) from e
             raise
 
@@ -123,7 +133,7 @@ class OpenAIProvider:
                         id=tc.id,
                         name=tc.function.name,
                         arguments=args,
-                    )
+                    ),
                 )
 
         usage = None
@@ -132,11 +142,10 @@ class OpenAIProvider:
             details = getattr(resp_usage, "prompt_tokens_details", None)
             usage = {
                 "input_tokens": getattr(resp_usage, "prompt_tokens", 0) or 0,
-                "output_tokens": getattr(resp_usage, "completion_tokens", 0) or 0,
+                "output_tokens": getattr(resp_usage, "completion_tokens", 0)
+                or 0,
                 "total_tokens": getattr(resp_usage, "total_tokens", 0) or 0,
-                "cached_tokens": (
-                    getattr(details, "cached_tokens", 0) or 0
-                )
+                "cached_tokens": (getattr(details, "cached_tokens", 0) or 0)
                 if details
                 else 0,
             }
@@ -180,7 +189,7 @@ class OpenAIProvider:
             if getattr(e, "status_code", None) == 404:
                 raise RuntimeError(
                     "API 端点不存在 (404): base_url 与 protocol 可能不匹配，"
-                    "请运行 /provider 检查配置"
+                    "请运行 /provider 检查配置",
                 ) from e
             raise
         async for chunk in stream:
@@ -190,8 +199,10 @@ class OpenAIProvider:
                 if usage is not None:
                     details = getattr(usage, "prompt_tokens_details", None)
                     stream_usage = {
-                        "input_tokens": getattr(usage, "prompt_tokens", 0) or 0,
-                        "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
+                        "input_tokens": getattr(usage, "prompt_tokens", 0)
+                        or 0,
+                        "output_tokens": getattr(usage, "completion_tokens", 0)
+                        or 0,
                         "total_tokens": getattr(usage, "total_tokens", 0) or 0,
                         "cached_tokens": (
                             getattr(details, "cached_tokens", 0) or 0
@@ -232,7 +243,9 @@ class OpenAIProvider:
                         if tc_delta.function and tc_delta.function.name:
                             pending_tools[idx]["name"] = tc_delta.function.name
                     if tc_delta.function and tc_delta.function.arguments:
-                        pending_tools[idx]["arguments"] += tc_delta.function.arguments
+                        pending_tools[idx][
+                            "arguments"
+                        ] += tc_delta.function.arguments
 
             if finish_reason == "tool_calls":
                 for tool_data in pending_tools.values():
@@ -250,8 +263,8 @@ class OpenAIProvider:
                                 id=tool_data["id"],
                                 name=tool_data["name"],
                                 arguments=args,
-                            )
-                        ]
+                            ),
+                        ],
                     )
                 pending_tools.clear()
                 pending_finish = finish_reason

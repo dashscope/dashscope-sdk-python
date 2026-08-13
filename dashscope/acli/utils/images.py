@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Image encoding helpers shared by the @image.png REPL flow and the
 understand_image vision tool."""
 
@@ -25,6 +26,6 @@ def image_to_data_url(path: str | Path) -> str:
     if len(data) > _AT_IMAGE_MAX_BYTES:
         raise ValueError(
             f"图片过大 ({len(data) // 1024} KB > "
-            f"{_AT_IMAGE_MAX_BYTES // 1024} KB)，已忽略"
+            f"{_AT_IMAGE_MAX_BYTES // 1024} KB)，已忽略",
         )
     return f"data:{mime};base64,{base64.b64encode(data).decode()}"

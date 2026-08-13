@@ -1,12 +1,16 @@
+# -*- coding: utf-8 -*-
 """
 Two-tier Memory Architecture for Agent Context Management.
 
 Working context: the conversation message list, owned by the agent loop and
   compressed by acli.compression (not tracked in this module).
-Mid-term (Session Memory): Per-session persistent state (plan, reflection, tool_chains)
-Long-term (Persistent Memory): Cross-session persistent memory (experience, user profile)
+Mid-term (Session Memory): Per-session persistent state
+  (plan, reflection, tool_chains)
+Long-term (Persistent Memory): Cross-session persistent memory
+  (experience, user profile)
 
-Design inspired by context engineering principles (Weng 2026, TMLR Survey 2026).
+Design inspired by context engineering principles (Weng 2026,
+TMLR Survey 2026).
 """
 
 from __future__ import annotations
@@ -61,9 +65,18 @@ class PersistentMemory:
         lesson: str = "",
     ) -> None:
         """Record a task experience."""
-        self.experience.record_experience(task_summary, tools_used, outcome, lesson)
+        self.experience.record_experience(
+            task_summary,
+            tools_used,
+            outcome,
+            lesson,
+        )
 
-    def search_experiences(self, query: str, limit: int = 3) -> list[dict[str, Any]]:
+    def search_experiences(
+        self,
+        query: str,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
         """Search for relevant experiences."""
         return self.experience.search_experiences(query, limit)
 
@@ -73,7 +86,8 @@ class PersistentMemory:
 
 
 class MemoryManager:
-    """Two-tier memory manager: per-session state + cross-session persistent memory.
+    """Two-tier memory manager: per-session state + cross-session
+    persistent memory.
 
     Coordinates mid-term (session: plan, reflection, tool chains) and
     long-term (persistent: experience, user profile) memory, plus trace
@@ -98,7 +112,9 @@ class MemoryManager:
         import uuid
 
         child = cls.__new__(cls)
-        child_workspace = parent.session.session_dir / "children" / uuid.uuid4().hex[:8]
+        child_workspace = (
+            parent.session.session_dir / "children" / uuid.uuid4().hex[:8]
+        )
         child.session = SessionMemory(child_workspace)
         child.persistent = parent.persistent
         child.trace = parent.trace
@@ -116,7 +132,12 @@ class MemoryManager:
         lesson: str = "",
     ) -> None:
         """Record a task experience to persistent memory."""
-        self.persistent.record_experience(task_summary, tools_used, outcome, lesson)
+        self.persistent.record_experience(
+            task_summary,
+            tools_used,
+            outcome,
+            lesson,
+        )
 
     def log_trace(self, event_type: str, data: dict[str, Any]) -> None:
         """Log a trace event."""

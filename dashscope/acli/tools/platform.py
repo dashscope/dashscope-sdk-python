@@ -1,10 +1,15 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from typing import Callable
 
 from dashscope.acli.config import Config
 from dashscope.acli.platforms import get_cli_provider
-from dashscope.acli.tools.registry import PermissionLevel, ToolDefinition, registry
+from dashscope.acli.tools.registry import (
+    PermissionLevel,
+    ToolDefinition,
+    registry,
+)
 
 # Track which tool names each capability registered, so /capability disable
 # can unregister them mid-session (the prior "重启后生效" caveat is gone).
@@ -33,10 +38,28 @@ _CAPABILITY_KEYS = [
 # Each hint should be short, imperative, and name the channel(s) the model
 # would otherwise reach for.
 _DISABLED_CAPABILITY_HINTS: dict[str, str] = {
-    "bailian.mcp": "用户已禁用 bailian.mcp。不要调用 mcp_connect，不要尝试调用 mcp_<service>_* 工具，也不要建议用户用 /skill <name> 触发依赖 MCP 的技能。",
-    "bailian.cli": "用户已禁用 bailian.cli（百炼 CLI 全集）。**严禁** 通过 run_command 调用 bl 命令（包括 bl image generate / bl video / bl speech / bl knowledge / bl memory 等）实现相同能力——这会消耗用户的配额。当请求落到 bl 能覆盖的范围（图像/视频/语音生成、RAG 检索、文档解析、TTS/ASR 等），直接告诉用户该能力已关闭，提示通过 /capability enable bailian.cli 重新启用。",
-    "local.delegate": "用户已禁用 local.delegate。不要调用 delegate 或 delegate_parallel 工具；需要并行处理时请按顺序调用其他工具完成。",
-    "local.memory": "用户已禁用 local.memory。不要调用 memory_search / memory_store / memory_delete 工具；需要用户档案信息时直接询问用户。",
+    "bailian.mcp": (
+        "用户已禁用 bailian.mcp。不要调用 mcp_connect，不要尝试调用 "
+        "mcp_<service>_* 工具，也不要建议用户用 /skill <name> 触发依赖 "
+        "MCP 的技能。"
+    ),
+    "bailian.cli": (
+        "用户已禁用 bailian.cli（百炼 CLI 全集）。**严禁** 通过 "
+        "run_command 调用 bl 命令（包括 bl image generate / bl video / "
+        "bl speech / bl knowledge / bl memory 等）实现相同能力"
+        "——这会消耗用户的配额。当请求落到 bl 能覆盖的范围"
+        "（图像/视频/语音生成、RAG 检索、文档解析、TTS/ASR 等），"
+        "直接告诉用户该能力已关闭，提示通过 /capability enable "
+        "bailian.cli 重新启用。"
+    ),
+    "local.delegate": (
+        "用户已禁用 local.delegate。不要调用 delegate 或 "
+        "delegate_parallel 工具；需要并行处理时请按顺序调用其他工具完成。"
+    ),
+    "local.memory": (
+        "用户已禁用 local.memory。不要调用 memory_search / memory_store / "
+        "memory_delete 工具；需要用户档案信息时直接询问用户。"
+    ),
 }
 
 
@@ -48,7 +71,9 @@ def disabled_capabilities_hint(config: Config) -> str:
     if not caps:
         return ""
     disabled = [
-        k for k in _CAPABILITY_KEYS if k not in caps and k in _DISABLED_CAPABILITY_HINTS
+        k
+        for k in _CAPABILITY_KEYS
+        if k not in caps and k in _DISABLED_CAPABILITY_HINTS
     ]
     if not disabled:
         return ""
@@ -67,18 +92,24 @@ def all_capability_keys() -> list[str]:
     return _CAPABILITY_KEYS + [c.key for c in _ext_current().capabilities]
 
 
-def register_platform_tools(config: Config, connect_mcp_fn: Callable | None = None):
+def register_platform_tools(
+    config: Config,
+    connect_mcp_fn: Callable | None = None,
+):
     caps = config.enabled_capabilities
     all_enabled = caps is None
     for cap_key in all_capability_keys():
         if config.privacy_mode and _is_cloud_capability(cap_key):
-            continue  # privacy mode: cloud capabilities never reach the tool surface
-        if all_enabled or cap_key in caps:
+            # privacy mode: cloud capabilities never reach the tool surface
+            continue
+        if all_enabled or cap_key in (caps or []):
             register_one_capability(config, cap_key, connect_mcp_fn)
 
 
 def register_one_capability(
-    config: Config, cap_key: str, connect_mcp_fn: Callable | None = None
+    config: Config,
+    cap_key: str,
+    connect_mcp_fn: Callable | None = None,
 ) -> int:
     """Register a single capability's tools, tracking new names for later
     unregister. Returns the count of tools added (0 when creds are missing
@@ -93,7 +124,10 @@ def register_one_capability(
         if cli_client := get_cli_provider(config):
             _register_bailian_cli_tools(cli_client)
     elif cap_key == "local.subagent":
-        from dashscope.acli.agents.subagent import _has_parent, register_subagent_tool
+        from dashscope.acli.agents.subagent import (
+            _has_parent,
+            register_subagent_tool,
+        )
 
         if _has_parent():
             register_subagent_tool()
@@ -101,7 +135,10 @@ def register_one_capability(
         # was called too early — cli.py wires _set_parent_agent + a final
         # re-register pass after Agent construction.
     elif cap_key == "local.delegate":
-        from dashscope.acli.agents.delegate import _has_parent, register_delegate_tools
+        from dashscope.acli.agents.delegate import (
+            _has_parent,
+            register_delegate_tools,
+        )
 
         if _has_parent():
             register_delegate_tools()
@@ -141,7 +178,11 @@ def _register_extension_capability(cap_key: str, config=None) -> bool:
     # time or prompting twice for the same secret.
     if not cap.resolve_auth_key():
         env_name = cap.api_key_env or auth_env_name(cap.auth)
-        cap.runtime_key = provider_key_for_env(config, env_name, loaded_key_targets())
+        cap.runtime_key = provider_key_for_env(
+            config,
+            env_name,
+            loaded_key_targets(),
+        )
     for tool in cap.tools:
         # tool name namespaced with cap key so two extensions can both
         # have a tool called "search" without colliding.
@@ -174,7 +215,7 @@ def _register_extension_capability(cap_key: str, config=None) -> bool:
                     permission=permission,
                     func=call_fn,
                     parameters=params,
-                )
+                ),
             )
     return True
 
@@ -287,7 +328,9 @@ def unregister_cloud_capability_tools() -> int:
     """Privacy mode on: drop every registered cloud capability tool (bailian.*,
     extension HTTP/vision tools). Returns total tools removed."""
     removed = 0
-    for cap_key in [k for k in list(_capability_tools) if _is_cloud_capability(k)]:
+    for cap_key in [
+        k for k in list(_capability_tools) if _is_cloud_capability(k)
+    ]:
         removed += unregister_capability_tools(cap_key)
     return removed
 
@@ -326,13 +369,19 @@ def _register_mcp_tools(config: Config, connect_mcp_fn: Callable):
 
     registry.register_mcp_tool(
         name="mcp_connect",
-        description="连接 MCP 云端服务以获取更多工具能力。当前可用: time(时间)、code-interpreter(代码执行)、doc-analysis(文档解析)。连接后会注册新工具供你调用。",
+        description=(
+            "连接 MCP 云端服务以获取更多工具能力。当前可用: "
+            "time(时间)、code-interpreter(代码执行)、doc-analysis(文档解析)。"
+            "连接后会注册新工具供你调用。"
+        ),
         parameters={
             "type": "object",
             "properties": {
                 "service": {
                     "type": "string",
-                    "description": "服务名称，当前可用: time、code-interpreter、doc-analysis",
+                    "description": (
+                        "服务名称，当前可用: time、code-interpreter、" "doc-analysis"
+                    ),
                 },
             },
             "required": ["service"],
@@ -383,10 +432,15 @@ def _register_bailian_cli_tools(client):
             continue
         command_path = tool_name[len("bailian_") :].split("_")
         description = "[bl] " + schema.get("description", "")
-        params = schema.get("input_schema") or {"type": "object", "properties": {}}
+        params = schema.get("input_schema") or {
+            "type": "object",
+            "properties": {},
+        }
         verb = command_path[-1]
         permission = (
-            PermissionLevel.CONFIRM if verb in _BL_WRITE_VERBS else PermissionLevel.AUTO
+            PermissionLevel.CONFIRM
+            if verb in _BL_WRITE_VERBS
+            else PermissionLevel.AUTO
         )
 
         async def _call(_p=command_path, _c=client, **kwargs):
@@ -400,7 +454,7 @@ def _register_bailian_cli_tools(client):
                     permission=permission,
                     func=_call,
                     parameters=params,
-                )
+                ),
             )
         else:
             registry.register_mcp_tool(
@@ -456,6 +510,7 @@ def _load_or_refresh_bl_schemas(client):
         tmp.write_text(json.dumps(schemas, ensure_ascii=False))
         tmp.replace(cache_path)
     except OSError:
-        pass  # Cache write failure is non-fatal; we still have schemas in memory
+        # Cache write failure is non-fatal; we still have schemas in memory
+        pass
 
     return schemas

@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=wrong-import-position,unused-import
+# pylint: disable=too-many-branches,too-many-statements
 from __future__ import annotations
 
 import asyncio
@@ -6,25 +9,28 @@ import warnings
 
 warnings.filterwarnings("ignore", message=".*urllib3.*OpenSSL.*")
 
-from rich.console import Console
+from rich.console import Console  # noqa: E402
 
-import dashscope.acli.tools.browser  # noqa: F401
-import dashscope.acli.tools.camera  # noqa: F401
+import dashscope.acli.tools.browser  # noqa: F401,E402
+import dashscope.acli.tools.camera  # noqa: F401,E402
 
 # Ensure tools are registered by importing
-import dashscope.acli.tools.filesystem  # noqa: F401
-import dashscope.acli.tools.shell  # noqa: F401
-import dashscope.acli.tools.web_search  # noqa: F401
-from dashscope.acli import __version__
-from dashscope.acli.config import PROVIDER_MODELS, Config
-from dashscope.acli.dev import handle_dev_command
-from dashscope.acli.skills import load_skill_files
+import dashscope.acli.tools.filesystem  # noqa: F401,E402
+import dashscope.acli.tools.shell  # noqa: F401,E402
+import dashscope.acli.tools.web_search  # noqa: F401,E402
+from dashscope.acli import __version__  # noqa: E402
+from dashscope.acli.config import PROVIDER_MODELS, Config  # noqa: F401,E402
+from dashscope.acli.dev import handle_dev_command  # noqa: F401,E402
+from dashscope.acli.skills import load_skill_files  # noqa: E402
 
 load_skill_files()
-from dashscope.acli.cli.completer import _get_arg_hint, _is_dir_safe
+from dashscope.acli.cli.completer import (  # noqa: F401,E402
+    _get_arg_hint,
+    _is_dir_safe,
+)
 
 # Import constants and multimodal handling from submodules
-from dashscope.acli.cli.constants import (
+from dashscope.acli.cli.constants import (  # noqa: F401,E402
     _AT_AUDIO_MAX_BYTES,
     _AT_IMAGE_MAX_BYTES,
     _AT_PATH_AT_CURSOR_RE,
@@ -35,25 +41,50 @@ from dashscope.acli.cli.constants import (
     ALL_CAPABILITY_KEYS,
     CAPABILITY_CATALOG,
 )
-from dashscope.acli.cli.multimodal import _expand_at_references, _to_multimodal_content
+from dashscope.acli.cli.multimodal import (  # noqa: F401,E402
+    _expand_at_references,
+    _to_multimodal_content,
+)
 
 console = Console()
-from dashscope.acli.cli.dispatch import (
+from dashscope.acli.cli.dispatch import (  # noqa: F401,E402
     _handle_skill_continue,
     _handle_slash_command,
     dispatch_async_command,
 )
-from dashscope.acli.cli.examples import _handle_example_command
-from dashscope.acli.cli.handlers_capability import _cap_enabled, sync_extensions_into_catalog
-from dashscope.acli.cli.handlers_misc import _handle_report_command
-from dashscope.acli.cli.handlers_setup import _handle_setup
+from dashscope.acli.cli.examples import (  # noqa: E402
+    _handle_example_command,
+)
+from dashscope.acli.cli.handlers_capability import (  # noqa: F401,E402
+    _cap_enabled,
+    sync_extensions_into_catalog,
+)
+from dashscope.acli.cli.handlers_misc import (  # noqa: F401,E402
+    _handle_report_command,
+)
+from dashscope.acli.cli.handlers_setup import (  # noqa: F401,E402
+    _handle_setup,
+)
 
 # Import MCP management from submodule
-from dashscope.acli.cli.mcp import _connect_mcp, _mcp_clients
-from dashscope.acli.cli.repl import _run_loop
-from dashscope.acli.cli.runners import _run_dry_run, _run_oneshot, _run_tui_mode
-from dashscope.acli.cli.startup import _compose_system_prompt, _load_system_prompt
-from dashscope.acli.cli.streaming import _do_compress, _do_summarize
+from dashscope.acli.cli.mcp import (  # noqa: F401,E402
+    _connect_mcp,
+    _mcp_clients,
+)
+from dashscope.acli.cli.repl import _run_loop  # noqa: E402
+from dashscope.acli.cli.runners import (  # noqa: E402
+    _run_dry_run,
+    _run_oneshot,
+    _run_tui_mode,
+)
+from dashscope.acli.cli.startup import (  # noqa: F401,E402
+    _compose_system_prompt,
+    _load_system_prompt,
+)
+from dashscope.acli.cli.streaming import (  # noqa: F401,E402
+    _do_compress,
+    _do_summarize,
+)
 
 # Cron scheduler
 _scheduler = None
@@ -64,7 +95,9 @@ def main():
     use_cli = "--cli" in sys.argv
     use_tui = "--tui" in sys.argv
     use_dry_run = "--dry-run" in sys.argv
-    sys.argv = [a for a in sys.argv if a not in ("--cli", "--tui", "--dry-run")]
+    sys.argv = [
+        a for a in sys.argv if a not in ("--cli", "--tui", "--dry-run")
+    ]
 
     # Parse --protocol flag (can appear anywhere in argv)
     protocol_override = None
@@ -91,7 +124,8 @@ def main():
             return
         elif arg in ("--help", "-h"):
             print(
-                "Usage: acli [--version] [--help] [-c <prompt>] [--cli | --tui] [--dry-run]"
+                "Usage: acli [--version] [--help] [-c <prompt>] "
+                "[--cli | --tui] [--dry-run]",
             )
             print()
             print("对话即操作——你说需求，AI 来执行。")
@@ -100,21 +134,23 @@ def main():
             print("  -c, --command <prompt>  执行单次对话后退出（适合脚本/管道）")
             print("  --cli                   使用传统 readline REPL 模式")
             print(
-                "  --tui                   使用 Textual 富 UI 模式（默认从 config.toml 读取）"
+                "  --tui                   "
+                "使用 Textual 富 UI 模式（默认从 config.toml 读取）",
             )
             print("  --protocol <name>       指定 API 协议（openai | anthropic）")
             print("  --max-turns <n>         覆盖最大对话轮数（默认 1000）")
             print(
-                "  --dry-run               预览当前配置（加载的 skill、MCP、tool 等）而不启动"
+                "  --dry-run               预览当前配置（加载的 skill、MCP、tool 等）而不启动",
             )
             print()
             print("Subcommands:")
             print("  example                         列出可用示例")
             print(
-                "  example download <name>         平铺合并示例到当前目录（冲突自动备份）"
+                "  example download <name>         平铺合并示例到当前目录（冲突自动备份）",
             )
             print(
-                "  mcp-server                      启动 MCP Server（stdio 对外暴露工具）"
+                "  mcp-server                      "
+                "启动 MCP Server（stdio 对外暴露工具）",
             )
             print()
             print("启动后输入 /help 查看内置命令。")

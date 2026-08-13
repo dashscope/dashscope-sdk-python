@@ -1,10 +1,13 @@
-"""Configuration-related command handlers (privacy, theme, directives, rule)."""
+# -*- coding: utf-8 -*-
+"""Configuration-related command handlers (privacy, theme, directives,
+rule)."""
+# pylint: disable=too-many-branches,too-many-return-statements
+# pylint: disable=too-many-statements,unused-argument
 
 from __future__ import annotations
 
 import copy
 import json
-from pathlib import Path
 
 from rich.console import Console
 
@@ -23,12 +26,12 @@ def _handle_privacy_command(cmd: str, config: Config) -> None:
         console.print(f"[bold]隐私模式:[/bold] {status}")
         if config.privacy_mode:
             console.print(
-                "  [dim]✓ 云端能力禁用（profile、kb、cloud memory、mcp）[/dim]"
+                "  [dim]✓ 云端能力禁用（profile、kb、cloud memory、mcp）[/dim]",
             )
             console.print("  [dim]✓ 定时任务（cron）不执行[/dim]")
             console.print("  [dim]✓ 审计日志脱敏（工具参数、用户输入截断）[/dim]")
             console.print(
-                "  [yellow]⚠ LLM API 调用不受控，对话内容仍发送至模型[/yellow]"
+                "  [yellow]⚠ LLM API 调用不受控，对话内容仍发送至模型[/yellow]",
             )
 
     if len(parts) < 2:
@@ -45,11 +48,15 @@ def _handle_privacy_command(cmd: str, config: Config) -> None:
         get_audit_logger().set_privacy_mode(True)
         # Enforce at the tool surface too (not just the slash-command gate):
         # drop every registered cloud capability tool + connected MCP tools.
-        from dashscope.acli.tools.platform import unregister_cloud_capability_tools
+        from dashscope.acli.tools.platform import (
+            unregister_cloud_capability_tools,
+        )
         from dashscope.acli.tools.registry import registry
 
         removed = unregister_cloud_capability_tools()
-        mcp_names = [t.name for t in registry.list_tools() if t.name.startswith("mcp_")]
+        mcp_names = [
+            t.name for t in registry.list_tools() if t.name.startswith("mcp_")
+        ]
         for name in mcp_names:
             registry.unregister(name)
         console.print("[green]✓ 隐私模式已启用[/green]")
@@ -82,7 +89,8 @@ def _handle_privacy_command(cmd: str, config: Config) -> None:
 
 
 def _handle_debug_command(cmd: str, config: Config) -> None:
-    """Toggle debug mode: record full LLM request payloads in the session trace."""
+    """Toggle debug mode: record full LLM request payloads in the session
+    trace."""
     from dashscope.acli import debuglog
 
     parts = cmd.strip().split()
@@ -94,7 +102,7 @@ def _handle_debug_command(cmd: str, config: Config) -> None:
         debuglog.set_debug_enabled(True)
         console.print("[green]✓ 调试模式已启用[/green]")
         console.print(
-            "  [dim]完整 prompt 将记录到会话 trace（/log、/trace 查看）[/dim]"
+            "  [dim]完整 prompt 将记录到会话 trace（/log、/trace 查看）[/dim]",
         )
         return
 
@@ -111,7 +119,7 @@ def _handle_debug_command(cmd: str, config: Config) -> None:
         if config.debug:
             console.print(
                 "  [dim]每次 LLM 调用的完整 prompt 都会记录到会话 trace"
-                "（/log、/trace 查看）[/dim]"
+                "（/log、/trace 查看）[/dim]",
             )
         return
 
@@ -181,7 +189,8 @@ def _can_page() -> bool:
 
 
 def _page_text(text: str) -> None:
-    """Page text through less (scroll ↑/↓, search with /); print inline if unavailable.
+    """Page text through less (scroll ↑/↓, search with /); print inline
+    if unavailable.
 
     rich's console.pager() routes through pydoc, whose no-arg `(less)` probe
     fails on macOS ("Missing filename") and degrades to a plain dump — so
@@ -203,7 +212,9 @@ def _page_text(text: str) -> None:
 
 
 def _trace_events(agent, event_type: str | None = None) -> list[dict]:
-    tracer = getattr(agent, "trace_logger", None) if agent is not None else None
+    tracer = (
+        getattr(agent, "trace_logger", None) if agent is not None else None
+    )
     if tracer is None:
         return []
     events = list(tracer.iter_events())
@@ -213,7 +224,8 @@ def _trace_events(agent, event_type: str | None = None) -> list[dict]:
 
 
 def _handle_log_command(cmd: str, agent=None) -> None:
-    """View recorded LLM request prompts: /log [tail [N] | search <kw> | clear].
+    """View recorded LLM request prompts: /log [tail [N] | search <kw> |
+    clear].
 
     Data source: llm_call trace events that carry the full message payload,
     which are only recorded while debug mode is on (/debug on).
@@ -221,7 +233,9 @@ def _handle_log_command(cmd: str, agent=None) -> None:
     parts = cmd.strip().split(None, 2)
     sub = parts[1] if len(parts) > 1 else "tail"
 
-    tracer = getattr(agent, "trace_logger", None) if agent is not None else None
+    tracer = (
+        getattr(agent, "trace_logger", None) if agent is not None else None
+    )
 
     if sub == "clear":
         if tracer is not None:
@@ -261,7 +275,7 @@ def _handle_log_command(cmd: str, agent=None) -> None:
 
     if not events:
         console.print(
-            "[dim]暂无完整 prompt 记录（先 /debug on 开启调试模式后重新提问）[/dim]"
+            "[dim]暂无完整 prompt 记录（先 /debug on 开启调试模式后重新提问）[/dim]",
         )
         return
 
@@ -277,7 +291,9 @@ def _handle_log_command(cmd: str, agent=None) -> None:
         )
         _page_text(text)
     else:
-        console.print(f"[bold]{header}[/bold] [dim]({path}, {size_kb} KB)[/dim]")
+        console.print(
+            f"[bold]{header}[/bold] [dim]({path}, {size_kb} KB)[/dim]",
+        )
         for i, r in enumerate(events):
             console.print(_log_record_text(r, i + 1, full=False), markup=False)
         console.print("[dim]内容已截断；CLI 模式下可翻页查看完整日志[/dim]")
@@ -302,7 +318,9 @@ def _trace_event_text(ev: dict, idx: int, *, full: bool) -> str:
             parts.append(f"{dur / 1000:.1f}s")
         tcs = ev.get("tool_calls") or []
         if tcs:
-            names = ", ".join(str(t.get("name", "?")) for t in tcs if isinstance(t, dict))
+            names = ", ".join(
+                str(t.get("name", "?")) for t in tcs if isinstance(t, dict)
+            )
             if names:
                 parts.append(f"→ {names}")
         header = "  ".join(parts) + " ━━━"
@@ -314,7 +332,11 @@ def _trace_event_text(ev: dict, idx: int, *, full: bool) -> str:
     if event == "tool_execution":
         ok = "✓" if ev.get("success") else "✗"
         dur = ev.get("duration_ms", 0)
-        args = json.dumps(ev.get("arguments", {}), ensure_ascii=False, default=str)
+        args = json.dumps(
+            ev.get("arguments", {}),
+            ensure_ascii=False,
+            default=str,
+        )
         if not full and len(args) > 120:
             args = args[:120] + " …"
         preview = ev.get("result_preview", "")
@@ -327,13 +349,19 @@ def _trace_event_text(ev: dict, idx: int, *, full: bool) -> str:
 
     if event == "decision":
         details = {
-            k: v for k, v in ev.items() if k not in ("timestamp", "elapsed_ms", "event")
+            k: v
+            for k, v in ev.items()
+            if k not in ("timestamp", "elapsed_ms", "event")
         }
         body = json.dumps(details, ensure_ascii=False, default=str)
         return f"━━━ #{idx} {stamp} decision {ev.get('type', '?')} · {body}"
 
     body = json.dumps(
-        {k: v for k, v in ev.items() if k not in ("timestamp", "elapsed_ms", "event")},
+        {
+            k: v
+            for k, v in ev.items()
+            if k not in ("timestamp", "elapsed_ms", "event")
+        },
         ensure_ascii=False,
         default=str,
     )
@@ -341,7 +369,8 @@ def _trace_event_text(ev: dict, idx: int, *, full: bool) -> str:
 
 
 def _handle_trace_command(cmd: str, agent=None) -> None:
-    """View the session execution trace: /trace [tail [N] | search <kw> | clear].
+    """View the session execution trace: /trace [tail [N] | search <kw> |
+    clear].
 
     Lightweight events (LLM 调用耗时/用量、工具调用耗时、决策点) are always
     recorded; 完整 prompt 需 /debug on。
@@ -349,7 +378,9 @@ def _handle_trace_command(cmd: str, agent=None) -> None:
     parts = cmd.strip().split(None, 2)
     sub = parts[1] if len(parts) > 1 else "tail"
 
-    tracer = getattr(agent, "trace_logger", None) if agent is not None else None
+    tracer = (
+        getattr(agent, "trace_logger", None) if agent is not None else None
+    )
 
     if sub == "clear":
         if tracer is not None:
@@ -377,7 +408,9 @@ def _handle_trace_command(cmd: str, agent=None) -> None:
         events = tracer.tail_events(limit) if tracer is not None else []
         header = f"trace 最近 {len(events)} 条"
     else:
-        console.print("[dim]用法: /trace [tail [N] | search <关键词> | clear][/dim]")
+        console.print(
+            "[dim]用法: /trace [tail [N] | search <关键词> | clear][/dim]",
+        )
         return
 
     if not events:
@@ -392,13 +425,19 @@ def _handle_trace_command(cmd: str, agent=None) -> None:
 
     if _can_page():
         text = f"{header}  ({path}, {size_kb} KB)\n\n" + "\n\n".join(
-            _trace_event_text(e, i + 1, full=True) for i, e in enumerate(events)
+            _trace_event_text(e, i + 1, full=True)
+            for i, e in enumerate(events)
         )
         _page_text(text)
     else:
-        console.print(f"[bold]{header}[/bold] [dim]({path}, {size_kb} KB)[/dim]")
+        console.print(
+            f"[bold]{header}[/bold] [dim]({path}, {size_kb} KB)[/dim]",
+        )
         for i, e in enumerate(events):
-            console.print(_trace_event_text(e, i + 1, full=False), markup=False)
+            console.print(
+                _trace_event_text(e, i + 1, full=False),
+                markup=False,
+            )
         console.print("[dim]内容已截断；CLI 模式下可翻页查看完整 trace[/dim]")
 
 
@@ -407,13 +446,18 @@ def _handle_theme_command(cmd: str, config: Config) -> None:
     parts = cmd.strip().split(maxsplit=2)
     if len(parts) < 2:
         current_name = next(
-            (name for name, preset in THEME_PRESETS.items() if preset == config.theme),
+            (
+                name
+                for name, preset in THEME_PRESETS.items()
+                if preset == config.theme
+            ),
             "custom",
         )
         console.print(f"[bold]当前主题:[/bold] {current_name}")
         console.print(f"[dim]可用预设: {', '.join(THEME_PRESETS.keys())}[/dim]")
         console.print(
-            "[dim]用法: /theme list | /theme set <name> | /theme <name> | /theme <key> <color>[/dim]"
+            "[dim]用法: /theme list | /theme set <name> | /theme <name> | "
+            "/theme <key> <color>[/dim]",
         )
         return
 
@@ -421,7 +465,11 @@ def _handle_theme_command(cmd: str, config: Config) -> None:
 
     if sub == "list":
         current_name = next(
-            (name for name, preset in THEME_PRESETS.items() if preset == config.theme),
+            (
+                name
+                for name, preset in THEME_PRESETS.items()
+                if preset == config.theme
+            ),
             "custom",
         )
         console.print(f"[bold]当前主题:[/bold] {current_name}")
@@ -480,7 +528,7 @@ def _handle_directives_command(cmd: str, config: Config) -> None:
             "  /directives clear            — 清空所有指令\n"
             "  /directives proposals        — 查看自动学习的提议\n"
             "  /directives accept <id>      — 接受提议为规则\n"
-            "  /directives reject <id>      — 拒绝提议[/dim]"
+            "  /directives reject <id>      — 拒绝提议[/dim]",
         )
         return
 
@@ -493,7 +541,9 @@ def _handle_directives_command(cmd: str, config: Config) -> None:
             return
         config.user_directives.append(text)
         config.save_workspace()
-        console.print(f"[green]✓ 已添加指令 ({len(config.user_directives)} 条)[/green]")
+        console.print(
+            f"[green]✓ 已添加指令 ({len(config.user_directives)} 条)[/green]",
+        )
         return
 
     if sub.startswith("rm "):
@@ -517,7 +567,9 @@ def _handle_directives_command(cmd: str, config: Config) -> None:
         return
 
     if sub == "proposals":
-        from dashscope.acli.memory.directives_learning import list_proposed_directives
+        from dashscope.acli.memory.directives_learning import (
+            list_proposed_directives,
+        )
 
         proposals = list_proposed_directives("pending")
         if not proposals:
@@ -549,7 +601,9 @@ def _handle_directives_command(cmd: str, config: Config) -> None:
             console.print(f"[red]提议 {proposal_id} 不存在或已处理[/red]")
         return
 
-    console.print("[dim]用法: /directives [add|rm|clear|proposals|accept|reject][/dim]")
+    console.print(
+        "[dim]用法: /directives [add|rm|clear|proposals|accept|reject][/dim]",
+    )
 
 
 def _handle_rule_command(cmd: str, config: Config) -> None:
@@ -591,7 +645,9 @@ def _handle_rule_command(cmd: str, config: Config) -> None:
         for i, entry in enumerate(entries, 1):
             text = entry.get("text", "")
             enabled = (
-                "[green]✓[/green]" if entry.get("enabled", True) else "[dim]✗[/dim]"
+                "[green]✓[/green]"
+                if entry.get("enabled", True)
+                else "[dim]✗[/dim]"
             )
             console.print(f"  {enabled} {i}. {text}")
 
@@ -606,7 +662,7 @@ def _handle_rule_command(cmd: str, config: Config) -> None:
             "  /rule edit <num> <text>    — 修改指定规则\n"
             "  /rule enable <num>         — 启用规则\n"
             "  /rule disable <num>        — 禁用规则\n"
-            "  /rule clear                — 清空规则[/dim]"
+            "  /rule clear                — 清空规则[/dim]",
         )
         return
 
@@ -732,5 +788,6 @@ def _handle_rule_command(cmd: str, config: Config) -> None:
         return
 
     console.print(
-        "[dim]用法: /rule [list|add|remove(rm)|edit|edit <num> <text>|enable|disable|clear][/dim]"
+        "[dim]用法: /rule [list|add|remove(rm)|edit|edit <num> <text>|"
+        "enable|disable|clear][/dim]",
     )

@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 """Skill and cron command handlers."""
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements,protected-access,consider-using-get
 
 from __future__ import annotations
 
@@ -54,7 +57,8 @@ async def _handle_skill_package_command(sub: str, args: list[str]):
     if sub == "install":
         if not args:
             console.print(
-                "[red]用法: /skill install <local-dir|git-url|name[@version]>[/red]"
+                "[red]用法: /skill install "
+                "<local-dir|git-url|name[@version]>[/red]",
             )
             return None
         source = _strip_at(args[0])
@@ -84,7 +88,8 @@ async def _handle_skill_package_command(sub: str, args: list[str]):
             failed = [(n, err) for n, err in results if err is not None]
             if ok:
                 console.print(
-                    f"[green]✓ 已更新 {len(ok)} 个 Skill 包: {', '.join(ok)}[/green]"
+                    f"[green]✓ 已更新 {len(ok)} 个 Skill 包: "
+                    f"{', '.join(ok)}[/green]",
                 )
             if failed:
                 console.print("[red]更新失败:[/red]")
@@ -95,7 +100,8 @@ async def _handle_skill_package_command(sub: str, args: list[str]):
             return None
         if not args:
             console.print(
-                "[red]用法: /skill update <package-name> 或 /skill update --all[/red]"
+                "[red]用法: /skill update <package-name> 或 "
+                "/skill update --all[/red]",
             )
             return None
         name = args[0]
@@ -119,13 +125,15 @@ async def _handle_skill_package_command(sub: str, args: list[str]):
 
     if sub == "search":
         query = args[0] if args else ""
-        results = manager.search(query)
-        if not results:
+        search_results = manager.search(query)
+        if not search_results:
             console.print("[dim]未找到匹配的 Skill 包[/dim]")
             return None
-        console.print(f"\n[bold]搜索结果 ({len(results)}):[/bold]")
-        for r in results:
-            status = "[green]已安装[/green]" if r["installed"] else "[dim]未安装[/dim]"
+        console.print(f"\n[bold]搜索结果 ({len(search_results)}):[/bold]")
+        for r in search_results:
+            status = (
+                "[green]已安装[/green]" if r["installed"] else "[dim]未安装[/dim]"
+            )
             console.print(f"  {r['name']} v{r['version']} {status}")
             if r.get("description"):
                 console.print(f"    {r['description']}")
@@ -159,15 +167,22 @@ def _print_skill_packages():
 
     console.print(f"\n[bold]已安装 Skill 包 ({len(packages)}):[/bold]")
     for pkg in packages:
-        status = "[green]常驻[/green]" if pkg["always_active"] else "[dim]按需[/dim]"
+        status = (
+            "[green]常驻[/green]" if pkg["always_active"] else "[dim]按需[/dim]"
+        )
         desc = f" — {pkg['description']}" if pkg.get("description") else ""
         console.print(f"  {pkg['name']} v{pkg['version']} {status}{desc}")
 
 
 async def _handle_skill_command(
-    cmd: str, config: Config, agent: Agent | None = None
+    cmd: str,
+    config: Config,
+    agent: Agent | None = None,
 ) -> str | None:
-    """Handle /skill command. Returns rendered prompt to feed to agent, or None if handled internally."""
+    """Handle /skill command.
+
+    Returns rendered prompt to feed to agent, or None if handled
+    internally."""
     # Ensure skills are loaded every time
     from dashscope.acli.skills.base import load_skill_files
 
@@ -265,9 +280,12 @@ async def _handle_cron_command(cmd: str, config: Config, agent: Agent):
         args_str = subcmd[3:].strip()
         if not args_str:
             console.print("[dim]用法: /cron add every 5m skill weather 杭州[/dim]")
-            console.print("[dim]      /cron add at 14:30 skill search AI新闻[/dim]")
             console.print(
-                '[dim]      /cron add cron "0 9 * * 1-5" skill search 早报 condition "curl -sf http://health"[/dim]'
+                "[dim]      /cron add at 14:30 skill search AI新闻[/dim]",
+            )
+            console.print(
+                '[dim]      /cron add cron "0 9 * * 1-5" skill search 早报 '
+                'condition "curl -sf http://health"[/dim]',
             )
             return
         from dashscope.acli.scheduler import parse_cron_add

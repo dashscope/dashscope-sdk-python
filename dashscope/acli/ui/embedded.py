@@ -15,6 +15,7 @@ Usage:
 The full acli interactive loop is reused (completions, slash commands,
 keybindings, /skill menus, etc.). Only identity and defaults are overridden.
 """
+# pylint: disable=protected-access,unused-import
 from __future__ import annotations
 
 import asyncio
@@ -41,7 +42,8 @@ def run(
     keybindings, /skill, /provider sub-menus — everything).
 
     Args:
-        system_prompt: The system prompt. If None, loads from .acli/system-prompt.md.
+        system_prompt: The system prompt. If None, loads from
+            .acli/system-prompt.md.
         app_name: Display name shown in the banner.
         default_model: Default LLM model name.
         default_provider: Default provider (tongyi/anthropic/openai/...).
@@ -49,7 +51,8 @@ def run(
         base_url: Custom base URL for the provider.
         command: If set, run one-shot mode with this prompt then exit.
         prompt_symbol: The input prompt symbol shown to the user.
-        sdk_index: List of SDK index files loaded (e.g., ["python-sdk", "python-cli"]).
+        sdk_index: List of SDK index files loaded (e.g., ["python-sdk",
+            "python-cli"]).
         tui: If set, override config.tui. None = use config value.
     """
     from dashscope.acli.config import Config
@@ -61,7 +64,8 @@ def run(
         default_model=default_model,
     )
 
-    # Explicit api_key from caller fills in MISSING key; saved config takes priority.
+    # Explicit api_key from caller fills in MISSING key; saved config
+    # takes priority.
     if api_key and not config.api_key:
         config.api_key = api_key
     if base_url and not config.base_url:
@@ -91,7 +95,11 @@ def run(
         pass
 
 
-async def _run_oneshot_embedded(config, prompt: str, system_prompt: str | None):
+async def _run_oneshot_embedded(
+    config,
+    prompt: str,
+    system_prompt: str | None,
+):
     """One-shot mode using acli's full agent stack."""
     import dashscope.acli.tools.filesystem  # noqa: F401
     import dashscope.acli.tools.shell  # noqa: F401
@@ -100,7 +108,9 @@ async def _run_oneshot_embedded(config, prompt: str, system_prompt: str | None):
     from dashscope.acli.executor import Executor
     from dashscope.acli.providers import get_provider_chain
 
-    resolved_prompt = _compose_system_prompt(system_prompt or _load_system_prompt())
+    resolved_prompt = _compose_system_prompt(
+        system_prompt or _load_system_prompt(),
+    )
     provider = get_provider_chain(config)
     executor = Executor()
     agent = Agent(

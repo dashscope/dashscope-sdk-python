@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Audit logging for user input and agent decisions.
 
 The design doc places ``AuditLog`` in the Governance layer, receiving events
@@ -24,7 +25,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from dashscope.acli.config import WORKSPACE_DIR
 
@@ -32,7 +33,7 @@ _AUDIT_FILE = WORKSPACE_DIR / "audit.log"
 
 # Tool argument keys whose values are redacted in privacy mode.
 _SENSITIVE_ARG_KEYS = frozenset(
-    {"content", "command", "query", "text", "prompt", "url", "path", "file"}
+    {"content", "command", "query", "text", "prompt", "url", "path", "file"},
 )
 
 # Credential-like keys are redacted in full regardless of length — even a
@@ -50,7 +51,7 @@ _CREDENTIAL_ARG_KEYS = frozenset(
         "auth",
         "credential",
         "cookie",
-    }
+    },
 )
 
 
@@ -121,7 +122,8 @@ class AuditLogger:
         self._privacy_mode = enabled
 
     def log(self, event: AuditEvent) -> None:
-        """Append one event. Swallows I/O errors so audit never breaks the agent."""
+        """Append one event. Swallows I/O errors so audit never breaks
+        the agent."""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             record = asdict(event)
@@ -130,7 +132,9 @@ class AuditLogger:
                 if record.get("source") == "user":
                     record["subject"] = _redact_text(record.get("subject", ""))
             with self._path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+                f.write(
+                    json.dumps(record, ensure_ascii=False, default=str) + "\n",
+                )
         except Exception:
             pass  # audit must never break the agent loop
 
@@ -153,7 +157,7 @@ class AuditLogger:
                 decision,
                 reason,
                 **args,
-            )
+            ),
         )
 
     def log_cron(self, job_id: str, decision: str, reason: str = "") -> None:

@@ -1,10 +1,16 @@
+# -*- coding: utf-8 -*-
 """Capability management command handlers."""
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
 
 from rich.console import Console
 
-from dashscope.acli.cli.constants import ALL_CAPABILITY_KEYS, CAPABILITY_CATALOG
+from dashscope.acli.cli.constants import (
+    ALL_CAPABILITY_KEYS,
+    CAPABILITY_CATALOG,
+)
 from dashscope.acli.config import PROVIDER_MODELS, Config
 
 console = Console()
@@ -52,14 +58,17 @@ def sync_extensions_into_catalog(ext) -> None:
                 "name": cap.display or cap.key,
                 "platform": platform_part,
                 "cap": cap_part or cap.key,
-                "requires": [],  # creds checked at HTTP call time, not registration
-            }
+                # creds checked at HTTP call time, not registration
+                "requires": [],
+            },
         )
         ALL_CAPABILITY_KEYS.append(cap.key)
 
 
 def _cap_enabled(config: Config, cap_key: str) -> bool:
-    """Check if a platform capability is enabled. None = all enabled (not configured).
+    """Check if a platform capability is enabled.
+
+    None = all enabled (not configured).
     When privacy_mode is True, all cloud capabilities are disabled."""
     if config.privacy_mode:
         return False
@@ -77,14 +86,15 @@ def _require_capability(config: Config, cap_key: str) -> bool:
     if _cap_enabled(config, cap_key):
         return True
     cap_name = next(
-        (c["name"] for c in CAPABILITY_CATALOG if c["key"] == cap_key), cap_key
+        (c["name"] for c in CAPABILITY_CATALOG if c["key"] == cap_key),
+        cap_key,
     )
     console.print(
         f"[yellow]能力未启用: {cap_key} ({cap_name})[/yellow]\n"
         f"[dim]启用方式:[/dim]\n"
         f"[dim]  /capability enable {cap_key}    — 立即启用并按需补全凭证[/dim]\n"
         f"[dim]  /setup                          — 重新选择启用的能力[/dim]\n"
-        f"[dim]  /capability list                  — 查看所有能力状态[/dim]"
+        f"[dim]  /capability list                  — 查看所有能力状态[/dim]",
     )
     return False
 
@@ -137,7 +147,9 @@ def _handle_capability_command(cmd: str, config: Config):
             # Already enabled — but extension caps may still lack credentials
             # (enabled without a token, or env var unset). Offer the prompt
             # again and re-register so the tools bind to fresh creds.
-            from dashscope.acli.cli.handlers_key import _maybe_prompt_extension_token
+            from dashscope.acli.cli.handlers_key import (
+                _maybe_prompt_extension_token,
+            )
 
             _maybe_prompt_extension_token(cap_key, config)
             from dashscope.acli.cli.mcp import _connect_mcp
@@ -150,13 +162,17 @@ def _handle_capability_command(cmd: str, config: Config):
             # to the (possibly just-entered) credentials.
             unregister_capability_tools(cap_key)
             added = register_one_capability(
-                config, cap_key, connect_mcp_fn=_connect_mcp
+                config,
+                cap_key,
+                connect_mcp_fn=_connect_mcp,
             )
             suffix = f" ({added} 个工具已注册)" if added else ""
             console.print(f"[dim]{cap_key} 已启用[/dim]{suffix}")
             return
         cap_info = next(c for c in CAPABILITY_CATALOG if c["key"] == cap_key)
-        missing = [f for f in cap_info["requires"] if not getattr(config, f, "")]
+        missing = [
+            f for f in cap_info["requires"] if not getattr(config, f, "")
+        ]
         if missing:
             console.print(f"[yellow]{cap_info['key']} 需要配置:[/yellow]")
             if not _prompt_missing_config(config, cap_info["requires"]):
@@ -164,7 +180,9 @@ def _handle_capability_command(cmd: str, config: Config):
                 return
 
         # Extension-capability bearer/apikey-header token
-        from dashscope.acli.cli.handlers_key import _maybe_prompt_extension_token
+        from dashscope.acli.cli.handlers_key import (
+            _maybe_prompt_extension_token,
+        )
 
         _maybe_prompt_extension_token(cap_key, config)
 
@@ -173,7 +191,11 @@ def _handle_capability_command(cmd: str, config: Config):
         from dashscope.acli.cli.mcp import _connect_mcp
         from dashscope.acli.tools.platform import register_one_capability
 
-        added = register_one_capability(config, cap_key, connect_mcp_fn=_connect_mcp)
+        added = register_one_capability(
+            config,
+            cap_key,
+            connect_mcp_fn=_connect_mcp,
+        )
         suffix = f" ({added} 个工具已注册)" if added else " (无可注册工具——可能缺凭证)"
         console.print(f"[green]✓ 已启用: {cap_key}[/green]{suffix}")
         return
@@ -200,9 +222,11 @@ def _handle_capability_command(cmd: str, config: Config):
         console.print(f"[yellow]✗ 已禁用: {cap_key}[/yellow] ({removed} 个工具已撤销)")
         return
 
-    if sub == "reload" or sub == "refresh":
+    if sub in ("reload", "refresh"):
         from dashscope.acli.extensions import apply_extensions
-        from dashscope.acli.tools.platform import refresh_extension_capability_tools
+        from dashscope.acli.tools.platform import (
+            refresh_extension_capability_tools,
+        )
 
         ext = apply_extensions(PROVIDER_MODELS)
         sync_extensions_into_catalog(ext)
@@ -210,7 +234,7 @@ def _handle_capability_command(cmd: str, config: Config):
         # freshly loaded toml (endpoint/auth/token edits take effect now).
         refreshed = refresh_extension_capability_tools(config)
         console.print(
-            f"[green]✓ 已重新加载能力注册表[/green] ({refreshed} 个扩展工具已刷新)"
+            f"[green]✓ 已重新加载能力注册表[/green] ({refreshed} 个扩展工具已刷新)",
         )
         return
 
@@ -219,10 +243,10 @@ def _handle_capability_command(cmd: str, config: Config):
         if not args:
             console.print("[bold]能力配置:[/bold]")
             console.print(
-                "[dim]能力配置请使用 /subagents config <name> <key> <value>[/dim]"
+                "[dim]能力配置请使用 /subagents config <name> <key> <value>[/dim]",
             )
             console.print(
-                "[dim]支持的能力: " + ", ".join(ALL_CAPABILITY_KEYS) + "[/dim]"
+                "[dim]支持的能力: " + ", ".join(ALL_CAPABILITY_KEYS) + "[/dim]",
             )
             return
         # Delegate to subagents config for subagent-type capabilities
@@ -234,10 +258,13 @@ def _handle_capability_command(cmd: str, config: Config):
         cap_key = args[0]
         if cap_key in SUBAGENT_CAPABILITY_KEYS:
             # Rewrite as /subagents config <rest...>
-            handle_subagents_command(f"/subagents config {' '.join(args)}", config)
+            handle_subagents_command(
+                f"/subagents config {' '.join(args)}",
+                config,
+            )
         else:
             console.print(
-                f"[dim]{cap_key} 不是可配置子代理；请使用 /subagents config[/dim]"
+                f"[dim]{cap_key} 不是可配置子代理；请使用 /subagents config[/dim]",
             )
         return
 
@@ -248,12 +275,12 @@ def _handle_capability_command(cmd: str, config: Config):
         console.print(
             f"[yellow]缺少操作: enable 或 disable[/yellow]\n"
             f"[dim]当前 {sub}: {'已启用' if currently_enabled else '未启用'}[/dim]\n"
-            f"[dim]例如: /capability {action_hint} {sub}[/dim]"
+            f"[dim]例如: /capability {action_hint} {sub}[/dim]",
         )
         return
 
     console.print(
-        r"[dim]用法: /capability \[list|enable <cap>|disable <cap>|reload|config <cap>][/dim]"
-        + "\n"
-        f"[dim]可选 cap: {', '.join(ALL_CAPABILITY_KEYS)}[/dim]"
+        r"[dim]用法: /capability \[list|enable <cap>|disable <cap>|"
+        r"reload|config <cap>][/dim]" + "\n"
+        f"[dim]可选 cap: {', '.join(ALL_CAPABILITY_KEYS)}[/dim]",
     )

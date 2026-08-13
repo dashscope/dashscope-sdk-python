@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Session manager — handles multi-topic session persistence.
 
 Each topic gets its own directory under WORKSPACE_DIR/session/<topic>/:
@@ -35,7 +36,10 @@ class SessionMeta:
         return cls(
             topic=data.get("topic", DEFAULT_TOPIC),
             created=data.get("created", datetime.now().isoformat()),
-            last_accessed=data.get("last_accessed", datetime.now().isoformat()),
+            last_accessed=data.get(
+                "last_accessed",
+                datetime.now().isoformat(),
+            ),
             message_count=data.get("message_count", 0),
         )
 
@@ -119,7 +123,7 @@ class SessionManager:
                             topic=topic_dir.name,
                             created=datetime.now().isoformat(),
                             last_accessed=datetime.now().isoformat(),
-                        )
+                        ),
                     )
             else:
                 # No meta file — derive timestamps from directory mtime to
@@ -140,7 +144,7 @@ class SessionManager:
                         topic=topic_dir.name,
                         created=ts,
                         last_accessed=ts,
-                    )
+                    ),
                 )
 
         # Sort: default first, then by last_accessed descending.
@@ -193,7 +197,9 @@ class SessionManager:
             old_meta_file = old_dir / "meta.json"
             if old_meta_file.exists():
                 try:
-                    meta_data = json.loads(old_meta_file.read_text(encoding="utf-8"))
+                    meta_data = json.loads(
+                        old_meta_file.read_text(encoding="utf-8"),
+                    )
                 except (json.JSONDecodeError, OSError):
                     meta_data = None
 
@@ -209,7 +215,9 @@ class SessionManager:
                         encoding="utf-8",
                     )
                 except OSError:
-                    pass  # meta mismatch is tolerable; directory is already renamed
+                    # meta mismatch is tolerable; directory is already
+                    # renamed
+                    pass
 
             if self.current_topic == old_name:
                 self.current_topic = new_name
@@ -246,7 +254,11 @@ class SessionManager:
         topic = topic or self.current_topic
         return self._input_history_file(topic)
 
-    def update_message_count(self, count: int, topic: str | None = None) -> None:
+    def update_message_count(
+        self,
+        count: int,
+        topic: str | None = None,
+    ) -> None:
         """Update the message count for a topic."""
         topic = topic or self.current_topic
         meta_file = self._meta_file(topic)
@@ -256,7 +268,8 @@ class SessionManager:
                 data["message_count"] = count
                 data["last_accessed"] = datetime.now().isoformat()
                 meta_file.write_text(
-                    json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+                    json.dumps(data, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
                 )
             except (json.JSONDecodeError, OSError):
                 pass
@@ -266,7 +279,8 @@ class SessionManager:
         meta_file = self._meta_file(topic)
         meta_file.parent.mkdir(parents=True, exist_ok=True)
         meta_file.write_text(
-            json.dumps(meta.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(meta.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
 
     def _update_last_accessed(self, topic: str) -> None:
@@ -277,13 +291,16 @@ class SessionManager:
                 data = json.loads(meta_file.read_text(encoding="utf-8"))
                 data["last_accessed"] = datetime.now().isoformat()
                 meta_file.write_text(
-                    json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+                    json.dumps(data, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
                 )
             except (json.JSONDecodeError, OSError):
                 pass
 
     def should_prompt_archive(
-        self, topic: str | None = None, threshold: int = 100
+        self,
+        topic: str | None = None,
+        threshold: int = 100,
     ) -> bool:
         """Check if a topic has enough messages to suggest archiving."""
         topic = topic or self.current_topic

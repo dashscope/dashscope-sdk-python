@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Keyword extraction helpers for local search (Chinese + English)."""
 
 from __future__ import annotations

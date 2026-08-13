@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Conversation history memory — auto-store summaries after each turn.
 
 Storage layout:
@@ -125,7 +126,9 @@ def extract_summary(messages: list[dict[str, str]]) -> str:
                     tools_used.append(name)
 
     if tools_used:
-        return sanitize_text(f"{candidate} [tools: {', '.join(tools_used[:3])}]")
+        return sanitize_text(
+            f"{candidate} [tools: {', '.join(tools_used[:3])}]",
+        )
     return sanitize_text(candidate)
 
 
@@ -234,7 +237,8 @@ def export_history(path: str, fmt: str | None = None) -> str:
 
     if fmt == "json":
         output.write_text(
-            json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8"
+            json.dumps(entries, ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
     elif fmt == "markdown":
         lines = ["# 对话历史\n"]
@@ -259,19 +263,22 @@ def _generate_html(entries: list[dict[str, Any]]) -> str:
         rows.append(
             f"<tr><td>{_esc(summary)}</td>"
             f"<td>{_esc(created)}</td>"
-            f"<td style='text-align:center'>{turns}</td></tr>"
+            f"<td style='text-align:center'>{turns}</td></tr>",
         )
 
     total_turns = sum(e.get("turns", 0) for e in entries)
     total_count = len(entries)
 
-    return f"""<!DOCTYPE html>
+    return (
+        f"""<!DOCTYPE html>
 <html lang="zh">
 <head>
 <meta charset="utf-8">
 <title>AgenticCLI 对话历史</title>
 <style>
-body {{ font-family: -apple-system, "Segoe UI", sans-serif; margin: 2rem; background: #1e1e1e; color: #d4d4d4; }}
+body {{ font-family: -apple-system, "Segoe UI", sans-serif; """
+        f"margin: 2rem; background: #1e1e1e; color: #d4d4d4; }}"
+        f"""
 h1 {{ color: #569cd6; }}
 .stats {{ margin: 1rem 0; color: #6a6a6a; }}
 table {{ border-collapse: collapse; width: 100%; }}
@@ -289,6 +296,7 @@ tr:nth-child(even) {{ background: #252525; }}
 </table>
 </body>
 </html>"""
+    )
 
 
 def _esc(text: str) -> str:

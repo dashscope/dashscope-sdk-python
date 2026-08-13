@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Browser tools — Playwright-based web scraping for JS-rendered pages.
 
 Security hardening:
@@ -31,7 +32,10 @@ _USER_AGENT = (
     "Chrome/120.0.0.0 Safari/537.36"
 )
 
-_PLAYWRIGHT_INSTALL_HINT = "错误: 未安装 playwright。请运行 `pip install playwright && playwright install chromium`"
+_PLAYWRIGHT_INSTALL_HINT = (
+    "错误: 未安装 playwright。请运行 "
+    "`pip install playwright && playwright install chromium`"
+)
 
 # Schemes we allow.
 _ALLOWED_SCHEMES = {"http", "https"}
@@ -70,7 +74,12 @@ def _validate_url(url: str) -> str:
     try:
         ip = ipaddress.ip_address(hostname)
         _is_ip = True
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+        ):
             raise ValueError(f"不允许访问内部网络地址 {hostname}（SSRF 防护）")
         return url
     except ValueError:
@@ -83,7 +92,7 @@ def _validate_url(url: str) -> str:
     try:
         infos = socket.getaddrinfo(hostname, port)
     except socket.gaierror as exc:
-        raise ValueError(f"无法解析主机名 '{hostname}': {exc}")
+        raise ValueError(f"无法解析主机名 '{hostname}': {exc}") from exc
 
     for _family, _, _, _, sockaddr in infos:
         ip_str = sockaddr[0]
@@ -91,7 +100,12 @@ def _validate_url(url: str) -> str:
             ip = ipaddress.ip_address(ip_str)
         except ValueError:
             continue
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+        ):
             raise ValueError(f"不允许访问内部网络地址 {ip_str}（SSRF 防护）")
     return url
 
@@ -102,7 +116,8 @@ def _clamp_timeout(timeout: int) -> int:
 
 
 def _validate_screenshot_path(output_path: str) -> str:
-    """Ensure the screenshot path doesn't escape the current working directory."""
+    """Ensure the screenshot path doesn't escape the current working
+    directory."""
     resolved = os.path.realpath(output_path)
     cwd = os.path.realpath(".")
     if not resolved.startswith(cwd + os.sep) and resolved != cwd:
@@ -180,11 +195,13 @@ async def _get_browser():
 
         try:
             from playwright.async_api import async_playwright
-        except ImportError:
-            raise ImportError(_PLAYWRIGHT_INSTALL_HINT)
+        except ImportError as exc:
+            raise ImportError(_PLAYWRIGHT_INSTALL_HINT) from exc
 
         _playwright_instance = await async_playwright().start()
-        _browser_instance = await _playwright_instance.chromium.launch(headless=True)
+        _browser_instance = await _playwright_instance.chromium.launch(
+            headless=True,
+        )
         _browser_loop = asyncio.get_running_loop()
         return _browser_instance
 
@@ -238,10 +255,17 @@ def _is_safe_response_ip(url: str) -> bool:
             return False
         for _, _, _, _, sockaddr in infos:
             ip = ipaddress.ip_address(sockaddr[0])
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+            ):
                 return False
         return True
-    return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved)
+    return not (
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+    )
 
 
 @asynccontextmanager
@@ -307,7 +331,10 @@ async def _navigate_and_wait(
 
 @tool(
     name="scrape_web",
-    description="用 Playwright 无头浏览器抓取网页内容（支持 JS 动态渲染的 SPA 页面）。返回页面的纯文本内容。可指定等待选择器、超时时间等。",
+    description=(
+        "用 Playwright 无头浏览器抓取网页内容（支持 JS 动态渲染的 SPA "
+        "页面）。返回页面的纯文本内容。可指定等待选择器、超时时间等。"
+    ),
     permission=PermissionLevel.AUTO,
 )
 async def scrape_web(
@@ -319,7 +346,8 @@ async def scrape_web(
 
     Args:
         url: The URL to scrape (http/https only).
-        wait_selector: Optional CSS selector to wait for before extracting content.
+        wait_selector: Optional CSS selector to wait for before extracting
+        content.
         timeout: Max wait time in milliseconds (default 30s, max 120s).
     """
     try:
@@ -367,7 +395,8 @@ async def scrape_web_html(
 
     Args:
         url: The URL to scrape (http/https only).
-        wait_selector: Optional CSS selector to wait for before extracting HTML.
+        wait_selector: Optional CSS selector to wait for before extracting
+        HTML.
         timeout: Max wait time in milliseconds (default 30s, max 120s).
     """
     try:
@@ -407,7 +436,8 @@ async def scrape_web_screenshot(
 
     Args:
         url: The URL to screenshot (http/https only).
-        output_path: Where to save the screenshot image (must be within current directory).
+        output_path: Where to save the screenshot image (must be within
+        current directory).
         full_page: If True, capture the full scrollable page.
         wait_selector: Optional CSS selector to wait for before capturing.
         timeout: Max wait time in milliseconds (default 30s, max 120s).

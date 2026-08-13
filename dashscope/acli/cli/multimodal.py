@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 """Multimodal content handling: @-references, images, audio."""
+
+# pylint: disable=too-many-return-statements,too-many-statements
 
 from __future__ import annotations
 
@@ -6,13 +9,11 @@ import base64
 import os
 import re
 from pathlib import Path
-from typing import Any
 
 from dashscope.acli.cli.constants import (
     _AT_AUDIO_MAX_BYTES,
     _AT_FILE_MAX_CHARS,
     _AT_FILE_PATTERN,
-    _AT_IMAGE_MAX_BYTES,
     _AUDIO_MIME,
     _IMAGE_MIME,
     _MEDIA_SENTINEL_RE,
@@ -97,14 +98,25 @@ def _expand_at_references(text: str) -> tuple[str, list[str], list[dict]]:
 
         try:
             result = _sp.run(
-                ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+                [
+                    "git",
+                    "ls-files",
+                    "--cached",
+                    "--others",
+                    "--exclude-standard",
+                ],
                 capture_output=True,
                 text=True,
                 cwd=str(dirpath),
                 timeout=5,
+                check=False,
             )
             if result.returncode == 0:
-                files = [dirpath / f for f in result.stdout.strip().splitlines() if f]
+                files = [
+                    dirpath / f
+                    for f in result.stdout.strip().splitlines()
+                    if f
+                ]
             else:
                 raise FileNotFoundError
         except (FileNotFoundError, _sp.TimeoutExpired):
@@ -128,16 +140,23 @@ def _expand_at_references(text: str) -> tuple[str, list[str], list[dict]]:
                 continue
             if total + len(content) > _AT_DIR_MAX_CHARS:
                 content = content[: _AT_DIR_MAX_CHARS - total]
-                rel = fp.relative_to(dirpath) if fp.is_relative_to(dirpath) else fp
+                rel = (
+                    fp.relative_to(dirpath)
+                    if fp.is_relative_to(dirpath)
+                    else fp
+                )
                 lang = lang_map.get(fp.suffix.lower(), "")
                 blocks.append(
-                    f"\n--- @{raw}{rel} ---\n```{lang}\n{content}\n... (截断)\n```\n"
+                    f"\n--- @{raw}{rel} ---\n```{lang}\n"
+                    f"{content}\n... (截断)\n```\n",
                 )
                 file_count += 1
                 break
             rel = fp.relative_to(dirpath) if fp.is_relative_to(dirpath) else fp
             lang = lang_map.get(fp.suffix.lower(), "")
-            blocks.append(f"\n--- @{raw}{rel} ---\n```{lang}\n{content}\n```\n")
+            blocks.append(
+                f"\n--- @{raw}{rel} ---\n```{lang}\n{content}\n```\n",
+            )
             total += len(content)
             file_count += 1
 
@@ -176,9 +195,16 @@ def _expand_at_references(text: str) -> tuple[str, list[str], list[dict]]:
             except OSError as e:
                 return f"[@{raw} 读取失败: {e}]"
             if len(data) > _AT_AUDIO_MAX_BYTES:
-                return f"[@{raw} 音频过大 ({len(data)//1024} KB > {_AT_AUDIO_MAX_BYTES//1024} KB)，已忽略]"
+                return (
+                    f"[@{raw} 音频过大 ({len(data)//1024} KB > "
+                    f"{_AT_AUDIO_MAX_BYTES//1024} KB)，已忽略]"
+                )
             audio_clips.append(
-                {"mime": mime, "format": fmt, "data": base64.b64encode(data).decode()}
+                {
+                    "mime": mime,
+                    "format": fmt,
+                    "data": base64.b64encode(data).decode(),
+                },
             )
             return f"<<__ACLI_AUDIO_{len(audio_clips) - 1}__>>"
 
@@ -201,7 +227,9 @@ def _expand_at_references(text: str) -> tuple[str, list[str], list[dict]]:
 
 
 def _to_multimodal_content(
-    text: str, images: list[str], audio_clips: list[dict] | None = None
+    text: str,
+    images: list[str],
+    audio_clips: list[dict] | None = None,
 ) -> str | list[dict]:
     """Convert (text-with-sentinels, image-data-urls, audio-clips) into either
     a plain string (no media) or an OpenAI-style content-block list."""
@@ -225,7 +253,10 @@ def _to_multimodal_content(
             if kind == "IMG":
                 try:
                     blocks.append(
-                        {"type": "image_url", "image_url": {"url": images[idx]}}
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": images[idx]},
+                        },
                     )
                 except IndexError:
                     continue
@@ -239,7 +270,7 @@ def _to_multimodal_content(
                                 "data": clip["data"],
                                 "format": clip["format"],
                             },
-                        }
+                        },
                     )
                 except IndexError:
                     continue

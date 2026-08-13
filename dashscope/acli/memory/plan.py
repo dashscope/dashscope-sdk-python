@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Planning layer for complex tasks.
 Provides plan creation, tracking, and progress reporting.
@@ -55,7 +56,9 @@ class PlanTracker:
     """
 
     def __init__(
-        self, ttl_seconds: float = 1800, clock: Callable[[], float] | None = None
+        self,
+        ttl_seconds: float = 1800,
+        clock: Callable[[], float] | None = None,
     ):
         self.current_plan: Plan | None = None
         self.ttl_seconds = ttl_seconds

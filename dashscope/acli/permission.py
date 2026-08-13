@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Per-tool and per-domain permission policy.
 
 The interactive permission protocol between ``Executor`` and the TUI/CLI
@@ -58,18 +59,23 @@ class PermissionPolicy:
         best: tuple[int, str] | None = None
         for prefix, decision in self.command_rules.items():
             if normalized.startswith(prefix):
+                # pylint: disable=unsubscriptable-object
                 if best is None or len(prefix) > best[0]:
                     best = (len(prefix), decision)
         return best[1] if best else None
 
     def add_tool_rule(self, tool_name: str, decision: str) -> None:
         if decision not in ("allow", "deny", "confirm"):
-            raise ValueError(f"decision must be allow/deny/confirm, got {decision}")
+            raise ValueError(
+                f"decision must be allow/deny/confirm, got {decision}",
+            )
         self.tool_rules[tool_name] = decision
 
     def add_command_rule(self, prefix: str, decision: str) -> None:
         if decision not in ("allow", "deny", "confirm"):
-            raise ValueError(f"decision must be allow/deny/confirm, got {decision}")
+            raise ValueError(
+                f"decision must be allow/deny/confirm, got {decision}",
+            )
         normalized = _normalize_command(prefix)
         if not normalized:
             raise ValueError("command rule prefix must not be empty")
@@ -125,7 +131,10 @@ def configure_permission_policy() -> PermissionPolicy:
     from dashscope.acli.config import CONFIG_DIR, WORKSPACE_DIR
 
     policy = PermissionPolicy()
-    for path in (CONFIG_DIR / "permissions.toml", WORKSPACE_DIR / "permissions.toml"):
+    for path in (
+        CONFIG_DIR / "permissions.toml",
+        WORKSPACE_DIR / "permissions.toml",
+    ):
         for err in load_permissions_file(policy, path):
             log.warning("%s", err)
     set_permission_policy(policy)

@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=protected-access
 from __future__ import annotations
 
 import inspect
 import sys
 import types
-import typing
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Union, get_type_hints
@@ -93,7 +94,7 @@ _CAPABILITY_AGENT_TOOLS = frozenset(
         "delegate",
         "delegate_parallel",
         "subagent_invoke",
-    }
+    },
 )
 
 
@@ -105,7 +106,8 @@ class ToolRegistry:
         self._tools: dict[str, ToolDefinition] = {}
 
     def register(self, tool_def: ToolDefinition):
-        """Register a tool. When used as a decorator with a ToolDefinition, returns a decorator."""
+        """Register a tool. When used as a decorator with a ToolDefinition,
+        returns a decorator."""
         if isinstance(tool_def, ToolDefinition):
             self._tools[tool_def.name] = tool_def
 
@@ -117,9 +119,14 @@ class ToolRegistry:
             return decorator
         # Called with a callable directly (legacy)
         self._tools[tool_def.name] = tool_def
+        return None
 
     def register_mcp_tool(
-        self, name: str, description: str, parameters: dict, call_fn: Callable
+        self,
+        name: str,
+        description: str,
+        parameters: dict,
+        call_fn: Callable,
     ):
         tool_def = ToolDefinition(
             name=name,
@@ -223,8 +230,18 @@ class ToolRegistry:
             "档案": ["memory_search", "memory_store"],
             "偏好": ["memory_search", "memory_store"],
             "记忆": b_memory,
-            "数据": ["data_upload", "data_files", "data_delete", "data_categories"],
-            "data": ["data_upload", "data_files", "data_delete", "data_categories"],
+            "数据": [
+                "data_upload",
+                "data_files",
+                "data_delete",
+                "data_categories",
+            ],
+            "data": [
+                "data_upload",
+                "data_files",
+                "data_delete",
+                "data_categories",
+            ],
             "prompt": [
                 "prompt_list",
                 "prompt_get",
@@ -328,7 +345,7 @@ class ToolRegistry:
                 "switch_provider",
                 "capability_enable",
                 "capability_disable",
-            ]
+            ],
         )
         include_tools.update(["mcp_connect", "mcp_disconnect"])
 
@@ -359,7 +376,9 @@ class ToolRegistry:
         if user_input:
             if isinstance(user_input, list):
                 input_lower = " ".join(
-                    b.get("text", "") for b in user_input if isinstance(b, dict)
+                    b.get("text", "")
+                    for b in user_input
+                    if isinstance(b, dict)
                 ).lower()
             else:
                 input_lower = user_input.lower()
@@ -368,7 +387,7 @@ class ToolRegistry:
                     include_tools.update(tools)
 
         # Add all MCP tools (they're dynamically added and usually relevant)
-        for name in self._tools.keys():
+        for name in self._tools:
             if name.startswith("mcp_"):
                 include_tools.add(name)
 
@@ -381,7 +400,7 @@ class ToolRegistry:
                         "name": t.name,
                         "description": t.description,
                         "parameters": t.parameters,
-                    }
+                    },
                 )
 
         return result

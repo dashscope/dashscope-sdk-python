@@ -1,8 +1,10 @@
+# -*- coding: utf-8 -*-
 """Constants and configuration data for acli CLI."""
 
 from __future__ import annotations
 
 import re
+from typing import Any
 
 # API key target configurations
 KEY_TARGETS = {
@@ -27,7 +29,11 @@ KEY_TARGETS = {
 }
 
 # ASR model options
-ASR_MODELS = ["paraformer-realtime-v2", "paraformer-realtime-v1", "sensevoice-v1"]
+ASR_MODELS = [
+    "paraformer-realtime-v2",
+    "paraformer-realtime-v1",
+    "sensevoice-v1",
+]
 
 # Theme presets
 THEME_PRESETS = {
@@ -88,7 +94,7 @@ THEME_PRESETS = {
 }
 
 # Capability catalog
-CAPABILITY_CATALOG = [
+CAPABILITY_CATALOG: list[dict[str, Any]] = [
     {
         "key": "bailian.mcp",
         "name": "云端工具扩展",
@@ -283,7 +289,8 @@ _DEV_SUBCOMMANDS: dict[str, list[str]] = {
 # Completion-related patterns
 _AT_PATH_AT_CURSOR_RE = re.compile(r"@([^\s]*)$")
 _PATH_COMPLETION_LIMIT = 300
-# Argument hints: dim ghost text appended after cursor to guide free-form input.
+# Argument hints: dim ghost text appended after cursor to guide
+# free-form input.
 # Key = (command, subcommand_or_None, arg_index) → hint text.
 _ARG_HINTS: dict[tuple, str] = {
     ("/camera", "capture", 2): " <filename.jpg>",

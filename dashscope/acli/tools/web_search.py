@@ -1,8 +1,10 @@
+# -*- coding: utf-8 -*-
 """Web search tool — DuckDuckGo-based web search.
 
 Uses the `duckduckgo-search` package (DDGS) as a free, keyless search backend.
 Complements the browser tools (scrape_web, scrape_web_html) which handle
-page content extraction. Together they form a complete web acquisition pipeline:
+page content extraction. Together they form a complete web acquisition
+pipeline:
   web_search  → find relevant URLs
   scrape_web  → extract content from those URLs
 
@@ -36,8 +38,8 @@ def _get_ddgs_class():
         from duckduckgo_search import DDGS
 
         return DDGS
-    except ImportError:
-        raise ImportError(_DDGS_HINT)
+    except ImportError as exc:
+        raise ImportError(_DDGS_HINT) from exc
 
 
 def _validate_query(query: str) -> str:
@@ -47,7 +49,7 @@ def _validate_query(query: str) -> str:
         raise ValueError("搜索查询不能为空")
     if len(query) > _MAX_QUERY_LEN:
         raise ValueError(
-            f"搜索查询过长（{len(query)} 字符），最大 {_MAX_QUERY_LEN} 字符"
+            f"搜索查询过长（{len(query)} 字符），最大 {_MAX_QUERY_LEN} 字符",
         )
     return query
 
@@ -112,7 +114,10 @@ def _format_results(results: list[dict], query: str) -> str:
             "rank": i,
             "title": r.get("title", ""),
             "url": r.get("href", r.get("url", r.get("link", ""))),
-            "snippet": r.get("body", r.get("snippet", r.get("description", ""))),
+            "snippet": r.get(
+                "body",
+                r.get("snippet", r.get("description", "")),
+            ),
         }
         formatted.append(entry)
 
@@ -161,7 +166,7 @@ async def web_search(
                     query,
                     region=region,
                     max_results=max_results,
-                )
+                ),
             )
     except ImportError as e:
         return str(e)

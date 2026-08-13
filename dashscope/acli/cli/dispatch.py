@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 """Command dispatch functions."""
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements,too-many-nested-blocks
 
 from __future__ import annotations
 
@@ -34,8 +37,16 @@ from dashscope.acli.dev import handle_dev_command
 console = Console()
 
 
-def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
-    """Handle slash commands. Returns True if handled, 'async' if needs async handling, 'voice' for voice input, False otherwise."""
+def _handle_slash_command(
+    cmd: str,
+    agent: Agent,
+    config: Config,
+) -> bool | str:
+    """Handle slash commands.
+
+    Returns True if handled, 'async' if needs async handling, 'voice' for
+    voice input, False otherwise.
+    """
     cmd = cmd.strip()
     if cmd == "/v":
         return "voice"
@@ -85,7 +96,7 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
             if arg in ("on", "true", "1"):
                 agent.json_mode = True
                 console.print(
-                    "[green]✓ JSON 输出模式已开启（后续回复强制 JSON 格式）[/green]"
+                    "[green]✓ JSON 输出模式已开启（后续回复强制 JSON 格式）[/green]",
                 )
             elif arg in ("off", "false", "0"):
                 agent.json_mode = False
@@ -96,7 +107,7 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
             state = "开启" if agent.json_mode else "关闭"
             console.print(f"[bold]JSON 输出模式: {state}[/bold]")
             console.print(
-                "[dim]用法: /json on|off — 开启后 Agent 回复强制 JSON 格式[/dim]"
+                "[dim]用法: /json on|off — 开启后 Agent 回复强制 JSON 格式[/dim]",
             )
         return True
     elif cmd == "/save" or cmd.startswith("/save "):
@@ -109,7 +120,8 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
             import datetime
 
             save_path = (
-                f"acli_output_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+                f"acli_output_"
+                f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
             )
         try:
             from pathlib import Path
@@ -117,7 +129,7 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
             p = Path(save_path)
             p.write_text(agent.last_output, encoding="utf-8")
             console.print(
-                f"[green]✓ 已保存 {len(agent.last_output)} 字符到: {p}[/green]"
+                f"[green]✓ 已保存 {len(agent.last_output)} 字符到: {p}[/green]",
             )
         except Exception as e:
             console.print(f"[red]保存失败: {e}[/red]")
@@ -136,41 +148,54 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
         return "compress"
     elif cmd == "/info":
         from dashscope.acli.config import CONFIG_FILE, WORKSPACE_CONFIG_FILE
-        from dashscope.acli.extensions import GLOBAL_EXTENSIONS_FILE, WORKSPACE_EXTENSIONS_FILE
+        from dashscope.acli.extensions import (
+            GLOBAL_EXTENSIONS_FILE,
+            WORKSPACE_EXTENSIONS_FILE,
+        )
 
         console.print()
         console.print("[bold]ℹ️ 当前运行信息[/bold]")
         console.print(
-            f"  Provider:     [cyan]{agent.provider_name or config.provider}[/cyan]"
+            f"  Provider:     [cyan]"
+            f"{agent.provider_name or config.provider}[/cyan]",
         )
         console.print(
-            f"  Model:        [cyan]{agent.model_name or config.model}[/cyan]"
+            f"  Model:        [cyan]{agent.model_name or config.model}[/cyan]",
         )
-        console.print(f"  Protocol:     [cyan]{config.protocol or 'auto'}[/cyan]")
+        console.print(
+            f"  Protocol:     [cyan]{config.protocol or 'auto'}[/cyan]",
+        )
         # Resolve actual base URL from provider profile
         from dashscope.acli.providers.profile import build_profiles_from_config
 
         profiles = build_profiles_from_config(config)
         actual_base_url = profiles[0].base_url if profiles else config.base_url
-        console.print(f"  Base URL:     [cyan]{actual_base_url or '(默认)'}[/cyan]")
+        console.print(
+            f"  Base URL:     [cyan]{actual_base_url or '(默认)'}[/cyan]",
+        )
         console.print(f"  User:         [cyan]{config.user_name}[/cyan]")
         console.print(
-            f"  Memory:       {'[green]开启' if config.memory_enabled else '[dim]关闭'}[/]"
+            f"  Memory:       "
+            f"{'[green]开启' if config.memory_enabled else '[dim]关闭'}[/]",
         )
         console.print(
-            f"  Capabilities: [cyan]{', '.join(config.enabled_capabilities or []) or '(无)'}[/cyan]"
+            f"  Capabilities: [cyan]"
+            f"{', '.join(config.enabled_capabilities or []) or '(无)'}"
+            f"[/cyan]",
         )
         console.print(
-            f"  JSON mode:    {'[green]开启' if agent.json_mode else '[dim]关闭'}[/]"
+            f"  JSON mode:    "
+            f"{'[green]开启' if agent.json_mode else '[dim]关闭'}[/]",
         )
         console.print(f"  Loop mode:    [cyan]{config.loop_mode}[/cyan]")
         console.print(f"  Max turns:    [cyan]{config.max_turns}[/cyan]")
         console.print(f"  Timeout:      [cyan]{config.timeout}s[/cyan]")
         console.print(
-            f"  TUI:          {'[green]开启' if config.tui else '[dim]关闭'}[/]"
+            f"  TUI:          {'[green]开启' if config.tui else '[dim]关闭'}[/]",
         )
         console.print(
-            f"  Privacy:      {'[green]开启' if config.privacy_mode else '[dim]关闭'}[/]"
+            f"  Privacy:      "
+            f"{'[green]开启' if config.privacy_mode else '[dim]关闭'}[/]",
         )
 
         console.print("\n[bold]配置文件[/bold]")
@@ -187,7 +212,9 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
         console.print()
         return True
     elif cmd == "/stats":
-        stats = agent.executor.get_stats() if hasattr(agent, "executor") else {}
+        stats = (
+            agent.executor.get_stats() if hasattr(agent, "executor") else {}
+        )
         console.print()
         console.print("[bold]📊 会话统计[/bold]")
         console.print(f"  Provider: [cyan]{agent.provider_name}[/cyan]")
@@ -199,7 +226,9 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
             cached = token_usage.get("cached_tokens", 0)
             cached_part = f", 缓存: {cached}" if cached else ""
             console.print(
-                f"  Token 使用: [green]{token_usage['total_tokens']}[/green] (输入: {token_usage['input_tokens']}, 输出: {token_usage['output_tokens']}{cached_part})"
+                f"  Token 使用: [green]{token_usage['total_tokens']}[/green]"
+                f" (输入: {token_usage['input_tokens']},"
+                f" 输出: {token_usage['output_tokens']}{cached_part})",
             )
 
         # Prompt composition (chars sent per LLM call, cumulative)
@@ -216,7 +245,8 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
                 v = prompt_comp.get(key, 0)
                 if v:
                     console.print(
-                        f"    [dim]{label}[/dim] → {v} ({v * 100 // comp_total}%)"
+                        f"    [dim]{label}[/dim] → {v} "
+                        f"({v * 100 // comp_total}%)",
                     )
 
         # API calls
@@ -226,12 +256,15 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
 
         # Tool calls
         console.print(
-            f"  工具调用: [yellow]{stats.get('total_tool_calls', 0)}[/yellow] 次"
+            f"  工具调用: [yellow]{stats.get('total_tool_calls', 0)}[/yellow] 次",
         )
         tool_counts = stats.get("tool_counts", {})
         if tool_counts:
             console.print("  工具明细:")
-            for name, count in sorted(tool_counts.items(), key=lambda x: -x[1]):
+            for name, count in sorted(
+                tool_counts.items(),
+                key=lambda x: -x[1],
+            ):
                 console.print(f"    [dim]{name}[/dim] → {count} 次")
 
         # Skill activations
@@ -242,7 +275,8 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
             if skill_counts:
                 console.print("  Skill 明细:")
                 for name, count in sorted(
-                    skill_counts.items(), key=lambda x: -x[1]
+                    skill_counts.items(),
+                    key=lambda x: -x[1],
                 ):
                     console.print(f"    [dim]{name}[/dim] → {count} 次")
 
@@ -257,13 +291,15 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
             minutes = int(duration // 60)
             seconds = int(duration % 60)
             if minutes > 0:
-                console.print(f"  会话时长: [magenta]{minutes}分{seconds}秒[/magenta]")
+                console.print(
+                    f"  会话时长: [magenta]{minutes}分{seconds}秒[/magenta]",
+                )
             else:
                 console.print(f"  会话时长: [magenta]{seconds}秒[/magenta]")
 
         console.print()
         return True
-    elif cmd == "/feedback good" or cmd == "/feedback bad":
+    elif cmd in ("/feedback good", "/feedback bad"):
         outcome = "success" if "good" in cmd else "failure"
         tracker = getattr(agent, "experience_tracker", None)
         if tracker and agent.last_output:
@@ -281,9 +317,7 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
                 if len(agent.messages) > 1
                 else "用户任务"
             )
-            lesson = (
-                "用户反馈: 结果满意" if outcome == "success" else "用户反馈: 结果不满意"
-            )
+            lesson = "用户反馈: 结果满意" if outcome == "success" else "用户反馈: 结果不满意"
             tracker.record_experience(
                 task_summary=task_summary,
                 tools_used=tools_used,
@@ -303,11 +337,15 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
         console.print(render_help_text())
         return True
     elif cmd.startswith("/provider"):
-        from dashscope.acli.cli.handlers_provider import handle_provider_command
+        from dashscope.acli.cli.handlers_provider import (
+            handle_provider_command,
+        )
 
         handle_provider_command(cmd, agent, config)
         return True
-    elif cmd.startswith("/dev test provider") or cmd.startswith("/dev debug call"):
+    elif cmd.startswith("/dev test provider") or cmd.startswith(
+        "/dev debug call",
+    ):
         # Provider connectivity test and manual tool call must run async; the
         # synchronous dev handler would try to start a nested event loop and
         # crash inside the TUI.
@@ -387,7 +425,7 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
                         raise ValueError
                 except ValueError:
                     console.print(
-                        "[yellow]用法: /audit recent [N]（N 为正整数）[/yellow]"
+                        "[yellow]用法: /audit recent [N]（N 为正整数）[/yellow]",
                     )
                     return True
             events = logger.recent(limit=limit)
@@ -401,26 +439,30 @@ def _handle_slash_command(cmd: str, agent: Agent, config: Config) -> bool | str:
             console.print("[dim]无审计记录[/dim]")
             return True
         console.print(f"[bold]审计日志 ({len(events)} 条)[/bold]")
-        for e in events:
-            ts = e.get("timestamp", "")[:19]
-            src = e.get("source", "")
-            act = e.get("action", "")
-            subj = e.get("subject", "")[:50]
-            dec = e.get("decision", "")
+        for ev in events:
+            ts = ev.get("timestamp", "")[:19]
+            src = ev.get("source", "")
+            act = ev.get("action", "")
+            subj = ev.get("subject", "")[:50]
+            dec = ev.get("decision", "")
             console.print(
-                f"  [dim]{ts}[/dim] [{src}] {act}: {subj} → [yellow]{dec}[/yellow]"
+                f"  [dim]{ts}[/dim] [{src}] {act}: {subj} → "
+                f"[yellow]{dec}[/yellow]",
             )
         return True
     return False
 
 
-async def dispatch_async_command(cmd: str, config: Config, agent: Agent) -> None:
+async def dispatch_async_command(
+    cmd: str,
+    config: Config,
+    agent: Agent,
+) -> None:
     """Dispatch async slash commands that need awaitable handlers.
 
     Centralizes the prefix-based routing previously duplicated between the
     CLI main loop and the TUI `_handle_async_command` method.
     """
-    from dashscope.acli.agents.subagents import handle_subagents_command
     from dashscope.acli.cli.handlers_capability import (
         _handle_capability_command,
         _require_capability,
@@ -464,7 +506,9 @@ async def dispatch_async_command(cmd: str, config: Config, agent: Agent) -> None
 
 
 async def _handle_skill_continue(
-    cmd: str, config: Config, agent=None
+    cmd: str,
+    config: Config,
+    agent=None,
 ) -> str | None:
     """Handle /skill: render the skill prompt if applicable, else return None.
 

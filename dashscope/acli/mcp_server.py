@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """MCP Server mode: expose acli's tools to external MCP clients.
 
 The design doc's Capability layer includes MCP as both a client (existing)
@@ -11,6 +12,7 @@ Implementation: converts ``ToolDefinition`` objects from the tool registry
 into MCP tool schemas, and dispatches incoming MCP tool-call requests to
 the registered handlers.
 """
+# pylint: disable=unused-import
 
 from __future__ import annotations
 
@@ -38,7 +40,7 @@ def tools_to_mcp_schema() -> list[dict[str, Any]]:
                 "name": tool.name,
                 "description": tool.description,
                 "inputSchema": tool.parameters,
-            }
+            },
         )
     return schemas
 
@@ -74,7 +76,10 @@ async def handle_mcp_request(
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
-                "error": {"code": -32601, "message": f"Unknown tool: {tool_name}"},
+                "error": {
+                    "code": -32601,
+                    "message": f"Unknown tool: {tool_name}",
+                },
             }
         try:
             if executor:

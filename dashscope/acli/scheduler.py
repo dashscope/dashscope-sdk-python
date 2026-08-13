@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Cron-style task scheduler for periodic skill execution.
 
 Supports three scheduling modes:
@@ -7,6 +8,8 @@ Supports three scheduling modes:
 
 Jobs persist across sessions in ~/.acli/cron_jobs.json.
 """
+# pylint: disable=too-many-branches,too-many-return-statements
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
 
@@ -18,10 +21,8 @@ import secrets
 import shlex
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from rich.console import Console
-from rich.panel import Panel
 
 from dashscope.acli.config import CONFIG_DIR
 
@@ -167,11 +168,12 @@ def _parse_cron_field(field_str: str, lo: int, hi: int) -> set[int]:
 
 
 def _expand_dow(field_str: str) -> set[int]:
-    """cron day-of-week (0=Sun..6=Sat, 7=Sun) → Python weekday (0=Mon..6=Sun)."""
+    """cron day-of-week (0=Sun..6=Sat, 7=Sun) → Python weekday
+    (0=Mon..6=Sun)."""
     raw = _parse_cron_field(field_str, 0, 7)
     python_dows: set[int] = set()
     for d in raw:
-        if d == 0 or d == 7:
+        if d in (0, 7):
             python_dows.add(6)  # Sunday
         else:
             python_dows.add(d - 1)  # 1=Mon→0, 2=Tue→1, ...
@@ -206,7 +208,7 @@ def next_cron_fire(fields: list[str], after: datetime) -> datetime | None:
 def parse_cron_add(
     args_str: str,
 ) -> tuple[ScheduleSpec, list[SkillInvocation], str | None, bool]:
-    tokens = shlex.split(args_str, posix=(os.name != "nt"))
+    tokens = shlex.split(args_str, posix=os.name != "nt")
 
     schedule: ScheduleSpec | None = None
     skills: list[SkillInvocation] = []
@@ -223,7 +225,9 @@ def parse_cron_add(
             if tok == "every":
                 secs = parse_interval(val)
                 schedule = ScheduleSpec(
-                    kind="interval", raw=f"every {val}", interval_seconds=secs
+                    kind="interval",
+                    raw=f"every {val}",
+                    interval_seconds=secs,
                 )
             elif tok == "at":
                 dt = parse_at_time(val)
@@ -237,7 +241,9 @@ def parse_cron_add(
                 if len(parts) != 5:
                     raise ValueError(f"cron 表达式需要 5 个字段: {val}")
                 schedule = ScheduleSpec(
-                    kind="cron", raw=f"cron {val}", cron_fields=parts
+                    kind="cron",
+                    raw=f"cron {val}",
+                    cron_fields=parts,
                 )
             i += 2
         elif tok == "condition":
@@ -418,7 +424,10 @@ class Scheduler:
                     break
                 try:
                     # Timeout: 5 minutes per execution to prevent hanging
-                    await asyncio.wait_for(self._execute_job(job), timeout=300.0)
+                    await asyncio.wait_for(
+                        self._execute_job(job),
+                        timeout=300.0,
+                    )
                 except asyncio.TimeoutError:
                     job.last_run = datetime.now().isoformat()
                     job.last_result = "执行超时 (>300秒)"
@@ -505,9 +514,9 @@ class Scheduler:
                 return
 
         # Auto-connect MCP services
-        for inv in job.skills:
-            from dashscope.acli.skills.base import BUILTIN_SKILLS
+        from dashscope.acli.skills.base import BUILTIN_SKILLS, render_skill
 
+        for inv in job.skills:
             skill = BUILTIN_SKILLS.get(inv.name)
             if skill and skill.mcp_service:
                 from dashscope.acli.cli import _connect_mcp, _mcp_clients
@@ -516,7 +525,8 @@ class Scheduler:
                     print(f"[CRON {job.id}] 正在连接 MCP: {skill.mcp_service}...")
                     try:
                         err = await asyncio.wait_for(
-                            _connect_mcp(skill.mcp_service, self.config), timeout=30.0
+                            _connect_mcp(skill.mcp_service, self.config),
+                            timeout=30.0,
                         )
                         if err:
                             print(f"[CRON {job.id}] MCP 连接失败: {err}")
@@ -528,8 +538,6 @@ class Scheduler:
         # Execute skills
         results = []
         for inv in job.skills:
-            from dashscope.acli.skills.base import BUILTIN_SKILLS, render_skill
-
             skill = BUILTIN_SKILLS.get(inv.name)
             if not skill:
                 results.append(f"未知技能: {inv.name}")
@@ -541,7 +549,7 @@ class Scheduler:
 
                 if skill.mcp_service not in _mcp_clients:
                     results.append(
-                        f"跳过 {inv.name}: 需要 MCP 服务 {skill.mcp_service}（连接失败）"
+                        f"跳过 {inv.name}: 需要 MCP 服务 {skill.mcp_service}（连接失败）",
                     )
                     continue
 
@@ -556,7 +564,9 @@ class Scheduler:
 
                 result = await _subagent_invoke(
                     prompt=rendered,
-                    system_prompt=f"你是定时任务的执行代理。当前任务: {inv.name}。直接输出结果，不要多余解释。",
+                    system_prompt=(
+                        f"你是定时任务的执行代理。当前任务: {inv.name}。" f"直接输出结果，不要多余解释。"
+                    ),
                     max_turns=15,
                 )
             else:
@@ -583,5 +593,8 @@ class Scheduler:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         data = {jid: job.to_dict() for jid, job in self.jobs.items()}
         tmp = _PERSIST_PATH.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         tmp.replace(_PERSIST_PATH)

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Identifier and timestamp helpers used across local storage providers."""
 
 from __future__ import annotations

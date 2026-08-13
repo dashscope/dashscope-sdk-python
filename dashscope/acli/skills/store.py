@@ -1,4 +1,7 @@
-"""Skill package lifecycle: install, link, update, uninstall, search, publish."""
+# -*- coding: utf-8 -*-
+"""Skill package lifecycle: install, link, update, uninstall, search,
+publish."""
+# pylint: disable=too-many-branches,too-many-statements
 
 from __future__ import annotations
 
@@ -17,7 +20,7 @@ import yaml
 
 from dashscope.acli.config import CONFIG_DIR, WORKSPACE_DIR
 from dashscope.acli.skills.package import load_skill_package
-from dashscope.acli.utils import load_toml, loads_toml
+from dashscope.acli.utils import loads_toml
 
 MANIFEST_NAME = ".acli-skills.json"
 
@@ -56,7 +59,8 @@ def save_manifest(skills_dir: Path, manifest: dict[str, Any]) -> None:
     skills_dir.mkdir(parents=True, exist_ok=True)
     path = _manifest_path(skills_dir)
     path.write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
     )
 
 
@@ -89,7 +93,10 @@ def _git_available() -> bool:
         return False
 
 
-def _run_git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def _run_git(
+    *args: str,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
         cwd=cwd,
@@ -170,14 +177,13 @@ def _download_and_extract(source: str, dest_dir: Path) -> None:
     the temp dir — tarballs from a remote registry are untrusted input.
     """
     import io
-    import tempfile
     import urllib.request
 
     with urllib.request.urlopen(source, timeout=60) as resp:
         payload = resp.read(_MAX_ARCHIVE_BYTES + 1)
     if len(payload) > _MAX_ARCHIVE_BYTES:
         raise RuntimeError(
-            f"skill 包过大（>{_MAX_ARCHIVE_BYTES // (1024 * 1024)}MB）: {source}"
+            f"skill 包过大（>{_MAX_ARCHIVE_BYTES // (1024 * 1024)}MB）: {source}",
         )
 
     if dest_dir.exists() or dest_dir.is_symlink():
@@ -188,11 +194,13 @@ def _download_and_extract(source: str, dest_dir: Path) -> None:
         with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as tar:
             for member in tar.getmembers():
                 target = os.path.realpath(os.path.join(tmp_real, member.name))
-                if target != tmp_real and not target.startswith(tmp_real + os.sep):
+                if target != tmp_real and not target.startswith(
+                    tmp_real + os.sep,
+                ):
                     raise RuntimeError(f"tar 包含越界路径: {member.name}")
                 if member.islnk() or member.issym():
                     link_real = os.path.realpath(
-                        os.path.join(os.path.dirname(target), member.linkname)
+                        os.path.join(os.path.dirname(target), member.linkname),
                     )
                     if not link_real.startswith(tmp_real + os.sep):
                         raise RuntimeError(f"tar 包含越界链接: {member.name}")
@@ -226,10 +234,13 @@ def _fetch_registry_index(registry_url: str) -> list[dict[str, Any]]:
         skills = data.get("skills", []) if isinstance(data, dict) else data
         return [s for s in skills if isinstance(s, dict)]
     except Exception as e:
-        raise RuntimeError(f"无法加载 skill registry: {e}")
+        raise RuntimeError(f"无法加载 skill registry: {e}") from e
 
 
-def _resolve_name_from_registry(name: str, registry_url: str) -> dict[str, Any] | None:
+def _resolve_name_from_registry(
+    name: str,
+    registry_url: str,
+) -> dict[str, Any] | None:
     """Look up a package by name (optionally with @version) in the registry."""
     if "@" in name:
         pkg_name, version = name.rsplit("@", 1)
@@ -239,7 +250,9 @@ def _resolve_name_from_registry(name: str, registry_url: str) -> dict[str, Any] 
     index = _fetch_registry_index(registry_url)
     candidates = [s for s in index if s.get("name") == pkg_name]
     if version:
-        candidates = [s for s in candidates if str(s.get("version", "")) == version]
+        candidates = [
+            s for s in candidates if str(s.get("version", "")) == version
+        ]
     if not candidates:
         return None
     # Prefer exact version match; otherwise latest.
@@ -300,7 +313,7 @@ def install(
             source_type = "local"
     else:
         raise RuntimeError(
-            f"无法识别 skill 来源: {source}（需要本地路径、git URL 或配置 skill_registry）"
+            f"无法识别 skill 来源: {source}（需要本地路径、git URL 或配置 skill_registry）",
         )
 
     _validate_skill_name(name, target_dir)
@@ -313,7 +326,8 @@ def install(
     else:
         _copy_package(Path(resolved_source), dest_dir)
 
-    # Re-validate using the final directory name (skill.toml may declare a different name).
+    # Re-validate using the final directory name (skill.toml may declare
+    # a different name).
     pkg = load_skill_package(dest_dir)
     if pkg is None:
         _remove_existing(dest_dir)
@@ -344,7 +358,11 @@ def install(
     return final_name
 
 
-def link(source_dir: str, skills_dir: Path | None = None, global_: bool = False) -> str:
+def link(
+    source_dir: str,
+    skills_dir: Path | None = None,
+    global_: bool = False,
+) -> str:
     """Symlink a local skill package into the store for development."""
     target_dir = skills_dir or get_skills_dir(global_)
     src = Path(source_dir).expanduser().resolve()
@@ -378,7 +396,11 @@ def link(source_dir: str, skills_dir: Path | None = None, global_: bool = False)
     return name
 
 
-def uninstall(name: str, skills_dir: Path | None = None, global_: bool = False) -> bool:
+def uninstall(
+    name: str,
+    skills_dir: Path | None = None,
+    global_: bool = False,
+) -> bool:
     """Remove an installed skill package."""
     target_dir = skills_dir or get_skills_dir(global_)
     _validate_skill_name(name, target_dir)
@@ -401,7 +423,7 @@ def uninstall(name: str, skills_dir: Path | None = None, global_: bool = False) 
 def update(
     name: str,
     skills_dir: Path | None = None,
-    registry_url: str = "",
+    registry_url: str = "",  # pylint: disable=unused-argument
     global_: bool = False,
 ) -> str:
     """Update an installed skill package."""
@@ -448,7 +470,9 @@ def update(
 
 
 def update_all(
-    skills_dir: Path | None = None, registry_url: str = "", global_: bool = False
+    skills_dir: Path | None = None,
+    registry_url: str = "",
+    global_: bool = False,
 ) -> list[tuple[str, str | None]]:
     """Update all installed packages. Returns list of (name, error_or_None)."""
     target_dir = skills_dir or get_skills_dir(global_)
@@ -494,7 +518,7 @@ def search(
                     "author": pkg.author,
                     "installed": True,
                     "source": "local",
-                }
+                },
             )
             seen.add(pkg.name)
 
@@ -505,7 +529,10 @@ def search(
                 name = entry.get("name", "")
                 if not name or name in seen:
                     continue
-                text = f"{name} {entry.get('description', '')} {' '.join(entry.get('tags', []))}".lower()
+                text = (
+                    f"{name} {entry.get('description', '')} "
+                    f"{' '.join(entry.get('tags', []))}"
+                ).lower()
                 if q in text:
                     results.append(
                         {
@@ -515,7 +542,7 @@ def search(
                             "author": entry.get("author", ""),
                             "installed": False,
                             "source": entry.get("source", ""),
-                        }
+                        },
                     )
         except Exception:
             pass

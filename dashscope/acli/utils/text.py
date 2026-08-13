@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Text formatting helpers used across the CLI and TUI."""
 
 from __future__ import annotations
@@ -6,7 +7,8 @@ import re
 
 
 def mask_secret(value: str) -> str:
-    """Mask a secret showing only first/last few chars with `...` in the middle."""
+    """Mask a secret showing only first/last few chars with `...` in
+    the middle."""
     if not value:
         return ""
     if len(value) > 8:
@@ -30,7 +32,9 @@ def truncate_text(text: str, max_chars: int) -> str:
     head = int(max_chars * 0.6)
     tail = max_chars - head
     return (
-        text[:head] + f"\n... [截断 {len(text) - max_chars} 字符] ...\n" + text[-tail:]
+        text[:head]
+        + f"\n... [截断 {len(text) - max_chars} 字符] ...\n"
+        + text[-tail:]
     )
 
 

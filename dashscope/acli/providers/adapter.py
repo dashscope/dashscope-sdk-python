@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Anthropic <-> OpenAI protocol adapter.
 
@@ -5,10 +6,12 @@ Converts Anthropic Messages API format to OpenAI Chat Completions format
 and vice versa, allowing providers like Tongyi (Qwen) and Zhipu to be
 accessed using Anthropic protocol.
 """
+# pylint: disable=too-many-branches,too-many-statements
 
 from __future__ import annotations
 
 import json
+from typing import Any
 
 
 def _normalize_tool_call(call: dict) -> dict:
@@ -61,7 +64,8 @@ def anthropic_to_openai_request(
         {"role": "system", "content": "..."},
         {"role": "user", "content": "..."}
       ],
-      "tools": [{"type": "function", "function": {"name": "foo", "parameters": {...}}}]
+      "tools": [{"type": "function", "function": {"name": "foo",
+      "parameters": {...}}}]
     }
 
     Tool structures round-trip: assistant tool_use blocks (or the agent's
@@ -69,7 +73,7 @@ def anthropic_to_openai_request(
     blocks (or internal ``role: "tool"`` messages) become OpenAI tool
     messages correlated by tool_call_id.
     """
-    openai_messages = []
+    openai_messages: list[dict[str, Any]] = []
 
     # Add system message if present
     if system:
@@ -91,7 +95,7 @@ def anthropic_to_openai_request(
                     "tool_call_id": (
                         msg.get("tool_call_id") or msg.get("tool_use_id", "")
                     ),
-                }
+                },
             )
             continue
 
@@ -105,7 +109,7 @@ def anthropic_to_openai_request(
                     "tool_calls": [
                         _normalize_tool_call(tc) for tc in msg["tool_calls"]
                     ],
-                }
+                },
             )
             continue
 
@@ -119,9 +123,12 @@ def anthropic_to_openai_request(
             tool_calls = []
             tool_results = []
 
-            def _flush_text():
+            def _flush_text(text_buffer=text_buffer, new_blocks=new_blocks):
+                # pylint: disable=dangerous-default-value
                 if text_buffer:
-                    new_blocks.append({"type": "text", "text": "\n".join(text_buffer)})
+                    new_blocks.append(
+                        {"type": "text", "text": "\n".join(text_buffer)},
+                    )
                     text_buffer.clear()
 
             for block in content:
@@ -146,7 +153,7 @@ def anthropic_to_openai_request(
                                 "name": block.get("name", ""),
                                 "arguments": args,
                             },
-                        }
+                        },
                     )
                 elif btype == "tool_result":
                     tool_results.append(block)
@@ -161,14 +168,16 @@ def anthropic_to_openai_request(
                         "role": "tool",
                         "content": _tool_result_text(tr.get("content", "")),
                         "tool_call_id": tr.get("tool_use_id", ""),
-                    }
+                    },
                 )
 
             content = (
                 new_blocks
                 if has_media
                 else "\n".join(
-                    b.get("text", "") for b in new_blocks if b.get("type") == "text"
+                    b.get("text", "")
+                    for b in new_blocks
+                    if b.get("type") == "text"
                 )
             )
             if tool_results and not content:
@@ -187,8 +196,10 @@ def anthropic_to_openai_request(
     if tools:
         openai_tools = []
         for tool in tools:
-            # Anthropic: {"name": "foo", "description": "...", "input_schema": {...}}
-            # OpenAI: {"type": "function", "function": {"name": "foo", "description": "...", "parameters": {...}}}
+            # Anthropic: {"name": "foo", "description": "...",
+            # "input_schema": {...}}
+            # OpenAI: {"type": "function", "function": {"name": "foo",
+            # "description": "...", "parameters": {...}}}
             openai_tool = {
                 "type": "function",
                 "function": {
@@ -211,11 +222,13 @@ def openai_to_anthropic_response(openai_response: dict) -> dict:
       "choices": [{
         "message": {
           "content": "...",
-          "tool_calls": [{"id": "...", "function": {"name": "...", "arguments": "..."}}]
+          "tool_calls": [{"id": "...", "function": {"name": "...",
+          "arguments": "..."}}]
         },
         "finish_reason": "stop"
       }],
-      "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+      "usage": {"prompt_tokens": 10, "completion_tokens": 20,
+      "total_tokens": 30}
     }
 
     Anthropic format:
@@ -247,7 +260,9 @@ def openai_to_anthropic_response(openai_response: dict) -> dict:
         func = call.get("function", {})
         args_str = func.get("arguments", "{}")
         try:
-            args = json.loads(args_str) if isinstance(args_str, str) else args_str
+            args = (
+                json.loads(args_str) if isinstance(args_str, str) else args_str
+            )
         except json.JSONDecodeError:
             args = {}
 
@@ -257,7 +272,7 @@ def openai_to_anthropic_response(openai_response: dict) -> dict:
                 "id": call.get("id", ""),
                 "name": func.get("name", ""),
                 "input": args,
-            }
+            },
         )
 
     # Convert finish reason
@@ -307,9 +322,10 @@ def anthropic_to_openai_response(anthropic_response: dict) -> dict:
                     "function": {
                         "name": block.get("name", ""),
                         "arguments": json.dumps(
-                            block.get("input", {}), ensure_ascii=False
+                            block.get("input", {}),
+                            ensure_ascii=False,
                         ),
                     },
-                }
+                },
             )
     return {"content": content, "tool_calls": tool_calls}

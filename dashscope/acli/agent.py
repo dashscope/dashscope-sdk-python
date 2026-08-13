@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=too-many-branches,too-many-statements,protected-access
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +34,6 @@ from dashscope.acli.utils import (
     text_of,
     tool_result_for_display,
     tool_result_for_history,
-    truncate,
 )
 
 console = Console()
@@ -63,22 +64,30 @@ SYSTEM_PROMPT = """你是 acli，一个智能命令行助手。用户说需求�
 
 规则：
 1. 只使用工具列表中存在的工具，绝不猜测或编造工具名
-2. 文件路径只使用当前工作目录、用户明确给出的路径、或相对当前工作目录的相对路径。绝不编造、猜测或使用训练数据中出现的路径（如 /Users/xxx/...）
-3. 对于明确意图的请求（如 git commit、读文件、搜索、修改代码），直接调用工具执行，无需先说明计划等确认。只有涉及不可逆操作（删除、覆盖、force push）或多步复杂任务时，才先简要说明并等用户确认
+2. 文件路径只使用当前工作目录、用户明确给出的路径、或相对当前工作目录的相对路径。
+   绝不编造、猜测或使用训练数据中出现的路径（如 /Users/xxx/...）
+3. 对于明确意图的请求（如 git commit、读文件、搜索、修改代码），直接调用工具执行，
+   无需先说明计划等确认。只有涉及不可逆操作（删除、覆盖、force push）或多步复杂任务时，
+   才先简要说明并等用户确认
 4. 如果任务需要多步操作，逐步执行并汇报进度
 5. 工具调用失败时不要重试同一个调用，直接向用户报告错误并给出建议
 6. 带 [MCP:xxx] 前缀的工具来自百炼 MCP 服务，可直接调用
 7. 如果"用户档案"中有信息，务必结合这些信息给出个性化回答（如用户用 Python 就推荐 Python 方案）
-8. 用户问题命中下方"可用 Skill 模板"时，优先按对应方式响应——若 Skill 依赖的 MCP 已连接，直接调相关工具；未连接则先用 mcp_connect 工具连接再调
+8. 用户问题命中下方"可用 Skill 模板"时，优先按对应方式响应——若 Skill 依赖的
+   MCP 已连接，直接调相关工具；未连接则先用 mcp_connect 工具连接再调
 9. 当用户提问可能与个人偏好、技术栈、工作环境相关时，主动用 memory_search 搜索档案补充上下文
 10. 如果没有合适的工具可以完成任务，直接用你的知识回答，不要尝试调用不存在的工具
 11. 用户想切换模型/Provider → 直接调 switch_model 或 switch_provider
 12. 用户想连接云端服务（时间、代码执行、文档解析等）→ 直接调 mcp_connect
 13. 用户想开启/关闭能力 → 直接调 capability_enable / capability_disable
 14. 永远不要回复"请使用 /xxx 命令"——如果你有工具能做，就直接做
-15. **不要用 run_command 执行 python3 -c 内联脚本来读写文件**，这很低效。读文件用 read_file，写文件用 write_file；sed/grep 等 shell 工具可以正常使用
+15. **不要用 run_command 执行 python3 -c 内联脚本来读写文件**，这很低效。
+   读文件用 read_file，写文件用 write_file；sed/grep 等 shell 工具可以正常使用
 16. **如果用户的问题可以直接回答（不需要文件、命令、外部信息），直接用你的知识回答，不要调用工具**。例如：自我介绍、解释概念、翻译文本、闲聊等
-17. **多个相互独立的子任务（如"查看这 2 个文件"、一次给几个无关任务）→ 直接调 delegate_parallel 并行委派子代理**，或在同一回合并行发多个 delegate；单个独立但过程冗长的子任务（整文件审查、多文件扫描）→ 调 subagent_invoke 隔离执行，只取回结论。不要自己串行逐个处理
+17. **多个相互独立的子任务（如"查看这 2 个文件"、一次给几个无关任务）→ 直接调
+   delegate_parallel 并行委派子代理**，或在同一回合并行发多个 delegate；
+   单个独立但过程冗长的子任务（整文件审查、多文件扫描）→ 调 subagent_invoke
+   隔离执行，只取回结论。不要自己串行逐个处理
 
 回复风格：
 - **简洁**。不要写"让我看看 / 测试一下 / 验证一下 / 让我帮你 / 我来分析下"之类的过场白和元说明；直接做事或直接给答案
@@ -119,14 +128,18 @@ class Agent:
         self.json_mode = json_mode
         # Load custom system prompt: workspace .acli/system-prompt.md first,
         # then global ~/.acli/system-prompt.md, then built-in default.
-        # runners.py pre-populates system_prompt via _load_system_prompt(); this
-        # fallback ensures direct Agent construction (SDK, tests, subagents) also
-        # respects the global file.
+        # runners.py pre-populates system_prompt via _load_system_prompt();
+        # this fallback ensures direct Agent construction (SDK, tests,
+        # subagents) also respects the global file.
         if self.system_prompt is None:
-            from dashscope.acli.cli.startup import _compose_system_prompt, _load_system_prompt
+            from dashscope.acli.cli.startup import (
+                _compose_system_prompt,
+                _load_system_prompt,
+            )
 
             self.system_prompt = _compose_system_prompt(_load_system_prompt())
-        # Discover project instructions from CWD (rules.jsonl, .cursorrules, etc.)
+        # Discover project instructions from CWD (rules.jsonl,
+        # .cursorrules, etc.)
         from dashscope.acli.prompt import discover_project_instructions
 
         project_instructions = discover_project_instructions()
@@ -134,7 +147,9 @@ class Agent:
             base_prompt=self.system_prompt or SYSTEM_PROMPT,
             project_instructions=project_instructions,
             skills_summary_fn=skills_summary_for_llm,
-            active_prompts_fn=lambda text: get_skill_manager().active_prompts(text),
+            active_prompts_fn=lambda text: get_skill_manager().active_prompts(
+                text,
+            ),
         )
         self.messages: list[dict] = []
         self.last_output: str = ""
@@ -144,9 +159,9 @@ class Agent:
         self.user_name = user_name
         self.session_path = session_path
         # Callable[[], str] returning a system-prompt fragment describing
-        # currently-disabled capabilities. Called fresh each turn so /capability
-        # toggles take effect on the next user input without re-instantiating
-        # the agent.
+        # currently-disabled capabilities. Called fresh each turn so
+        # /capability toggles take effect on the next user input without
+        # re-instantiating the agent.
         self.disabled_caps_provider = disabled_caps_provider
         # Callable[[], list[str]] returning user-declared operational rules
         # to be injected unconditionally each turn (see _directives_section).
@@ -186,7 +201,8 @@ class Agent:
         self._pending_skill_names.append(name)
 
     def reset(self):
-        """Clear in-memory messages without deleting the persisted history file."""
+        """Clear in-memory messages without deleting the persisted history
+        file."""
         self.messages = []
 
     def load_session(self) -> int:
@@ -204,14 +220,21 @@ class Agent:
         return 0
 
     def save_session(self) -> None:
-        """Persist self.messages atomically. No-op when session_path is unset."""
+        """Persist self.messages atomically. No-op when session_path is
+        unset."""
         if not self.session_path:
             return
         try:
             self.session_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.session_path.with_suffix(self.session_path.suffix + ".tmp")
+            tmp = self.session_path.with_suffix(
+                self.session_path.suffix + ".tmp",
+            )
             tmp.write_text(
-                json.dumps(sanitize(self.messages), ensure_ascii=False, indent=2)
+                json.dumps(
+                    sanitize(self.messages),
+                    ensure_ascii=False,
+                    indent=2,
+                ),
             )
             tmp.replace(self.session_path)
         except OSError:
@@ -221,12 +244,16 @@ class Agent:
             from dashscope.acli.session import get_session_manager
 
             topic = self.session_path.parent.name
-            get_session_manager().update_message_count(len(self.messages), topic)
+            get_session_manager().update_message_count(
+                len(self.messages),
+                topic,
+            )
         except Exception:
             pass
 
     def _connected_mcp_services(self) -> set[str]:
-        """Infer connected MCP services from registry tool names (mcp_<service>_*)."""
+        """Infer connected MCP services from registry tool names
+        (mcp_<service>_*)."""
         services: set[str] = set()
         for t in registry.list_tools():
             if t.name.startswith("mcp_"):
@@ -350,7 +377,7 @@ class Agent:
             partial_text = "".join(_partial).strip()
             if partial_text:
                 self.messages.append(
-                    {"role": "assistant", "content": partial_text + " [已中断]"}
+                    {"role": "assistant", "content": partial_text + " [已中断]"},
                 )
             self.save_session()
             raise
@@ -365,8 +392,10 @@ class Agent:
         # User-message hook
         await self.hook_bus.dispatch_async(
             HookContext(
-                event="on_message", tool_name="", arguments={"input": user_input_text}
-            )
+                event="on_message",
+                tool_name="",
+                arguments={"input": user_input_text},
+            ),
         )
 
         # Clear tool tracking for new turn
@@ -396,7 +425,7 @@ class Agent:
             system_prompt += memory_context
 
         tools_schema = self._filter_tools_schema(
-            registry.to_schema_list(user_input_text)
+            registry.to_schema_list(user_input_text),
         )
 
         # Compress with the full request overhead in view: the system prompt
@@ -404,7 +433,7 @@ class Agent:
         # model's window too. Runs after both are built, before the request
         # list is assembled.
         overhead_tokens = estimate_tokens(system_prompt) + estimate_tokens(
-            json.dumps(tools_schema, ensure_ascii=False)
+            json.dumps(tools_schema, ensure_ascii=False),
         )
         await self._auto_compress(overhead_tokens)
         await self._ensure_fits_context(overhead_tokens)
@@ -442,14 +471,16 @@ class Agent:
                     ]
                     console.print(
                         f"[dim]轮内安全压缩: {old_count} 条消息 → "
-                        f"{len(self.messages)} 条[/dim]"
+                        f"{len(self.messages)} 条[/dim]",
                     )
 
             # Inject reflection hint while repeated failures persist; assign
             # unconditionally so the hint disappears once failures stop.
             # The hint is appended, keeping the cache-friendly prefix stable.
             reflection_hint = self._reflection_section()
-            messages_with_system[0]["content"] = system_prompt + reflection_hint
+            messages_with_system[0]["content"] = (
+                system_prompt + reflection_hint
+            )
 
             full_content = ""
             full_reasoning = ""
@@ -461,26 +492,26 @@ class Agent:
             async for chunk in self.provider.chat_stream(
                 normalize_for_model(messages_with_system, self.model_name),
                 tools_schema,
-                response_format={"type": "json_object"} if self.json_mode else None,
+                response_format={"type": "json_object"}
+                if self.json_mode
+                else None,
             ):
-
                 if chunk.delta_content:
-
                     full_content += chunk.delta_content
 
                     yield chunk.delta_content
 
                 if chunk.delta_reasoning_content:
-
                     full_reasoning += chunk.delta_reasoning_content
 
                 if chunk.tool_calls:
-
                     for tc in chunk.tool_calls:
                         key = (
                             tc.name,
                             json.dumps(
-                                tc.arguments, sort_keys=True, ensure_ascii=False
+                                tc.arguments,
+                                sort_keys=True,
+                                ensure_ascii=False,
                             ),
                         )
                         if key in seen_tool_calls:
@@ -491,13 +522,13 @@ class Agent:
                 # Record token usage from the last chunk
 
                 if chunk.usage:
-
                     self.executor.record_api_call(chunk.usage)
                     last_chunk = chunk
 
             # Log LLM call trace
             self.executor.record_prompt_composition(
-                messages_with_system, tools_schema
+                messages_with_system,
+                tools_schema,
             )
             self.trace_logger.log_llm_call(
                 messages=messages_with_system,
@@ -509,7 +540,9 @@ class Agent:
                         for tc in tool_calls
                     ],
                     "usage": (
-                        last_chunk.usage if last_chunk and last_chunk.usage else None
+                        last_chunk.usage
+                        if last_chunk and last_chunk.usage
+                        else None
                     ),
                 },
                 duration_ms=int((time.monotonic() - llm_start) * 1000),
@@ -549,7 +582,10 @@ class Agent:
                         warn = "\n[响应可能被截断：模型描述了工具操作但未生成完整的工具调用]\n"
                         full_content += warn
                         yield warn
-                    final_msg: dict = {"role": "assistant", "content": full_content}
+                    final_msg: dict = {
+                        "role": "assistant",
+                        "content": full_content,
+                    }
                     if full_reasoning:
                         final_msg["reasoning_content"] = full_reasoning
                     self.messages.append(final_msg)
@@ -575,7 +611,9 @@ class Agent:
             # fall back to sequential execution — concurrent stdin prompts
             # corrupt each other and produce garbled output.
             yield ""  # Stop thinking spinner before tool execution
-            any_needs_confirm = any(self._needs_confirmation(tc) for tc in tool_calls)
+            any_needs_confirm = any(
+                self._needs_confirmation(tc) for tc in tool_calls
+            )
             if len(tool_calls) > 1 and not any_needs_confirm:
                 # Parallel execution
                 results = await asyncio.gather(
@@ -597,7 +635,10 @@ class Agent:
                     elif isinstance(result, Exception):
                         result = f"错误: {result}"
 
-                    yield f"\n[{tool_call.name}] →\n{tool_result_for_display(tool_call.name, result)}\n"
+                    yield (
+                        f"\n[{tool_call.name}] →\n"
+                        f"{tool_result_for_display(tool_call.name, result)}\n"
+                    )
                     tool_msg = {
                         "role": "tool",
                         "content": tool_result_for_history(result),
@@ -613,7 +654,10 @@ class Agent:
                 if supplement_info:
                     supplement_msg = {
                         "role": "user",
-                        "content": f"[用户补充信息]: {supplement_info}\n请根据补充信息重新规划并继续执行。",
+                        "content": (
+                            f"[用户补充信息]: {supplement_info}\n"
+                            f"请根据补充信息重新规划并继续执行。"
+                        ),
                     }
                     self.messages.append(supplement_msg)
                     messages_with_system.append(supplement_msg)
@@ -625,7 +669,11 @@ class Agent:
                     answered_ids: set[str] = set()
                     for tool_call in tool_calls:
                         result = await self._execute_tool(tool_call)
-                        yield f"\n[{tool_call.name}] →\n{tool_result_for_display(tool_call.name, result)}\n"
+                        rendered = tool_result_for_display(
+                            tool_call.name,
+                            result,
+                        )
+                        yield f"\n[{tool_call.name}] →\n{rendered}\n"
                         tool_msg = {
                             "role": "tool",
                             "content": tool_result_for_history(result),
@@ -638,9 +686,13 @@ class Agent:
                         answered_ids.add(tool_call.id)
                 except UserSupplement as e:
                     self._close_pending_tool_calls(
-                        tool_calls, answered_ids, messages_with_system
+                        tool_calls,
+                        answered_ids,
+                        messages_with_system,
                     )
-                    supplement_text = f"[用户补充信息]: {e.supplement}\n请根据补充信息重新规划并继续执行。"
+                    supplement_text = (
+                        f"[用户补充信息]: {e.supplement}\n请根据补充信息重新规划并继续执行。"
+                    )
                     yield f"\n{supplement_text}\n"
                     supplement_msg = {
                         "role": "user",
@@ -670,7 +722,7 @@ class Agent:
                 event="on_response",
                 tool_name="",
                 arguments={"input": user_input, "content": last_content},
-            )
+            ),
         )
 
         # Persist session before memory write so a memory exception can't
@@ -684,7 +736,7 @@ class Agent:
                 [
                     {"role": "user", "content": text_of(user_input)},
                     {"role": "assistant", "content": last_content},
-                ]
+                ],
             )
 
         # Store conversation history summary
@@ -694,7 +746,8 @@ class Agent:
         if self._current_turn_tools:
             task_summary = text_of(user_input)[:100]  # Truncate for storage
             outcome = _classify_outcome(
-                self._turn_tool_successes, self._turn_tool_failures
+                self._turn_tool_successes,
+                self._turn_tool_failures,
             )
             self.memory_manager.record_experience(
                 task_summary=task_summary,
@@ -738,7 +791,8 @@ class Agent:
         if not tool_def:
             return f"错误: 未知工具 '{tool_call.name}'"
 
-        # Track tool usage for experience recording (deduped, keep first-use order)
+        # Track tool usage for experience recording (deduped, keep
+        # first-use order)
         if tool_call.name not in self._current_turn_tools:
             self._current_turn_tools.append(tool_call.name)
 
@@ -777,7 +831,8 @@ class Agent:
                 parameters=tool_def.parameters,
             )
             if not await self.executor._async_check_permission(
-                synthetic, tool_call.arguments
+                synthetic,
+                tool_call.arguments,
             ):
                 from dashscope.acli.audit import get_audit_logger
 
@@ -792,11 +847,17 @@ class Agent:
         start_time = time.time()
         result = await self.executor.execute(tool_def, tool_call.arguments)
         duration_ms = int((time.time() - start_time) * 1000)
-        success = not result.startswith(_TOOL_ERROR_PREFIXES) and not result.startswith(
-            _TOOL_CANCEL_PREFIX
+        success = not result.startswith(
+            _TOOL_ERROR_PREFIXES,
+        ) and not result.startswith(
+            _TOOL_CANCEL_PREFIX,
         )
         self.trace_logger.log_tool_execution(
-            tool_call.name, tool_call.arguments, result, duration_ms, success
+            tool_call.name,
+            tool_call.arguments,
+            result,
+            duration_ms,
+            success,
         )
 
         # After-tool-call hooks
@@ -854,8 +915,10 @@ class Agent:
 
         # Add fallback hints for common failures
         if not success and result.startswith(_TOOL_ERROR_PREFIXES):
-            fallback_hint = self.memory_manager.session.tool_chains.get_fallback_hints(
-                tool_call.name
+            fallback_hint = (
+                self.memory_manager.session.tool_chains.get_fallback_hints(
+                    tool_call.name,
+                )
             )
             if fallback_hint:
                 result = result + fallback_hint
@@ -880,7 +943,7 @@ class Agent:
             old_count = len(self.messages)
             self.messages = compressed
             console.print(
-                f"[dim]安全压缩: {old_count} 条消息 → {len(self.messages)} 条[/dim]"
+                f"[dim]安全压缩: {old_count} 条消息 → {len(self.messages)} 条[/dim]",
             )
 
     async def _auto_compress(self, extra_tokens: int = 0) -> None:
@@ -903,7 +966,7 @@ class Agent:
         old_count = len(self.messages)
         self.messages = compressed
         console.print(
-            f"[dim]自动压缩: {old_count} 条消息 → {len(self.messages)} 条[/dim]"
+            f"[dim]自动压缩: {old_count} 条消息 → {len(self.messages)} 条[/dim]",
         )
 
         # Log compression decision
@@ -921,11 +984,12 @@ class Agent:
     # When multiple such tools appear in one batch, we must fall back to
     # sequential execution — concurrent stdin prompts corrupt each other.
     _NEEDS_CONFIRM_TOOLS = frozenset(
-        {"write_file", "delete_file", "delete_directory", "move_file"}
+        {"write_file", "delete_file", "delete_directory", "move_file"},
     )
 
     def _needs_confirmation(self, tool_call: ToolCall) -> bool:
-        """Check whether a tool call may trigger an interactive confirmation prompt.
+        """Check whether a tool call may trigger an interactive
+        confirmation prompt.
 
         Conservative heuristic: known dangerous tool names OR any tool with
         a non-AUTO permission level in the registry.
@@ -976,7 +1040,10 @@ class Agent:
                     "type": "function",
                     "function": {
                         "name": tc.name,
-                        "arguments": json.dumps(tc.arguments, ensure_ascii=False),
+                        "arguments": json.dumps(
+                            tc.arguments,
+                            ensure_ascii=False,
+                        ),
                     },
                 }
                 for tc in response.tool_calls

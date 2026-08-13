@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 """Profile and memory command handlers."""
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
 
@@ -26,7 +29,8 @@ async def _handle_profile_command(cmd: str, config: Config):
     if not _memory_client:
         if not config.memory_enabled:
             console.print(
-                "[dim]用户档案已禁用。在 config.toml 中设置 memory_enabled = true 启用[/dim]"
+                "[dim]用户档案已禁用。在 config.toml 中设置 "
+                "memory_enabled = true 启用[/dim]",
             )
             return
         from dashscope.acli.platforms import get_memory_provider
@@ -38,7 +42,7 @@ async def _handle_profile_command(cmd: str, config: Config):
 
     if len(parts) == 1:
         console.print(
-            f"[bold]用户档案[/bold]: {'启用' if config.memory_enabled else '禁用'}"
+            f"[bold]用户档案[/bold]: {'启用' if config.memory_enabled else '禁用'}",
         )
         if config.user_name:
             console.print(f"[dim]用户: {config.user_name}[/dim]")
@@ -54,7 +58,7 @@ async def _handle_profile_command(cmd: str, config: Config):
             "  /profile add <text>    — 添加信息\n"
             "  /profile remove <num>  — 删除指定档案\n"
             "  /profile clear         — 清空档案[/dim]\n"
-            "\n说明: 对话中提到的个人信息（技术栈、偏好等）会自动提取保存。"
+            "\n说明: 对话中提到的个人信息（技术栈、偏好等）会自动提取保存。",
         )
         return
 
@@ -70,7 +74,9 @@ async def _handle_profile_command(cmd: str, config: Config):
                 for i, n in enumerate(nodes, 1):
                     time_str = n.updated_at or n.created_at
                     console.print(f"  {i}. {n.content}")
-                    console.print(f"     [dim]{time_str} | id: {n.id[:8]}...[/dim]")
+                    console.print(
+                        f"     [dim]{time_str} | id: {n.id[:8]}...[/dim]",
+                    )
         except Exception as e:
             console.print(f"[red]获取档案失败: {e}[/red]")
 
@@ -87,7 +93,8 @@ async def _handle_profile_command(cmd: str, config: Config):
                 console.print(f"[bold]搜索结果[/bold] ({len(nodes)} 条):")
                 for i, n in enumerate(nodes, 1):
                     console.print(
-                        f"  {i}. {n.content} [dim](score: {n.score:.2f})[/dim]"
+                        f"  {i}. {n.content} "
+                        f"[dim](score: {n.score:.2f})[/dim]",
                     )
         except Exception as e:
             console.print(f"[red]搜索失败: {e}[/red]")
@@ -106,7 +113,7 @@ async def _handle_profile_command(cmd: str, config: Config):
         except Exception as e:
             console.print(f"[red]保存失败: {e}[/red]")
 
-    elif subcmd == "remove" or subcmd == "rm":
+    elif subcmd in ("remove", "rm"):
         idx_str = parts[2] if len(parts) > 2 else ""
         if not idx_str:
             console.print("[red]用法: /profile remove <编号>[/red]")
@@ -150,7 +157,7 @@ async def _handle_profile_command(cmd: str, config: Config):
             "  /profile search <q> — 搜索档案\n"
             "  /profile add <text>    — 添加信息\n"
             "  /profile remove <num>  — 删除指定档案\n"
-            "  /profile clear         — 清空档案[/dim]"
+            "  /profile clear         — 清空档案[/dim]",
         )
 
 
@@ -164,7 +171,8 @@ async def _handle_memory_command(cmd: str):
         # Show status
         stats = history.stats()
         console.print(
-            f"[bold]对话历史[/bold]: {stats['count']} 条记录, {stats['total_turns']} 轮对话"
+            f"[bold]对话历史[/bold]: {stats['count']} 条记录, "
+            f"{stats['total_turns']} 轮对话",
         )
         console.print(
             "\n[dim]用法:\n"
@@ -173,7 +181,7 @@ async def _handle_memory_command(cmd: str):
             "  /memory search <q>    — 搜索历史\n"
             "  /memory remove <id|num>— 删除指定记录(ID 或列表编号)\n"
             "  /memory clear         — 清空所有历史[/dim]\n"
-            "\n说明: 每次对话结束后自动存储摘要，用于跨会话上下文回忆。"
+            "\n说明: 每次对话结束后自动存储摘要，用于跨会话上下文回忆。",
         )
         return
 
@@ -190,7 +198,9 @@ async def _handle_memory_command(cmd: str):
                 created = entry.get("created_at", "")[:16]  # truncate ISO
                 turns = entry.get("turns", 0)
                 summary = entry.get("summary", "")
-                console.print(f"  {i}. [dim]{created}[/dim] ({turns}轮) {summary}")
+                console.print(
+                    f"  {i}. [dim]{created}[/dim] ({turns}轮) {summary}",
+                )
                 console.print(f"     [dim]id: {entry['id']}[/dim]")
 
     elif subcmd == "search":
@@ -205,9 +215,11 @@ async def _handle_memory_command(cmd: str):
             console.print(f"[bold]搜索结果[/bold] ({len(results)} 条):")
             for i, entry in enumerate(results, 1):
                 created = entry.get("created_at", "")[:16]
-                console.print(f"  {i}. [dim]{created}[/dim] {entry['summary']}")
+                console.print(
+                    f"  {i}. [dim]{created}[/dim] {entry['summary']}",
+                )
 
-    elif subcmd == "remove" or subcmd == "rm":
+    elif subcmd in ("remove", "rm"):
         entry_id = parts[2] if len(parts) > 2 else ""
         if not entry_id:
             console.print("[dim]用法: /memory remove <id|num>[/dim]")
@@ -223,7 +235,8 @@ async def _handle_memory_command(cmd: str):
                 target = entries[idx]
                 if history.delete_history(target["id"]):
                     console.print(
-                        f"[green]已删除记录 #{entry_id}: {target.get('summary', '')[:40]}[/green]"
+                        f"[green]已删除记录 #{entry_id}: "
+                        f"{target.get('summary', '')[:40]}[/green]",
                     )
                     return
         except ValueError:
@@ -241,5 +254,5 @@ async def _handle_memory_command(cmd: str):
             "  /memory list [n]      — 查看最近 n 条\n"
             "  /memory search <q>    — 搜索历史\n"
             "  /memory remove <id|num>— 删除指定记录(ID 或列表编号)\n"
-            "  /memory clear         — 清空所有历史[/dim]"
+            "  /memory clear         — 清空所有历史[/dim]",
         )

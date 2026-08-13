@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 """API key management command handlers."""
+# pylint: disable=too-many-branches,unused-argument
 
 from __future__ import annotations
 
@@ -107,7 +109,11 @@ def ensure_provider_key(config: Config, agent) -> bool:
             console.print("[red]未输入 API Key，退出[/red]")
             sys.exit(0)
         if ext is not None:
-            if _set_extension_provider_token(ext, config, direct_value=api_key):
+            if _set_extension_provider_token(
+                ext,
+                config,
+                direct_value=api_key,
+            ):
                 agent.provider = get_provider_chain(config)
                 return True
             sys.exit(1)
@@ -156,12 +162,14 @@ def _set_extension_cap_token(cap_key: str, direct_value: str = "") -> None:
         env_hint = cap.api_key_env or auth_env_name(cap.auth)
     else:
         console.print(
-            f"[yellow]{cap_key} 当前 auth 配置 ({cap.auth or 'none'}) 不需要 token[/yellow]"
+            f"[yellow]{cap_key} 当前 auth 配置 "
+            f"({cap.auth or 'none'}) 不需要 token[/yellow]",
         )
         return
 
     secret = direct_value or _prompt_input(
-        f"  {cap_key} 凭证 (env {env_hint} 的值, 输入隐藏): ", secret=True
+        f"  {cap_key} 凭证 (env {env_hint} 的值, 输入隐藏): ",
+        secret=True,
     )
     if not secret:
         console.print("[dim]已取消[/dim]")
@@ -178,7 +186,9 @@ def _set_extension_cap_token(cap_key: str, direct_value: str = "") -> None:
 
 
 def _set_extension_provider_token(
-    ext_prov, config: Config, direct_value: str = ""
+    ext_prov,
+    config: Config,
+    direct_value: str = "",
 ) -> bool:
     """Persist an extension provider API key as <name>_api_key in
     ~/.acli/config.toml, just like the built-in providers. If `direct_value`
@@ -188,7 +198,8 @@ def _set_extension_provider_token(
     (an error message is already printed on failure).
     """
     secret = direct_value or _prompt_input(
-        f"  {ext_prov.name} API Key (输入隐藏，加密后写入): ", secret=True
+        f"  {ext_prov.name} API Key (输入隐藏，加密后写入): ",
+        secret=True,
     )
     if not secret:
         console.print("[dim]已取消[/dim]")
@@ -204,7 +215,7 @@ def _set_extension_provider_token(
     config.save_global()
     env_hint = ext_prov.api_key_env or "(无)"
     console.print(
-        f"[green]✓ {ext_prov.name}_api_key 已加密保存到 ~/.acli/config.toml[/green]"
+        f"[green]✓ {ext_prov.name}_api_key 已加密保存到 ~/.acli/config.toml[/green]",
     )
     console.print(f"[dim]运行时优先级: 环境变量 {env_hint} > 加密 token[/dim]")
     return True
@@ -218,8 +229,11 @@ def _maybe_prompt_extension_token(cap_key: str, config=None) -> None:
     var (reused at registration time via runtime_key)."""
     import os
 
-    from dashscope.acli.cli.constants import KEY_TARGETS
-    from dashscope.acli.extensions import auth_env_name, find_capability, provider_key_for_env
+    from dashscope.acli.extensions import (
+        auth_env_name,
+        find_capability,
+        provider_key_for_env,
+    )
 
     cap = find_capability(cap_key)
     if cap is None:
@@ -235,7 +249,7 @@ def _maybe_prompt_extension_token(cap_key: str, config=None) -> None:
         return
     console.print(
         f"[yellow]{cap_key} 缺凭证[/yellow] "
-        f"[dim](env {env_name} 未设；toml 中也无加密 key)[/dim]"
+        f"[dim](env {env_name} 未设；toml 中也无加密 key)[/dim]",
     )
     yn = input("现在录入? (加密保存，下次自动用) [Y/n]: ").strip().lower()
     if yn in ("", "y", "yes"):

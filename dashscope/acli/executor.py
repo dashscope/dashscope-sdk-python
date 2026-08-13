@@ -1,6 +1,8 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements
 from __future__ import annotations
 
-import asyncio
 import inspect
 import json
 import time
@@ -89,7 +91,9 @@ class Executor:
             self._skill_counts[name] = self._skill_counts.get(name, 0) + 1
 
     def record_prompt_composition(
-        self, messages: list[dict], tools_schema: list[dict] | None = None
+        self,
+        messages: list[dict],
+        tools_schema: list[dict] | None = None,
     ) -> None:
         """Accumulate prompt size (chars) by category for one LLM call."""
         for msg in messages:
@@ -111,7 +115,7 @@ class Executor:
                     self._prompt_composition["tools"] += len(args)
         if tools_schema:
             self._prompt_composition["tools"] += len(
-                json.dumps(tools_schema, ensure_ascii=False)
+                json.dumps(tools_schema, ensure_ascii=False),
             )
 
     async def execute(self, tool_def: ToolDefinition, arguments: dict) -> str:
@@ -130,7 +134,10 @@ class Executor:
             from dashscope.acli.audit import get_audit_logger
 
             get_audit_logger().log_tool_call(
-                tool_def.name, arguments, decision="denied", reason="user declined"
+                tool_def.name,
+                arguments,
+                decision="denied",
+                reason="user declined",
             )
             return "操作已取消"
 
@@ -147,7 +154,9 @@ class Executor:
             from dashscope.acli.audit import get_audit_logger
 
             get_audit_logger().log_tool_call(
-                tool_def.name, arguments, decision="executed"
+                tool_def.name,
+                arguments,
+                decision="executed",
             )
             return str(result)
         except Exception as e:
@@ -155,7 +164,10 @@ class Executor:
             from dashscope.acli.audit import get_audit_logger
 
             get_audit_logger().log_tool_call(
-                tool_def.name, arguments, decision="failed", reason=str(e)
+                tool_def.name,
+                arguments,
+                decision="failed",
+                reason=str(e),
             )
             return f"{EXEC_ERROR_PREFIX}: {type(e).__name__}: {e}"
 
@@ -175,12 +187,19 @@ class Executor:
         }
 
     async def _async_check_permission(
-        self, tool_def: ToolDefinition, arguments: dict
+        self,
+        tool_def: ToolDefinition,
+        arguments: dict,
     ) -> bool:
-        """Async version of _check_permission. When _confirm_callback is set (TUI mode),
-        delegates to the callback; otherwise falls back to sync _check_permission."""
+        """Async version of _check_permission. When _confirm_callback is
+        set (TUI mode), delegates to the callback; otherwise falls back
+        to sync _check_permission.
+        """
         if self._confirm_callback:
-            if tool_def.permission == PermissionLevel.AUTO or self.auto_approve:
+            if (
+                tool_def.permission == PermissionLevel.AUTO
+                or self.auto_approve
+            ):
                 return True
             # Policy deny rules run before the readonly fast-path: an admin
             # deny must always win, even over read-only auto-approval.
@@ -189,7 +208,10 @@ class Executor:
                 return False
             if tool_def.name == "run_command":
                 cmd = arguments.get("command", "")
-                if isinstance(cmd, str) and policy.check_command(cmd) == "deny":
+                if (
+                    isinstance(cmd, str)
+                    and policy.check_command(cmd) == "deny"
+                ):
                     return False
             # Auto-pass read-only shell commands
             if tool_def.name == "run_command":
@@ -217,7 +239,13 @@ class Executor:
                 return True
             # Delegate to TUI callback
             is_dangerous = tool_def.permission == PermissionLevel.DANGEROUS
-            result = await self._confirm_callback(tool_def, arguments, is_dangerous)
+            # pylint: disable=not-callable
+            result = await self._confirm_callback(
+                tool_def,
+                arguments,
+                is_dangerous,
+            )
+            # pylint: enable=not-callable
             if result == "a":
                 # DANGEROUS never enters the trust cache (同步路径仅提供 y/n)
                 if not is_dangerous:
@@ -233,7 +261,11 @@ class Executor:
             return result == "y"
         return self._check_permission(tool_def, arguments)
 
-    def _check_permission(self, tool_def: ToolDefinition, arguments: dict) -> bool:
+    def _check_permission(
+        self,
+        tool_def: ToolDefinition,
+        arguments: dict,
+    ) -> bool:
         if tool_def.permission == PermissionLevel.AUTO or self.auto_approve:
             return True
 
@@ -246,7 +278,7 @@ class Executor:
         if tool_def.name == "run_command":
             cmd = arguments.get("command", "")
             if isinstance(cmd, str) and policy.check_command(cmd) == "deny":
-                console.print(f"[dim red]✗ 命令被策略拒绝[/dim red]")
+                console.print("[dim red]✗ 命令被策略拒绝[/dim red]")
                 return False
 
         # Auto-pass read-only shell commands (grep, ls, find, git status, …).
@@ -274,15 +306,18 @@ class Executor:
                 if cmd_decision == "allow":
                     return True
                 if cmd_decision == "deny":
-                    console.print(f"[dim red]✗ 命令被策略拒绝[/dim red]")
+                    console.print("[dim red]✗ 命令被策略拒绝[/dim red]")
                     return False
 
-        # Consult turn-scoped trust cache (CONFIRM only; DANGEROUS never caches).
+        # Consult turn-scoped trust cache (CONFIRM only; DANGEROUS never
+        # caches).
         if tool_def.name in self._always_deny:
             console.print(f"[dim red]✗ {tool_def.name} (本次对话已拒绝)[/dim red]")
             return False
         if tool_def.name in self._always_allow:
-            console.print(f"[dim green]✓ {tool_def.name} (本次对话已授信)[/dim green]")
+            console.print(
+                f"[dim green]✓ {tool_def.name} (本次对话已授信)[/dim green]",
+            )
             return True
 
         style = PERMISSION_STYLES[tool_def.permission]
@@ -309,7 +344,7 @@ class Executor:
                 # Ctrl-C / Ctrl-D at the confirmation prompt = abort the turn.
                 # asyncio + prompt_toolkit can swallow the signal mid-prompt,
                 # so we explicitly translate it here.
-                raise UserAbortedTurn("Ctrl-C 中止本轮对话")
+                raise UserAbortedTurn("Ctrl-C 中止本轮对话") from None
 
         # CONFIRM gets the four-way prompt with turn-scoped memory.
         # Brackets are escaped (\[…\]) so Rich doesn't parse them as markup
@@ -317,13 +352,14 @@ class Executor:
         # top" rendering previously.
         try:
             choice = Prompt.ask(
-                r"是否执行? \[y]es / \[n]o / \[u]pdate (补充信息，重新规划) / \[a]lways (本次对话该工具直接放行) / \[s]top (中止本轮对话)",
+                r"是否执行? \[y]es / \[n]o / \[u]pdate (补充信息，重新规划) / "
+                r"\[a]lways (本次对话该工具直接放行) / \[s]top (中止本轮对话)",
                 choices=["y", "n", "u", "a", "s"],
                 default="y",
                 show_choices=False,
             )
         except (KeyboardInterrupt, EOFError):
-            raise UserAbortedTurn("Ctrl-C 中止本轮对话")
+            raise UserAbortedTurn("Ctrl-C 中止本轮对话") from None
         if choice == "a":
             self._always_allow.add(tool_def.name)
             return True

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Experience memory — learn from task outcomes to improve future performance.
 Records tool usage patterns, success/failure outcomes, and lessons learned.
@@ -9,7 +10,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from dashscope.acli.utils.keywords import expand_scoring_terms, extract_keywords
+from dashscope.acli.utils.keywords import (
+    expand_scoring_terms,
+    extract_keywords,
+)
 
 
 class ExperienceTracker:
@@ -52,7 +56,9 @@ class ExperienceTracker:
         try:
             if self.experience_file.stat().st_size <= self.MAX_FILE_BYTES:
                 return
-            lines = self.experience_file.read_text(encoding="utf-8").splitlines()
+            lines = self.experience_file.read_text(
+                encoding="utf-8",
+            ).splitlines()
             keep = [line for line in lines if line.strip()][-self.KEEP_LINES :]
             tmp = self.experience_file.with_suffix(".jsonl.tmp")
             tmp.write_text("\n".join(keep) + "\n", encoding="utf-8")
@@ -81,8 +87,13 @@ class ExperienceTracker:
         self._cache_mtime_ns = mtime_ns
         return experiences
 
-    def search_experiences(self, query: str, limit: int = 3) -> list[dict[str, Any]]:
-        """Search for relevant experiences based on CJK-aware keyword overlap."""
+    def search_experiences(
+        self,
+        query: str,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Search for relevant experiences based on CJK-aware keyword
+        overlap."""
         keywords = extract_keywords(query)
         if not keywords:
             return []
@@ -122,7 +133,10 @@ class ExperienceTracker:
                 break
         return results
 
-    def format_experiences_for_prompt(self, experiences: list[dict[str, Any]]) -> str:
+    def format_experiences_for_prompt(
+        self,
+        experiences: list[dict[str, Any]],
+    ) -> str:
         """Format experiences for injection into system prompt."""
         if not experiences:
             return ""
@@ -134,8 +148,13 @@ class ExperienceTracker:
             lesson = exp.get("lesson", "")
             tools = exp.get("tools", [])
 
-            outcome_emoji = {"success": "✓", "failure": "✗", "partial": "△"}.get(
-                outcome, "?"
+            outcome_emoji = {
+                "success": "✓",
+                "failure": "✗",
+                "partial": "△",
+            }.get(
+                outcome,
+                "?",
             )
             lines.append(f"{i}. {outcome_emoji} {task}")
             if tools:

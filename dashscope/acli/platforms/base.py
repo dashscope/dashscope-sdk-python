@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -105,24 +106,48 @@ class MemoryProvider(Protocol):
         messages: list[dict[str, str]],
         custom_content: str = "",
         metadata: dict | None = None,
-    ) -> list[MemoryNode]: ...
+    ) -> list[MemoryNode]:
+        ...
+
     async def search(
-        self, query: str | list[dict[str, str]], top_k: int = 5, min_score: float = 0.3
-    ) -> list[MemoryNode]: ...
+        self,
+        query: str | list[dict[str, str]],
+        top_k: int = 5,
+        min_score: float = 0.3,
+    ) -> list[MemoryNode]:
+        ...
+
     async def list(
-        self, page_num: int = 1, page_size: int = 10
-    ) -> list[MemoryNode]: ...
-    async def delete(self, node_id: str) -> bool: ...
-    async def update(self, node_id: str, content: str) -> bool: ...
+        self,
+        page_num: int = 1,
+        page_size: int = 10,
+    ) -> list[MemoryNode]:
+        ...
+
+    async def delete(self, node_id: str) -> bool:
+        ...
+
+    async def update(self, node_id: str, content: str) -> bool:
+        ...
 
 
 class KBProvider(Protocol):
     def list_indices(
-        self, page_number: int = 1, page_size: int = 20
-    ) -> list[IndexInfo]: ...
+        self,
+        page_number: int = 1,
+        page_size: int = 20,
+    ) -> list[IndexInfo]:
+        ...
+
     def retrieve(
-        self, index_id: str, query: str, top_k: int = 5, min_score: float = 0.3
-    ) -> list[RetrieveNode]: ...
+        self,
+        index_id: str,
+        query: str,
+        top_k: int = 5,
+        min_score: float = 0.3,
+    ) -> list[RetrieveNode]:
+        ...
+
     def create_index(
         self,
         name: str,
@@ -130,55 +155,112 @@ class KBProvider(Protocol):
         document_ids: list[str] | None = None,
         chunk_size: int = 500,
         overlap_size: int = 100,
-    ) -> str: ...
-    def delete_index(self, index_id: str) -> bool: ...
-    def submit_index_job(self, index_id: str) -> str: ...
-    def get_index_job_status(self, index_id: str, job_id: str) -> dict: ...
+    ) -> str:
+        ...
+
+    def delete_index(self, index_id: str) -> bool:
+        ...
+
+    def submit_index_job(self, index_id: str) -> str:
+        ...
+
+    def get_index_job_status(self, index_id: str, job_id: str) -> dict:
+        ...
+
     def add_documents_to_index(
         self,
         index_id: str,
         category_ids: list[str] | None = None,
         document_ids: list[str] | None = None,
-    ) -> str: ...
+    ) -> str:
+        ...
+
     def list_index_documents(
-        self, index_id: str, page_number: int = 1, page_size: int = 20
-    ) -> list[IndexDocument]: ...
+        self,
+        index_id: str,
+        page_number: int = 1,
+        page_size: int = 20,
+    ) -> list[IndexDocument]:
+        ...
+
     def delete_index_documents(
-        self, index_id: str, document_ids: list[str]
-    ) -> bool: ...
+        self,
+        index_id: str,
+        document_ids: list[str],
+    ) -> bool:
+        ...
 
 
 class DataProvider(Protocol):
-    def upload_file(self, file_path: str, category_id: str = "default") -> FileInfo: ...
+    def upload_file(
+        self,
+        file_path: str,
+        category_id: str = "default",
+    ) -> FileInfo:
+        ...
+
     def list_files(
-        self, category_id: str = "default", max_results: int = 20
-    ) -> list[FileInfo]: ...
-    def delete_file(self, file_id: str, category_id: str = "default") -> bool: ...
+        self,
+        category_id: str = "default",
+        max_results: int = 20,
+    ) -> list[FileInfo]:
+        ...
+
+    def delete_file(self, file_id: str, category_id: str = "default") -> bool:
+        ...
+
     def list_categories(
-        self, category_type: str = "UNSTRUCTURED"
-    ) -> list[Category]: ...
+        self,
+        category_type: str = "UNSTRUCTURED",
+    ) -> list[Category]:
+        ...
+
     def add_category(
-        self, name: str, category_type: str = "UNSTRUCTURED"
-    ) -> Category: ...
+        self,
+        name: str,
+        category_type: str = "UNSTRUCTURED",
+    ) -> Category:
+        ...
 
 
 class PromptProvider(Protocol):
     def list(
-        self, name: str | None = None, type: str | None = None, max_results: int = 20
-    ) -> list[PromptTemplate]: ...
-    def get(self, template_id: str) -> PromptTemplate: ...
-    def create(self, name: str, content: str) -> PromptTemplate: ...
+        self,
+        name: str | None = None,
+        type: str | None = None,  # pylint: disable=redefined-builtin
+        max_results: int = 20,
+    ) -> list[PromptTemplate]:
+        ...
+
+    def get(self, template_id: str) -> PromptTemplate:
+        ...
+
+    def create(self, name: str, content: str) -> PromptTemplate:
+        ...
+
     def update(
-        self, template_id: str, name: str | None = None, content: str | None = None
-    ) -> bool: ...
-    def delete(self, template_id: str) -> bool: ...
-    def render(self, template_id: str, variables: dict[str, str]) -> str: ...
+        self,
+        template_id: str,
+        name: str | None = None,
+        content: str | None = None,
+    ) -> bool:
+        ...
+
+    def delete(self, template_id: str) -> bool:
+        ...
+
+    def render(self, template_id: str, variables: dict[str, str]) -> str:
+        ...
 
 
 class SearchProvider(Protocol):
     async def search(
-        self, query: str, count: int = 10, recency: str = "noLimit"
-    ) -> list[SearchResult]: ...
+        self,
+        query: str,
+        count: int = 10,
+        recency: str = "noLimit",
+    ) -> list[SearchResult]:
+        ...
 
 
 @dataclass
@@ -208,7 +290,8 @@ class ContextProvider(Protocol):
         mode: str = "session",
         ttl: int = 3600,
         truncation_strategy: dict | None = None,
-    ) -> ContextInfo: ...
+    ) -> ContextInfo:
+        ...
 
     async def chat(
         self,
@@ -218,4 +301,5 @@ class ContextProvider(Protocol):
         max_tokens: int | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
-    ) -> ContextChatResponse: ...
+    ) -> ContextChatResponse:
+        ...

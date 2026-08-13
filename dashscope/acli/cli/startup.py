@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Startup functions: banner, system prompt loading, provider debug."""
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ def _load_system_prompt() -> str | None:
     are discovered separately by Agent.__init__ and passed to the prompt
     pipeline for proper stable/ephemeral separation.
     """
-    from dashscope.acli.config import CONFIG_DIR, WORKSPACE_DIR
+    from dashscope.acli.config import CONFIG_DIR
 
     base: str | None = None
     for d in (WORKSPACE_DIR, CONFIG_DIR):
@@ -49,7 +50,7 @@ def _load_references() -> str | None:
     Unlike skills (invoked on demand), references are knowledge docs that must
     always be in the system prompt — e.g. generated SDK API indexes.
     """
-    from dashscope.acli.config import CONFIG_DIR, WORKSPACE_DIR
+    from dashscope.acli.config import CONFIG_DIR
 
     parts: dict[str, str] = {}
     for d in (CONFIG_DIR, WORKSPACE_DIR):
@@ -62,7 +63,9 @@ def _load_references() -> str | None:
             except OSError:
                 continue
             if body:
-                parts[path.name] = body  # workspace overrides global by file name
+                parts[
+                    path.name
+                ] = body  # workspace overrides global by file name
     return "\n\n---\n\n".join(parts.values()) if parts else None
 
 
@@ -90,7 +93,7 @@ def _print_banner(config: Config | None = None):
     )
     console.print(f"[bold cyan]{logo}[/bold cyan]", highlight=False)
     console.print(
-        f"  [bold]AgenticCLI[/bold] [dim]v{__version__}[/dim] — 用自然语言驱动一切"
+        f"  [bold]AgenticCLI[/bold] [dim]v{__version__}[/dim] — 用自然语言驱动一切",
     )
     console.print(f"  [dim]Workspace: {WORKSPACE_DIR}[/dim]\n")
 
@@ -100,7 +103,7 @@ def _print_banner(config: Config | None = None):
         console.print(
             f"  [bold]Provider:[/bold] [cyan]{config.provider}[/cyan]  "
             f"[bold]Model:[/bold] [cyan]{config.model}[/cyan]  "
-            f"[bold]User:[/bold] [cyan]{user_display}[/cyan]"
+            f"[bold]User:[/bold] [cyan]{user_display}[/cyan]",
         )
 
         # API Key 状态（当前 provider）
@@ -112,13 +115,14 @@ def _print_banner(config: Config | None = None):
             key_val = getattr(config, key_info["field"], "")
             if key_val:
                 console.print(
-                    f"  [bold]API Key:[/bold] [green]✓ {mask_secret(key_val)}[/green] "
-                    f"[dim]({key_info['env']})[/dim]"
+                    f"  [bold]API Key:[/bold] "
+                    f"[green]✓ {mask_secret(key_val)}[/green] "
+                    f"[dim]({key_info['env']})[/dim]",
                 )
             else:
                 console.print(
                     f"  [bold]API Key:[/bold] [red]✗ 未设置[/red] "
-                    f"[dim]({key_info['env']}, 用 /provider 设置)[/dim]"
+                    f"[dim]({key_info['env']}, 用 /provider 设置)[/dim]",
                 )
 
         # 已启用能力
@@ -132,7 +136,9 @@ def _print_banner(config: Config | None = None):
 
         # 已注册工具数量
         tool_count = (
-            len(registry.list_tools()) if hasattr(registry, "list_tools") else "?"
+            len(registry.list_tools())
+            if hasattr(registry, "list_tools")
+            else "?"
         )
         console.print(f"  [bold]工具:[/bold]   [dim]{tool_count} 个已注册[/dim]")
 
@@ -140,21 +146,25 @@ def _print_banner(config: Config | None = None):
         sdk_index = getattr(config, "_embedded_sdk_index", None)
         if sdk_index:
             console.print(
-                f"  [bold]SDK:[/bold]    [green]✓[/green] [dim]{', '.join(sdk_index)}[/dim]"
+                f"  [bold]SDK:[/bold]    [green]✓[/green] "
+                f"[dim]{', '.join(sdk_index)}[/dim]",
             )
 
         console.print()
 
-    console.print(f"  [dim]会话: /help /clear /exit[/dim]")
+    console.print("  [dim]会话: /help /clear /exit[/dim]")
     console.print(
-        f"  [dim]配置: /setup /capability /subagents /provider /trust /rule[/dim]"
+        "  [dim]配置: /setup /capability /subagents /provider /trust "
+        "/rule[/dim]",
     )
-    console.print(f"  [dim]能力: /profile /mcp /skill[/dim]")
+    console.print("  [dim]能力: /profile /mcp /skill[/dim]")
     console.print(
-        f"  [dim]开发: /dev model|provider|capability (运行时) /dev platform|tool|skill (扩展指南)[/dim]"
+        "  [dim]开发: /dev model|provider|capability (运行时) "
+        "/dev platform|tool|skill (扩展指南)[/dim]",
     )
     console.print(
-        f"  [dim]输入: Enter 提交 / Ctrl+J 换行 / 粘贴多行自动保留 / @文件 展开内容 / /v 语音输入[/dim]"
+        "  [dim]输入: Enter 提交 / Ctrl+J 换行 / 粘贴多行自动保留 / "
+        "@文件 展开内容 / /v 语音输入[/dim]",
     )
     console.print()
 

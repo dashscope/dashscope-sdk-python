@@ -1,18 +1,29 @@
+# -*- coding: utf-8 -*-
 """Runner functions for different execution modes."""
+# pylint: disable=protected-access,too-many-branches,too-many-statements
 
 from __future__ import annotations
 
-import asyncio
 import sys
 
 from rich.console import Console
 
-from dashscope.acli import __version__
 from dashscope.acli.agent import Agent
 from dashscope.acli.cli.handlers_key import ensure_provider_key
-from dashscope.acli.cli.multimodal import _expand_at_references, _to_multimodal_content
-from dashscope.acli.cli.startup import _compose_system_prompt, _load_system_prompt
-from dashscope.acli.config import PROVIDER_MODELS, Config, is_audio_model, is_vision_model
+from dashscope.acli.cli.multimodal import (
+    _expand_at_references,
+    _to_multimodal_content,
+)
+from dashscope.acli.cli.startup import (
+    _compose_system_prompt,
+    _load_system_prompt,
+)
+from dashscope.acli.config import (
+    PROVIDER_MODELS,
+    Config,
+    is_audio_model,
+    is_vision_model,
+)
 from dashscope.acli.dev import _apply_custom_models
 from dashscope.acli.executor import Executor
 from dashscope.acli.providers import get_provider, get_provider_chain
@@ -45,12 +56,14 @@ async def _run_oneshot(config: Config, prompt: str):
         targets = all_key_targets(config)
         key_info = targets.get(config.provider)
         env_hint = (
-            key_info.get("env") if key_info else f"{config.provider.upper()}_API_KEY"
+            key_info.get("env")
+            if key_info
+            else f"{config.provider.upper()}_API_KEY"
         )
         print(f"错误: 未找到 {config.provider} 的 API Key")
         print(f"  1) 设置环境变量: export {env_hint}=sk-xxx")
-        print(f"  2) 启动后设置:   /provider")
-        print(f"  3) 交互式设置:   /setup")
+        print("  2) 启动后设置:   /provider")
+        print("  3) 交互式设置:   /setup")
         sys.exit(1)
 
     provider = get_provider_chain(config)
@@ -66,10 +79,18 @@ async def _run_oneshot(config: Config, prompt: str):
     # Pin parent agent ref for local.subagent / local.delegate BEFORE platform
     # tool registration so register_one_capability finds a parent to attach to
     # (same ordering as cli/repl.py).
-    from dashscope.acli.agents.delegate import set_config as set_delegate_config
-    from dashscope.acli.agents.delegate import set_parent_agent as set_delegate_parent
-    from dashscope.acli.agents.subagent import set_config as set_subagent_config
-    from dashscope.acli.agents.subagent import set_parent_agent as set_subagent_parent
+    from dashscope.acli.agents.delegate import (
+        set_config as set_delegate_config,
+    )
+    from dashscope.acli.agents.delegate import (
+        set_parent_agent as set_delegate_parent,
+    )
+    from dashscope.acli.agents.subagent import (
+        set_config as set_subagent_config,
+    )
+    from dashscope.acli.agents.subagent import (
+        set_parent_agent as set_subagent_parent,
+    )
 
     set_subagent_parent(agent)
     set_subagent_config(config)
@@ -84,12 +105,14 @@ async def _run_oneshot(config: Config, prompt: str):
     expanded, images, audio_clips = _expand_at_references(prompt)
     if images and not is_vision_model(config.model):
         console.print(
-            f"[yellow]当前模型 {config.model} 不支持图片，{len(images)} 张图片已忽略。[/yellow]"
+            f"[yellow]当前模型 {config.model} 不支持图片，"
+            f"{len(images)} 张图片已忽略。[/yellow]",
         )
         images = []
     if audio_clips and not is_audio_model(config.model):
         console.print(
-            f"[yellow]当前模型 {config.model} 不支持音频，{len(audio_clips)} 段音频已忽略。[/yellow]"
+            f"[yellow]当前模型 {config.model} 不支持音频，"
+            f"{len(audio_clips)} 段音频已忽略。[/yellow]",
         )
         audio_clips = []
     agent_input = _to_multimodal_content(expanded, images, audio_clips)
@@ -106,11 +129,7 @@ def _run_dry_run(config: Config):
     Shows what would be loaded: provider, model, skills, MCP services,
     tools, capabilities, and overall readiness status.
     """
-    from rich.console import Console
-    from rich.panel import Panel
     from rich.table import Table
-
-    console = Console()
 
     console.print("\n[bold cyan]acli --dry-run[/bold cyan]  配置预览\n")
 
@@ -133,7 +152,10 @@ def _run_dry_run(config: Config):
     load_skill_files()
     skills = list(BUILTIN_SKILLS.values())
     if skills:
-        skill_table = Table(title=f"已加载 Skills ({len(skills)})", show_header=True)
+        skill_table = Table(
+            title=f"已加载 Skills ({len(skills)})",
+            show_header=True,
+        )
         skill_table.add_column("名称", style="cyan")
         skill_table.add_column("描述", style="dim")
         for skill in skills:
@@ -146,7 +168,10 @@ def _run_dry_run(config: Config):
     # 3. MCP Services
     mcp_servers = getattr(config, "mcp_servers", None) or []
     if mcp_servers:
-        mcp_table = Table(title=f"MCP 服务 ({len(mcp_servers)})", show_header=True)
+        mcp_table = Table(
+            title=f"MCP 服务 ({len(mcp_servers)})",
+            show_header=True,
+        )
         mcp_table.add_column("名称", style="cyan")
         mcp_table.add_column("URL", style="dim")
         mcp_table.add_column("状态", style="green")
@@ -180,12 +205,17 @@ def _run_dry_run(config: Config):
     caps_table.add_column("Capability", style="cyan")
     caps_table.add_column("状态", style="green")
     caps_table.add_row(
-        "Memory", "✓ 启用" if getattr(config, "memory_enabled", False) else "✗ 禁用"
+        "Memory",
+        "✓ 启用" if getattr(config, "memory_enabled", False) else "✗ 禁用",
     )
     caps_table.add_row(
-        "Session Persist", "✓ 启用" if config.session_persist else "✗ 禁用"
+        "Session Persist",
+        "✓ 启用" if config.session_persist else "✗ 禁用",
     )
-    caps_table.add_row("Auto Approve", "✓ 启用" if config.auto_approve else "✗ 禁用")
+    caps_table.add_row(
+        "Auto Approve",
+        "✓ 启用" if config.auto_approve else "✗ 禁用",
+    )
     console.print(caps_table)
     console.print()
 
@@ -197,14 +227,14 @@ def _run_dry_run(config: Config):
         issues.append("无可用工具")
 
     if issues:
-        console.print(f"[bold red]⚠ Readiness: Warning[/bold red]")
+        console.print("[bold red]⚠ Readiness: Warning[/bold red]")
         for issue in issues:
             console.print(f"  • {issue}")
     else:
         console.print("[bold green]✓ Readiness: Ready[/bold green]")
 
     console.print(
-        "\n[dim]这是配置预览，agent 未启动。移除 --dry-run 以正常启动。[/dim]\n"
+        "\n[dim]这是配置预览，agent 未启动。移除 --dry-run 以正常启动。[/dim]\n",
     )
 
 
@@ -224,7 +254,9 @@ def _run_tui_mode(config: Config):
     from dashscope.acli.extensions import apply_extensions
 
     _ext = apply_extensions(PROVIDER_MODELS)
-    from dashscope.acli.cli.handlers_capability import sync_extensions_into_catalog
+    from dashscope.acli.cli.handlers_capability import (
+        sync_extensions_into_catalog,
+    )
 
     sync_extensions_into_catalog(_ext)
 
@@ -233,10 +265,18 @@ def _run_tui_mode(config: Config):
     provider = get_provider_chain(config)
     executor = Executor(auto_approve=config.auto_approve)
 
-    from dashscope.acli.agents.delegate import set_config as set_delegate_config
-    from dashscope.acli.agents.delegate import set_parent_agent as set_delegate_parent
-    from dashscope.acli.agents.subagent import set_config as set_subagent_config
-    from dashscope.acli.agents.subagent import set_parent_agent as set_subagent_parent
+    from dashscope.acli.agents.delegate import (
+        set_config as set_delegate_config,
+    )
+    from dashscope.acli.agents.delegate import (
+        set_parent_agent as set_delegate_parent,
+    )
+    from dashscope.acli.agents.subagent import (
+        set_config as set_subagent_config,
+    )
+    from dashscope.acli.agents.subagent import (
+        set_parent_agent as set_subagent_parent,
+    )
     from dashscope.acli.hooks import create_hook_bus
     from dashscope.acli.platforms import get_memory_provider
     from dashscope.acli.tools.platform import disabled_capabilities_hint
@@ -267,7 +307,8 @@ def _run_tui_mode(config: Config):
         disabled_caps_provider=lambda: disabled_capabilities_hint(config),
         directives_provider=lambda: config.user_directives,
         system_prompt=_compose_system_prompt(
-            getattr(config, "_embedded_system_prompt", None) or _load_system_prompt()
+            getattr(config, "_embedded_system_prompt", None)
+            or _load_system_prompt(),
         ),
         hook_bus=hook_bus,
     )
@@ -318,12 +359,14 @@ def _run_tui_mode(config: Config):
     except ImportError:
         console.print(
             "[yellow]TUI 需要 textual 依赖，请先安装: pip install textual"
-            "（或使用 CLI 模式: --cli）[/yellow]"
+            "（或使用 CLI 模式: --cli）[/yellow]",
         )
         return
 
     # Run Textual TUI
     input_history_path = (
-        session_manager.get_input_history_path() if config.session_persist else None
+        session_manager.get_input_history_path()
+        if config.session_persist
+        else None
     )
     run_tui(config, agent, input_history_path=input_history_path)

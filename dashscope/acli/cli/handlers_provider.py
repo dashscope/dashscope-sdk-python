@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Provider configuration wizard (/provider).
 
 Q&A-style, modeled on /setup: one linear flow —
@@ -5,6 +6,7 @@ provider → key → model → protocol — with Enter accepting the default at
 every step. The former arg-style subcommands (/provider use|model|protocol|
 key) were removed — /provider always opens the wizard.
 """
+# pylint: disable=too-many-branches,too-many-statements
 
 from __future__ import annotations
 
@@ -46,7 +48,10 @@ def _read_secret(prompt: str) -> str:
 
 
 def _numbered_pick(
-    label: str, options: list[str], default: str, custom_hint: str = ""
+    label: str,
+    options: list[str],
+    default: str,
+    custom_hint: str = "",
 ) -> str:
     """Show a numbered list and read a choice (number or name).
 
@@ -85,24 +90,33 @@ def _warn_missing_ext_key(config: Config) -> None:
     """Warn when the active extension provider has no resolvable key —
     otherwise the chain would silently fall back on auth failure."""
     ext = find_provider(config.provider)
-    if ext is None or config.provider in PROVIDERS or ext.resolve_api_key(config):
+    if (
+        ext is None
+        or config.provider in PROVIDERS
+        or ext.resolve_api_key(config)
+    ):
         return
     env_hint = ext.api_key_env or "(无)"
     console.print(
         f"[yellow]⚠️  {config.provider} 缺少 API Key "
-        f"(env {env_hint} 未设；toml 中也无加密 key)[/yellow]"
+        f"(env {env_hint} 未设；toml 中也无加密 key)[/yellow]",
     )
 
 
 def _wizard_key_step(config: Config) -> None:
     """Step 2: API key — always shown; Enter keeps the current key / skips."""
-    from dashscope.acli.cli.handlers_key import _set_extension_provider_token, all_key_targets
+    from dashscope.acli.cli.handlers_key import (
+        _set_extension_provider_token,
+        all_key_targets,
+    )
 
     info = all_key_targets(config).get(config.provider)
     if info is None:
         return
     if info.get("no_auth"):
-        console.print(f"[dim]{config.provider} 无需 API Key (auth = false)[/dim]")
+        console.print(
+            f"[dim]{config.provider} 无需 API Key (auth = false)[/dim]",
+        )
         return
 
     existing = getattr(config, info["field"], "") or ""
@@ -124,7 +138,7 @@ def _wizard_key_step(config: Config) -> None:
             env_hint = f"或环境变量 {info['env']} " if info.get("env") else ""
             console.print(
                 f"[dim]已跳过 {config.provider} key，"
-                f"稍后可用 /provider {env_hint}设置[/dim]"
+                f"稍后可用 /provider {env_hint}设置[/dim]",
             )
         return
 
@@ -144,7 +158,7 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
 
     console.print(
         f"[dim]当前: {config.provider}/{config.model}  "
-        f"protocol={config.protocol}[/dim]\n"
+        f"protocol={config.protocol}[/dim]\n",
     )
 
     loaded = ext_current()
@@ -196,11 +210,17 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
         normalized = normalize_model_name(model)
         if normalized != model.strip():
             console.print(
-                f"[dim]模型名归一化为 {normalized} (API 模型 ID 大小写敏感)[/dim]"
+                f"[dim]模型名归一化为 {normalized} (API 模型 ID 大小写敏感)[/dim]",
             )
-        if models and normalized not in models and config.provider in PROVIDER_MODELS:
+        if (
+            models
+            and normalized not in models
+            and config.provider in PROVIDER_MODELS
+        ):
             register_custom_model(config, config.provider, normalized)
-            console.print(f"[green]✓ 已注册 {config.provider}/{normalized}[/green]")
+            console.print(
+                f"[green]✓ 已注册 {config.provider}/{normalized}[/green]",
+            )
         config.model = normalized
 
     # 4) Protocol — for extension providers the default comes from the toml.
@@ -212,7 +232,7 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
         if ext_proto and proto != ext_proto:
             console.print(
                 f"[yellow]⚠️  {config.provider} 的 toml 声明协议为 {ext_proto}，"
-                f"改用 {proto} 可能调用失败 (404)[/yellow]"
+                f"改用 {proto} 可能调用失败 (404)[/yellow]",
             )
         config.protocol = proto
     elif proto:
@@ -223,7 +243,7 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
     if _rebuild_provider(agent, config):
         console.print(
             f"[green]✓ 已切换: {config.provider}/{config.model}  "
-            f"protocol={config.protocol}[/green]"
+            f"protocol={config.protocol}[/green]",
         )
     return True
 

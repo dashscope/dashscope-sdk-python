@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Deliverable surfacing — detect and present files produced by tool calls.
 
 When an agent turn writes files (via write_file, shell, etc.), this module
@@ -52,7 +53,7 @@ _PATH_PATTERN = re.compile(
     r"(?:^|[\s\[\](){}<>|`\"'\n])"
     r"((?:/|(?:\.{1,2}/)|[A-Za-z]:\\)?"
     r"[\w\-./\\]+(?:\.[A-Za-z0-9\-_]+)+)"
-    r"(?=$|[\s\[\](){}<>|`\"'\n])"
+    r"(?=$|[\s\[\](){}<>|`\"'\n])",
 )
 
 
@@ -133,7 +134,10 @@ def _open_command() -> str | None:
     return "xdg-open"
 
 
-def surface_deliverables(deliverables: list[Path], auto_open: bool = False) -> None:
+def surface_deliverables(
+    deliverables: list[Path],
+    auto_open: bool = False,
+) -> None:
     """Print a summary of generated files and optionally open them."""
     if not deliverables:
         return
@@ -141,7 +145,11 @@ def surface_deliverables(deliverables: list[Path], auto_open: bool = False) -> N
     console.print()
     console.print("[dim]─ 生成文件 ─[/dim]")
     for path in deliverables:
-        rel = path.relative_to(Path.cwd()) if path.is_relative_to(Path.cwd()) else path
+        rel = (
+            path.relative_to(Path.cwd())
+            if path.is_relative_to(Path.cwd())
+            else path
+        )
         suffix = path.suffix.lower()
         icon = "📄" if suffix in _OPENABLE_EXTENSIONS else "📦"
         console.print(f"{icon} [cyan]{rel}[/cyan]")
@@ -150,7 +158,7 @@ def surface_deliverables(deliverables: list[Path], auto_open: bool = False) -> N
             cmd = _open_command()
             if cmd:
                 try:
-                    subprocess.Popen(
+                    subprocess.Popen(  # pylint: disable=consider-using-with
                         [cmd, str(path)],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Pluggable system-prompt section pipeline.
 
 Each section is a small object implementing the ``PromptSection`` protocol.
@@ -9,6 +10,7 @@ Extracting the sections from ``Agent`` makes the prompt assembly order
 explicit, lets extensions inject custom sections via ``custom-extensions.toml``
 in future phases, and keeps ``Agent`` focused on the turn loop.
 """
+# pylint: disable=unused-argument
 
 from __future__ import annotations
 
@@ -43,7 +45,6 @@ class PromptSection(Protocol):
 
     def render(self, ctx: PromptContext) -> str:
         """Return the section text (empty string if nothing to inject)."""
-        ...
 
 
 # ── Volatile sections (lead the ephemeral per-turn suffix) ─────────────
@@ -61,13 +62,15 @@ class SkillsSection:
         self._skills_summary_fn = skills_summary_fn
 
     def render(self, ctx: PromptContext) -> str:
-        services = ctx.connected_mcp_services() if ctx.connected_mcp_services else []
+        services = (
+            ctx.connected_mcp_services() if ctx.connected_mcp_services else []
+        )
         body = self._skills_summary_fn(services)
         if not body:
             return ""
         return (
-            "\n\n可用 Skill 模板（你可通过 use_skill 工具调用；用户也可一行 `/skill <name> <args>` 触发）:\n"
-            + body
+            "\n\n可用 Skill 模板（你可通过 use_skill 工具调用；"
+            "用户也可一行 `/skill <name> <args>` 触发）:\n" + body
         )
 
 
@@ -139,7 +142,9 @@ class ExperienceSection:
         if not query:
             return ""
         experiences = ctx.experience_tracker.search_experiences(query, limit=3)
-        return ctx.experience_tracker.format_experiences_for_prompt(experiences)
+        return ctx.experience_tracker.format_experiences_for_prompt(
+            experiences,
+        )
 
 
 class ToolChainsSection:
@@ -149,7 +154,7 @@ class ToolChainsSection:
         if not ctx.memory_manager:
             return ""
         return ctx.memory_manager.session.tool_chains.get_relevant_chains(
-            ctx.user_input
+            ctx.user_input,
         )
 
 
@@ -157,7 +162,9 @@ class DirectivesLearningSection:
     name = "directives_learning"
 
     def render(self, ctx: PromptContext) -> str:
-        from dashscope.acli.memory.directives_learning import get_directive_proposals_summary
+        from dashscope.acli.memory.directives_learning import (
+            get_directive_proposals_summary,
+        )
 
         return get_directive_proposals_summary()
 
@@ -174,13 +181,13 @@ class EnvironmentSection:
         if ctx.provider_name or ctx.model_name:
             env_info.append(
                 f"当前模型: {ctx.provider_name}/{ctx.model_name}"
-                "（以 config.toml 当前配置为准；历史消息或摘要中提到的模型名可能已过时，回答模型相关问题时必须以此处为准）"
+                "（以 config.toml 当前配置为准；历史消息或摘要中提到的模型名可能已过时，回答模型相关问题时必须以此处为准）",
             )
         if not env_info:
             return ""
         env_info.append(
             "规则: 涉及本 CLI 的命令时，只提及确定存在的真实命令；"
-            "不确定时引导用户输入 /help 查看，不要自行编造命令名或用法。"
+            "不确定时引导用户输入 /help 查看，不要自行编造命令名或用法。",
         )
         return "\n\n" + "\n".join(env_info)
 
@@ -192,7 +199,11 @@ class PromptPipeline:
     sections are concatenated as the per-turn suffix.
     """
 
-    def __init__(self, base_prompt: str, project_instructions: str | None = None):
+    def __init__(
+        self,
+        base_prompt: str,
+        project_instructions: str | None = None,
+    ):
         self._assembly = PromptAssembly(
             base_prompt=base_prompt,
             project_instructions=project_instructions,
@@ -213,10 +224,11 @@ class PromptPipeline:
         return self._assembly.stable_prefix
 
     def render(self, ctx: PromptContext) -> str:
-        # Stable sections feed named slots in PromptAssembly. Only "skills" and
-        # "skill_packages" are wired; any new stable section added via add_stable()
-        # must also be added to PromptAssembly.with_sections() and
-        # _build_stable_prefix() or its output will be silently discarded here.
+        # Stable sections feed named slots in PromptAssembly. Only "skills"
+        # and "skill_packages" are wired; any new stable section added via
+        # add_stable() must also be added to PromptAssembly.with_sections()
+        # and _build_stable_prefix() or its output will be silently
+        # discarded here.
         stable_texts: dict[str, str] = {}
         for section in self._stable:
             if section.name not in ("skills", "skill_packages"):

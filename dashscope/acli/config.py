@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=too-many-branches,too-many-statements
 from __future__ import annotations
 
 import os
@@ -6,7 +8,11 @@ from pathlib import Path
 
 from dashscope.acli.utils.crypto import decrypt_value, encrypt_value
 from dashscope.acli.utils.paths import atomic_write_text
-from dashscope.acli.utils.toml import load_toml, parse_toml_inline_table, toml_str
+from dashscope.acli.utils.toml import (
+    load_toml,
+    parse_toml_inline_table,
+    toml_str,
+)
 
 CONFIG_DIR = Path.home() / ".acli"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
@@ -85,7 +91,8 @@ def register_custom_model(config: "Config", provider: str, model: str) -> str:
 
 # Models that accept image content blocks in chat messages. Used to gate
 # @image.png input — non-vision models would get an API error otherwise.
-# Prefix-matched so versioned aliases (qwen-vl-max-latest, gpt-4o-2024-...) work.
+# Prefix-matched so versioned aliases (qwen-vl-max-latest,
+# gpt-4o-2024-...) work.
 # Populated at runtime by apply_extensions() from the vision_models lists
 # declared on each [[providers]] block in custom-extensions.toml.
 VISION_MODELS: set[str] = set()
@@ -100,7 +107,8 @@ def _is_model_in_set(model: str, prefixes: set[str]) -> bool:
 
 
 def is_vision_model(model: str) -> bool:
-    """True if the model name starts with any registered vision-model prefix."""
+    """True if the model name starts with any registered vision-model
+    prefix."""
     return _is_model_in_set(model, VISION_MODELS)
 
 
@@ -109,7 +117,10 @@ def is_audio_model(model: str) -> bool:
     return _is_model_in_set(model, AUDIO_MODELS)
 
 
-def _valid_models_for_provider(provider: str, custom_models: list[str]) -> list[str]:
+def _valid_models_for_provider(
+    provider: str,
+    custom_models: list[str],
+) -> list[str]:
     """Return ordered valid model names for a provider.
 
     Includes built-in models, extension provider models from
@@ -211,12 +222,13 @@ class Config:
     provider: str = "tongyi"
     model: str = "qwen3.7-plus"
     # Dual-LLM: when thinking_model is set, Plan/Thinking loop phases route to
-    # the thinking model; Execute uses the execution model (provider/model above).
+    # the thinking model; Execute uses the execution model (provider/model
+    # above).
     # Empty = single-model mode (default, backward compatible).
     thinking_provider: str = ""
     thinking_model: str = ""
-    # Loop mode: "auto" = LLM-driven flat loop (default); "structured" = 6-phase
-    # closed cycle (Target→Plan→Execute→Evaluate→Feedback→Thinking).
+    # Loop mode: "auto" = LLM-driven flat loop (default); "structured" =
+    # 6-phase closed cycle (Target→Plan→Execute→Evaluate→Feedback→Thinking).
     loop_mode: str = "auto"
     tongyi_api_key: str = ""
     anthropic_api_key: str = ""
@@ -254,7 +266,7 @@ class Config:
             "accent": "#007acc",
             "muted": "#595959",
             "panel_border": "blue",
-        }
+        },
     )
     protocol: str = "openai"  # "openai" | "anthropic"
     tui: bool = True
@@ -262,15 +274,21 @@ class Config:
     # Default off on Windows: Textual's mouse-capture path is crash-prone
     # in PowerShell/conhost; native terminal mouse still allows selection.
     tui_mouse: bool = field(default_factory=lambda: os.name != "nt")
-    privacy_mode: bool = False  # When True, all data stays local, no cloud capabilities
-    debug: bool = False  # When True, log final LLM prompts to .acli/logs/llm.log
+    privacy_mode: bool = (
+        False  # When True, all data stays local, no cloud capabilities
+    )
+    debug: bool = (
+        False  # When True, log final LLM prompts to .acli/logs/llm.log
+    )
     skill_registry: str = (
         ""  # Optional registry index URL/path for /skill search/install
     )
     fallback_providers: list[str] = field(
-        default_factory=list
+        default_factory=list,
     )  # Ordered fallback provider names
-    examples_repo: str = ""  # Set to a public git URL to enable `acli example download`
+    examples_repo: str = (
+        ""  # Set to a public git URL to enable `acli example download`
+    )
     examples_branch: str = "main"
 
     @property
@@ -290,8 +308,8 @@ class Config:
         default_model: str = "qwen3.7-plus",
     ) -> Config:
         config = cls()
-        # Caller's defaults become the initial values; config files and env vars
-        # override them during the loading process below.
+        # Caller's defaults become the initial values; config files and env
+        # vars override them during the loading process below.
         config.provider = default_provider
         config.model = default_model
 
@@ -305,11 +323,13 @@ class Config:
             config._load_workspace()
             workspace_loaded = True
         elif CONFIG_FILE.exists():
-            # Fallback: read workspace-level fields from global config (migration)
+            # Fallback: read workspace-level fields from global config
+            # (migration)
             config._load_workspace_from(CONFIG_FILE)
             workspace_loaded = True
 
-        # Environment variables fill in MISSING API keys (saved config takes priority).
+        # Environment variables fill in MISSING API keys (saved config takes
+        # priority).
         if not config.tongyi_api_key:
             if key := os.environ.get("DASHSCOPE_API_KEY"):
                 config.tongyi_api_key = key
@@ -320,9 +340,10 @@ class Config:
             if key := os.environ.get("OPENAI_API_KEY"):
                 config.openai_api_key = key
 
-        # First-run provider auto-selection: if there is no saved workspace config,
-        # pick a provider based on whichever API key env var is present. Once the
-        # user has saved workspace config (e.g. via /provider), that choice wins.
+        # First-run provider auto-selection: if there is no saved workspace
+        # config, pick a provider based on whichever API key env var is
+        # present. Once the user has saved workspace config (e.g. via
+        # /provider), that choice wins.
         if not workspace_loaded:
             if os.environ.get("DASHSCOPE_API_KEY"):
                 config.provider = "tongyi"
@@ -363,7 +384,8 @@ class Config:
         # responsible for the model name on their own endpoint.
         if not config.base_url:
             valid_models = _valid_models_for_provider(
-                config.provider, config.custom_models
+                config.provider,
+                config.custom_models,
             )
             if valid_models and config.model not in set(valid_models):
                 config.model = valid_models[0]
@@ -371,7 +393,9 @@ class Config:
         # Migrate session.json -> session/default/history.json
         old_session = WORKSPACE_DIR / "session.json"
         if old_session.exists():
-            new_session = WORKSPACE_DIR / "session" / "default" / "history.json"
+            new_session = (
+                WORKSPACE_DIR / "session" / "default" / "history.json"
+            )
             new_session.parent.mkdir(parents=True, exist_ok=True)
             try:
                 old_session.replace(new_session)
@@ -381,7 +405,9 @@ class Config:
         # Migrate session/history.json -> session/default/history.json
         legacy_session = WORKSPACE_DIR / "session" / "history.json"
         if legacy_session.exists():
-            new_session = WORKSPACE_DIR / "session" / "default" / "history.json"
+            new_session = (
+                WORKSPACE_DIR / "session" / "default" / "history.json"
+            )
             new_session.parent.mkdir(parents=True, exist_ok=True)
             try:
                 legacy_session.replace(new_session)
@@ -391,7 +417,9 @@ class Config:
         # Migrate history -> session/default/input-history.txt
         old_history = WORKSPACE_DIR / "history"
         if old_history.exists():
-            new_history = WORKSPACE_DIR / "session" / "default" / "input-history.txt"
+            new_history = (
+                WORKSPACE_DIR / "session" / "default" / "input-history.txt"
+            )
             new_history.parent.mkdir(parents=True, exist_ok=True)
             try:
                 old_history.replace(new_history)
@@ -401,7 +429,9 @@ class Config:
         # Migrate session/input-history -> session/default/input-history.txt
         legacy_input = WORKSPACE_DIR / "session" / "input-history"
         if legacy_input.exists():
-            new_input = WORKSPACE_DIR / "session" / "default" / "input-history.txt"
+            new_input = (
+                WORKSPACE_DIR / "session" / "default" / "input-history.txt"
+            )
             new_input.parent.mkdir(parents=True, exist_ok=True)
             try:
                 legacy_input.replace(new_input)
@@ -435,7 +465,9 @@ class Config:
         # Voice settings
         if "voice_silence_duration" in data:
             try:
-                self.voice_silence_duration = float(data["voice_silence_duration"])
+                self.voice_silence_duration = float(
+                    data["voice_silence_duration"],
+                )
             except (ValueError, TypeError):
                 pass
         if "voice_max_seconds" in data:
@@ -445,7 +477,9 @@ class Config:
                 pass
         if "voice_silence_threshold" in data:
             try:
-                self.voice_silence_threshold = int(data["voice_silence_threshold"])
+                self.voice_silence_threshold = int(
+                    data["voice_silence_threshold"],
+                )
             except (ValueError, TypeError):
                 pass
         # TTS settings
@@ -484,9 +518,13 @@ class Config:
         if "memory_enabled" in data:
             val = str(data["memory_enabled"]).lower()
             self.memory_enabled = val not in ("false", "0", "no")
-        if "memory_user_id" in data and not os.environ.get("ACLI_MEMORY_USER_ID"):
+        if "memory_user_id" in data and not os.environ.get(
+            "ACLI_MEMORY_USER_ID",
+        ):
             self.memory_user_id = str(data["memory_user_id"])
-        if "memory_library_id" in data and not os.environ.get("ACLI_MEMORY_LIBRARY_ID"):
+        if "memory_library_id" in data and not os.environ.get(
+            "ACLI_MEMORY_LIBRARY_ID",
+        ):
             self.memory_library_id = str(data["memory_library_id"])
         if "user_name" in data and not self.user_name:
             self.user_name = str(data["user_name"])
@@ -512,7 +550,9 @@ class Config:
             self.debug = val not in ("false", "0", "no")
         if "voice_silence_duration" in data:
             try:
-                self.voice_silence_duration = float(data["voice_silence_duration"])
+                self.voice_silence_duration = float(
+                    data["voice_silence_duration"],
+                )
             except (ValueError, TypeError):
                 pass
         if "voice_max_seconds" in data:
@@ -522,7 +562,9 @@ class Config:
                 pass
         if "voice_silence_threshold" in data:
             try:
-                self.voice_silence_threshold = int(data["voice_silence_threshold"])
+                self.voice_silence_threshold = int(
+                    data["voice_silence_threshold"],
+                )
             except (ValueError, TypeError):
                 pass
         if "tts_enabled" in data:
@@ -550,7 +592,7 @@ class Config:
                         os.environ.get("DASHSCOPE_API_KEY"),
                         os.environ.get("ANTHROPIC_API_KEY"),
                         os.environ.get("OPENAI_API_KEY"),
-                    ]
+                    ],
                 )
                 and not self.api_key
             ):
@@ -559,13 +601,19 @@ class Config:
         # List fields (comma-separated strings)
         if "enabled_capabilities" in data:
             raw = str(data["enabled_capabilities"])
-            self.enabled_capabilities = [c.strip() for c in raw.split(",") if c.strip()]
+            self.enabled_capabilities = [
+                c.strip() for c in raw.split(",") if c.strip()
+            ]
         if "custom_models" in data and not self.custom_models:
             raw = str(data["custom_models"])
-            self.custom_models = [c.strip() for c in raw.split(",") if c.strip()]
+            self.custom_models = [
+                c.strip() for c in raw.split(",") if c.strip()
+            ]
         if "fallback_providers" in data:
             raw = str(data["fallback_providers"])
-            self.fallback_providers = [c.strip() for c in raw.split(",") if c.strip()]
+            self.fallback_providers = [
+                c.strip() for c in raw.split(",") if c.strip()
+            ]
 
         # user_directives (TOML array)
         if "user_directives" in data and not self.user_directives:
@@ -623,11 +671,13 @@ class Config:
 
     def save(self):
         if CONFIG_FILE == WORKSPACE_CONFIG_FILE:
-            # cwd == ~: both scopes share one file; write keys + settings together
+            # cwd == ~: both scopes share one file; write keys + settings
+            # together
             CONFIG_DIR.mkdir(parents=True, exist_ok=True)
             atomic_write_text(
                 CONFIG_FILE,
-                "\n".join(self._global_lines() + self._workspace_lines()) + "\n",
+                "\n".join(self._global_lines() + self._workspace_lines())
+                + "\n",
             )
             return
         self.save_global()
@@ -643,13 +693,18 @@ class Config:
         for prov in PROVIDERS:
             key_val = getattr(self, f"{prov}_api_key", "")
             if key_val:
-                lines.append(f"{prov}_api_key = {toml_str(encrypt_value(key_val))}")
-        # Extension provider keys stored as <name>_api_key (e.g. ideatalk_api_key)
+                lines.append(
+                    f"{prov}_api_key = {toml_str(encrypt_value(key_val))}",
+                )
+        # Extension provider keys stored as <name>_api_key (e.g.
+        # ideatalk_api_key)
         for attr in self.__dict__:
             if attr.endswith("_api_key") and attr not in built_in_key_fields:
                 key_val = getattr(self, attr, "")
                 if key_val:
-                    lines.append(f"{attr} = {toml_str(encrypt_value(key_val))}")
+                    lines.append(
+                        f"{attr} = {toml_str(encrypt_value(key_val))}",
+                    )
         if self.tts_enabled:
             lines.append("tts_enabled = true")
         if self.tts_model and self.tts_model != "cosyvoice-v2":
@@ -659,17 +714,22 @@ class Config:
         if self.tts_speed != 1.0:
             lines.append(f"tts_speed = {self.tts_speed}")
         if self.voice_silence_duration != 2.0:
-            lines.append(f"voice_silence_duration = {self.voice_silence_duration}")
+            lines.append(
+                f"voice_silence_duration = {self.voice_silence_duration}",
+            )
         if self.voice_max_seconds != 60:
             lines.append(f"voice_max_seconds = {self.voice_max_seconds}")
         if self.voice_silence_threshold != 500:
-            lines.append(f"voice_silence_threshold = {self.voice_silence_threshold}")
+            lines.append(
+                f"voice_silence_threshold = {self.voice_silence_threshold}",
+            )
         return lines
 
     def save_workspace(self):
         WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
         atomic_write_text(
-            WORKSPACE_CONFIG_FILE, "\n".join(self._workspace_lines()) + "\n"
+            WORKSPACE_CONFIG_FILE,
+            "\n".join(self._workspace_lines()) + "\n",
         )
 
     def _workspace_lines(self) -> list[str]:
@@ -684,10 +744,13 @@ class Config:
             lines.append(f"base_url = {toml_str(self.base_url)}")
         if self.enabled_capabilities is not None:
             lines.append(
-                f"enabled_capabilities = {toml_str(','.join(self.enabled_capabilities))}"
+                f"enabled_capabilities = "
+                f"{toml_str(','.join(self.enabled_capabilities))}",
             )
         if self.custom_models:
-            lines.append(f"custom_models = {toml_str(','.join(self.custom_models))}")
+            lines.append(
+                f"custom_models = {toml_str(','.join(self.custom_models))}",
+            )
         if self.max_turns != 50:
             lines.append(f"max_turns = {self.max_turns}")
         if not self.session_persist:
@@ -700,7 +763,9 @@ class Config:
         if self.memory_user_id:
             lines.append(f"memory_user_id = {toml_str(self.memory_user_id)}")
         if self.memory_library_id:
-            lines.append(f"memory_library_id = {toml_str(self.memory_library_id)}")
+            lines.append(
+                f"memory_library_id = {toml_str(self.memory_library_id)}",
+            )
         if self.theme:
             pairs = ", ".join(
                 f"{toml_str(k)} = {toml_str(v)}" for k, v in self.theme.items()
@@ -718,7 +783,8 @@ class Config:
             lines.append(f"protocol = {toml_str(self.protocol)}")
         if self.fallback_providers:
             lines.append(
-                f"fallback_providers = {toml_str(','.join(self.fallback_providers))}"
+                f"fallback_providers = "
+                f"{toml_str(','.join(self.fallback_providers))}",
             )
         if self.skill_registry:
             lines.append(f"skill_registry = {toml_str(self.skill_registry)}")
@@ -738,17 +804,23 @@ class Config:
         if self.tts_speed != 1.0:
             lines.append(f"tts_speed = {self.tts_speed}")
         if self.voice_silence_duration != 2.0:
-            lines.append(f"voice_silence_duration = {self.voice_silence_duration}")
+            lines.append(
+                f"voice_silence_duration = {self.voice_silence_duration}",
+            )
         if self.voice_max_seconds != 60:
             lines.append(f"voice_max_seconds = {self.voice_max_seconds}")
         if self.voice_silence_threshold != 500:
-            lines.append(f"voice_silence_threshold = {self.voice_silence_threshold}")
+            lines.append(
+                f"voice_silence_threshold = {self.voice_silence_threshold}",
+            )
         if self.examples_repo:
             lines.append(f"examples_repo = {toml_str(self.examples_repo)}")
         if self.examples_branch != "main":
             lines.append(f"examples_branch = {toml_str(self.examples_branch)}")
         if self.thinking_provider:
-            lines.append(f"thinking_provider = {toml_str(self.thinking_provider)}")
+            lines.append(
+                f"thinking_provider = {toml_str(self.thinking_provider)}",
+            )
         if self.thinking_model:
             lines.append(f"thinking_model = {toml_str(self.thinking_model)}")
         if self.loop_mode and self.loop_mode != "auto":

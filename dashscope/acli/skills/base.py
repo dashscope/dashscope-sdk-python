@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import json
@@ -44,12 +45,15 @@ def load_skill_files():
                 import logging
 
                 logging.getLogger(__name__).warning(
-                    "跳过无法解析的 skill 文件 %s: %s", path, e
+                    "跳过无法解析的 skill 文件 %s: %s",
+                    path,
+                    e,
                 )
 
 
 def _parse_skill_md(path: Path) -> Skill | None:
-    """Parse a skill .md file with YAML frontmatter + body as prompt_template."""
+    """Parse a skill .md file with YAML frontmatter + body as
+    prompt_template."""
     text = path.read_text(encoding="utf-8")
 
     # Split frontmatter from body
@@ -84,7 +88,8 @@ def _parse_skill_md(path: Path) -> Skill | None:
 
 
 def _parse_simple_yaml(text: str) -> dict:
-    """Minimal YAML parser for frontmatter — handles key: value and key: [a, b]."""
+    """Minimal YAML parser for frontmatter — handles key: value and
+    key: [a, b]."""
     result: dict = {}
     for line in text.splitlines():
         line = line.strip()
@@ -168,7 +173,8 @@ def list_known_services() -> str:
 def skills_summary_for_llm(connected_services: set[str] | None = None) -> str:
     """Compact catalog the LLM can use to route /skill suggestions.
 
-    Each line: `- <name> <args> — <desc> [MCP:<service>(<connected|auto-connect>)]`.
+    Each line:
+    `- <name> <args> — <desc> [MCP:<service>(<connected|auto-connect>)]`.
     Returns empty string when no skills are registered.
     """
     if not BUILTIN_SKILLS:
@@ -179,14 +185,17 @@ def skills_summary_for_llm(connected_services: set[str] | None = None) -> str:
         args = " ".join(f"<{a}>" for a in skill.arguments)
         head = f"- {skill.name} {args} — {skill.description}"
         if skill.mcp_service:
-            state = "已连接" if skill.mcp_service in connected else "需 mcp_connect"
+            state = (
+                "已连接" if skill.mcp_service in connected else "需 mcp_connect"
+            )
             head += f"  [MCP:{skill.mcp_service}({state})]"
         lines.append(head)
     return "\n".join(lines)
 
 
 def render_skill(skill: Skill, args: list[str]) -> str | None:
-    """Render a skill prompt with given arguments. Returns None if args don't match."""
+    """Render a skill prompt with given arguments. Returns None if args
+    don't match."""
     if len(args) < len(skill.arguments):
         return None
     kwargs = {}

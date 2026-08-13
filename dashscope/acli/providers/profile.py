@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Provider profile registry and fallback chain.
 
 A ProviderProfile captures everything needed to instantiate one LLM backend
@@ -12,7 +13,10 @@ from dataclasses import dataclass
 from typing import AsyncIterator
 
 from dashscope.acli.providers.base import LLMChunk, LLMProvider, LLMResponse
-from dashscope.acli.providers.hardening import HardenedProvider, is_retryable_error
+from dashscope.acli.providers.hardening import (
+    HardenedProvider,
+    is_retryable_error,
+)
 
 _API_KEY_ENVS = {
     "tongyi": "DASHSCOPE_API_KEY",
@@ -88,7 +92,7 @@ def validate_key_for_profile(profile: ProviderProfile) -> list[str]:
     if detected and detected != profile.provider:
         warnings.append(
             f"{profile.name}: provider='{profile.provider}' but base_url "
-            f"'{base_url}' looks like '{detected}'"
+            f"'{base_url}' looks like '{detected}'",
         )
 
     # Check key prefix when the provider has a known convention.
@@ -97,7 +101,7 @@ def validate_key_for_profile(profile: ProviderProfile) -> list[str]:
         if not any(key.startswith(p) for p in prefixes):
             warnings.append(
                 f"{profile.name}: API key does not start with expected "
-                f"prefix {prefixes} for provider '{profile.provider}'"
+                f"prefix {prefixes} for provider '{profile.provider}'",
             )
 
     return warnings
@@ -108,14 +112,17 @@ def build_profiles_from_config(config) -> list[ProviderProfile]:
     profiles: list[ProviderProfile] = []
 
     def _profile_for(
-        provider_name: str, model: str | None = None
+        provider_name: str,
+        model: str | None = None,
     ) -> ProviderProfile | None:
         api_key_attr = f"{provider_name}_api_key"
         api_key = getattr(config, api_key_attr, "") or ""
 
         # Resolve base_url: config.base_url only makes sense for the primary
         # provider; fallbacks use their well-known endpoints unless overridden.
-        base_url = config.base_url if provider_name == config.provider else None
+        base_url = (
+            config.base_url if provider_name == config.provider else None
+        )
 
         timeout = float(getattr(config, "timeout", 120))
         # config.protocol describes the PRIMARY provider only; fallback
@@ -168,7 +175,8 @@ def build_profiles_from_config(config) -> list[ProviderProfile]:
     # Fallback profiles.
     fallback_names = getattr(config, "fallback_providers", []) or []
     if not fallback_names:
-        # If no explicit fallback list, try a sensible default based on env keys.
+        # If no explicit fallback list, try a sensible default based on
+        # env keys.
         fallback_names = _infer_fallback_names(config)
 
     seen = {config.provider}
@@ -219,7 +227,8 @@ def _infer_fallback_names(config) -> list[str]:
 
 
 class ProviderChain(LLMProvider):
-    """Ordered list of ProviderProfiles; routes to the next on retryable failure."""
+    """Ordered list of ProviderProfiles; routes to the next on retryable
+    failure."""
 
     def __init__(self, profiles: list[ProviderProfile]):
         self.profiles = profiles
@@ -254,7 +263,9 @@ class ProviderChain(LLMProvider):
             try:
                 provider = self._get_instance(i)
                 return await provider.chat(
-                    messages, tools, response_format=response_format
+                    messages,
+                    tools,
+                    response_format=response_format,
                 )
             except Exception as e:
                 last_error = e
@@ -263,7 +274,7 @@ class ProviderChain(LLMProvider):
                 continue
         raise last_error or RuntimeError("所有 provider 均调用失败")
 
-    async def chat_stream(
+    async def chat_stream(  # pylint: disable=invalid-overridden-method
         self,
         messages: list[dict],
         tools: list[dict] | None = None,

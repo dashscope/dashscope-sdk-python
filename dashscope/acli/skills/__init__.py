@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from dashscope.acli.skills.base import (
@@ -13,7 +14,8 @@ from dashscope.acli.skills.base import (
 )
 from dashscope.acli.skills.manager import SkillManager, get_skill_manager
 
-# All skills are now loaded from .acli/skills/*.md files via load_skill_files().
+# All skills are now loaded from .acli/skills/*.md files via
+# load_skill_files().
 # No Python modules to import here.
 
 __all__ = [

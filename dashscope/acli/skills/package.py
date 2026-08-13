@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Skill package loader.
 
 A skill package is a directory under ``.acli/skills/<name>/`` containing:
@@ -12,6 +13,7 @@ Loaded packages contribute:
   - prompt supplements when active
   - hooks registered on the global hook bus
 """
+# pylint: disable=redefined-outer-name,too-many-branches
 
 from __future__ import annotations
 
@@ -23,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from dashscope.acli.config import CONFIG_DIR, WORKSPACE_DIR
+from dashscope.acli.config import CONFIG_DIR
 from dashscope.acli.hooks import Hook, HookBus
 from dashscope.acli.tools.registry import ToolRegistry, registry
 from dashscope.acli.utils import load_toml
@@ -81,7 +83,8 @@ def _register_package_tools(pkg: SkillPackage, registry: ToolRegistry) -> None:
         # Module names must be valid Python identifiers (no hyphens/dots).
         safe_name = pkg.name.replace("-", "_").replace(".", "_")
         spec = importlib.util.spec_from_file_location(
-            f"acli_skill_tools_{safe_name}", tools_py
+            f"acli_skill_tools_{safe_name}",
+            tools_py,
         )
         if spec is None or spec.loader is None:
             return
@@ -235,9 +238,11 @@ def register_skill_package(
 
 
 def unregister_skill_package(
-    pkg: SkillPackage, hook_bus: HookBus | None = None
+    pkg: SkillPackage,
+    hook_bus: HookBus | None = None,
 ) -> None:
-    """Remove a package's tools from the registry and its hooks from the bus."""
+    """Remove a package's tools from the registry and its hooks from
+    the bus."""
     for name in pkg.tools_registered:
         registry.unregister(name)
     pkg.tools_registered.clear()

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Local file-based memory provider.
 
 Storage layout:
@@ -66,7 +67,8 @@ class LocalMemoryClient:
 
     @staticmethod
     def _new_node(
-        content: str, metadata: dict[str, Any] | None = None
+        content: str,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return {
             "id": short_uuid(),
@@ -107,7 +109,7 @@ class LocalMemoryClient:
                     id=node["id"],
                     content=node["content"],
                     metadata=node.get("metadata", {}),
-                )
+                ),
             )
         else:
             # Extract meaningful lines from conversation
@@ -142,7 +144,8 @@ class LocalMemoryClient:
         top_k: int = 5,
         min_score: float = 0.3,
     ) -> list[MemoryNode]:
-        """Simple keyword-based search (no embedding model available locally)."""
+        """Simple keyword-based search (no embedding model available
+        locally)."""
         nodes = self._load()
         if not nodes:
             return []
@@ -164,7 +167,9 @@ class LocalMemoryClient:
         scored: list[tuple[float, int, dict]] = []
         for index, node in enumerate(nodes):
             content_lower = node["content"].lower()
-            hit_weight = sum(_weight(kw) for kw in keywords if kw in content_lower)
+            hit_weight = sum(
+                _weight(kw) for kw in keywords if kw in content_lower
+            )
             if hit_weight > 0:
                 score = min(hit_weight / max_weight, 1.0)
                 if score >= min_score:
@@ -182,11 +187,15 @@ class LocalMemoryClient:
                     updated_at=node.get("updated_at", ""),
                     score=score,
                     metadata=node.get("metadata", {}),
-                )
+                ),
             )
         return results
 
-    async def list(self, page_num: int = 1, page_size: int = 10) -> list[MemoryNode]:
+    async def list(
+        self,
+        page_num: int = 1,
+        page_size: int = 10,
+    ) -> list[MemoryNode]:
         """List all memory nodes with pagination."""
         nodes = self._load()
         start = (page_num - 1) * page_size
@@ -200,7 +209,7 @@ class LocalMemoryClient:
                     created_at=node.get("created_at", ""),
                     updated_at=node.get("updated_at", ""),
                     metadata=node.get("metadata", {}),
-                )
+                ),
             )
         return results
 

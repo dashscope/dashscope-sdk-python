@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """local.subagent: spawn an isolated Agent loop sharing the parent's
 provider + executor + tool registry, but with its own messages list so
 the sub-task doesn't pollute the parent's conversation context.
@@ -19,7 +20,7 @@ What it is NOT:
 
 from __future__ import annotations
 
-from dashscope.acli.tools.registry import PermissionLevel, registry
+from dashscope.acli.tools.registry import registry
 
 # Set by cli._run_loop after Agent construction. We pin a reference here
 # so the registered subagent_invoke tool can spin up a child Agent from
@@ -69,7 +70,9 @@ async def _subagent_invoke(
     if _parent_agent is None:
         return "错误: subagent 未初始化（缺少 parent agent 引用）"
 
-    from dashscope.acli.agent import Agent  # local import to avoid module-load cycle
+    from dashscope.acli.agent import (
+        Agent,
+    )  # local import to avoid module-load cycle
     from dashscope.acli.memory.manager import MemoryManager
 
     # Look up per-agent config overrides (max_turns, model, temperature)
@@ -86,7 +89,9 @@ async def _subagent_invoke(
     composed_prompt = None
     if system_prompt:
         base = getattr(_parent_agent, "system_prompt", None) or ""
-        composed_prompt = f"{base}\n\n{system_prompt}" if base else system_prompt
+        composed_prompt = (
+            f"{base}\n\n{system_prompt}" if base else system_prompt
+        )
 
     sub = Agent(
         provider=_parent_agent.provider,
@@ -143,7 +148,9 @@ def register_subagent_tool() -> None:
             "properties": {
                 "prompt": {
                     "type": "string",
-                    "description": "The task description the sub-agent acts on.",
+                    "description": (
+                        "The task description the sub-agent acts on."
+                    ),
                 },
                 "system_prompt": {
                     "type": "string",
@@ -154,7 +161,10 @@ def register_subagent_tool() -> None:
                 },
                 "max_turns": {
                     "type": "integer",
-                    "description": "Cap on sub-agent loop iterations (default 10, max 50).",
+                    "description": (
+                        "Cap on sub-agent loop iterations "
+                        "(default 10, max 50)."
+                    ),
                     "default": 10,
                 },
             },
@@ -209,7 +219,9 @@ async def _specialist_invoke(specialist_type: str, task: str) -> str:
     }
     system_prompt = prompts.get(specialist_type, "")
     if not system_prompt:
-        return f"错误: 未知的专家类型 '{specialist_type}'，可选: {', '.join(prompts.keys())}"
+        return (
+            f"错误: 未知的专家类型 '{specialist_type}'，可选: {', '.join(prompts.keys())}"
+        )
 
     return await _subagent_invoke(
         prompt=task,

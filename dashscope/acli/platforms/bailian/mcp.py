@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=too-many-return-statements
 from __future__ import annotations
 
 import asyncio
@@ -60,15 +62,17 @@ class MCPClient:
         # Wait for endpoint event
         try:
             await asyncio.wait_for(self._connected.wait(), timeout=15)
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as exc:
             self._sse_task.cancel()
-            raise MCPError("SSE 连接超时，未收到 endpoint 事件")
+            raise MCPError("SSE 连接超时，未收到 endpoint 事件") from exc
 
     async def _sse_loop(self):
         """Background task: read SSE stream."""
         try:
             async with self._client.stream(
-                "GET", self.sse_url, headers=self._headers
+                "GET",
+                self.sse_url,
+                headers=self._headers,
             ) as resp:
                 if resp.status_code != 200:
                     body = ""
@@ -104,7 +108,8 @@ class MCPClient:
             self._fail_all_pending(f"SSE 连接中断: {e}")
 
     def _fail_all_pending(self, reason: str) -> None:
-        """Resolve every in-flight request with an error so awaiters don't hang."""
+        """Resolve every in-flight request with an error so awaiters
+        don't hang."""
         pending, self._pending = self._pending, {}
         for future in pending.values():
             if not future.done():
@@ -131,8 +136,13 @@ class MCPClient:
             if not future.done():
                 future.set_result(msg)
 
-    async def _send_jsonrpc(self, method: str, params: dict | None = None) -> Any:
-        """Send JSON-RPC request via POST and wait for response on SSE stream."""
+    async def _send_jsonrpc(
+        self,
+        method: str,
+        params: dict | None = None,
+    ) -> Any:
+        """Send JSON-RPC request via POST and wait for response on SSE
+        stream."""
         req_id = self._next_id()
         payload = {
             "jsonrpc": "2.0",
@@ -151,7 +161,9 @@ class MCPClient:
         }
         try:
             resp = await self._client.post(
-                self._message_endpoint, json=payload, headers=headers
+                self._message_endpoint,
+                json=payload,
+                headers=headers,
             )
             resp.raise_for_status()
         except Exception:
@@ -166,7 +178,11 @@ class MCPClient:
             self._pending.pop(req_id, None)
             return {"error": {"message": "请求超时"}}
 
-    async def _send_notification(self, method: str, params: dict | None = None):
+    async def _send_notification(
+        self,
+        method: str,
+        params: dict | None = None,
+    ):
         """Send JSON-RPC notification (no id, no response expected)."""
         payload = {"jsonrpc": "2.0", "method": method}
         if params:
@@ -177,7 +193,9 @@ class MCPClient:
         }
         try:
             await self._client.post(
-                self._message_endpoint, json=payload, headers=headers
+                self._message_endpoint,
+                json=payload,
+                headers=headers,
             )
         except httpx.HTTPError:
             pass
@@ -189,7 +207,9 @@ class MCPClient:
             self.last_error = str(e)
             return False
         except httpx.HTTPStatusError as e:
-            self.last_error = f"HTTP {e.response.status_code}: {e.response.text[:200]}"
+            self.last_error = (
+                f"HTTP {e.response.status_code}: {e.response.text[:200]}"
+            )
             return False
         except httpx.HTTPError as e:
             self.last_error = str(e)
@@ -209,12 +229,17 @@ class MCPClient:
         try:
             resp = await self._send_jsonrpc("initialize", params)
             if isinstance(resp, dict) and "error" in resp:
-                self.last_error = resp["error"].get("message", str(resp["error"]))
+                self.last_error = resp["error"].get(
+                    "message",
+                    str(resp["error"]),
+                )
                 return False
             await self._send_notification("notifications/initialized")
             return True
         except httpx.HTTPStatusError as e:
-            self.last_error = f"HTTP {e.response.status_code}: {e.response.text[:200]}"
+            self.last_error = (
+                f"HTTP {e.response.status_code}: {e.response.text[:200]}"
+            )
             return False
         except httpx.HTTPError as e:
             self.last_error = str(e)

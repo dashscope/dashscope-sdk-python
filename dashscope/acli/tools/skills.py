@@ -1,4 +1,6 @@
-"""Model-invocable skill tool: expand a .md skill template into instructions."""
+# -*- coding: utf-8 -*-
+"""Model-invocable skill tool: expand a .md skill template into
+instructions."""
 
 from __future__ import annotations
 
@@ -35,10 +37,14 @@ def register_skill_tools(get_agent: Callable) -> None:
                 },
                 "required": ["name"],
             },
-        )
+        ),
     )
     async def use_skill(name: str, args: list[str] | None = None) -> str:
-        from dashscope.acli.skills.base import BUILTIN_SKILLS, load_skill_files, render_skill
+        from dashscope.acli.skills.base import (
+            BUILTIN_SKILLS,
+            load_skill_files,
+            render_skill,
+        )
 
         load_skill_files()
         skill = BUILTIN_SKILLS.get(name)

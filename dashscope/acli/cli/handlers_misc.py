@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 """Miscellaneous command handlers (trust, history, report)."""
+# pylint: disable=protected-access,too-many-branches,too-many-statements
 
 from __future__ import annotations
 
@@ -26,7 +28,7 @@ def _handle_trust_command(cmd: str, agent: Agent) -> None:
                 console.print(f"  ✗ {name}")
         if not ex._always_allow and not ex._always_deny:
             console.print(
-                "[dim]本次对话无授信/拒绝缓存（每次新对话开始时自动清空）[/dim]"
+                "[dim]本次对话无授信/拒绝缓存（每次新对话开始时自动清空）[/dim]",
             )
         console.print(
             "\n[dim]用法:\n"
@@ -34,7 +36,7 @@ def _handle_trust_command(cmd: str, agent: Agent) -> None:
             "  /trust clear        — 立即清空（无需等本轮结束）\n"
             "  /trust allow <tool> — 预先加入授信，仅对下一轮对话生效\n"
             "  /trust deny  <tool> — 预先加入拒绝，仅对下一轮对话生效\n"
-            "                        (弹窗里按 [s]top 是中止本轮，不会进 deny 缓存)[/dim]"
+            "                        (弹窗里按 [s]top 是中止本轮，不会进 deny 缓存)[/dim]",
         )
         return
 
@@ -57,7 +59,9 @@ def _handle_trust_command(cmd: str, agent: Agent) -> None:
             console.print(f"[red]✗ {tool} 加入拒绝（仅对下一轮对话生效）[/red]")
         return
 
-    console.print("[dim]用法: /trust [list|clear|allow <tool>|deny <tool>][/dim]")
+    console.print(
+        "[dim]用法: /trust [list|clear|allow <tool>|deny <tool>][/dim]",
+    )
 
 
 def _handle_history_command(cmd: str) -> None:
@@ -83,14 +87,15 @@ def _handle_history_command(cmd: str) -> None:
                 console.print("\n[bold]最近 5 次对话:[/bold]")
                 for e in entries:
                     console.print(
-                        f"  - {e.get('summary', '')} ({e.get('created_at', '')})"
+                        f"  - {e.get('summary', '')} "
+                        f"({e.get('created_at', '')})",
                     )
         console.print(
             "\n[dim]用法:\n"
             "  /history stats                          — 显示统计\n"
             "  /history list [n]                       — 列出最近 n 条\n"
             "  /history export <file> [--format json|md|html]  — 导出历史\n"
-            "  /history clear                           — 清空历史[/dim]"
+            "  /history clear                           — 清空历史[/dim]",
         )
         return
 
@@ -120,7 +125,7 @@ def _handle_history_command(cmd: str) -> None:
             for i, e in enumerate(entries, 1):
                 console.print(f"  {i}. {e.get('summary', '')}")
                 console.print(
-                    f"     {e.get('created_at', '')} | {e.get('turns', 0)} 轮"
+                    f"     {e.get('created_at', '')} | {e.get('turns', 0)} 轮",
                 )
         return
 
@@ -138,7 +143,9 @@ def _handle_history_command(cmd: str) -> None:
             fmt = "markdown"
         try:
             resolved = export_history(output_path, fmt=fmt)
-            console.print(f"[green]✓ 历史已导出到: {resolved} (format: {fmt})[/green]")
+            console.print(
+                f"[green]✓ 历史已导出到: {resolved} (format: {fmt})[/green]",
+            )
         except Exception as e:
             console.print(f"[red]导出失败: {e}[/red]")
         return

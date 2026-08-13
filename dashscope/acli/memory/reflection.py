@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Reflection mechanism — detect failure patterns and adjust strategy.
 Monitors tool execution outcomes and provides adaptive guidance.
@@ -43,7 +44,8 @@ class ReflectionTracker:
         failed_tools_str = ", ".join(set(self.last_failed_tools))
         return (
             f"\n\n## ⚠️ 反思提示\n"
-            f"检测到连续 {self.consecutive_failures} 次工具执行失败 ({failed_tools_str})。\n"
+            f"检测到连续 {self.consecutive_failures} 次工具执行失败 "
+            f"({failed_tools_str})。\n"
             f"建议:\n"
             f"1. 检查之前的方法是否有问题\n"
             f"2. 尝试不同的工具或参数\n"
@@ -56,9 +58,7 @@ class ReflectionTracker:
         if self.consecutive_failures < self.threshold:
             return ""
         failed_tools_str = ", ".join(set(self.last_failed_tools))
-        return (
-            f"连续 {self.consecutive_failures} 次失败 ({failed_tools_str})，需要换策略"
-        )
+        return f"连续 {self.consecutive_failures} 次失败 ({failed_tools_str})，需要换策略"
 
     def reset(self) -> None:
         """Reset the tracker for a new turn."""

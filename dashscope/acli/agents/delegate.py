@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """local.delegate: spawn parallel sub-agents for fan-out tasks.
 
 A `delegate` tool lets the main agent break a request into independent
@@ -5,6 +6,7 @@ sub-tasks, run them in parallel, and collect structured results. Child
 agents share the parent's provider and executor but have isolated message
 histories and cannot delegate further (no nested spawning).
 """
+# pylint: disable=too-many-branches
 
 from __future__ import annotations
 
@@ -72,7 +74,10 @@ def _default_delegation_config():
     return _Fallback()
 
 
-def _child_system_prompt(tools: list[str] | None, override: str | None = None) -> str:
+def _child_system_prompt(
+    tools: list[str] | None,
+    override: str | None = None,
+) -> str:
     if override:
         base = override
     else:
@@ -92,7 +97,10 @@ def _build_prompt(task: str, context_files: list[str] | None) -> str:
         for path in context_files:
             parts.append(f"- {path}")
             try:
-                content = Path(path).read_text(encoding="utf-8", errors="ignore")
+                content = Path(path).read_text(
+                    encoding="utf-8",
+                    errors="ignore",
+                )
                 parts.append(f"```\n{content}\n```")
             except Exception as e:
                 parts.append(f"（读取失败: {e}）")
@@ -131,7 +139,8 @@ async def _run_child(
     effective_timeout = timeout or cfg.default_timeout
     effective_timeout = max(1, effective_timeout)
 
-    # Capped max_turns: explicit param > subagents config > default 10, hard cap 50.
+    # Capped max_turns: explicit param > subagents config > default 10,
+    # hard cap 50.
     if max_turns is not None:
         capped_turns = min(max(1, max_turns), 50)
     else:
@@ -167,18 +176,21 @@ async def _run_child(
 
     prompt = _build_prompt(task, context_files)
     chunks: list[str] = []
-    stream_task = asyncio.create_task(_drain_stream(sub.run_stream(prompt), chunks))
+    stream_task = asyncio.create_task(
+        _drain_stream(sub.run_stream(prompt), chunks),
+    )
     status = "failed"
 
     try:
         try:
             await asyncio.wait_for(
-                asyncio.shield(stream_task), timeout=effective_timeout
+                asyncio.shield(stream_task),
+                timeout=effective_timeout,
             )
             status = "completed"
         except asyncio.TimeoutError:
             status = "timeout"
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:  # pylint: disable=try-except-raise
             # Cancelled by the caller — the finally below stops the child
             # stream first, then the cancellation propagates.
             raise
@@ -219,7 +231,13 @@ async def _delegate(
     """Spawn a single sub-agent and return a JSON result."""
     async with _get_delegate_semaphore():
         result = await _run_child(
-            task, tools, context_files, timeout, model, system_prompt, max_turns
+            task,
+            tools,
+            context_files,
+            timeout,
+            model,
+            system_prompt,
+            max_turns,
         )
     return json.dumps(result, ensure_ascii=False)
 
@@ -261,7 +279,8 @@ def register_delegate_tools() -> None:
         description=(
             "委派一个独立子代理处理子任务。子代理共享当前 provider/executor，"
             "但拥有隔离的消息历史，不会污染主对话。可限制工具白名单、传入上下文文件、"
-            "设置超时、模型、system_prompt 和 max_turns。返回 {task_id, status, result} 的 JSON。"
+            "设置超时、模型、system_prompt 和 max_turns。返回 "
+            "{task_id, status, result} 的 JSON。"
         ),
         parameters={
             "type": "object",
@@ -307,7 +326,8 @@ def register_delegate_tools() -> None:
         name="delegate_parallel",
         description=(
             "并行委派多个子任务，自动限制最大并发数。每个元素是一个任务配置，"
-            "支持 task/tools/context_files/timeout/model/system_prompt/max_turns。"
+            "支持 task/tools/context_files/timeout/model/"
+            "system_prompt/max_turns。"
             "返回任务结果数组的 JSON。"
         ),
         parameters={
@@ -320,7 +340,9 @@ def register_delegate_tools() -> None:
                 },
                 "max_concurrent": {
                     "type": "integer",
-                    "description": "最大并发数（可选，默认读取配置 delegation.max_concurrent）。",
+                    "description": (
+                        "最大并发数（可选，默认读取配置 " "delegation.max_concurrent）。"
+                    ),
                 },
             },
             "required": ["tasks"],

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Filesystem path validation helpers used by tools and the CLI."""
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ SENSITIVE_NAMES = frozenset(
         "shadow",
         "master.key",
         "passwd",
-    }
+    },
 )
 
 

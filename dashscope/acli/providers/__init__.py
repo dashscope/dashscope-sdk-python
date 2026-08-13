@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from dashscope.acli.providers.base import LLMProvider, LLMResponse, ToolCall
@@ -38,9 +39,11 @@ def _create_provider(profile: ProviderProfile):
     """Instantiate a concrete provider from a profile.
 
     Dispatch priority:
-      1. Custom extension provider (custom-extensions.toml) → use its resolved protocol
+      1. Custom extension provider (custom-extensions.toml) → use its
+         resolved protocol
       2. Built-in provider name:
-         - tongyi / dashscope → TongyiProvider (protocol controls message conversion)
+         - tongyi / dashscope → TongyiProvider (protocol controls
+           message conversion)
          - anthropic          → AnthropicProvider
          - openai / other     → OpenAIProvider (default)
 
@@ -67,15 +70,25 @@ def _create_provider(profile: ProviderProfile):
 
     if provider_name in ("tongyi", "dashscope"):
         return TongyiProvider(
-            model=model, api_key=api_key, base_url=base_url, protocol=proto
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            protocol=proto,
         )
     if proto == "anthropic" or provider_name == "anthropic":
         from dashscope.acli.providers.anthropic import AnthropicProvider
 
-        return AnthropicProvider(model=model, api_key=api_key, base_url=base_url)
+        return AnthropicProvider(
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+        )
     if proto == "dashscope":
         return TongyiProvider(
-            model=model, api_key=api_key, base_url=base_url, protocol=proto
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            protocol=proto,
         )
     from dashscope.acli.providers.openai import OpenAIProvider
 

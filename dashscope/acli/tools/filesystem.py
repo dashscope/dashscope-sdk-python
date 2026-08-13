@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import fnmatch
@@ -5,7 +6,11 @@ import os
 import shutil
 
 from dashscope.acli.tools.registry import PermissionLevel, tool
-from dashscope.acli.utils.paths import SENSITIVE_NAMES, validate_path, validate_write_path
+from dashscope.acli.utils.paths import (
+    SENSITIVE_NAMES,
+    validate_path,
+    validate_write_path,
+)
 
 # Maximum directory depth for search_files traversal.
 _MAX_SEARCH_DEPTH = 8
@@ -24,7 +29,11 @@ _MAX_WRITE_SIZE = 50 * 1024 * 1024
     description="读取文件内容。可指定起始行和读取行数。",
     permission=PermissionLevel.AUTO,
 )
-def read_file(path: str, offset: int | None = None, limit: int | None = None) -> str:
+def read_file(
+    path: str,
+    offset: int | None = None,
+    limit: int | None = None,
+) -> str:
     try:
         path = validate_path(path)
     except ValueError as e:
@@ -59,7 +68,10 @@ def write_file(path: str, content: str) -> str:
         return f"错误: {e}"
 
     if len(content) > _MAX_WRITE_SIZE:
-        return f"错误: 内容过大 ({len(content)} 字节)，上限为 {_MAX_WRITE_SIZE // (1024*1024)} MB"
+        return (
+            f"错误: 内容过大 ({len(content)} 字节)，上限为 "
+            f"{_MAX_WRITE_SIZE // (1024*1024)} MB"
+        )
 
     parent = os.path.dirname(path)
     if parent and not os.path.exists(parent):
@@ -96,13 +108,15 @@ def write_file(path: str, content: str) -> str:
             fromfile=f"a/{path}",
             tofile=f"b/{path}",
             n=3,
-        )
+        ),
     )
     MAX_DIFF_LINES = 80
     truncated = ""
     if len(diff_lines) > MAX_DIFF_LINES:
         total_added = sum(
-            1 for l in diff_lines if l.startswith("+") and not l.startswith("+++")
+            1
+            for dline in diff_lines
+            if dline.startswith("+") and not dline.startswith("+++")
         )
         diff_lines = diff_lines[:MAX_DIFF_LINES]
         truncated = (
@@ -217,7 +231,9 @@ def search_files(pattern: str, path: str | None = None) -> str:
             dirs[:] = []
         # Skip hidden and sensitive directories
         dirs[:] = [
-            d for d in dirs if not d.startswith(".") and d not in SENSITIVE_NAMES
+            d
+            for d in dirs
+            if not d.startswith(".") and d not in SENSITIVE_NAMES
         ]
         for name in files:
             if fnmatch.fnmatch(name, pattern):

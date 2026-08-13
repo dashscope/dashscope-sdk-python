@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 """Session management command handlers."""
+# pylint: disable=too-many-branches,too-many-statements,unused-argument
 
 from __future__ import annotations
 
@@ -25,7 +27,7 @@ def _handle_session_command(cmd: str, config, agent) -> None:
             "  /session list         — 列出所有会话\n"
             "  /session switch <n>   — 切换到指定主题\n"
             "  /session rename <old> <new> — 重命名\n"
-            "  /session remove <n>   — 删除会话（default 不可删）[/dim]"
+            "  /session remove <n>   — 删除会话（default 不可删）[/dim]",
         )
         return
 
@@ -44,7 +46,8 @@ def _handle_session_command(cmd: str, config, agent) -> None:
             console.print(f"[green]已创建并切换到新会话: {topic}[/green]")
         else:
             console.print(
-                f"[yellow]会话 '{topic}' 已存在，使用 /session switch {topic} 切换[/yellow]"
+                f"[yellow]会话 '{topic}' 已存在，使用 "
+                f"/session switch {topic} 切换[/yellow]",
             )
 
     elif subcmd == "list":
@@ -56,10 +59,13 @@ def _handle_session_command(cmd: str, config, agent) -> None:
             console.print(f"[bold]会话列表[/bold] ({len(topics)} 个):")
             for meta in topics:
                 marker = " ← 当前" if meta.topic == current else ""
-                accessed = meta.last_accessed[:16] if meta.last_accessed else ""
+                accessed = (
+                    meta.last_accessed[:16] if meta.last_accessed else ""
+                )
                 console.print(f"  • [cyan]{meta.topic}[/cyan]{marker}")
                 console.print(
-                    f"    [dim]{meta.message_count} 条消息, 最后访问: {accessed}[/dim]"
+                    f"    [dim]{meta.message_count} 条消息, "
+                    f"最后访问: {accessed}[/dim]",
                 )
 
     elif subcmd == "switch":
@@ -82,7 +88,7 @@ def _handle_session_command(cmd: str, config, agent) -> None:
                 console.print(f"  [dim]已恢复 {restored} 条历史消息[/dim]")
         else:
             console.print(
-                f"[red]会话 '{topic}' 不存在，使用 /session list 查看可用会话[/red]"
+                f"[red]会话 '{topic}' 不存在，使用 /session list 查看可用会话[/red]",
             )
 
     elif subcmd == "rename":
@@ -105,7 +111,7 @@ def _handle_session_command(cmd: str, config, agent) -> None:
             console.print(f"[green]已重命名: {old_name} → {new_name}[/green]")
         else:
             console.print(
-                f"[red]重命名失败：'{old_name}' 不存在或 '{new_name}' 已存在[/red]"
+                f"[red]重命名失败：'{old_name}' 不存在或 '{new_name}' 已存在[/red]",
             )
 
     elif subcmd == "remove":
@@ -131,5 +137,5 @@ def _handle_session_command(cmd: str, config, agent) -> None:
             "  /session list         — 列出所有会话\n"
             "  /session switch <n>   — 切换到指定主题\n"
             "  /session rename <old> <new> — 重命名\n"
-            "  /session remove <n>   — 删除会话（default 不可删）[/dim]"
+            "  /session remove <n>   — 删除会话（default 不可删）[/dim]",
         )

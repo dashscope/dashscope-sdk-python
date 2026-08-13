@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Debug-mode flag.
 
 When debug mode is on (``/debug on``), the trace logger additionally records

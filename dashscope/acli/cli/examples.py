@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 """Example management functions."""
+# pylint: disable=too-many-branches,too-many-return-statements
+# pylint: disable=too-many-statements
 
 from __future__ import annotations
 
@@ -59,7 +62,12 @@ def _list_examples() -> list[str]:
     )
 
 
-def _clone_example_to_temp(name: str, repo: str, branch: str, tmp: Path) -> Path:
+def _clone_example_to_temp(
+    name: str,
+    repo: str,
+    branch: str,
+    tmp: Path,
+) -> Path:
     """Sparse-clone <name> from the examples repo into tmp."""
     try:
         subprocess.run(
@@ -103,7 +111,7 @@ def _clone_example_to_temp(name: str, repo: str, branch: str, tmp: Path) -> Path
         err = (e.stderr or "").strip()
         raise RuntimeError(f"git 操作失败: {err or e}") from e
     except FileNotFoundError:
-        raise RuntimeError("未找到 git 命令，请先安装 git")
+        raise RuntimeError("未找到 git 命令，请先安装 git") from None
 
     src = tmp / name
     if not src.is_dir():
@@ -141,13 +149,16 @@ def _list_remote_examples(repo: str, branch: str) -> list[str]:
 
 
 def _save_examples_repo(repo: str) -> None:
-    """Write examples_repo into the global ~/.acli/config.toml (create or replace)."""
+    """Write examples_repo into the global ~/.acli/config.toml (create or
+    replace)."""
     from dashscope.acli.config import CONFIG_DIR, CONFIG_FILE
     from dashscope.acli.utils.paths import atomic_write_text
     from dashscope.acli.utils.toml import toml_str
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    text = CONFIG_FILE.read_text(encoding="utf-8") if CONFIG_FILE.exists() else ""
+    text = (
+        CONFIG_FILE.read_text(encoding="utf-8") if CONFIG_FILE.exists() else ""
+    )
     line = f"examples_repo = {toml_str(repo)}"
     if re.search(r"(?m)^examples_repo\s*=", text):
         text = re.sub(r"(?m)^examples_repo\s*=.*$", line, text)
@@ -181,7 +192,9 @@ def _copy_example_flat(src: Path, dst: Path, *, force: bool) -> bool:
     can be rolled back.
     """
     acli_dir = dst / ".acli"
-    copies: list[tuple[Path, Path]] = []  # (source file, path relative to dst/.acli)
+    copies: list[
+        tuple[Path, Path]
+    ] = []  # (source file, path relative to dst/.acli)
     for p in _example_files(src):
         rel = p.relative_to(src)
         if rel.parts[0] == ".acli":
@@ -195,7 +208,7 @@ def _copy_example_flat(src: Path, dst: Path, *, force: bool) -> bool:
     if conflicts and not force:
         listing = "\n".join(f"  .acli/{rel}" for _, rel in conflicts)
         console.print(
-            f"[yellow]以下文件已存在，继续将覆盖（原文件自动备份）:[/yellow]\n{listing}"
+            f"[yellow]以下文件已存在，继续将覆盖（原文件自动备份）:[/yellow]\n{listing}",
         )
         if not sys.stdin.isatty():
             console.print("[yellow]存在冲突文件且当前为非交互模式，已取消。[/yellow]")
@@ -229,15 +242,22 @@ def _copy_example_flat(src: Path, dst: Path, *, force: bool) -> bool:
 
     if backup_dir is not None:
         manifest = "\n".join(str(Path(".acli") / rel) for _, rel in copies)
-        (backup_dir / ".manifest").write_text(manifest + "\n", encoding="utf-8")
+        (backup_dir / ".manifest").write_text(
+            manifest + "\n",
+            encoding="utf-8",
+        )
 
     console.print(f"[green]✓ 示例已复制到: {acli_dir}[/green]")
     if backup_dir is not None:
         console.print(
-            f"[dim]被覆盖文件已备份: {backup_dir}（可用 /example restore 恢复）[/dim]"
+            f"[dim]被覆盖文件已备份: {backup_dir}（可用 /example restore 恢复）[/dim]",
         )
     readmes = sorted(
-        (acli_dir / rel for _, rel in copies if rel.name.lower().startswith("readme")),
+        (
+            acli_dir / rel
+            for _, rel in copies
+            if rel.name.lower().startswith("readme")
+        ),
         key=lambda p: (len(p.parts), str(p)),
     )
     if readmes:
@@ -257,7 +277,8 @@ def _prune_empty_dirs(path: Path, stop: Path) -> None:
 
 
 def _restore_example_backup(dst: Path) -> bool:
-    """Restore the single .acli/backup: originals copied back, added files removed."""
+    """Restore the single .acli/backup: originals copied back, added files
+    removed."""
     backup = dst / ".acli" / "backup"
     if not backup.is_dir():
         console.print("[yellow]没有找到可恢复的备份（.acli/backup/）。[/yellow]")
@@ -293,7 +314,7 @@ def _restore_example_backup(dst: Path) -> bool:
     shutil.rmtree(backup)
     _prune_empty_dirs(backup.parent, dst)
     console.print(
-        f"[green]✓ 已恢复（还原 {restored} 个原文件，移除 {removed} 个示例新增文件）[/green]"
+        f"[green]✓ 已恢复（还原 {restored} 个原文件，移除 {removed} 个示例新增文件）[/green]",
     )
     return True
 
@@ -321,19 +342,23 @@ def _print_example_list():
     console.print()
     console.print("[bold]用法:[/bold]")
     console.print(
-        "  acli example download <name>                 [dim]# 合并到 ./.acli/（冲突自动备份）[/dim]"
+        "  acli example download <name>                 "
+        "[dim]# 合并到 ./.acli/（冲突自动备份）[/dim]",
     )
     console.print(
-        "  acli example download <name> --target <dir>  [dim]# 合并到指定目录[/dim]"
+        "  acli example download <name> --target <dir>  [dim]# 合并到指定目录[/dim]",
     )
     console.print(
-        "  acli example download <name> --force         [dim]# 跳过确认直接覆盖（仍备份）[/dim]"
+        "  acli example download <name> --force         "
+        "[dim]# 跳过确认直接覆盖（仍备份）[/dim]",
     )
     console.print(
-        "  acli example download <name> --repo <url>    [dim]# 指定示例仓库并写入配置[/dim]"
+        "  acli example download <name> --repo <url>    "
+        "[dim]# 指定示例仓库并写入配置[/dim]",
     )
     console.print(
-        "  acli example restore                         [dim]# 恢复最近一次备份（撤销合并）[/dim]"
+        "  acli example restore                         "
+        "[dim]# 恢复最近一次备份（撤销合并）[/dim]",
     )
 
 
@@ -355,7 +380,11 @@ def _handle_example_command(args):
     if sub == "restore":
         target_dir = Path.cwd()
         if "--target" in args or "-t" in args:
-            idx = args.index("--target") if "--target" in args else args.index("-t")
+            idx = (
+                args.index("--target")
+                if "--target" in args
+                else args.index("-t")
+            )
             if idx + 1 < len(args):
                 target_dir = Path(args[idx + 1])
         _restore_example_backup(target_dir)
@@ -371,7 +400,11 @@ def _handle_example_command(args):
         name = args[1]
         target_dir = Path.cwd()
         if "--target" in args or "-t" in args:
-            idx = args.index("--target") if "--target" in args else args.index("-t")
+            idx = (
+                args.index("--target")
+                if "--target" in args
+                else args.index("-t")
+            )
             if idx + 1 < len(args):
                 target_dir = Path(args[idx + 1])
         force = "--force" in args or "-f" in args
@@ -401,7 +434,9 @@ def _handle_example_command(args):
         if not repo:
             console.print("[yellow]未配置示例仓库，无法下载。[/yellow]")
             console.print("可直接指定（自动写入 ~/.acli/config.toml）:")
-            console.print(f"  acli example download {name} --repo <示例 git 仓库地址>")
+            console.print(
+                f"  acli example download {name} --repo <示例 git 仓库地址>",
+            )
             console.print("或手动在 ~/.acli/config.toml 中添加:")
             console.print('  examples_repo = "<示例所在 git 仓库地址>"')
             return
@@ -416,7 +451,9 @@ def _handle_example_command(args):
         except (RuntimeError, FileNotFoundError, OSError) as e:
             console.print(f"[yellow]错误: {e}[/yellow]")
             console.print(f"[dim]仓库: {repo} (分支: {branch})[/dim]")
-            console.print("[dim]可在 ~/.acli/config.toml 中设置 examples_repo[/dim]")
+            console.print(
+                "[dim]可在 ~/.acli/config.toml 中设置 examples_repo[/dim]",
+            )
         return
 
     # Unknown subcommand — show hint
@@ -425,5 +462,5 @@ def _handle_example_command(args):
     console.print("  acli example                         [dim]# 列出示例[/dim]")
     console.print("  acli example download <name>         [dim]# 下载示例[/dim]")
     console.print(
-        "  acli example restore                 [dim]# 恢复最近一次备份[/dim]"
+        "  acli example restore                 [dim]# 恢复最近一次备份[/dim]",
     )
