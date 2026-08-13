@@ -97,6 +97,7 @@ class TestRouteToExpert:
         self, fake_config_dir, captured_run, monkeypatch, tmp_path
     ):
         monkeypatch.chdir(tmp_path)
+        _make_tty(monkeypatch)
         offered: list = []
         monkeypatch.setattr(
             cli, "_maybe_offer_example_download", lambda: offered.append(1)
@@ -273,9 +274,10 @@ class TestBundledExample:
         )
         expert = examples_dir / "dashscope-sdk-expert"
         assert (expert / ".acli" / "system-prompt.md").is_file()
-        assert (expert / ".acli" / "skills" / "update-sdk.md").is_file()
-        assert (expert / ".acli" / "references" / "python-sdk.md").is_file()
-        assert (expert / "build_sdk_index.py").is_file()
+        assert (expert / ".acli" / "skills" / "text-generation.md").is_file()
+        assert (expert / ".acli" / "skills" / "cli.md").is_file()
+        assert (expert / ".acli" / "config.toml").is_file()
+        assert (expert / "README.md").is_file()
 
     def test_example_download_merges_into_workspace(self, tmp_path):
         from dashscope.acli.cli.examples import _handle_example_command
@@ -286,4 +288,4 @@ class TestBundledExample:
 
         assert (tmp_path / ".acli" / "system-prompt.md").is_file()
         assert (tmp_path / ".acli" / "skills" / "sdk-example.md").is_file()
-        assert (tmp_path / ".acli" / "references" / "java-sdk.md").is_file()
+        assert (tmp_path / ".acli" / "skills" / "cli.md").is_file()
