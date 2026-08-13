@@ -70,6 +70,12 @@ from dashscope.agentstudio.types.models import (  # noqa: F401
     SessionThreadStatusEvent,
     SpanModelRequestStartEvent,
     SpanModelRequestEndEvent,
+    WebhookDelivery,
+    WebhookEndpoint,
+    WebhookEndpointList,
+    WebhookEvent,
+    WebhookEventData,
+    WebhookSecretReset,
 )
 from dashscope.agentstudio.types.params import (  # noqa: F401
     AgentCreateParams,
@@ -94,4 +100,7 @@ from dashscope.agentstudio.types.params import (  # noqa: F401
     CredentialCreateParams,
     CredentialUpdateParams,
     CredentialListParams,
+    WebhookEndpointCreateParams,
+    WebhookEndpointUpdateParams,
+    WebhookEventListParams,
 )
