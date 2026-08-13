@@ -7,6 +7,7 @@ sub-modules (generation, fine_tunes, files, etc.).
 """
 import sys
 import warnings
+from pathlib import Path
 from typing import Optional
 
 # Suppress urllib3 NotOpenSSLWarning on systems with LibreSSL
@@ -131,7 +132,7 @@ def _translate_legacy_args(argv):
     """Translate legacy argparse command format to Typer format.
 
     Legacy format:  dashscope fine_tunes.call --training_file_ids ...
-    New format:     dashscope fine-tunes call --training-file-ids ...
+    New format:     dashscope fine-tunes create --training-file-ids ...
 
     Returns modified argv list.
     """
@@ -234,6 +235,130 @@ def _extract_global_api_key(argv):
     return new_argv
 
 
+def _translate_help_shortcut(argv):
+    """Translate -h to --help for convenience."""
+    return [arg if arg != "-h" else "--help" for arg in argv]
+
+
+_MD_MARKER = "<!-- managed-by: dashscope-expert -->"
+_PY_MARKER = "# managed-by: dashscope-expert"
+_EXPERT_EXAMPLE = "dashscope-sdk-expert"
+
+
+def _cleanup_legacy_expert_sync():
+    """Remove files the deleted expert bundling synced into ~/.acli.
+
+    Only files carrying the managed marker are deleted — without it the file
+    is user-owned and left untouched. Needed so stale global copies don't
+    shadow the workspace ./.acli/ configs installed via example download.
+    """
+    try:
+        from dashscope.acli.config import CONFIG_DIR
+    except ImportError:
+        return
+    md_targets = []
+    for subdir in ("skills", "references"):
+        target_dir = CONFIG_DIR / subdir
+        if target_dir.is_dir():
+            md_targets.extend(target_dir.glob("*.md"))
+    for path in md_targets:
+        try:
+            if _MD_MARKER in path.read_text(encoding="utf-8"):
+                path.unlink()
+        except OSError:
+            pass
+    build = CONFIG_DIR / "build_sdk_index.py"
+    try:
+        if build.is_file() and _PY_MARKER in build.read_text(encoding="utf-8"):
+            build.unlink()
+    except OSError:
+        pass
+
+
+def _maybe_offer_example_download():
+    """First interactive run without ./.acli: offer the SDK-expert example.
+
+    Accepting merges the example into ./.acli/ via the same code path as
+    `example download` (copied from the packaged install dir when present);
+    declining writes a marker into ./.acli/ so we never ask again here.
+    """
+    if not sys.stdin.isatty() or (Path.cwd() / ".acli").is_dir():
+        return
+    try:
+        from dashscope.acli.cli.examples import _handle_example_command
+    except ImportError:
+        return
+    err_console.print(
+        "[cyan]首次运行：[/cyan]可下载 dashscope-sdk-expert 示例配置到 ./.acli/\n"
+        "（SDK 问答专家人设 + 技能模板 + SDK 知识索引，纯配置，可随时编辑）。"
+    )
+    try:
+        answer = input("下载示例配置? [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        err_console.print()
+        return
+    if answer in ("n", "no"):
+        try:
+            marker = Path.cwd() / ".acli" / ".dashscope-example-declined"
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("declined\n", encoding="utf-8")
+        except OSError:
+            pass
+        err_console.print(
+            "[dim]已跳过。之后想定制可随时运行： "
+            "python -m dashscope.acli example download dashscope-sdk-expert[/dim]"
+        )
+        return
+    _handle_example_command(["download", _EXPERT_EXAMPLE])
+
+
+def _route_to_expert(command, tui=None):
+    """Run the vendored acli agent (dashscope with no/unknown subcommand)."""
+    try:
+        from dashscope.acli.ui.embedded import run
+    except ImportError as exception:
+        err_console.print(
+            "[yellow]Tip:[/yellow] Install dashscope[acli] to enable the agent "
+            f"({exception}).",
+        )
+        return
+
+    if command is None and not sys.stdin.isatty():
+        # The interactive REPL needs a real terminal; prompt_toolkit crashes
+        # on non-tty stdin (e.g. kqueue rejects /dev/null with EINVAL).
+        # Treat piped text as a one-shot prompt instead.
+        try:
+            piped = sys.stdin.read().strip()
+        except OSError:
+            piped = ""
+        if not piped:
+            err_console.print(
+                "[red]Error:[/red] Interactive mode requires a terminal. "
+                'Pass a prompt instead, e.g. dashscope "your question".',
+            )
+            sys.exit(2)
+        command = piped
+
+    _cleanup_legacy_expert_sync()
+    if command is None:
+        _maybe_offer_example_download()
+
+    try:
+        run(
+            app_name="DashScope SDK Expert",
+            prompt_symbol="dashscope> ",
+            api_key=dashscope.api_key or None,
+            command=command,
+            tui=tui,
+        )
+    except SystemExit:
+        pass
+    except Exception as exception:  # pylint: disable=broad-except
+        err_console.print(
+            f"[yellow]Tip:[/yellow] Agent failed to start ({exception}).",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Typer app
 # ---------------------------------------------------------------------------
@@ -317,6 +442,20 @@ def _register_rl_app():
 _register_rl_app()
 
 
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def _first_non_option(argv):
+    """Return the first non-option argument in *argv* (skip index 0),
+    or None if all arguments are options."""
+    for arg in argv[1:]:
+        if not arg.startswith("-"):
+            return arg
+    return None
+
+
 def main():
     """Entry point for the ``dashscope`` console script."""
     # Translate legacy command format first so legacy --api_key can be treated
@@ -326,7 +465,39 @@ def main():
     # Extract global api-key parameter after legacy argument normalization.
     argv = _extract_global_api_key(argv)
 
-    # Update sys.argv for Typer
+    # Extract agent mode flags (--cli / --tui); they belong to the vendored
+    # acli and must not leak into typer or the one-shot prompt text.
+    # Bare `dashscope` defaults to the TUI; --cli opts into the plain CLI REPL.
+    forced_tui = True
+    if "--cli" in argv:
+        forced_tui = False
+        argv = [a for a in argv if a != "--cli"]
+    if "--tui" in argv:
+        forced_tui = True
+        argv = [a for a in argv if a != "--tui"]
+
+    # Top-level --help / -h → show help and exit normally
+    if "--help" in argv or "-h" in argv:
+        argv = _translate_help_shortcut(argv)
+        sys.argv = argv
+        app()
+        return
+
+    # No subcommand → enter the agent (acli) directly
+    first_cmd = _first_non_option(argv)
+    if first_cmd is None:
+        _route_to_expert(None, tui=forced_tui)
+        return
+
+    # Unknown command → route to the agent with the original user input.
+    # Use the cleaned argv so an extracted -k/--api-key is not leaked into
+    # the prompt text.
+    if first_cmd not in _TOP_LEVEL_COMMANDS:
+        _route_to_expert(" ".join(argv[1:]), tui=forced_tui)
+        return
+
+    # Direct command execution (backward compatible)
+    argv = _translate_help_shortcut(argv)
     sys.argv = argv
 
     try:

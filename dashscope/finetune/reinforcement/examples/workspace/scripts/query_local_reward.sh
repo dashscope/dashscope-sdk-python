@@ -1,9 +1,7 @@
 #!/bin/sh
 #****************************************************************#
 # ScriptName: query_reward.sh
-# Author: @alibaba-inc.com
 # Create Date: 2026-03-16 11:44
-# Modify Author: @alibaba-inc.com
 # Modify Date: 2026-03-16 11:44
 # Function:
 #***************************************************************#

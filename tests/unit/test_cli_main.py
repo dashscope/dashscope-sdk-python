@@ -12,8 +12,10 @@ from typer.testing import CliRunner
 
 import dashscope
 from dashscope.cli import agentic_rl
-from dashscope.cli import app as cli_app
-from dashscope.cli import main as cli_main
+from dashscope.cli import (
+    app as cli_app,
+    main as cli_main,
+)
 from dashscope.common.error import AuthenticationError
 
 

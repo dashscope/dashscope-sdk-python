@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 #****************************************************************#
 # ScriptName: build.sh
-# Author: @alibaba-inc.com
 # Create Date: 2026-03-04 17:22
-# Modify Author: @alibaba-inc.com
 # Modify Date: 2026-03-25 14:27
 # Function:
 #   Build and optionally install DashScope SDK for Agentic RL development

@@ -1,0 +1,100 @@
+# acli hooks — basic-chat example
+# ============================================================================
+# 在 Agent 运行关键生命周期插入自定义行为：拦截危险工具、打印告警、
+# 调用外部脚本审计、向用户确认。仅 workspace 级（不读 ~/.acli/hooks.toml）。
+#
+# 加载位置：./.acli/hooks.toml（当前 workspace）
+# Skill 包级 hook：.acli/skills/<name>/hooks.toml（仅对该 skill 生效）
+#
+# 支持的事件（按生命周期顺序）：
+#   before_tool_call  — 工具即将执行前
+#   after_tool_call   — 工具执行完成后
+#   on_error          — 工具抛异常或子代理失败时
+#   on_message        — 收到用户消息时
+#   on_response       — 收到 LLM 响应时
+#
+# 支持的动作（action 字段）：
+#   run      — 执行 shell 命令（配合 run = "..." 字段）
+#   block    — 阻止当前操作，返回 message 给 Agent
+#   confirm  — 向用户确认后才继续
+#   warn     — 打印黄色警告
+#   alert    — 打印红色告警
+#   log      — 写入日志（不打印到终端）
+#
+# 字段说明：
+#   match            — 工具名 glob（如 "write_file" / "run_command" / "*"）
+#   condition        — 文件路径 glob（如 "*.py"），从工具参数提取路径后匹配
+#   content_pattern  — 内容 glob（on_error/on_response 检查 result，工具调用检查 arguments）
+#   action           — 见上方动作列表
+#   run              — shell 命令模板（仅 action = "run"）
+#   message          — 消息模板（block/confirm/warn/alert/log 用）
+#   on_fail          — run 命令失败时的策略：warn / alert / block
+#   silent           — true 时不把 run 的 stdout 打印到终端
+#
+# 模板变量（{var} 占位）：
+#   {tool_name}      — 工具名
+#   {path}           — 工具参数中的路径（path/file_path/file/src/dst/target）
+#   {filename}       — 路径的文件名部分
+#   {filename_stem}  — 文件名（去扩展名）
+#   {timestamp}      — 当前时间（YYYY-MM-DDTHH:MM:SS）
+#   {exit_code}      — run_command 工具的退出码
+#   {content}        — write_file 工具的内容（前 500 字符）
+# ============================================================================
+
+# ---- 示例 1: 写完 .py 文件后自动语法检查（action = "run"）----
+# [[hooks.after_tool_call]]
+# match = "write_file"
+# condition = "*.py"
+# action = "run"
+# run = "python -m py_compile {path}"
+# on_fail = "warn"   # 编译失败时打印警告（不阻止）
+# silent = true       # 不把 stdout 打到终端
+
+# ---- 示例 2: 拦截删除受保护文件（action = "block"）----
+# [[hooks.before_tool_call]]
+# match = "delete_file"
+# condition = "*.acli/skills/*"
+# action = "block"
+# message = "不能删除 skills 目录下的文件，请直接编辑或用 /skill rm"
+
+# ---- 示例 3: pip 安装前确认（action = "confirm"）----
+# [[hooks.before_tool_call]]
+# match = "run_command"
+# content_pattern = "*pip*install*"
+# action = "confirm"
+# message = "即将执行 pip 安装，确认吗？"
+
+# ---- 示例 4: 写完 .py 文件后记录日志（action = "log"）----
+# [[hooks.after_tool_call]]
+# match = "write_file"
+# condition = "*.py"
+# action = "log"
+# message = "{timestamp} | wrote {filename}"
+
+# ---- 示例 5: 检测到模块缺失时提醒（action = "warn"）----
+# [[hooks.on_error]]
+# match = "*"
+# content_pattern = "*ModuleNotFoundError*"
+# action = "warn"
+# message = "检测到模块缺失。先检查依赖：pip show <package>"
+
+# ---- 示例 6: 写完 .go 文件后自动 gofmt（action = "run"）----
+# [[hooks.after_tool_call]]
+# match = "write_file"
+# condition = "*.go"
+# action = "run"
+# run = "gofmt -w {path}"
+# on_fail = "warn"
+
+# ---- 示例 7: 收到 LLM 响应时追加到日志文件（action = "run"）----
+# [[hooks.on_response]]
+# match = "*"
+# action = "run"
+# run = "echo '{timestamp} | response received' >> .acli/response.log"
+# silent = true
+
+# ---- 示例 8: 收到用户消息时记录时间戳（action = "log"）----
+# [[hooks.on_message]]
+# match = "*"
+# action = "log"
+# message = "{timestamp} | user message received"

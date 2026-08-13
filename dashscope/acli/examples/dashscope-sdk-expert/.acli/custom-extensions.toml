@@ -1,0 +1,22 @@
+# acli custom extensions — dashscope-sdk-expert example
+# ============================================================================
+# 为 SDK Expert 示例声明 tongyi provider。复制此示例后，可按需添加更多
+# provider 或 capability。参见 examples/basic-chat/.acli/custom-extensions.toml
+# 获取更详细的字段说明。
+# ============================================================================
+
+[[providers]]
+name = "tongyi"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key_env = "DASHSCOPE_API_KEY"
+default_model = "qwen3.7-plus"
+models = [
+    "qwen3.8-max",
+    "qwen3.7-max",
+    "qwen3.7-plus",
+    "qwen-turbo",
+    "qwen-vl-max",
+    "qwen-vl-plus",
+]
+vision_models = ["qwen-vl-max", "qwen-vl-plus"]
+protocol = "openai"
