@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-__version__ = "0.5.7"
+__version__ = "0.6.0"
 
 # Expose the lightweight programmatic SDK at the package root.
 try:
