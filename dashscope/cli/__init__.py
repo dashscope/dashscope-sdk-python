@@ -289,11 +289,13 @@ def _maybe_offer_example_download():
     except ImportError:
         return
     err_console.print(
-        "[cyan]首次运行：[/cyan]可下载 dashscope-sdk-expert 示例配置到 ./.acli/\n"
-        "（SDK 问答专家人设 + 技能模板 + SDK 知识索引，纯配置，可随时编辑）。",
+        "[cyan]First run:[/cyan] download the dashscope-sdk-expert "
+        "example config into ./.acli/\n"
+        "(SDK Q&A expert persona + skill templates + SDK knowledge "
+        "index; pure config, editable anytime).",
     )
     try:
-        answer = input("下载示例配置? [Y/n] ").strip().lower()
+        answer = input("Download the example config? [Y/n] ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         err_console.print()
         return
@@ -305,7 +307,7 @@ def _maybe_offer_example_download():
         except OSError:
             pass
         err_console.print(
-            "[dim]已跳过。之后想定制可随时运行： "
+            "[dim]Skipped. To customize later, run: "
             "python -m dashscope.acli example download "
             "dashscope-sdk-expert[/dim]",
         )
