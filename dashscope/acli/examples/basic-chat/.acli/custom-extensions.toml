@@ -1,17 +1,18 @@
 # acli custom extensions — basic-chat example
 # ============================================================================
-# 最小可用配置：只声明一个 tongyi provider，演示 custom-extensions.toml 的写法。
-# 其他 provider（kimi / deepseek / zhipu / ollama / ...）按相同
-# 模式添加 [[providers]] 块即可。
+# Minimal working config: declares only one tongyi provider, demonstrating how
+# to write custom-extensions.toml. Add other providers (kimi / deepseek /
+# zhipu / ollama / ...) by adding [[providers]] blocks following the same
+# pattern.
 #
-# 加载位置（任选其一，workspace 优先）：
-#   ~/.acli/custom-extensions.toml      全局生效
-#   ./.acli/custom-extensions.toml      当前 workspace 生效（覆盖全局同名条目）
+# Load locations (either one; workspace takes precedence):
+#   ~/.acli/custom-extensions.toml      applies globally
+#   ./.acli/custom-extensions.toml      applies to the current workspace (overrides same-name global entries)
 #
-# API Key 三种写法（按推荐度排序）：
-#   1. api_key_env = "DASHSCOPE_API_KEY"   ← 仅存环境变量名，shell 里 export 值
-#   2. /provider key tongyi 命令加密存储    ← 写入 api_key = "ENC:..."（机器绑定）
-#   3. 明文 api_key = "sk-xxx"              ← 加载器拒绝，仅占位说明
+# Three ways to provide an API key (in order of recommendation):
+#   1. api_key_env = "DASHSCOPE_API_KEY"   ← stores only the env var name; export the value in the shell
+#   2. /provider key tongyi command (encrypted storage) ← writes api_key = "ENC:..." (machine-bound)
+#   3. Plaintext api_key = "sk-xxx"         ← rejected by the loader; placeholder illustration only
 # ============================================================================
 
 [[providers]]
@@ -30,8 +31,8 @@ vision_models = ["qwen-vl-max", "qwen-vl-plus"]
 protocol = "openai"
 
 # ============================================================================
-# 更多 provider 模板（与项目 .acli/custom-extensions.toml 保持一致）
-# 取消注释对应块并设置环境变量即可使用。
+# More provider templates (kept in sync with the project .acli/custom-extensions.toml)
+# Uncomment the corresponding block and set the env var to use it.
 # ============================================================================
 
 # [[providers]]
@@ -63,72 +64,72 @@ protocol = "openai"
 # default_model = "llama3"
 # models = ["llama3", "mistral"]
 # protocol = "openai"
-# auth = false   # 本地服务，无需 API Key
+# auth = false   # local service, no API key needed
 
 # ============================================================================
-# [[capabilities]] — HTTP 工具能力（让 LLM 调用外部 API）
+# [[capabilities]] — HTTP tool capabilities (let the LLM call external APIs)
 # ============================================================================
-# 用法：
-#   1. 取消注释一个 [[capabilities]] 块（含其下的 [[capabilities.tools]]）
-#   2. 设置对应的 env var（如 export ZHIPU_API_KEY=xxx）
-#   3. 运行 /capability enable <key> 激活（如 /capability enable zhipu.image）
-#   4. 对话中自然语言触发（"画一张猫"）或 LLM 自主调用
+# Usage:
+#   1. Uncomment a [[capabilities]] block (including its [[capabilities.tools]])
+#   2. Set the corresponding env var (e.g. export ZHIPU_API_KEY=xxx)
+#   3. Run /capability enable <key> to activate it (e.g. /capability enable zhipu.image)
+#   4. Trigger it with natural language in chat ("draw a cat") or let the LLM call it autonomously
 #
-# 支持两类工具：
-#   - type = "http"（默认）— REST API 调用，需填 endpoint + body_template
-#   - type = "vision"     — 调用视觉 LLM 读图，需填 provider + model
+# Two tool types are supported:
+#   - type = "http" (default) — REST API call; requires endpoint + body_template
+#   - type = "vision"         — calls a vision LLM to read images; requires provider + model
 # ============================================================================
 
-# ---- 示例 1: 智谱 GLM 图像生成（HTTP 工具）----
+# ---- Example 1: Zhipu GLM image generation (HTTP tool) ----
 # export ZHIPU_API_KEY="xxx"
 # /capability enable zhipu.image
-# 对话中说："画一张停在湖边的自行车"
+# Say in chat: "draw a bicycle parked by a lake"
 # [[capabilities]]
 # key = "zhipu.image"
-# display = "智谱 GLM 图像生成"
+# display = "Zhipu GLM Image Generation"
 # auth = "apikey-header:Authorization:$ZHIPU_API_KEY"
 #
 # [[capabilities.tools]]
 # name = "generate_glm_image"
-# description = "调用智谱 GLM-Image 模型根据文本描述生成图片"
+# description = "Generate an image from a text description with the Zhipu GLM-Image model"
 # endpoint = "https://open.bigmodel.cn/api/paas/v4/images/generations"
 # http_method = "POST"
 # permission = "confirm"
 # params = [
-#   {name = "prompt", type = "string", required = true, description = "图片描述，例如"一辆停在湖边的山地自行车""},
-#   {name = "model", type = "string", required = false, default = "glm-image-4v", description = "图像生成模型名"},
-#   {name = "size", type = "string", required = false, default = "1024x1024", description = "输出图片尺寸"},
+#   {name = "prompt", type = "string", required = true, description = "Image description, e.g. 'a mountain bike parked by a lake'"},
+#   {name = "model", type = "string", required = false, default = "glm-image-4v", description = "Image generation model name"},
+#   {name = "size", type = "string", required = false, default = "1024x1024", description = "Output image size"},
 # ]
 # body_template = '{"model": {{model}}, "prompt": {{prompt}}, "size": {{size}}}'
 
-# ---- 示例 2: 通义万相图像生成（HTTP 工具，复用 DASHSCOPE_API_KEY）----
+# ---- Example 2: Tongyi Wanxiang image generation (HTTP tool, reuses DASHSCOPE_API_KEY) ----
 # export DASHSCOPE_API_KEY="xxx"
 # /capability enable dashscope.image
 # [[capabilities]]
 # key = "dashscope.image"
-# display = "通义万相图像生成"
+# display = "Tongyi Wanxiang Image Generation"
 # api_key_env = "DASHSCOPE_API_KEY"
 #
 # [[capabilities.tools]]
 # name = "generate_wan_image"
-# description = "调用通义万相 Wan2.6 / Wanx 模型根据文本描述生成图片"
+# description = "Generate an image from a text description with the Tongyi Wanxiang Wan2.6 / Wanx models"
 # endpoint = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis"
 # http_method = "POST"
 # permission = "confirm"
 # params = [
-#   {name = "prompt", type = "string", required = true, description = "图片描述"},
-#   {name = "model", type = "string", required = false, default = "wanx2.1-t2i-turbo", description = "图像生成模型名"},
-#   {name = "size", type = "string", required = false, default = "1024x1024", description = "输出图片尺寸"},
+#   {name = "prompt", type = "string", required = true, description = "Image description"},
+#   {name = "model", type = "string", required = false, default = "wanx2.1-t2i-turbo", description = "Image generation model name"},
+#   {name = "size", type = "string", required = false, default = "1024x1024", description = "Output image size"},
 # ]
 # body_template = '{"model": {{model}}, "input": {"prompt": {{prompt}}}, "parameters": {"size": {{size}}}}'
 
-# ---- 示例 3: 通义视觉理解（Vision 工具，调用 qwen-vl-max 读图）----
-# 让 text agent 按需调用视觉模型理解图片，主模型无需切换。
-# 用法：/capability enable tongyi.vision，然后说 "看这张图 @photo.png 并描述"
+# ---- Example 3: Tongyi vision understanding (vision tool, calls qwen-vl-max to read images) ----
+# Lets the text agent call a vision model on demand to understand images; no need to switch the main model.
+# Usage: /capability enable tongyi.vision, then say "look at this image @photo.png and describe it"
 # export DASHSCOPE_API_KEY="xxx"
 # [[capabilities]]
 # key = "tongyi.vision"
-# display = "通义视觉理解 (qwen-vl-max)"
+# display = "Tongyi Vision Understanding (qwen-vl-max)"
 # api_key_env = "DASHSCOPE_API_KEY"
 #
 # [[capabilities.tools]]
@@ -136,96 +137,96 @@ protocol = "openai"
 # type = "vision"
 # provider = "tongyi"
 # model = "qwen-vl-max"
-# description = "用视觉模型理解图片内容，返回文本描述。主模型无需切换。"
+# description = "Understand image content with a vision model and return a text description. No need to switch the main model."
 # permission = "auto"
 # params = [
-#   {name = "image_path", type = "string", required = true, description = "图片文件路径（png/jpg/jpeg/gif/webp/bmp）"},
-#   {name = "question", type = "string", required = false, default = "描述这张图片的内容", description = "关于图片的问题"},
+#   {name = "image_path", type = "string", required = true, description = "Image file path (png/jpg/jpeg/gif/webp/bmp)"},
+#   {name = "question", type = "string", required = false, default = "Describe the content of this image", description = "Question about the image"},
 # ]
 
-# ---- 示例 4: Coze 工作流（HTTP 工具，调用 Coze 云端 agent）----
+# ---- Example 4: Coze workflow (HTTP tool, calls a Coze cloud agent) ----
 # export COZE_API_KEY="xxx"
 # /capability enable coze.workflow
 # [[capabilities]]
 # key = "coze.workflow"
-# display = "Coze 工作流（云端 agent / 子代理）"
+# display = "Coze Workflow (cloud agent / sub-agent)"
 # auth = "bearer:$COZE_API_KEY"
 #
 # [[capabilities.tools]]
 # name = "run_coze_workflow"
-# description = "调用 Coze 工作流完成特定任务"
+# description = "Run a Coze workflow to complete a specific task"
 # endpoint = "https://api.coze.cn/v1/workflow/run"
 # http_method = "POST"
 # permission = "confirm"
 # params = [
-#   {name = "workflow_id", type = "string", required = true, description = "Coze 工作流 ID"},
-#   {name = "parameters", type = "object", required = true, description = "工作流入参（与工作流定义一致的 JSON 对象）"},
+#   {name = "workflow_id", type = "string", required = true, description = "Coze workflow ID"},
+#   {name = "parameters", type = "object", required = true, description = "Workflow input parameters (a JSON object matching the workflow definition)"},
 # ]
 # body_template = '{"workflow_id": {{workflow_id}}, "parameters": {{parameters}}}'
 
 # ============================================================================
-# [[skills]] — TOML 声明的 Skill（替代 .md 文件，适合简短模板）
+# [[skills]] — Skills declared in TOML (alternative to .md files; good for short templates)
 # ============================================================================
-# 用法：/skill write_poem 春天   或自然语言触发："写首关于春天的诗"
-# 与 .acli/skills/*.md 二选一即可；md 文件支持更长的模板 + frontmatter 元数据。
-# 模板用 {{var}} 占位符，调用时由实际值替换。
+# Usage: /skill write_poem spring   or a natural-language trigger: "write a poem about spring"
+# Choose either this or .acli/skills/*.md; md files support longer templates + frontmatter metadata.
+# Templates use {{var}} placeholders, replaced with actual values on invocation.
 # ============================================================================
 
 # [[skills]]
 # name = "write_poem"
-# description = "根据主题写一首中文七言绝句"
-# prompt_template = "请写一首关于{{topic}}的七言绝句，要求押韵、意境优美。"
+# description = "Write a Chinese seven-character quatrain on a given topic"
+# prompt_template = "Write a seven-character quatrain about {{topic}}, with rhyme and elegant imagery."
 # arguments = ["topic"]
 
 # [[skills]]
 # name = "commit_message"
-# description = "根据 git diff 生成 Conventional Commits 格式的 commit message"
-# prompt_template = "根据以下 git diff 生成 commit message（Conventional Commits 格式，不超过 50 字）：\n\n{{diff}}"
+# description = "Generate a Conventional Commits format commit message from a git diff"
+# prompt_template = "Generate a commit message from the following git diff (Conventional Commits format, max 50 characters):\n\n{{diff}}"
 # arguments = ["diff"]
 
 # ============================================================================
-# [[shell_tools]] — 本地命令包装为 LLM 可调用工具
+# [[shell_tools]] — Wrap local commands as LLM-callable tools
 # ============================================================================
-# LLM 自动调用，或用户通过 /skill <name> 显式触发。
+# Called automatically by the LLM, or explicitly triggered by the user via /skill <name>.
 # permission:
-#   auto      — 自动执行（适合只读命令）
-#   confirm   — 每次执行前确认（默认，适合有副作用的命令）
-#   dangerous — 高危，少用（如 rm -rf）
-# 模板用 {{var}} 占位符，参数定义同 [[capabilities.tools]].params。
+#   auto      — run automatically (good for read-only commands)
+#   confirm   — confirm before each run (default; good for commands with side effects)
+#   dangerous — high risk, use sparingly (e.g. rm -rf)
+# Templates use {{var}} placeholders; parameter definitions are the same as [[capabilities.tools]].params.
 # ============================================================================
 
-# ---- 示例 1: ripgrep 搜索文件内容（只读，auto）----
+# ---- Example 1: ripgrep file-content search (read-only, auto) ----
 # [[shell_tools]]
 # name = "search_file"
-# description = "使用 ripgrep 在指定路径下搜索匹配正则的文件内容"
+# description = "Search file contents matching a regex under the given path with ripgrep"
 # command_template = "rg -n {{pattern}} {{path}}"
 # permission = "auto"
 # params = [
-#   {name = "pattern", type = "string", required = true, description = "搜索正则表达式"},
-#   {name = "path", type = "string", required = false, default = ".", description = "搜索路径"},
+#   {name = "pattern", type = "string", required = true, description = "Search regex"},
+#   {name = "path", type = "string", required = false, default = ".", description = "Search path"},
 # ]
 
-# ---- 示例 2: 检查端口占用（只读，auto）----
+# ---- Example 2: Check port usage (read-only, auto) ----
 # [[shell_tools]]
 # name = "check_port"
-# description = "检查指定端口是否被占用（macOS / Linux）"
-# command_template = "lsof -i :{{port}} || echo '端口空闲'"
+# description = "Check whether the given port is in use (macOS / Linux)"
+# command_template = "lsof -i :{{port}} || echo 'port is free'"
 # permission = "auto"
 # params = [
-#   {name = "port", type = "string", required = true, description = "端口号"},
+#   {name = "port", type = "string", required = true, description = "Port number"},
 # ]
 
-# ---- 示例 3: 获取公网 IP（只读，auto）----
+# ---- Example 3: Get public IP (read-only, auto) ----
 # [[shell_tools]]
 # name = "public_ip"
-# description = "获取当前公网 IP 地址"
+# description = "Get the current public IP address"
 # command_template = "curl -s ifconfig.me"
 # permission = "auto"
 
-# ---- 示例 4: Git 提交（有副作用，confirm）----
+# ---- Example 4: Git commit (side effects, confirm) ----
 # [[shell_tools]]
 # name = "git_commit"
-# description = "执行 git commit（已 stage 的改动）"
+# description = "Run git commit (for staged changes)"
 # command_template = "git commit -m {{message}}"
 # permission = "confirm"
 # params = [

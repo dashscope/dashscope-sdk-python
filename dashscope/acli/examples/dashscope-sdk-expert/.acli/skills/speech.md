@@ -103,7 +103,7 @@ import com.alibaba.dashscope.audio.tts.*;
 
 SpeechSynthesizer synthesizer = new SpeechSynthesizer();
 SpeechSynthesisParam param = SpeechSynthesisParam.builder()
-        .model("cosyvoice-v1").text("你好").voice("longxiaochun").build();
+        .model("cosyvoice-v1").text("hello").voice("longxiaochun").build();
 java.nio.ByteBuffer audio = synthesizer.call(param);  // write audio.array() to file
 ```
 

@@ -1,96 +1,96 @@
-# Basic Chat — acli 最小可用示例
+# Basic Chat — Minimal Working acli Example
 
-演示如何用最少的配置启动一个具备联网搜索能力的通用聊天 Agent。**全部智能都在 `.acli/` 配置中，没有任何 Python 启动代码**——下载后直接运行 `acli` 即可。
+Shows how to start a general-purpose chat agent with web search capability using minimal configuration. **All the intelligence lives in the `.acli/` configuration — there is no Python startup code** — download and run `acli` directly.
 
-## 目录结构
+## Directory Structure
 
 ```
 basic-chat/
 └── .acli/
-    ├── config.toml                   # 默认 provider/model/user_name
-    ├── custom-extensions.toml        # 声明 tongyi provider + capability/skill/shell_tool 注释模板
-    ├── hooks.toml                    # 事件钩子（before/after_tool_call、on_error 等）注释模板
-    ├── system-prompt.md              # Agent 人设与行为规则
+    ├── config.toml                   # Default provider/model/user_name
+    ├── custom-extensions.toml        # tongyi provider declaration + capability/skill/shell_tool comment templates
+    ├── hooks.toml                    # Event hook (before/after_tool_call, on_error, etc.) comment templates
+    ├── system-prompt.md              # Agent persona and behavior rules
     └── skills/
-        ├── research-topic.md         # 联网搜索某主题并出简报（调用 web_search）
-        ├── explain-code.md           # 解释代码逻辑
-        ├── translate.md              # 中英互译
-        └── write-poem.md             # 写七言绝句（演示纯 prompt 模板）
+        ├── research-topic.md         # Web-search a topic and produce a briefing (calls web_search)
+        ├── explain-code.md           # Explain code logic
+        ├── translate.md              # Chinese-English translation
+        └── write-poem.md             # Write a seven-character quatrain (demonstrates a pure prompt template)
 ```
 
-## 快速开始
+## Quick Start
 
 ```bash
 pip install acli
 export DASHSCOPE_API_KEY="sk-xxx"
 
-# 把示例合并到 ./.acli/（同名文件自动备份到 .acli/backup/，可用 example restore 撤销）
+# Merge the example into ./.acli/ (same-name files are auto-backed up to .acli/backup/; undo with example restore)
 acli example download basic-chat
 
-# 修改 .acli/custom-extensions.toml 添加你需要的 provider
-# 修改 .acli/system-prompt.md 定义 Agent 人设
-# 在 .acli/skills/ 下添加你自己的技能模板
+# Edit .acli/custom-extensions.toml to add the providers you need
+# Edit .acli/system-prompt.md to define the agent persona
+# Add your own skill templates under .acli/skills/
 
-# 启动（无需 cd，配置已在当前目录）
+# Start (no cd needed; the config is already in the current directory)
 acli
 acli --tui
-acli -c "你好"
+acli -c "hello"
 ```
 
-> 想放在一个全新目录里？`mkdir my-agent && cd my-agent && acli example download basic-chat`，
-> 或用 `acli example download basic-chat --target my-agent`。
+> Want it in a brand-new directory? `mkdir my-agent && cd my-agent && acli example download basic-chat`,
+> or use `acli example download basic-chat --target my-agent`.
 
-## 配置即程序
+## Configuration as Program
 
-### custom-extensions.toml — Provider 声明
+### custom-extensions.toml — Provider Declarations
 
-声明 acli 能用哪些 LLM provider。最小配置只需要一个 `[[providers]]` 块：
+Declares which LLM providers acli can use. A minimal config needs just one `[[providers]]` block:
 
 ```toml
 [[providers]]
 name = "tongyi"
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-api_key_env = "DASHSCOPE_API_KEY"      # ← 只存环境变量名，shell 提供 sk-xxx
+api_key_env = "DASHSCOPE_API_KEY"      # ← stores only the env var name; the shell provides sk-xxx
 default_model = "qwen3.7-max"
 models = ["qwen3.7-max", "qwen3.7-plus", "qwen-turbo", "qwen-vl-max"]
-vision_models = ["qwen-vl-max"]        # ← 让 acli 知道这些模型支持图片输入
+vision_models = ["qwen-vl-max"]        # ← tells acli these models accept image input
 protocol = "openai"                     # ← openai / anthropic / dashscope
 ```
 
-想用 Claude / GPT / GLM？取消注释 toml 里对应的 `[[providers]]` 块即可。
+Want Claude / GPT / GLM? Just uncomment the corresponding `[[providers]]` block in the toml.
 
-**API Key 三种写法**（推荐度递减）：
+**Three ways to provide an API key** (in decreasing order of recommendation):
 
-1. `api_key_env = "FOO_API_KEY"` — shell 里 `export FOO_API_KEY=sk-xxx`，toml 可安全提交 git
-2. `/provider` 向导交互式录入 — 写入 `api_key = "ENC:..."`（机器绑定加密）
-3. 明文 `api_key = "sk-xxx"` — 加载器拒绝，仅占位说明
+1. `api_key_env = "FOO_API_KEY"` — `export FOO_API_KEY=sk-xxx` in the shell; the toml is safe to commit to git
+2. `/provider` wizard interactive entry — writes `api_key = "ENC:..."` (machine-bound encryption)
+3. Plaintext `api_key = "sk-xxx"` — rejected by the loader; placeholder illustration only
 
-### system-prompt.md — Agent 人设
+### system-prompt.md — Agent Persona
 
-定义 Agent "是谁"。acli 启动时自动加载 `.acli/system-prompt.md`（workspace 优先于 `~/.acli/system-prompt.md`）。
+Defines who the agent "is". acli automatically loads `.acli/system-prompt.md` at startup (workspace takes precedence over `~/.acli/system-prompt.md`).
 
-### skills/*.md — Prompt 模板
+### skills/*.md — Prompt Templates
 
-每个 `.md` 文件是一个可复用提示词，带 YAML frontmatter：
+Each `.md` file is a reusable prompt with YAML frontmatter:
 
 ```yaml
 ---
 name: research-topic
-description: 联网搜索某个主题并给出带来源 URL 的简报
+description: Web-search a topic and produce a briefing with source URLs
 arguments: [topic]
 ---
 
-使用 web_search 工具研究「{topic}」：
+Use the web_search tool to research "{topic}":
 ...
 ```
 
-调用方式：
-- `/skill research-topic 量子计算` — 显式调用
-- 自然语言："帮我研究一下量子计算的最新进展" — LLM 自动选择是否使用
+How to invoke:
+- `/skill research-topic quantum computing` — explicit invocation
+- Natural language: "help me research the latest progress in quantum computing" — the LLM decides whether to use it
 
-`research-topic` 演示了如何用 prompt 引导 LLM 调用内置的 `web_search` 工具完成联网信息获取。
+`research-topic` demonstrates how to use a prompt to guide the LLM to call the built-in `web_search` tool for online information gathering.
 
-### config.toml — 默认值
+### config.toml — Defaults
 
 ```toml
 user_name = "dashscope"
@@ -99,14 +99,14 @@ model = "qwen3.7-max"
 memory_user_id = "acli-basic"
 ```
 
-## 从这里出发
+## Next Steps
 
-- **加更多 provider**：在 `custom-extensions.toml` 添加 `[[providers]]` 块
-- **加 HTTP 工具**：添加 `[[capabilities]]` + `[[capabilities.tools]]` 块（如调用 Coze、智谱画图等）
-- **加视觉能力**：添加 `type = "vision"` 的 capability tool，让 text agent 按需调用 vision LLM
-- **加 Shell 工具**：添加 `[[shell_tools]]` 块，封装常用本地命令
-- **加 Hooks**：在 `.acli/hooks.toml` 配置工具调用前后的钩子（如写完 `.py` 自动 `py_compile`、`pip install` 前确认、删除文件前阻止）。模板见 `.acli/hooks.toml`，覆盖 `before_tool_call` / `after_tool_call` / `on_error` / `on_message` / `on_response` 全部 5 个事件 × 6 种动作（run/block/confirm/warn/alert/log）。
-- **加常驻知识**：把需要**始终**出现在 system prompt 的文档（如 API 索引）放到 `.acli/references/*.md`
-- **改人设**：编辑 `system-prompt.md`，例如变成"代码审查员"、"数据分析师"、"客服"
+- **Add more providers**: add `[[providers]]` blocks in `custom-extensions.toml`
+- **Add HTTP tools**: add `[[capabilities]]` + `[[capabilities.tools]]` blocks (e.g. calling Coze, Zhipu image generation, etc.)
+- **Add vision capability**: add a capability tool with `type = "vision"` so the text agent can call a vision LLM on demand
+- **Add shell tools**: add `[[shell_tools]]` blocks to wrap common local commands
+- **Add hooks**: configure pre/post tool-call hooks in `.acli/hooks.toml` (e.g. auto `py_compile` after writing a `.py` file, confirm before `pip install`, block file deletion). See the template in `.acli/hooks.toml`, covering all 5 events (`before_tool_call` / `after_tool_call` / `on_error` / `on_message` / `on_response`) × 6 actions (run/block/confirm/warn/alert/log).
+- **Add persistent knowledge**: put documents that must **always** appear in the system prompt (e.g. an API index) into `.acli/references/*.md`
+- **Change the persona**: edit `system-prompt.md` — e.g. turn it into a "code reviewer", "data analyst", or "customer support agent"
 
-完整功能文档见项目根目录 `README.md`。
+See the project root `README.md` for the full feature documentation.

@@ -1,54 +1,54 @@
-# DashScope SDK Expert — acli 配置化示例
+# DashScope SDK Expert — acli Configuration-Driven Example
 
-本示例演示如何用 **AgenticCLI (acli)** 原生配置机制构建一个场景化的 AI 专家 Agent。
+This example shows how to build a scenario-specific AI expert agent using **AgenticCLI (acli)**'s native configuration mechanisms.
 
-**核心理念：配置驱动，零 Python 胶水。** Agent 的身份、能力、技能、知识索引全部由 `.acli/` 目录中的文件定义；下载示例后直接运行 `acli` 即可启动。
+**Core idea: configuration-driven, zero Python glue.** The agent's identity, capabilities, skills, and knowledge index are all defined by files under `.acli/`; download the example and run `acli` directly to start.
 
-## 目录结构
+## Directory Structure
 
 ```
 dashscope-sdk-expert/
-└── .acli/                      # Agent 配置目录
-    ├── config.toml              # 模型与用户配置
-    ├── custom-extensions.toml   # Provider 声明（tongyi）
-    ├── hooks.toml               # 事件钩子
-    ├── system-prompt.md         # 系统提示词（Agent 人设与行为规则）
-    └── skills/                  # 技能模板（模型按需 use_skill 加载）
-        ├── text-generation.md   # 文本生成（Generation / OpenAI 兼容，Python+Java）
-        ├── multimodal.md        # 多模态（MultiModalConversation/ImageSynthesis/VideoSynthesis）
-        ├── speech.md            # 语音（SpeechSynthesizer/Transcription）
-        ├── retrieval.md         # 检索（Embedding/TextReRank/RAG）
-        ├── fine-tuning.md       # 微调与部署（SFT/CPT/DPO/Deployments）
-        ├── agent.md             # Agent（Application/Assistants/插件与 MCP）
-        ├── cli.md               # dashscope CLI 命令参考
-        ├── sdk-example.md       # 生成 SDK 代码示例
-        ├── api-doc.md           # 查看 API 参数文档
-        ├── diagnose.md          # 诊断 SDK 调用错误
-        ├── error-code.md        # 解释错误码
-        ├── explain-code.md      # 解释代码逻辑
-        └── translate.md         # 中英互译
+└── .acli/                      # Agent configuration directory
+    ├── config.toml              # Model and user configuration
+    ├── custom-extensions.toml   # Provider declaration (tongyi)
+    ├── hooks.toml               # Event hooks
+    ├── system-prompt.md         # System prompt (agent persona and behavior rules)
+    └── skills/                  # Skill templates (loaded by the model on demand via use_skill)
+        ├── text-generation.md   # Text generation (Generation / OpenAI-compatible, Python+Java)
+        ├── multimodal.md        # Multimodal (MultiModalConversation/ImageSynthesis/VideoSynthesis)
+        ├── speech.md            # Speech (SpeechSynthesizer/Transcription)
+        ├── retrieval.md         # Retrieval (Embedding/TextReRank/RAG)
+        ├── fine-tuning.md       # Fine-tuning & deployment (SFT/CPT/DPO/Deployments)
+        ├── agent.md             # Agent (Application/Assistants/plugins & MCP)
+        ├── cli.md               # dashscope CLI command reference
+        ├── sdk-example.md       # Generate SDK code examples
+        ├── api-doc.md           # View API parameter docs
+        ├── diagnose.md          # Diagnose SDK call errors
+        ├── error-code.md        # Explain error codes
+        ├── explain-code.md      # Explain code logic
+        └── translate.md         # Chinese-English translation
 ```
 
-## 快速开始
+## Quick Start
 
 ```bash
 pip install acli
 export DASHSCOPE_API_KEY="sk-xxx"
 
-# 把示例合并到 ./.acli/（同名文件自动备份到 .acli/backup/，可用 example restore 撤销）
+# Merge the example into ./.acli/ (same-name files are auto-backed up to .acli/backup/; undo with example restore)
 acli example download dashscope-sdk-expert
 
-# 启动 —— 无需 cd、无需任何 Python 启动脚本
+# Start — no cd, no Python launcher script needed
 acli
 acli --tui
-acli -c "Generation.call 怎么用？"
+acli -c "How do I use Generation.call?"
 ```
 
-## 配置化理念
+## The Configuration-Driven Approach
 
-### 1. system-prompt.md — Agent 人设
+### 1. system-prompt.md — Agent Persona
 
-定义 Agent 的身份、知识范围、行为规则。这是 Agent "是谁"的核心：
+Defines the agent's identity, knowledge scope, and behavior rules. This is the core of who the agent "is":
 
 ```markdown
 You are DashScope SDK Expert, an intelligent assistant for the DashScope Python SDK...
@@ -57,31 +57,31 @@ You are DashScope SDK Expert, an intelligent assistant for the DashScope Python 
 Before answering, ALWAYS verify against the actual installed SDK...
 ```
 
-### 2. skills/ — 领域知识库（按需加载）
+### 2. skills/ — Domain Knowledge Base (Loaded on Demand)
 
-SDK/CLI 的对外接口知识直接维护在 domain skills 里：每个领域一个文件，包含模型清单、Python 与 Java SDK 签名、输入输出结构和错误码。模型回答 API 问题时通过 `use_skill` 按需加载对应技能，**不常驻 system prompt**——首轮输入 token 因此减少约 16k 字符；skill 未覆盖的细节再回退到 `inspect.signature` / `help()` 验证已安装包。
+The SDK/CLI's public interface knowledge lives directly in domain skills: one file per domain, with model lists, Python and Java SDK signatures, input/output structures, and error codes. When answering API questions, the model loads the matching skill via `use_skill` on demand — **nothing stays permanently in the system prompt** — cutting first-turn input tokens by about 16k characters; details not covered by a skill fall back to `inspect.signature` / `help()` against the installed package.
 
-### 3. skills/ — 任务模板
+### 3. skills/ — Task Templates
 
-每个 `.md` 文件是一个可复用的 prompt 模板，带有 frontmatter 元数据：
+Each `.md` file is a reusable prompt template with frontmatter metadata:
 
 ```yaml
 ---
 name: sdk-example
-description: 生成 DashScope SDK 可运行代码示例
+description: Generate runnable DashScope SDK code examples
 arguments: [api_name]
 ---
 
-生成代码前，请先验证用户安装的 SDK 版本和 API 签名：
+Before generating code, first verify the user's installed SDK version and API signature:
 1. `run_command("python -c 'import dashscope; ...'")`
 ...
 ```
 
-- **name**: 技能标识符，用于 `/skill` 命令调用
-- **description**: 简短描述，Agent 据此决定何时使用
-- **arguments**: 模板变量，调用时由实际值替换
+- **name**: skill identifier, invoked via the `/skill` command
+- **description**: short description; the agent uses it to decide when to apply the skill
+- **arguments**: template variables, replaced with actual values on invocation
 
-### 4. config.toml — 运行时配置
+### 4. config.toml — Runtime Configuration
 
 ```toml
 user_name = "dashscope"
@@ -90,22 +90,22 @@ model = "qwen3.7-plus"
 memory_user_id = "acli-dashscope"
 ```
 
-## 复用此模式
+## Reuse This Pattern
 
-要为你自己的场景创建 AI 专家：
+To create an AI expert for your own scenario:
 
-1. `acli example download dashscope-sdk-expert`（合并到你的项目 `./.acli/`）
-2. 修改 `.acli/system-prompt.md` — 定义你的 Agent 人设
-3. 修改 `.acli/skills/` — 添加你的领域知识与技能模板（模型按需加载）
-4. 修改 `.acli/config.toml` — 选择合适的模型
-5. 运行 `acli`
+1. `acli example download dashscope-sdk-expert` (merges into your project's `./.acli/`)
+2. Edit `.acli/system-prompt.md` — define your agent persona
+3. Edit `.acli/skills/` — add your domain knowledge and skill templates (loaded by the model on demand)
+4. Edit `.acli/config.toml` — choose a suitable model
+5. Run `acli`
 
-## 设计启示
+## Design Takeaways
 
-| 传统方式 | acli 配置化方式 |
+| Traditional Approach | acli Configuration Approach |
 |---------|---------------|
-| 代码中硬编码 prompt | `system-prompt.md` 文件 |
-| if-else 分支处理不同场景 | `skills/*.md` 模板库 |
-| 大文档全量塞进 prompt | `skills/` 领域知识按需加载 |
-| 修改代码才能调整行为 | 编辑 Markdown 即可 |
-| 无法共享和复用 | 整个 `.acli/` 目录可迁移 |
+| Prompts hardcoded in code | `system-prompt.md` file |
+| if-else branches for different scenarios | `skills/*.md` template library |
+| Entire large docs stuffed into the prompt | `skills/` domain knowledge loaded on demand |
+| Code changes required to adjust behavior | Just edit Markdown |
+| Hard to share and reuse | Entire `.acli/` directory is portable |

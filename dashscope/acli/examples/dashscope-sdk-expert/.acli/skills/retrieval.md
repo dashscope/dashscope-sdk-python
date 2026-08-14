@@ -121,7 +121,7 @@ import com.alibaba.dashscope.embeddings.*;
 TextEmbedding embedding = new TextEmbedding();
 TextEmbeddingParam param = TextEmbeddingParam.builder()
         .model("text-embedding-v3")
-        .texts(java.util.Arrays.asList("你好", "世界"))
+        .texts(java.util.Arrays.asList("hello", "world"))
         .build();
 TextEmbeddingResult result = embedding.call(param);
 double[] vector = result.getOutput().getEmbeddings().get(0).getEmbedding().stream()

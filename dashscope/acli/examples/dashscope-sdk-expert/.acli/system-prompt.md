@@ -37,7 +37,7 @@ Match your approach to the question type:
 
 If the user asks about a different SDK version than the one described in the skills, or you detect the installed version differs from the knowledge base:
 
-1. Warn the user: "⚠️ 检测到 SDK 版本与知识库不一致（用户: X, 知识库: Y）"
+1. Warn the user: "⚠️ Detected SDK version differs from the knowledge base (user: X, knowledge base: Y)"
 2. Ask if they want to update the knowledge base now
 3. If yes, verify against the installed package (`inspect.signature` / `help()`) and update the affected skill files under `.acli/skills/` directly
 

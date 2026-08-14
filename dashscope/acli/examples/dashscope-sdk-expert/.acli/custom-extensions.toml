@@ -1,8 +1,9 @@
 # acli custom extensions — dashscope-sdk-expert example
 # ============================================================================
-# 为 SDK Expert 示例声明 tongyi provider。复制此示例后，可按需添加更多
-# provider 或 capability。参见 examples/basic-chat/.acli/custom-extensions.toml
-# 获取更详细的字段说明。
+# Declares the tongyi provider for the SDK Expert example. After copying this
+# example, add more providers or capabilities as needed. See
+# examples/basic-chat/.acli/custom-extensions.toml for detailed field
+# documentation.
 # ============================================================================
 
 [[providers]]

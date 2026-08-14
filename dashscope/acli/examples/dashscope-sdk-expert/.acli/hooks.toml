@@ -16,10 +16,10 @@ message = "{timestamp} | wrote {filename}"
 match = "run_command"
 content_pattern = "*pip*install*"
 action = "confirm"
-message = "即将执行 pip 安装，确认吗？"
+message = "About to run a pip install. Continue?"
 
 [[hooks.on_error]]
 match = "*"
 content_pattern = "*ModuleNotFoundError*"
 action = "warn"
-message = "检测到模块缺失。先检查 dashscope 是否已安装：pip show dashscope"
+message = "Missing module detected. Check whether dashscope is installed first: pip show dashscope"

@@ -89,7 +89,7 @@ import com.alibaba.dashscope.app.*;
 
 Application app = new Application();
 ApplicationParam param = ApplicationParam.builder()
-        .appId("YOUR_APP_ID").prompt("你好").build();
+        .appId("YOUR_APP_ID").prompt("hello").build();
 ApplicationResult result = app.call(param);
 String text = result.getOutput().getText();
 ```
