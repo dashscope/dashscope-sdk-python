@@ -19,15 +19,16 @@ def _handle_session_command(cmd: str, config, agent) -> None:
     if len(parts) == 1:
         # Show current topic
         current = session_mgr.get_current_topic()
-        console.print(f"[bold]当前会话[/bold]: {current}")
+        console.print(f"[bold]Current session[/bold]: {current}")
         console.print(
-            "\n[dim]用法:\n"
-            "  /session              — 显示当前主题\n"
-            "  /session new [name]   — 新建会话（默认 default）\n"
-            "  /session list         — 列出所有会话\n"
-            "  /session switch <n>   — 切换到指定主题\n"
-            "  /session rename <old> <new> — 重命名\n"
-            "  /session remove <n>   — 删除会话（default 不可删）[/dim]",
+            "\n[dim]Usage:\n"
+            "  /session              — show current topic\n"
+            "  /session new [name]   — new session (default: default)\n"
+            "  /session list         — list all sessions\n"
+            "  /session switch <n>   — switch to a topic\n"
+            "  /session rename <old> <new> — rename\n"
+            "  /session remove <n>   — remove session "
+            "(default cannot be removed)[/dim]",
         )
         return
 
@@ -43,35 +44,38 @@ def _handle_session_command(cmd: str, config, agent) -> None:
             # Reset agent and switch to new topic
             agent.reset()
             agent.session_path = session_mgr.get_history_path(topic)
-            console.print(f"[green]已创建并切换到新会话: {topic}[/green]")
+            console.print(
+                f"[green]Created and switched to new session: "
+                f"{topic}[/green]",
+            )
         else:
             console.print(
-                f"[yellow]会话 '{topic}' 已存在，使用 "
-                f"/session switch {topic} 切换[/yellow]",
+                f"[yellow]Session '{topic}' already exists; use "
+                f"/session switch {topic} to switch[/yellow]",
             )
 
     elif subcmd == "list":
         topics = session_mgr.list_topics()
         if not topics:
-            console.print("[dim]暂无会话[/dim]")
+            console.print("[dim]No sessions yet[/dim]")
         else:
             current = session_mgr.get_current_topic()
-            console.print(f"[bold]会话列表[/bold] ({len(topics)} 个):")
+            console.print(f"[bold]Session list[/bold] ({len(topics)}):")
             for meta in topics:
-                marker = " ← 当前" if meta.topic == current else ""
+                marker = " ← current" if meta.topic == current else ""
                 accessed = (
                     meta.last_accessed[:16] if meta.last_accessed else ""
                 )
                 console.print(f"  • [cyan]{meta.topic}[/cyan]{marker}")
                 console.print(
-                    f"    [dim]{meta.message_count} 条消息, "
-                    f"最后访问: {accessed}[/dim]",
+                    f"    [dim]{meta.message_count} messages, "
+                    f"last accessed: {accessed}[/dim]",
                 )
 
     elif subcmd == "switch":
         topic = parts[2] if len(parts) > 2 else ""
         if not topic:
-            console.print("[dim]用法: /session switch <主题名>[/dim]")
+            console.print("[dim]Usage: /session switch <topic>[/dim]")
             return
 
         if session_mgr.set_current_topic(topic):
@@ -83,21 +87,24 @@ def _handle_session_command(cmd: str, config, agent) -> None:
             agent.reset()
             agent.session_path = session_mgr.get_history_path(topic)
             restored = agent.load_session()
-            console.print(f"[green]已切换到会话: {topic}[/green]")
+            console.print(f"[green]Switched to session: {topic}[/green]")
             if restored:
-                console.print(f"  [dim]已恢复 {restored} 条历史消息[/dim]")
+                console.print(
+                    f"  [dim]Restored {restored} " f"history messages[/dim]",
+                )
         else:
             console.print(
-                f"[red]会话 '{topic}' 不存在，使用 /session list 查看可用会话[/red]",
+                f"[red]Session '{topic}' does not exist; "
+                f"see /session list for available sessions[/red]",
             )
 
     elif subcmd == "rename":
         if len(parts) < 3:
-            console.print("[dim]用法: /session rename <旧名> <新名>[/dim]")
+            console.print("[dim]Usage: /session rename <old> <new>[/dim]")
             return
         old_new = parts[2].split(maxsplit=1)
         if len(old_new) < 2:
-            console.print("[dim]用法: /session rename <旧名> <新名>[/dim]")
+            console.print("[dim]Usage: /session rename <old> <new>[/dim]")
             return
         old_name, new_name = old_new
 
@@ -108,34 +115,36 @@ def _handle_session_command(cmd: str, config, agent) -> None:
             # appending to the renamed topic instead of the old path.
             if was_current and agent.session_path:
                 agent.session_path = session_mgr.get_history_path(new_name)
-            console.print(f"[green]已重命名: {old_name} → {new_name}[/green]")
+            console.print(f"[green]Renamed: {old_name} → {new_name}[/green]")
         else:
             console.print(
-                f"[red]重命名失败：'{old_name}' 不存在或 '{new_name}' 已存在[/red]",
+                f"[red]Rename failed: '{old_name}' does not exist "
+                f"or '{new_name}' already exists[/red]",
             )
 
     elif subcmd == "remove":
         topic = parts[2] if len(parts) > 2 else ""
         if not topic:
-            console.print("[dim]用法: /session remove <主题名>[/dim]")
+            console.print("[dim]Usage: /session remove <topic>[/dim]")
             return
 
         if topic == "default":
-            console.print("[yellow]不能删除 default 会话[/yellow]")
+            console.print("[yellow]Cannot delete the default session[/yellow]")
             return
 
         if session_mgr.delete_topic(topic):
-            console.print(f"[green]已删除会话: {topic}[/green]")
+            console.print(f"[green]Removed session: {topic}[/green]")
         else:
-            console.print(f"[red]会话 '{topic}' 不存在[/red]")
+            console.print(f"[red]Session '{topic}' does not exist[/red]")
 
     else:
         console.print(
-            "[dim]用法:\n"
-            "  /session              — 显示当前主题\n"
-            "  /session new [name]   — 新建会话（默认 default）\n"
-            "  /session list         — 列出所有会话\n"
-            "  /session switch <n>   — 切换到指定主题\n"
-            "  /session rename <old> <new> — 重命名\n"
-            "  /session remove <n>   — 删除会话（default 不可删）[/dim]",
+            "[dim]Usage:\n"
+            "  /session              — show current topic\n"
+            "  /session new [name]   — new session (default: default)\n"
+            "  /session list         — list all sessions\n"
+            "  /session switch <n>   — switch to a topic\n"
+            "  /session rename <old> <new> — rename\n"
+            "  /session remove <n>   — remove session "
+            "(default cannot be removed)[/dim]",
         )

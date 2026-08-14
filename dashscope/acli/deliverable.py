@@ -143,7 +143,7 @@ def surface_deliverables(
         return
 
     console.print()
-    console.print("[dim]─ 生成文件 ─[/dim]")
+    console.print("[dim]─ Generated files ─[/dim]")
     for path in deliverables:
         rel = (
             path.relative_to(Path.cwd())
@@ -166,4 +166,6 @@ def surface_deliverables(
                 except Exception:
                     pass
 
-    console.print("[dim]  提示: 用 /open <路径> 或在系统文件管理器中查看[/dim]")
+    console.print(
+        "[dim]  Tip: use /open <path> or view in your file manager[/dim]",
+    )

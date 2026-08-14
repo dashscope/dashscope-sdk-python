@@ -33,7 +33,7 @@ def truncate_text(text: str, max_chars: int) -> str:
     tail = max_chars - head
     return (
         text[:head]
-        + f"\n... [截断 {len(text) - max_chars} 字符] ...\n"
+        + (f"\n... [truncated {len(text) - max_chars} chars] ...\n")
         + text[-tail:]
     )
 
@@ -51,7 +51,10 @@ def truncate_head_tail(text: str, max_chars: int, ratio: float = 0.6) -> str:
     tail_len = max_chars - head_len
     head = text[:head_len]
     tail = text[-tail_len:] if tail_len > 0 else ""
-    return f"{head}\n\n... [省略 {len(text) - max_chars} 字符] ...\n\n{tail}"
+    return (
+        f"{head}\n\n... [omitted {len(text) - max_chars} chars]"
+        f" ...\n\n{tail}"
+    )
 
 
 _FRONTMATTER_RE = re.compile(
@@ -94,9 +97,9 @@ def truncate_value(value: str) -> str:
     # Build summary
     parts = []
     if total_lines > _MAX_DISPLAY_LINES:
-        parts.append(f"共 {total_lines} 行")
+        parts.append(f"{total_lines} lines")
     if total_chars > _MAX_DISPLAY_CHARS:
-        parts.append(f"共 {total_chars} 字符")
-    summary = f"  ... (省略, {', '.join(parts)})"
+        parts.append(f"{total_chars} chars")
+    summary = f"  ... (omitted, {', '.join(parts)})"
 
     return kept + "\n" + summary

@@ -33,7 +33,7 @@ _USER_AGENT = (
 )
 
 _PLAYWRIGHT_INSTALL_HINT = (
-    "错误: 未安装 playwright。请运行 "
+    "Error: playwright is not installed. Run "
     "`pip install playwright && playwright install chromium`"
 )
 
@@ -64,10 +64,13 @@ def _validate_url(url: str) -> str:
     """
     parsed = urlparse(url)
     if parsed.scheme not in _ALLOWED_SCHEMES:
-        raise ValueError(f"不允许的 URL scheme '{parsed.scheme}'，仅支持 http/https")
+        raise ValueError(
+            f"URL scheme '{parsed.scheme}' is not allowed; "
+            f"only http/https are supported",
+        )
     hostname = parsed.hostname
     if not hostname:
-        raise ValueError("URL 缺少主机名")
+        raise ValueError("URL is missing a hostname")
 
     # Block raw IP addresses pointing to private ranges directly.
     _is_ip = False
@@ -80,7 +83,10 @@ def _validate_url(url: str) -> str:
             or ip.is_link_local
             or ip.is_reserved
         ):
-            raise ValueError(f"不允许访问内部网络地址 {hostname}（SSRF 防护）")
+            raise ValueError(
+                f"Access to internal network address {hostname} "
+                f"is not allowed (SSRF protection)",
+            )
         return url
     except ValueError:
         if _is_ip:
@@ -92,7 +98,9 @@ def _validate_url(url: str) -> str:
     try:
         infos = socket.getaddrinfo(hostname, port)
     except socket.gaierror as exc:
-        raise ValueError(f"无法解析主机名 '{hostname}': {exc}") from exc
+        raise ValueError(
+            f"Cannot resolve hostname '{hostname}': {exc}",
+        ) from exc
 
     for _family, _, _, _, sockaddr in infos:
         ip_str = sockaddr[0]
@@ -106,7 +114,10 @@ def _validate_url(url: str) -> str:
             or ip.is_link_local
             or ip.is_reserved
         ):
-            raise ValueError(f"不允许访问内部网络地址 {ip_str}（SSRF 防护）")
+            raise ValueError(
+                f"Access to internal network address {ip_str} "
+                f"is not allowed (SSRF protection)",
+            )
     return url
 
 
@@ -121,7 +132,10 @@ def _validate_screenshot_path(output_path: str) -> str:
     resolved = os.path.realpath(output_path)
     cwd = os.path.realpath(".")
     if not resolved.startswith(cwd + os.sep) and resolved != cwd:
-        raise ValueError(f"截图路径 '{output_path}' 不在当前工作目录内（路径穿越防护）")
+        raise ValueError(
+            f"Screenshot path '{output_path}' is outside the current "
+            f"working directory (path traversal protection)",
+        )
     # Ensure parent directory exists.
     parent = os.path.dirname(resolved)
     if parent:
@@ -143,7 +157,10 @@ def _validate_selector(selector: str) -> str:
     # Block obvious injection vectors
     dangerous = {"`", ";", "${", "javascript:", "<script", "eval(", "alert("}
     if any(d in selector for d in dangerous):
-        raise ValueError(f"CSS 选择器包含可疑内容: '{selector[:50]}...'")
+        raise ValueError(
+            f"CSS selector contains suspicious content: "
+            f"'{selector[:50]}...'",
+        )
     return selector
 
 
@@ -332,8 +349,9 @@ async def _navigate_and_wait(
 @tool(
     name="scrape_web",
     description=(
-        "用 Playwright 无头浏览器抓取网页内容（支持 JS 动态渲染的 SPA "
-        "页面）。返回页面的纯文本内容。可指定等待选择器、超时时间等。"
+        "Scrape web page content with a Playwright headless browser "
+        "(supports JS-rendered SPA pages). Returns the page's plain "
+        "text. Optional wait selector, timeout, etc."
     ),
     permission=PermissionLevel.AUTO,
 )
@@ -354,7 +372,7 @@ async def scrape_web(
         _validate_url(url)
         wait_selector = _validate_selector(wait_selector)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
 
     try:
         async with _launch_page(timeout=timeout) as page:
@@ -364,7 +382,7 @@ async def scrape_web(
     except ImportError as e:
         return str(e)
     except Exception as e:
-        return f"错误: 网页抓取失败 — {e}"
+        return f"Error: web scraping failed — {e}"
 
     # Clean up excessive whitespace
     lines = [line.strip() for line in content.splitlines() if line.strip()]
@@ -372,7 +390,7 @@ async def scrape_web(
 
     max_len = 50_000
     if len(text) > max_len:
-        text = text[:max_len] + "\n...(内容已截断)"
+        text = text[:max_len] + "\n...(content truncated)"
 
     result = ""
     if title:
@@ -383,7 +401,11 @@ async def scrape_web(
 
 @tool(
     name="scrape_web_html",
-    description="用 Playwright 无头浏览器抓取网页的 HTML 源码（支持 JS 动态渲染）。返回渲染后的完整 HTML。",
+    description=(
+        "Scrape a web page's HTML source with a Playwright headless "
+        "browser (supports JS-rendered pages). Returns the fully "
+        "rendered HTML."
+    ),
     permission=PermissionLevel.AUTO,
 )
 async def scrape_web_html(
@@ -403,7 +425,7 @@ async def scrape_web_html(
         _validate_url(url)
         wait_selector = _validate_selector(wait_selector)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
 
     try:
         async with _launch_page(timeout=timeout) as page:
@@ -412,17 +434,21 @@ async def scrape_web_html(
     except ImportError as e:
         return str(e)
     except Exception as e:
-        return f"错误: 网页抓取失败 — {e}"
+        return f"Error: web scraping failed — {e}"
 
     max_len = 80_000
     if len(html) > max_len:
-        html = html[:max_len] + "\n...(HTML 已截断)"
+        html = html[:max_len] + "\n...(HTML truncated)"
     return html
 
 
 @tool(
     name="scrape_web_screenshot",
-    description="用 Playwright 无头浏览器对网页截图并保存为图片文件。适合查看页面视觉布局。",
+    description=(
+        "Take a screenshot of a web page with a Playwright headless "
+        "browser and save it as an image file. Useful for inspecting "
+        "visual layout."
+    ),
     permission=PermissionLevel.AUTO,
 )
 async def scrape_web_screenshot(
@@ -447,7 +473,7 @@ async def scrape_web_screenshot(
         wait_selector = _validate_selector(wait_selector)
         output_path = _validate_screenshot_path(output_path)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
 
     try:
         async with _launch_page(
@@ -459,6 +485,9 @@ async def scrape_web_screenshot(
     except ImportError as e:
         return str(e)
     except Exception as e:
-        return f"错误: 截图失败 — {e}"
+        return f"Error: screenshot failed — {e}"
 
-    return f"截图已保存到 {output_path}，可用 @路径 引用图片发给视觉模型分析。"
+    return (
+        f"Screenshot saved to {output_path}. Reference it with @path "
+        f"to send the image to a vision model for analysis."
+    )

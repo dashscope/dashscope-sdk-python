@@ -96,7 +96,7 @@ def load_permissions_file(policy: PermissionPolicy, path: Path) -> list[str]:
     ):
         entries = data.get(section, {})
         if not isinstance(entries, dict):
-            errors.append(f"{path}: [{section}] 必须是表")
+            errors.append(f"{path}: [{section}] must be a table")
             continue
         for key, decision in entries.items():
             try:

@@ -110,7 +110,7 @@ def handle_subagents_command(cmd: str, config: Config) -> None:
         _subagents_config(config, args)
     else:
         console.print(
-            "[dim]用法: /subagents [list|reload|enable <name>|disable "
+            "[dim]Usage: /subagents [list|reload|enable <name>|disable "
             "<name>|config <name> [key value]][/dim]",
         )
 
@@ -118,11 +118,11 @@ def handle_subagents_command(cmd: str, config: Config) -> None:
 def _subagents_list(config: Config) -> None:
     """List all discovered subagents with status."""
     subagents = discover_subagents(config)
-    console.print("[bold]可用子代理:[/bold]")
+    console.print("[bold]Available subagents:[/bold]")
     console.print("=" * 50)
 
     if not subagents:
-        console.print("[dim]  (未发现子代理)[/dim]")
+        console.print("[dim]  (no subagents found)[/dim]")
         return
 
     for a in subagents:
@@ -146,7 +146,9 @@ def _subagents_list(config: Config) -> None:
             f"[{a.source}/{a.category}]{cfg_str}[/dim]",
         )
 
-    console.print("\n[dim]用法: /subagents enable|disable|config <name>[/dim]")
+    console.print(
+        "\n[dim]Usage: /subagents enable|disable|config <name>[/dim]",
+    )
 
 
 def _subagents_reload(config: Config) -> None:
@@ -160,30 +162,33 @@ def _subagents_reload(config: Config) -> None:
 
     ext = apply_extensions(PROVIDER_MODELS)
     sync_extensions_into_catalog(ext)
-    console.print("[green]✓ 已重新加载子代理注册表[/green]")
+    console.print("[green]✓ Subagent registry reloaded[/green]")
 
 
 def _subagents_enable(config: Config, args: list[str]) -> None:
     """Enable a specific subagent."""
     if not args:
-        console.print("[red]缺少子代理名称[/red]")
-        console.print("[dim]用法: /subagents enable <name>[/dim]")
+        console.print("[red]Missing subagent name[/red]")
+        console.print("[dim]Usage: /subagents enable <name>[/dim]")
         return
 
     key = args[0]
     if key not in SUBAGENT_CAPABILITY_KEYS:
-        console.print(f"[red]未知子代理: {key}[/red]")
+        console.print(f"[red]Unknown subagent: {key}[/red]")
         console.print(
-            f"[dim]可选: {', '.join(sorted(SUBAGENT_CAPABILITY_KEYS))}[/dim]",
+            f"[dim]Options: "
+            f"{', '.join(sorted(SUBAGENT_CAPABILITY_KEYS))}[/dim]",
         )
         return
 
     if config.enabled_capabilities is None:
-        console.print(f"[dim]{key} 已启用（全部启用状态）[/dim]")
+        console.print(
+            f"[dim]{key} already enabled (all-enabled state)[/dim]",
+        )
         return
 
     if key in config.enabled_capabilities:
-        console.print(f"[dim]{key} 已启用[/dim]")
+        console.print(f"[dim]{key} already enabled[/dim]")
         return
 
     config.enabled_capabilities.append(key)
@@ -191,22 +196,23 @@ def _subagents_enable(config: Config, args: list[str]) -> None:
     from dashscope.acli.tools.platform import register_one_capability
 
     added = register_one_capability(config, key)
-    suffix = f" ({added} 个工具已注册)" if added else ""
-    console.print(f"[green]✓ 已启用: {key}[/green]{suffix}")
+    suffix = f" ({added} tools registered)" if added else ""
+    console.print(f"[green]✓ Enabled: {key}[/green]{suffix}")
 
 
 def _subagents_disable(config: Config, args: list[str]) -> None:
     """Disable a specific subagent."""
     if not args:
-        console.print("[red]缺少子代理名称[/red]")
-        console.print("[dim]用法: /subagents disable <name>[/dim]")
+        console.print("[red]Missing subagent name[/red]")
+        console.print("[dim]Usage: /subagents disable <name>[/dim]")
         return
 
     key = args[0]
     if key not in SUBAGENT_CAPABILITY_KEYS:
-        console.print(f"[red]未知子代理: {key}[/red]")
+        console.print(f"[red]Unknown subagent: {key}[/red]")
         console.print(
-            f"[dim]可选: {', '.join(sorted(SUBAGENT_CAPABILITY_KEYS))}[/dim]",
+            f"[dim]Options: "
+            f"{', '.join(sorted(SUBAGENT_CAPABILITY_KEYS))}[/dim]",
         )
         return
 
@@ -219,14 +225,17 @@ def _subagents_disable(config: Config, args: list[str]) -> None:
     elif key in config.enabled_capabilities:
         config.enabled_capabilities.remove(key)
     else:
-        console.print(f"[dim]{key} 未启用[/dim]")
+        console.print(f"[dim]{key} not enabled[/dim]")
         return
 
     config.save_workspace()
     from dashscope.acli.tools.platform import unregister_capability_tools
 
     removed = unregister_capability_tools(key)
-    console.print(f"[yellow]✗ 已禁用: {key}[/yellow] ({removed} 个工具已撤销)")
+    console.print(
+        f"[yellow]✗ Disabled: {key}[/yellow] "
+        f"({removed} tools unregistered)",
+    )
 
 
 def _subagents_config(config: Config, args: list[str]) -> None:
@@ -240,23 +249,28 @@ def _subagents_config(config: Config, args: list[str]) -> None:
     """
     if not args:
         # Show all subagent configs
-        console.print("[bold]子代理配置:[/bold]")
+        console.print("[bold]Subagent configs:[/bold]")
         for key in SUBAGENT_CAPABILITY_KEYS:
             cfg = config.subagents.get(key)
             if cfg:
                 console.print(f"  [cyan]{key}[/cyan]")
-                console.print(f"    model: {cfg.model or '(默认)'}")
-                console.print(f"    temperature: {cfg.temperature or '(默认)'}")
-                console.print(f"    max_turns: {cfg.max_turns or '(默认)'}")
+                console.print(f"    model: {cfg.model or '(default)'}")
+                console.print(
+                    f"    temperature: {cfg.temperature or '(default)'}",
+                )
+                console.print(
+                    f"    max_turns: {cfg.max_turns or '(default)'}",
+                )
             else:
-                console.print(f"  [dim]{key}: (无自定义配置)[/dim]")
+                console.print(f"  [dim]{key}: (no custom config)[/dim]")
         return
 
     key = args[0]
     if key not in SUBAGENT_CAPABILITY_KEYS:
-        console.print(f"[red]未知子代理: {key}[/red]")
+        console.print(f"[red]Unknown subagent: {key}[/red]")
         console.print(
-            f"[dim]可选: {', '.join(sorted(SUBAGENT_CAPABILITY_KEYS))}[/dim]",
+            f"[dim]Options: "
+            f"{', '.join(sorted(SUBAGENT_CAPABILITY_KEYS))}[/dim]",
         )
         return
 
@@ -265,20 +279,20 @@ def _subagents_config(config: Config, args: list[str]) -> None:
         from dashscope.acli.config import SubagentConfig
 
         cfg = config.subagents.get(key, SubagentConfig())
-        console.print(f"[bold]{key} 配置:[/bold]")
-        console.print(f"  model: {cfg.model or '(默认)'}")
-        console.print(f"  temperature: {cfg.temperature or '(默认)'}")
-        console.print(f"  max_turns: {cfg.max_turns or '(默认)'}")
+        console.print(f"[bold]{key} config:[/bold]")
+        console.print(f"  model: {cfg.model or '(default)'}")
+        console.print(f"  temperature: {cfg.temperature or '(default)'}")
+        console.print(f"  max_turns: {cfg.max_turns or '(default)'}")
         console.print(
-            f"\n[dim]用法: /subagents config {key} "
+            f"\n[dim]Usage: /subagents config {key} "
             f"<model|temperature|max_turns> <value>[/dim]",
         )
         return
 
     if len(args) < 3:
-        console.print("[red]缺少值[/red]")
+        console.print("[red]Missing value[/red]")
         console.print(
-            f"[dim]用法: /subagents config {key} "
+            f"[dim]Usage: /subagents config {key} "
             f"<model|temperature|max_turns> <value>[/dim]",
         )
         return
@@ -292,26 +306,30 @@ def _subagents_config(config: Config, args: list[str]) -> None:
         try:
             temp = float(cfg_val)
             if not 0.0 <= temp <= 2.0:
-                console.print("[red]temperature 必须在 0.0-2.0 之间[/red]")
+                console.print(
+                    "[red]temperature must be between 0.0-2.0[/red]",
+                )
                 return
             set_subagent_config(config, key, temperature=temp)
         except ValueError:
-            console.print("[red]temperature 必须是数字[/red]")
+            console.print("[red]temperature must be a number[/red]")
             return
     elif cfg_key == "max_turns":
         try:
             turns = int(cfg_val)
             if not 1 <= turns <= 100:
-                console.print("[red]max_turns 必须在 1-100 之间[/red]")
+                console.print(
+                    "[red]max_turns must be between 1-100[/red]",
+                )
                 return
             set_subagent_config(config, key, max_turns=turns)
         except ValueError:
-            console.print("[red]max_turns 必须是整数[/red]")
+            console.print("[red]max_turns must be an integer[/red]")
             return
     else:
-        console.print(f"[red]未知配置项: {cfg_key}[/red]")
-        console.print("[dim]可选: model, temperature, max_turns[/dim]")
+        console.print(f"[red]Unknown config key: {cfg_key}[/red]")
+        console.print("[dim]Options: model, temperature, max_turns[/dim]")
         return
 
     config.save_workspace()
-    console.print(f"[green]✓ 已更新 {key}.{cfg_key} = {cfg_val}[/green]")
+    console.print(f"[green]✓ Updated {key}.{cfg_key} = {cfg_val}[/green]")

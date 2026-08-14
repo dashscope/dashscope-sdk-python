@@ -39,10 +39,13 @@ from dashscope.acli.utils import (
 console = Console()
 
 # Tool results are plain strings; outcome classification relies on these
-# prefixes. "错误" marks validation / unknown-tool failures, EXEC_ERROR_PREFIX
-# marks executor exceptions, "操作已取消" marks user rejection/cancellation.
-_TOOL_ERROR_PREFIXES = ("错误", EXEC_ERROR_PREFIX)
-_TOOL_CANCEL_PREFIX = "操作已取消"
+# prefixes. "Error" marks validation / unknown-tool failures,
+# EXEC_ERROR_PREFIX marks executor exceptions, "Cancelled" marks user
+# rejection/cancellation. The Chinese variants are kept so results from
+# external tools / MCP servers that still return Chinese text are also
+# classified correctly.
+_TOOL_ERROR_PREFIXES = ("错误", "Error", EXEC_ERROR_PREFIX)
+_TOOL_CANCEL_PREFIXES = ("操作已取消", "Cancelled")
 
 
 def _classify_outcome(successes: int, failures: int) -> str:
@@ -58,44 +61,70 @@ def _classify_outcome(successes: int, failures: int) -> str:
     return "partial"
 
 
-SYSTEM_PROMPT = """你是 acli，一个智能命令行助手。用户说需求，你来执行——不要让用户自己敲命令。
+SYSTEM_PROMPT = """You are acli, an intelligent command-line assistant.
+The user states what they need and you execute it — never make the user
+run commands themselves.
 
-核心原则：**用户说，你就做。** 你有完整的工具能力来完成用户的请求，直接调用工具执行，不要建议用户去输入斜杠命令。
+Core principle: **the user speaks, you act.** You have full tool access to
+fulfill user requests; call tools directly instead of suggesting slash
+commands.
 
-规则：
-1. 只使用工具列表中存在的工具，绝不猜测或编造工具名
-2. 文件路径只使用当前工作目录、用户明确给出的路径、或相对当前工作目录的相对路径。
-   绝不编造、猜测或使用训练数据中出现的路径（如 /Users/xxx/...）
-3. 对于明确意图的请求（如 git commit、读文件、搜索、修改代码），直接调用工具执行，
-   无需先说明计划等确认。只有涉及不可逆操作（删除、覆盖、force push）或多步复杂任务时，
-   才先简要说明并等用户确认
-4. 如果任务需要多步操作，逐步执行并汇报进度
-5. 工具调用失败时不要重试同一个调用，直接向用户报告错误并给出建议
-6. 带 [MCP:xxx] 前缀的工具来自百炼 MCP 服务，可直接调用
-7. 如果"用户档案"中有信息，务必结合这些信息给出个性化回答（如用户用 Python 就推荐 Python 方案）
-8. 用户问题命中下方"可用 Skill 模板"时，优先按对应方式响应——若 Skill 依赖的
-   MCP 已连接，直接调相关工具；未连接则先用 mcp_connect 工具连接再调
-9. 当用户提问可能与个人偏好、技术栈、工作环境相关时，主动用 memory_search 搜索档案补充上下文
-10. 如果没有合适的工具可以完成任务，直接用你的知识回答，不要尝试调用不存在的工具
-11. 用户想切换模型/Provider → 直接调 switch_model 或 switch_provider
-12. 用户想连接云端服务（时间、代码执行、文档解析等）→ 直接调 mcp_connect
-13. 用户想开启/关闭能力 → 直接调 capability_enable / capability_disable
-14. 永远不要回复"请使用 /xxx 命令"——如果你有工具能做，就直接做
-15. **不要用 run_command 执行 python3 -c 内联脚本来读写文件**，这很低效。
-   读文件用 read_file，写文件用 write_file；sed/grep 等 shell 工具可以正常使用
-16. **如果用户的问题可以直接回答（不需要文件、命令、外部信息），直接用你的知识回答，不要调用工具**。例如：自我介绍、解释概念、翻译文本、闲聊等
-17. **多个相互独立的子任务（如"查看这 2 个文件"、一次给几个无关任务）→ 直接调
-   delegate_parallel 并行委派子代理**，或在同一回合并行发多个 delegate；
-   单个独立但过程冗长的子任务（整文件审查、多文件扫描）→ 调 subagent_invoke
-   隔离执行，只取回结论。不要自己串行逐个处理
+Rules:
+1. Only use tools that exist in the tool list; never guess or invent tool names
+2. Only use file paths inside the current working directory, paths explicitly
+   given by the user, or paths relative to the CWD. Never invent, guess, or
+   reuse paths seen in training data (e.g. /Users/xxx/...)
+3. For clear-intent requests (git commit, read file, search, edit code), call
+   tools directly without stating a plan first. Only for irreversible
+   operations (delete, overwrite, force push) or complex multi-step tasks,
+   briefly explain and wait for user confirmation
+4. If a task needs multiple steps, execute them one by one and report progress
+5. When a tool call fails, do not retry the same call; report the error to
+   the user with a suggestion
+6. Tools prefixed [MCP:xxx] come from Bailian MCP services; call them directly
+7. If the "user profile" contains info, personalize answers with it (e.g.
+   recommend Python solutions for a Python user)
+8. When a request matches an "available Skill template" below, prefer that
+   flow — if the Skill's MCP is connected, call its tools directly; if not,
+   connect first with mcp_connect, then call
+9. When a question may involve personal preferences, tech stack, or work
+   environment, proactively search the profile with memory_search for context
+10. If no suitable tool can complete the task, answer from your knowledge;
+    never call a nonexistent tool
+11. To switch model/Provider → call switch_model or switch_provider directly
+12. To use cloud services (time, code execution, doc parsing, etc.) → call
+    mcp_connect directly
+13. To enable/disable capabilities → call capability_enable /
+    capability_disable directly
+14. Never reply "please use the /xxx command" — if you have a tool that can
+    do it, just do it
+15. **Do not use run_command with python3 -c inline scripts to read/write
+    files** — it is inefficient. Read with read_file, write with write_file;
+    shell tools like sed/grep are fine to use
+16. **If a question can be answered directly (no files, commands, or external
+    info needed), answer from your knowledge without calling tools** — e.g.
+    self-introduction, explaining concepts, translating text, small talk
+17. **Multiple independent subtasks (e.g. "look at these 2 files", several
+    unrelated tasks at once) → call delegate_parallel to fan out subagents**,
+    or send multiple delegate calls in the same turn; a single independent
+    but lengthy subtask (whole-file review, multi-file scan) → call
+    subagent_invoke for isolated execution and take back only the conclusion.
+    Do not grind through them serially yourself
 
-回复风格：
-- **简洁**。不要写"让我看看 / 测试一下 / 验证一下 / 让我帮你 / 我来分析下"之类的过场白和元说明；直接做事或直接给答案
-- **一次到位**。读文件用 read_file（必要时给 offset/limit 取大段），不要用 python3 -c 内联脚本做文件读写
-- **批量并行**。同一目的的多个独立 tool 调用尽量在同一回合并行发出，不要串行一个一个调
-- **不重复确认**。已经读过/查过的事实不要再读第二遍；工具失败一次就直接报错给用户，不要换写法重试同一动作
-- 用户不要求时不主动总结你刚做完的事——他能看到 diff / 输出
-- 用户的输入可能来自语音转写（/v 命令），直接理解其意图即可，不要评论语音/录音功能本身"""
+Reply style:
+- **Concise**. No filler like "let me see / test this / verify / let me help
+  you / I'll analyze it"; just act or give the answer
+- **One shot**. Read files with read_file (use offset/limit for large spans);
+  never use python3 -c inline scripts for file I/O
+- **Batch in parallel**. Issue multiple independent tool calls for the same
+  purpose in one turn; do not call them one by one serially
+- **No re-confirmation**. Do not re-read facts already fetched; if a tool
+  fails once, report the error to the user instead of retrying a rephrased
+  version of the same action
+- Do not summarize what you just did unless asked — the user can see the
+  diff / output
+- User input may come from voice transcription (/v command); just understand
+  the intent and do not comment on the voice/recording feature itself"""
 
 
 class Agent:
@@ -316,7 +345,7 @@ class Agent:
             ):
                 self._reflection_lesson_recorded = True
                 self.memory_manager.record_experience(
-                    task_summary="工具连续失败",
+                    task_summary="repeated tool failures",
                     tools_used=self._current_turn_tools,
                     outcome="failure",
                     lesson=lesson,
@@ -342,7 +371,7 @@ class Agent:
             if not nodes:
                 return ""
             parts = [f"- {n.content}" for n in nodes]
-            return "\n\n用户档案:\n" + "\n".join(parts)
+            return "\n\nUser profile:\n" + "\n".join(parts)
         except Exception:
             return ""
 
@@ -377,7 +406,10 @@ class Agent:
             partial_text = "".join(_partial).strip()
             if partial_text:
                 self.messages.append(
-                    {"role": "assistant", "content": partial_text + " [已中断]"},
+                    {
+                        "role": "assistant",
+                        "content": partial_text + " [interrupted]",
+                    },
                 )
             self.save_session()
             raise
@@ -470,8 +502,8 @@ class Agent:
                         *self.messages,
                     ]
                     console.print(
-                        f"[dim]轮内安全压缩: {old_count} 条消息 → "
-                        f"{len(self.messages)} 条[/dim]",
+                        f"[dim]mid-turn safety compression: {old_count} "
+                        f"messages → {len(self.messages)}[/dim]",
                     )
 
             # Inject reflection hint while repeated failures persist; assign
@@ -579,7 +611,11 @@ class Agent:
                         "create_directory",
                     )
                     if any(h in full_content for h in _TOOL_HINTS):
-                        warn = "\n[响应可能被截断：模型描述了工具操作但未生成完整的工具调用]\n"
+                        warn = (
+                            "\n[Response may be truncated: the model "
+                            "described a tool action but produced no "
+                            "complete tool call]\n"
+                        )
                         full_content += warn
                         yield warn
                     final_msg: dict = {
@@ -591,7 +627,10 @@ class Agent:
                     self.messages.append(final_msg)
                     last_content = full_content
                 else:
-                    yield "\n[模型未返回内容，可能是模型名不存在或服务无响应]\n"
+                    yield (
+                        "\n[Model returned no content; the model name "
+                        "may not exist or the service is unresponsive]\n"
+                    )
                 break
 
             # Handle tool calls
@@ -628,12 +667,12 @@ class Agent:
                         # AUTO tool). Every call still gets a tool message so
                         # tool_call pairing stays intact, then we re-raise.
                         aborted = aborted or result
-                        result = "操作已取消（用户中止本轮对话）"
+                        result = "Cancelled (user aborted this turn)"
                     elif isinstance(result, UserSupplement):
                         supplement_info = result.supplement
-                        result = "操作已取消（用户选择补充信息重新规划）"
+                        result = "Cancelled (user added info to replan)"
                     elif isinstance(result, Exception):
-                        result = f"错误: {result}"
+                        result = f"Error: {result}"
 
                     yield (
                         f"\n[{tool_call.name}] →\n"
@@ -655,8 +694,8 @@ class Agent:
                     supplement_msg = {
                         "role": "user",
                         "content": (
-                            f"[用户补充信息]: {supplement_info}\n"
-                            f"请根据补充信息重新规划并继续执行。"
+                            f"[User supplement]: {supplement_info}\n"
+                            f"Replan with the new info and continue."
                         ),
                     }
                     self.messages.append(supplement_msg)
@@ -691,7 +730,8 @@ class Agent:
                         messages_with_system,
                     )
                     supplement_text = (
-                        f"[用户补充信息]: {e.supplement}\n请根据补充信息重新规划并继续执行。"
+                        f"[User supplement]: {e.supplement}\n"
+                        f"Replan with the new info and continue."
                     )
                     yield f"\n{supplement_text}\n"
                     supplement_msg = {
@@ -710,11 +750,11 @@ class Agent:
                         tool_calls,
                         answered_ids,
                         messages_with_system,
-                        reason="操作已取消（用户中止本轮对话）",
+                        reason="Cancelled (user aborted this turn)",
                     )
                     raise
         else:
-            yield "\n(达到最大轮次限制)"
+            yield "\n(max turn limit reached)"
 
         # Response hook
         await self.hook_bus.dispatch_async(
@@ -789,7 +829,7 @@ class Agent:
     async def _execute_tool(self, tool_call: ToolCall) -> str:
         tool_def = registry.get(tool_call.name)
         if not tool_def:
-            return f"错误: 未知工具 '{tool_call.name}'"
+            return f"Error: unknown tool '{tool_call.name}'"
 
         # Track tool usage for experience recording (deduped, keep
         # first-use order)
@@ -808,7 +848,7 @@ class Agent:
             msg = (
                 before_result.warnings[0]
                 if before_result.warnings
-                else "操作被 hook 阻止"
+                else "blocked by hook"
             )
             from dashscope.acli.audit import get_audit_logger
 
@@ -818,7 +858,7 @@ class Agent:
                 decision="denied",
                 reason=f"hook: {msg}",
             )
-            return f"操作已阻止: {msg}"
+            return f"Blocked: {msg}"
 
         if before_result.confirm:
             from dashscope.acli.tools.registry import ToolDefinition
@@ -842,7 +882,7 @@ class Agent:
                     decision="denied",
                     reason="hook confirm declined",
                 )
-                return "操作已取消"
+                return "Cancelled"
 
         start_time = time.time()
         result = await self.executor.execute(tool_def, tool_call.arguments)
@@ -850,7 +890,7 @@ class Agent:
         success = not result.startswith(
             _TOOL_ERROR_PREFIXES,
         ) and not result.startswith(
-            _TOOL_CANCEL_PREFIX,
+            _TOOL_CANCEL_PREFIXES,
         )
         self.trace_logger.log_tool_execution(
             tool_call.name,
@@ -906,7 +946,7 @@ class Agent:
         )
         # Reflection counts only real failures — user rejection/cancellation
         # is neutral and must not feed the consecutive-failure counter.
-        if not result.startswith(_TOOL_CANCEL_PREFIX):
+        if not result.startswith(_TOOL_CANCEL_PREFIXES):
             self.memory_manager.record_tool_execution(tool_call.name, success)
             if success:
                 self._turn_tool_successes += 1
@@ -943,7 +983,8 @@ class Agent:
             old_count = len(self.messages)
             self.messages = compressed
             console.print(
-                f"[dim]安全压缩: {old_count} 条消息 → {len(self.messages)} 条[/dim]",
+                f"[dim]safety compression: {old_count} messages → "
+                f"{len(self.messages)}[/dim]",
             )
 
     async def _auto_compress(self, extra_tokens: int = 0) -> None:
@@ -966,7 +1007,8 @@ class Agent:
         old_count = len(self.messages)
         self.messages = compressed
         console.print(
-            f"[dim]自动压缩: {old_count} 条消息 → {len(self.messages)} 条[/dim]",
+            f"[dim]auto-compression: {old_count} messages → "
+            f"{len(self.messages)}[/dim]",
         )
 
         # Log compression decision
@@ -1006,7 +1048,7 @@ class Agent:
         tool_calls: list[ToolCall],
         answered_ids: set[str],
         messages_with_system: list[dict],
-        reason: str = "操作已取消（用户选择补充信息重新规划）",
+        reason: str = "Cancelled (user added info to replan)",
     ) -> None:
         """Append synthetic tool responses for tool_calls left unanswered.
 

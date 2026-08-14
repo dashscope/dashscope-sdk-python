@@ -66,32 +66,32 @@ DEFAULT_VOICE: dict[str, str] = {
     "cosyvoice-v1": "longxiaochun",
 }
 
-# Voice display names (Chinese)
+# Voice display names
 VOICE_DISPLAY: dict[str, str] = {
-    "longxiaochun_v2": "知性女声",
-    "longxiaoxia_v2": "甜美女声",
-    "longxiaochen_v2": "青年男声",
-    "longxiaobai_v2": "清新男声",
-    "longlaotie_v2": "东北老铁",
-    "longshu_v2": "暖心男声",
-    "longwan_v2": "活力男声",
-    "longxiang_v2": "磁性男声",
-    "longjing_v2": "播音女声",
-    "longfei_v2": "激昂解说",
-    "longze_v2": "方言男声",
-    "longtong_v2": "可爱童声",
-    "loongstella_v2": "知性女声2",
-    "loongbella_v2": "甜美女生2",
-    "longxiaochun": "知性女声(v1)",
-    "longxiaoxia": "甜美女声(v1)",
-    "longxiaochen": "青年男声(v1)",
-    "longxiaobai": "清新男声(v1)",
-    "longlaotie": "东北老铁(v1)",
-    "longshu": "暖心男声(v1)",
-    "longwan": "活力男声(v1)",
-    "longxiang": "磁性男声(v1)",
-    "longjing": "播音女声(v1)",
-    "longfei": "激昂解说(v1)",
+    "longxiaochun_v2": "Intellectual female",
+    "longxiaoxia_v2": "Sweet female",
+    "longxiaochen_v2": "Young male",
+    "longxiaobai_v2": "Fresh male",
+    "longlaotie_v2": "Northeastern buddy",
+    "longshu_v2": "Warm male",
+    "longwan_v2": "Energetic male",
+    "longxiang_v2": "Magnetic male",
+    "longjing_v2": "Broadcast female",
+    "longfei_v2": "Passionate narrator",
+    "longze_v2": "Dialect male",
+    "longtong_v2": "Cute child",
+    "loongstella_v2": "Intellectual female 2",
+    "loongbella_v2": "Sweet female 2",
+    "longxiaochun": "Intellectual female (v1)",
+    "longxiaoxia": "Sweet female (v1)",
+    "longxiaochen": "Young male (v1)",
+    "longxiaobai": "Fresh male (v1)",
+    "longlaotie": "Northeastern buddy (v1)",
+    "longshu": "Warm male (v1)",
+    "longwan": "Energetic male (v1)",
+    "longxiang": "Magnetic male (v1)",
+    "longjing": "Broadcast female (v1)",
+    "longfei": "Passionate narrator (v1)",
 }
 
 # Max text length per TTS call (DashScope limit ~2000 chars)
@@ -106,13 +106,15 @@ def is_available() -> tuple[bool, str]:
 
         return True, ""
     except ImportError:
-        return False, "语音输出需要安装依赖: pip install acli[voice]"
+        return False, (
+            "Voice output requires dependencies: pip install acli[voice]"
+        )
 
 
 def _strip_markdown(text: str) -> str:
     """Strip common markdown formatting for cleaner speech."""
     # Remove code blocks entirely
-    text = re.sub(r"```[\s\S]*?```", "（代码块已省略）", text)
+    text = re.sub(r"```[\s\S]*?```", "(code block omitted)", text)
     # Remove inline code
     text = re.sub(r"`([^`]+)`", r"\1", text)
     # Remove bold/italic markers
@@ -289,7 +291,8 @@ class TTSPlayer:
             )
         except ImportError:
             return (
-                "DashScope TTS v2 不可用，请升级 dashscope: pip install -U dashscope"
+                "DashScope TTS v2 unavailable; please upgrade dashscope: "
+                "pip install -U dashscope"
             )
 
         audio_deque: collections.deque[bytes] = collections.deque()
@@ -364,13 +367,13 @@ class TTSPlayer:
 
             if not audio_deque:
                 if audio_error:
-                    return f"TTS 合成失败: {audio_error[0]}"
+                    return f"TTS synthesis failed: {audio_error[0]}"
                 if synth_error:
-                    return f"TTS 合成失败: {synth_error[0]}"
+                    return f"TTS synthesis failed: {synth_error[0]}"
                 # Wait a bit more
                 audio_complete.wait(timeout=5.0)
                 if not audio_deque:
-                    return "TTS 合成失败: 无音频数据"
+                    return "TTS synthesis failed: no audio data"
 
             if self._cancel.is_set():
                 return None
@@ -414,7 +417,7 @@ class TTSPlayer:
                 if self._cancel.is_set():
                     return None
                 if not all_audio:
-                    return "TTS 播放失败: 无音频数据"
+                    return "TTS playback failed: no audio data"
                 try:
                     with io.BytesIO(all_audio) as buf:
                         with wave.open(buf, "rb") as wf:
@@ -425,7 +428,7 @@ class TTSPlayer:
                     sd.wait()
                     return None
                 except Exception as e:
-                    return f"TTS 播放失败: {e}"
+                    return f"TTS playback failed: {e}"
 
             # Any bytes after the WAV header are already-received audio data.
             # Put them at the front of the deque so playback order is
@@ -489,11 +492,11 @@ class TTSPlayer:
                 time.sleep(stream.latency + 0.2)
 
             if playback_error:
-                return f"TTS 播放失败: {playback_error[0]}"
+                return f"TTS playback failed: {playback_error[0]}"
             return None
 
         except Exception as e:
-            return f"TTS 播放失败: {e}"
+            return f"TTS playback failed: {e}"
 
 
 def speak_text(

@@ -21,11 +21,11 @@ def image_to_data_url(path: str | Path) -> str:
     suffix = p.suffix.lower()
     mime = _IMAGE_MIME.get(suffix)
     if mime is None:
-        raise ValueError(f"不支持的图片扩展名: {suffix}")
+        raise ValueError(f"Unsupported image extension: {suffix}")
     data = p.read_bytes()
     if len(data) > _AT_IMAGE_MAX_BYTES:
         raise ValueError(
-            f"图片过大 ({len(data) // 1024} KB > "
-            f"{_AT_IMAGE_MAX_BYTES // 1024} KB)，已忽略",
+            f"Image too large ({len(data) // 1024} KB > "
+            f"{_AT_IMAGE_MAX_BYTES // 1024} KB), ignored",
         )
     return f"data:{mime};base64,{base64.b64encode(data).decode()}"

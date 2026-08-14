@@ -19,20 +19,25 @@ def register_skill_tools(get_agent: Callable) -> None:
         Tool(
             name="use_skill",
             description=(
-                "调用一个 Skill 提示词模板（.acli/skills/*.md 中配置，目录见系统提示的"
-                " Skill 列表），返回展开后的指令并严格遵循执行。"
+                "Invoke a skill prompt template (configured in "
+                ".acli/skills/*.md, catalog in the system prompt's skill "
+                "list); returns expanded instructions to follow strictly."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "Skill 名称（如 explain-code、translate）",
+                        "description": (
+                            "Skill name (e.g. explain-code, translate)"
+                        ),
                     },
                     "args": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "按模板 arguments 顺序的位置参数",
+                        "description": (
+                            "Positional args in template arguments order"
+                        ),
                     },
                 },
                 "required": ["name"],
@@ -49,19 +54,22 @@ def register_skill_tools(get_agent: Callable) -> None:
         load_skill_files()
         skill = BUILTIN_SKILLS.get(name)
         if not skill:
-            return f"错误: 未知 skill '{name}'。可用模板见系统提示的 Skill 列表。"
+            return (
+                f"Error: unknown skill '{name}'. "
+                "See the skill list in the system prompt."
+            )
         if skill.mcp_service:
             from dashscope.acli.cli.mcp import _mcp_clients
 
             if skill.mcp_service not in _mcp_clients:
                 return (
-                    f"错误: skill '{name}' 依赖 MCP 服务 {skill.mcp_service}，"
-                    "请先让用户连接。"
+                    f"Error: skill '{name}' requires MCP service "
+                    f"{skill.mcp_service}; ask the user to connect first."
                 )
         rendered = render_skill(skill, [str(a) for a in (args or [])])
         if not rendered:
             hint = " ".join(f"<{a}>" for a in skill.arguments)
-            return f"错误: 参数不足。'{name}' 需要: {hint}"
+            return f"Error: missing args. '{name}' requires: {hint}"
         agent = get_agent()
         if agent is not None:
             agent.turn_skills += 1

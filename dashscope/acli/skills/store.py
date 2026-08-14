@@ -126,11 +126,11 @@ def _validate_skill_name(name: str, base_dir: Path) -> None:
         or ".." in name
         or Path(name).is_absolute()
     ):
-        raise RuntimeError(f"非法的 skill 名称: {name}")
+        raise RuntimeError(f"Invalid skill name: {name}")
     base = base_dir.resolve()
     dest = (base / name).resolve()
     if dest != base and base not in dest.parents:
-        raise RuntimeError(f"非法的 skill 名称: {name}")
+        raise RuntimeError(f"Invalid skill name: {name}")
 
 
 def _remove_existing(path: Path) -> None:
@@ -155,7 +155,9 @@ def _copy_package(source_dir: Path, dest_dir: Path) -> None:
 def _git_clone(source: str, dest_dir: Path) -> None:
     """Clone a git repository into the store."""
     if not _git_available():
-        raise RuntimeError("git 未安装，无法从 git 地址安装 skill")
+        raise RuntimeError(
+            "git is not installed; cannot install skill from a git URL",
+        )
     if dest_dir.exists() or dest_dir.is_symlink():
         _remove_existing(dest_dir)
     # Strip git+ prefix if present.
@@ -183,7 +185,8 @@ def _download_and_extract(source: str, dest_dir: Path) -> None:
         payload = resp.read(_MAX_ARCHIVE_BYTES + 1)
     if len(payload) > _MAX_ARCHIVE_BYTES:
         raise RuntimeError(
-            f"skill 包过大（>{_MAX_ARCHIVE_BYTES // (1024 * 1024)}MB）: {source}",
+            f"skill archive too large "
+            f"(>{_MAX_ARCHIVE_BYTES // (1024 * 1024)}MB): {source}",
         )
 
     if dest_dir.exists() or dest_dir.is_symlink():
@@ -197,17 +200,24 @@ def _download_and_extract(source: str, dest_dir: Path) -> None:
                 if target != tmp_real and not target.startswith(
                     tmp_real + os.sep,
                 ):
-                    raise RuntimeError(f"tar 包含越界路径: {member.name}")
+                    raise RuntimeError(
+                        f"tar member escapes target dir: {member.name}",
+                    )
                 if member.islnk() or member.issym():
                     link_real = os.path.realpath(
                         os.path.join(os.path.dirname(target), member.linkname),
                     )
                     if not link_real.startswith(tmp_real + os.sep):
-                        raise RuntimeError(f"tar 包含越界链接: {member.name}")
+                        raise RuntimeError(
+                            f"tar link escapes target dir: {member.name}",
+                        )
             tar.extractall(tmp)
         entries = list(Path(tmp).iterdir())
         if len(entries) != 1 or not entries[0].is_dir():
-            raise RuntimeError(f"tar 包结构不符合预期（应为单个顶层目录）: {source}")
+            raise RuntimeError(
+                f"tar archive has unexpected structure (expected a "
+                f"single top-level directory): {source}",
+            )
         entries[0].rename(dest_dir)
 
 
@@ -234,7 +244,7 @@ def _fetch_registry_index(registry_url: str) -> list[dict[str, Any]]:
         skills = data.get("skills", []) if isinstance(data, dict) else data
         return [s for s in skills if isinstance(s, dict)]
     except Exception as e:
-        raise RuntimeError(f"无法加载 skill registry: {e}") from e
+        raise RuntimeError(f"Failed to load skill registry: {e}") from e
 
 
 def _resolve_name_from_registry(
@@ -262,13 +272,13 @@ def _resolve_name_from_registry(
 def _validate_package(path: Path) -> tuple[bool, str]:
     """Validate a skill package directory."""
     if not path.is_dir():
-        return False, f"不是目录: {path}"
+        return False, f"Not a directory: {path}"
     skill_toml = path / "skill.toml"
     if not skill_toml.exists():
-        return False, f"缺少 skill.toml: {path}"
+        return False, f"Missing skill.toml: {path}"
     pkg = load_skill_package(path)
     if pkg is None:
-        return False, f"无法解析 skill.toml: {path}"
+        return False, f"Cannot parse skill.toml: {path}"
     return True, ""
 
 
@@ -300,10 +310,10 @@ def install(
     elif registry_url:
         entry = _resolve_name_from_registry(source, registry_url)
         if entry is None:
-            raise RuntimeError(f"registry 中未找到 skill: {source}")
+            raise RuntimeError(f"Skill not found in registry: {source}")
         resolved_source = entry.get("source", "")
         if not resolved_source:
-            raise RuntimeError(f"registry 条目缺少 source: {source}")
+            raise RuntimeError(f"Registry entry missing source: {source}")
         name = entry.get("name", _package_name_from_source(resolved_source))
         if _is_git_url(resolved_source):
             source_type = "git"
@@ -313,7 +323,8 @@ def install(
             source_type = "local"
     else:
         raise RuntimeError(
-            f"无法识别 skill 来源: {source}（需要本地路径、git URL 或配置 skill_registry）",
+            f"Unrecognized skill source: {source} (need a local path, "
+            f"git URL, or configured skill_registry)",
         )
 
     _validate_skill_name(name, target_dir)
@@ -331,7 +342,9 @@ def install(
     pkg = load_skill_package(dest_dir)
     if pkg is None:
         _remove_existing(dest_dir)
-        raise RuntimeError(f"安装后解析 skill 包失败: {dest_dir}")
+        raise RuntimeError(
+            f"Failed to parse skill package after install: {dest_dir}",
+        )
     final_name = pkg.name
     try:
         _validate_skill_name(final_name, target_dir)
@@ -432,14 +445,14 @@ def update(
     manifest = load_manifest(target_dir)
     entry = manifest.get(name)
     if entry is None:
-        raise RuntimeError(f"未找到已安装的 skill: {name}")
+        raise RuntimeError(f"Installed skill not found: {name}")
 
     source_type = entry.get("source_type", "local")
     source = entry.get("source", "")
 
     if source_type == "git":
         if not _git_available():
-            raise RuntimeError("git 未安装，无法更新")
+            raise RuntimeError("git is not installed; cannot update")
         dest_dir = target_dir / name
         _run_git("pull", cwd=dest_dir)
     elif source_type == "link":
@@ -454,11 +467,11 @@ def update(
     elif source_type == "local" and source:
         src = Path(source)
         if not src.exists():
-            raise RuntimeError(f"本地源已不存在: {source}")
+            raise RuntimeError(f"Local source no longer exists: {source}")
         dest_dir = target_dir / name
         _copy_package(src, dest_dir)
     else:
-        raise RuntimeError(f"无法更新的 source 类型: {source_type}")
+        raise RuntimeError(f"Cannot update source type: {source_type}")
 
     entry["updated_at"] = _now()
     # Refresh version from package metadata.

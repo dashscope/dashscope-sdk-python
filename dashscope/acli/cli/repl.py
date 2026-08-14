@@ -68,7 +68,8 @@ console = Console()
 
 
 def _reset_terminal_modes() -> None:
-    # TUI 被强杀会遗留鼠标上报模式，导致 iTerm2 滚轮被截获、无法滚动回滚区
+    # A force-killed TUI leaves mouse-reporting modes on, which makes iTerm2
+    # capture the scroll wheel so the scrollback region can't be scrolled.
     if sys.stdout.isatty():
         sys.stdout.write("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")
         sys.stdout.flush()
@@ -94,9 +95,12 @@ async def _run_loop(config: Config):
     _ext = apply_extensions(PROVIDER_MODELS)
     if _ext.errors:
         for err in _ext.errors:
-            console.print(f"[yellow]扩展加载警告:[/yellow] [dim]{err}[/dim]")
+            console.print(
+                f"[yellow]Extension load warning:[/yellow] "
+                f"[dim]{err}[/dim]",
+            )
     sync_extensions_into_catalog(_ext)
-    # _load_plugins() — 已废弃，插件通过 hooks 机制加载
+    # _load_plugins() — deprecated; plugins load via the hooks mechanism
     provider = get_provider_chain(config)
     executor = Executor(auto_approve=config.auto_approve)
 
@@ -223,12 +227,17 @@ async def _run_loop(config: Config):
         restored = agent.load_session()
         if restored:
             console.print(
-                f"  [dim]已恢复 {restored} 条历史消息 ({session_path})[/dim]\n",
+                f"  [dim]Restored {restored} history messages "
+                f"({session_path})[/dim]\n",
             )
         else:
-            console.print(f"  [dim]当前无历史消息 ({session_path})[/dim]\n")
+            console.print(
+                f"  [dim]No history messages ({session_path})[/dim]\n",
+            )
     except Exception:
-        console.print(f"  [dim]历史加载失败 ({session_path})[/dim]\n")
+        console.print(
+            f"  [dim]History load failed ({session_path})[/dim]\n",
+        )
 
     # First-run: auto-trigger /setup if workspace config doesn't exist
     # Skip if essential config (provider/model/API key) is already set globally
@@ -383,19 +392,19 @@ async def _run_loop(config: Config):
     ) -> str:
         from dashscope.acli.utils.text import truncate_value
 
-        title = "⚠️  危险操作" if is_dangerous else "需要确认"
+        title = "⚠️  Dangerous operation" if is_dangerous else "Confirm"
         border_style = "red bold" if is_dangerous else "yellow"
         args_display = "\n".join(
             f"  {k}: {truncate_value(v)}" for k, v in arguments.items()
         )
-        content = f"工具: {tool_def.name}\n参数:\n{args_display}"
+        content = f"Tool: {tool_def.name}\nArgs:\n{args_display}"
         console.print(Panel(content, title=title, border_style=border_style))
 
         if is_dangerous:
-            prompt_sym = "是否执行? [y]es / [n]o  [y]: "
+            prompt_sym = "Execute? [y]es / [n]o  [y]: "
         else:
             prompt_sym = (
-                "是否执行? [y]es / [n]o / [u]pdate (补充信息，重新规划) "
+                "Execute? [y]es / [n]o / [u]pdate (add info, re-plan) "
                 "/ [a]lways / [s]top  [y]: "
             )
 
@@ -407,7 +416,8 @@ async def _run_loop(config: Config):
 
         choice = raw.strip().lower() or "y"
         if is_dangerous:
-            # 危险操作仅接受 y/n，与同步路径一致（不提供 always 授信）
+            # Dangerous ops accept only y/n, matching the sync path
+            # (no always-trust grant).
             if choice not in ("y", "n"):
                 choice = "n"
         elif choice not in ("y", "n", "u", "a", "s"):
@@ -416,12 +426,12 @@ async def _run_loop(config: Config):
             try:
                 with patch_stdout():
                     supplement = await session.prompt_async(
-                        "[yellow]请输入补充信息:[/yellow] ",
+                        "[yellow]Enter supplementary info:[/yellow] ",
                     )
             except (KeyboardInterrupt, EOFError):
                 supplement = ""
             if not supplement.strip():
-                raise UserAbortedTurn("用户未提供补充信息")
+                raise UserAbortedTurn("No supplementary info provided")
             raise UserSupplement(supplement.strip())
         return choice
 
@@ -443,13 +453,13 @@ async def _run_loop(config: Config):
         except KeyboardInterrupt:
             now = _time.time()
             if now - _last_ctrl_c < 2.0:
-                console.print("\n[dim]再见![/dim]")
+                console.print("\n[dim]Bye![/dim]")
                 break
             _last_ctrl_c = now
-            console.print("[dim]再按一次 Ctrl+C 退出[/dim]")
+            console.print("[dim]Press Ctrl+C again to exit[/dim]")
             continue
         except EOFError:
-            console.print("\n[dim]再见![/dim]")
+            console.print("\n[dim]Bye![/dim]")
             break
         user_input = user_input.strip()
 
@@ -458,7 +468,7 @@ async def _run_loop(config: Config):
             pending = _pkg._scheduler.get_pending_prompts()
             if pending:
                 for prompt in pending:
-                    console.print("\n[cyan][CRON → 主对话][/cyan]")
+                    console.print("\n[cyan][CRON → main chat][/cyan]")
                     await _stream_response(agent, config, prompt)
                     console.print()
                 continue
@@ -501,13 +511,14 @@ async def _run_loop(config: Config):
             continue
 
         if user_input.startswith("/"):
-            # 勿加 patch_stdout：无 prompt app 运行时它会把输出中的 ESC
-            # 全替换成 '?'，导致 slash 命令 Rich 输出乱码
+            # Do NOT add patch_stdout here: with no prompt app running it
+            # replaces every ESC in the output with '?', garbling slash
+            # commands' Rich output.
             try:
                 result = _handle_slash_command(user_input, agent, config)
             except Exception as e:
                 # A buggy handler must not kill the session loop.
-                console.print(f"[red]命令执行出错: {e}[/red]")
+                console.print(f"[red]Command error: {e}[/red]")
                 continue
             if result == "voice":
                 from dashscope.acli.ui.voice import voice_input as _voice_input
@@ -551,14 +562,16 @@ async def _run_loop(config: Config):
         expanded_text, images, audio_clips = _expand_at_references(user_input)
         if images and not is_vision_model(config.model):
             console.print(
-                f"[yellow]当前模型 {config.model} 不支持图片，{len(images)} 张图片已忽略。"
-                f"切换到视觉模型（如 qwen-vl-max）后重试。[/yellow]",
+                f"[yellow]Model {config.model} does not support images; "
+                f"{len(images)} image(s) ignored. Switch to a vision model "
+                f"(e.g. qwen-vl-max) and retry.[/yellow]",
             )
             images = []
         if audio_clips and not is_audio_model(config.model):
             console.print(
-                f"[yellow]当前模型 {config.model} 不支持音频，{len(audio_clips)} 段音频已忽略。"
-                f"切换到音频模型（如 qwen-omni-turbo）后重试。[/yellow]",
+                f"[yellow]Model {config.model} does not support audio; "
+                f"{len(audio_clips)} audio clip(s) ignored. Switch to an "
+                f"audio model (e.g. qwen-omni-turbo) and retry.[/yellow]",
             )
             audio_clips = []
         user_input = _to_multimodal_content(expanded_text, images, audio_clips)
@@ -569,16 +582,17 @@ async def _run_loop(config: Config):
             await _stream_response(agent, config, user_input)
             console.print()
         except KeyboardInterrupt:
-            console.print("\n[dim]已中断[/dim]")
+            console.print("\n[dim]Interrupted[/dim]")
         except Exception as e:
-            console.print(f"\n[red]错误: {e}[/red]\n")
+            console.print(f"\n[red]Error: {e}[/red]\n")
 
         # Auto-summarize long tasks (>= 6 new messages = user + assistant
         # + tool calls)
         messages_added = len(agent.messages) - messages_before
         if messages_added >= 6:
             console.print(
-                f"[dim]检测到长任务 ({messages_added} 条消息)，自动总结...[/dim]",
+                f"[dim]Long task detected ({messages_added} messages), "
+                f"auto-summarizing...[/dim]",
             )
             await _do_summarize(agent, silent=False)
 

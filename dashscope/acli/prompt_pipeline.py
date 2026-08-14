@@ -69,8 +69,9 @@ class SkillsSection:
         if not body:
             return ""
         return (
-            "\n\n可用 Skill 模板（你可通过 use_skill 工具调用；"
-            "用户也可一行 `/skill <name> <args>` 触发）:\n" + body
+            "\n\nAvailable skill templates (call them via the use_skill "
+            "tool; the user can also trigger one with a single "
+            "`/skill <name> <args>` line):\n" + body
         )
 
 
@@ -84,7 +85,7 @@ class SkillPackagesSection:
         prompts = self._active_prompts_fn(ctx.user_input)
         if not prompts:
             return ""
-        return "\n\n## 已激活 Skill 包补充规则\n" + prompts
+        return "\n\n## Active skill package rules\n" + prompts
 
 
 # ── Ephemeral sections (recomputed every turn) ─────────────────────────
@@ -114,7 +115,10 @@ class DirectivesSection:
             return ""
         if not rules:
             return ""
-        lines = ["\n\n## 用户长效操作规则（必须遵守，除非用户在本轮明确说要绕过）"]
+        lines = [
+            "\n\n## Standing user rules (always follow unless the user "
+            "explicitly asks to bypass them this turn)",
+        ]
         for i, r in enumerate(rules, 1):
             lines.append(f"{i}. {r}")
         return "\n".join(lines)
@@ -129,7 +133,7 @@ class PlanSection:
         section = ctx.memory_manager.session.plan.get_plan_section()
         if not section:
             return ""
-        return f"\n\n## 当前执行计划{section}"
+        return f"\n\n## Current plan{section}"
 
 
 class ExperienceSection:
@@ -177,17 +181,20 @@ class EnvironmentSection:
     def render(self, ctx: PromptContext) -> str:
         env_info: list[str] = []
         if ctx.user_name:
-            env_info.append(f"当前用户: {ctx.user_name}")
+            env_info.append(f"Current user: {ctx.user_name}")
         if ctx.provider_name or ctx.model_name:
             env_info.append(
-                f"当前模型: {ctx.provider_name}/{ctx.model_name}"
-                "（以 config.toml 当前配置为准；历史消息或摘要中提到的模型名可能已过时，回答模型相关问题时必须以此处为准）",
+                f"Current model: {ctx.provider_name}/{ctx.model_name} "
+                "(the config.toml setting is authoritative; model names "
+                "mentioned in history or summaries may be outdated — "
+                "always defer to this line for model questions)",
             )
         if not env_info:
             return ""
         env_info.append(
-            "规则: 涉及本 CLI 的命令时，只提及确定存在的真实命令；"
-            "不确定时引导用户输入 /help 查看，不要自行编造命令名或用法。",
+            "Rule: when mentioning this CLI's commands, only cite real "
+            "commands that definitely exist; when unsure, point the user "
+            "to /help instead of inventing command names or usage.",
         )
         return "\n\n" + "\n".join(env_info)
 

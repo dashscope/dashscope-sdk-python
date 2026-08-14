@@ -118,7 +118,8 @@ def _register_package_tools(pkg: SkillPackage, registry: ToolRegistry) -> None:
                 registry.unregister(name)
                 registry.register(original)
                 warnings.warn(
-                    f"skill 包 '{pkg.name}' 试图覆盖已注册的工具 '{name}'，已忽略",
+                    f"skill package '{pkg.name}' tried to override "
+                    f"registered tool '{name}', ignored",
                     stacklevel=2,
                 )
 
@@ -133,8 +134,8 @@ def _register_package_tools(pkg: SkillPackage, registry: ToolRegistry) -> None:
             if new_name != name:
                 if registry.get(new_name) is not None:
                     warnings.warn(
-                        f"skill 包 '{pkg.name}' 的工具 '{new_name}' "
-                        "与已注册工具重名，已忽略",
+                        f"skill package '{pkg.name}' tool '{new_name}' "
+                        "collides with a registered tool, ignored",
                         stacklevel=2,
                     )
                     registry.unregister(name)

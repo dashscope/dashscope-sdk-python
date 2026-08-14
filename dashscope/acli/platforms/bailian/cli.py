@@ -84,7 +84,9 @@ class BailianCLIClient:
                 check=False,
             )
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
-            raise BailianCLIError(f"bl config export-schema 失败: {e}") from e
+            raise BailianCLIError(
+                f"bl config export-schema failed: {e}",
+            ) from e
         if cp.returncode != 0:
             raise BailianCLIError(
                 f"bl exit={cp.returncode}: {cp.stderr or cp.stdout}",
@@ -92,7 +94,7 @@ class BailianCLIClient:
         try:
             return json.loads(cp.stdout)
         except json.JSONDecodeError as e:
-            raise BailianCLIError(f"bl schema 解析失败: {e}") from e
+            raise BailianCLIError(f"bl schema parse failed: {e}") from e
 
     # ===== Invocation =====
 
@@ -137,7 +139,7 @@ class BailianCLIClient:
             return CLIResult(
                 code=124,
                 stdout="",
-                stderr=f"超时 ({self.timeout}s)",
+                stderr=f"timeout ({self.timeout}s)",
             )
         return CLIResult(
             code=proc.returncode or 0,

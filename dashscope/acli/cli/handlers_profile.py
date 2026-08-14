@@ -29,36 +29,41 @@ async def _handle_profile_command(cmd: str, config: Config):
     if not _memory_client:
         if not config.memory_enabled:
             console.print(
-                "[dim]用户档案已禁用。在 config.toml 中设置 "
-                "memory_enabled = true 启用[/dim]",
+                "[dim]User profile is disabled. Set "
+                "memory_enabled = true in config.toml to enable[/dim]",
             )
             return
         from dashscope.acli.platforms import get_memory_provider
 
         _memory_client = get_memory_provider(config)
         if not _memory_client:
-            console.print("[red]未配置 API Key 或用户名，无法使用用户档案[/red]")
+            console.print(
+                "[red]No API Key or username configured; "
+                "user profile unavailable[/red]",
+            )
             return
 
     if len(parts) == 1:
         console.print(
-            f"[bold]用户档案[/bold]: {'启用' if config.memory_enabled else '禁用'}",
+            f"[bold]User Profile[/bold]: "
+            f"{'enabled' if config.memory_enabled else 'disabled'}",
         )
         if config.user_name:
-            console.print(f"[dim]用户: {config.user_name}[/dim]")
+            console.print(f"[dim]User: {config.user_name}[/dim]")
         if config.memory_user_id:
-            console.print(f"[dim]记忆标识: {config.memory_user_id}[/dim]")
+            console.print(f"[dim]Memory ID: {config.memory_user_id}[/dim]")
         if config.memory_library_id:
-            console.print(f"[dim]档案库: {config.memory_library_id}[/dim]")
+            console.print(f"[dim]Library: {config.memory_library_id}[/dim]")
         console.print(
-            "\n[dim]用法:\n"
-            "  /profile            — 显示状态\n"
-            "  /profile list       — 查看档案\n"
-            "  /profile search <q> — 搜索档案\n"
-            "  /profile add <text>    — 添加信息\n"
-            "  /profile remove <num>  — 删除指定档案\n"
-            "  /profile clear         — 清空档案[/dim]\n"
-            "\n说明: 对话中提到的个人信息（技术栈、偏好等）会自动提取保存。",
+            "\n[dim]Usage:\n"
+            "  /profile            — show status\n"
+            "  /profile list       — list entries\n"
+            "  /profile search <q> — search profile\n"
+            "  /profile add <text>    — add info\n"
+            "  /profile remove <num>  — remove an entry\n"
+            "  /profile clear         — clear profile[/dim]\n"
+            "\nNote: personal info mentioned in chat (tech stack, "
+            "preferences, etc.) is extracted and saved automatically.",
         )
         return
 
@@ -68,9 +73,11 @@ async def _handle_profile_command(cmd: str, config: Config):
         try:
             nodes = await _memory_client.list(page_size=20)
             if not nodes:
-                console.print("[dim]暂无档案信息[/dim]")
+                console.print("[dim]No profile entries yet[/dim]")
             else:
-                console.print(f"[bold]用户档案[/bold] ({len(nodes)} 条):")
+                console.print(
+                    f"[bold]User Profile[/bold] ({len(nodes)} entries):",
+                )
                 for i, n in enumerate(nodes, 1):
                     time_str = n.updated_at or n.created_at
                     console.print(f"  {i}. {n.content}")
@@ -78,65 +85,69 @@ async def _handle_profile_command(cmd: str, config: Config):
                         f"     [dim]{time_str} | id: {n.id[:8]}...[/dim]",
                     )
         except Exception as e:
-            console.print(f"[red]获取档案失败: {e}[/red]")
+            console.print(f"[red]Failed to load profile: {e}[/red]")
 
     elif subcmd == "search":
         query = parts[2] if len(parts) > 2 else ""
         if not query:
-            console.print("[dim]用法: /profile search <关键词>[/dim]")
+            console.print("[dim]Usage: /profile search <keyword>[/dim]")
             return
         try:
             nodes = await _memory_client.search(query, top_k=5, min_score=0.3)
             if not nodes:
-                console.print("[dim]未找到相关信息[/dim]")
+                console.print("[dim]No matching info found[/dim]")
             else:
-                console.print(f"[bold]搜索结果[/bold] ({len(nodes)} 条):")
+                console.print(
+                    f"[bold]Search results[/bold] ({len(nodes)} entries):",
+                )
                 for i, n in enumerate(nodes, 1):
                     console.print(
                         f"  {i}. {n.content} "
                         f"[dim](score: {n.score:.2f})[/dim]",
                     )
         except Exception as e:
-            console.print(f"[red]搜索失败: {e}[/red]")
+            console.print(f"[red]Search failed: {e}[/red]")
 
     elif subcmd == "add":
         content = parts[2] if len(parts) > 2 else ""
         if not content:
-            console.print("[dim]用法: /profile add <信息内容>[/dim]")
+            console.print("[dim]Usage: /profile add <content>[/dim]")
             return
         try:
             nodes = await _memory_client.add([], custom_content=content)
             if nodes:
-                console.print(f"[green]已保存 {len(nodes)} 条档案信息[/green]")
+                console.print(
+                    f"[green]Saved {len(nodes)} profile entries[/green]",
+                )
             else:
-                console.print("[green]已提交[/green]")
+                console.print("[green]Submitted[/green]")
         except Exception as e:
-            console.print(f"[red]保存失败: {e}[/red]")
+            console.print(f"[red]Save failed: {e}[/red]")
 
     elif subcmd in ("remove", "rm"):
         idx_str = parts[2] if len(parts) > 2 else ""
         if not idx_str:
-            console.print("[red]用法: /profile remove <编号>[/red]")
+            console.print("[red]Usage: /profile remove <num>[/red]")
             return
         try:
             idx = int(idx_str) - 1
             nodes = await _memory_client.list(page_size=100)
             if idx < 0 or idx >= len(nodes):
-                console.print(f"[red]无效编号: {idx_str}[/red]")
+                console.print(f"[red]Invalid number: {idx_str}[/red]")
                 return
             target = nodes[idx]
             await _memory_client.delete(target.id)
-            console.print(f"[green]✓ 已删除档案 ({idx_str})[/green]")
+            console.print(f"[green]✓ Entry removed ({idx_str})[/green]")
         except ValueError:
-            console.print("[red]请输入数字编号[/red]")
+            console.print("[red]Please enter a numeric index[/red]")
         except Exception as e:
-            console.print(f"[red]删除失败: {e}[/red]")
+            console.print(f"[red]Delete failed: {e}[/red]")
 
     elif subcmd == "clear":
         try:
             nodes = await _memory_client.list(page_size=100)
             if not nodes:
-                console.print("[dim]暂无档案可清除[/dim]")
+                console.print("[dim]No profile entries to clear[/dim]")
                 return
             count = 0
             for n in nodes:
@@ -145,19 +156,19 @@ async def _handle_profile_command(cmd: str, config: Config):
                     count += 1
                 except Exception:
                     pass
-            console.print(f"[green]已清除 {count} 条档案信息[/green]")
+            console.print(f"[green]Cleared {count} profile entries[/green]")
         except Exception as e:
-            console.print(f"[red]清除失败: {e}[/red]")
+            console.print(f"[red]Clear failed: {e}[/red]")
 
     else:
         console.print(
-            "[dim]用法:\n"
-            "  /profile            — 显示状态\n"
-            "  /profile list       — 查看档案\n"
-            "  /profile search <q> — 搜索档案\n"
-            "  /profile add <text>    — 添加信息\n"
-            "  /profile remove <num>  — 删除指定档案\n"
-            "  /profile clear         — 清空档案[/dim]",
+            "[dim]Usage:\n"
+            "  /profile            — show status\n"
+            "  /profile list       — list entries\n"
+            "  /profile search <q> — search profile\n"
+            "  /profile add <text>    — add info\n"
+            "  /profile remove <num>  — remove an entry\n"
+            "  /profile clear         — clear profile[/dim]",
         )
 
 
@@ -171,17 +182,18 @@ async def _handle_memory_command(cmd: str):
         # Show status
         stats = history.stats()
         console.print(
-            f"[bold]对话历史[/bold]: {stats['count']} 条记录, "
-            f"{stats['total_turns']} 轮对话",
+            f"[bold]Chat history[/bold]: {stats['count']} records, "
+            f"{stats['total_turns']} turns",
         )
         console.print(
-            "\n[dim]用法:\n"
-            "  /memory               — 显示统计\n"
-            "  /memory list [n]      — 查看最近 n 条 (默认 20)\n"
-            "  /memory search <q>    — 搜索历史\n"
-            "  /memory remove <id|num>— 删除指定记录(ID 或列表编号)\n"
-            "  /memory clear         — 清空所有历史[/dim]\n"
-            "\n说明: 每次对话结束后自动存储摘要，用于跨会话上下文回忆。",
+            "\n[dim]Usage:\n"
+            "  /memory               — show stats\n"
+            "  /memory list [n]      — show last n entries (default 20)\n"
+            "  /memory search <q>    — search history\n"
+            "  /memory remove <id|num>— remove a record (ID or list index)\n"
+            "  /memory clear         — clear all history[/dim]\n"
+            "\nNote: a summary is stored after each conversation for "
+            "cross-session context recall.",
         )
         return
 
@@ -191,28 +203,30 @@ async def _handle_memory_command(cmd: str):
         limit = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 20
         entries = history.list_history(limit)
         if not entries:
-            console.print("[dim]暂无对话历史[/dim]")
+            console.print("[dim]No conversation history yet[/dim]")
         else:
-            console.print(f"[bold]最近 {len(entries)} 条对话[/bold]:")
+            console.print(f"[bold]Last {len(entries)} conversations[/bold]:")
             for i, entry in enumerate(entries, 1):
                 created = entry.get("created_at", "")[:16]  # truncate ISO
                 turns = entry.get("turns", 0)
                 summary = entry.get("summary", "")
                 console.print(
-                    f"  {i}. [dim]{created}[/dim] ({turns}轮) {summary}",
+                    f"  {i}. [dim]{created}[/dim] ({turns} turns) {summary}",
                 )
                 console.print(f"     [dim]id: {entry['id']}[/dim]")
 
     elif subcmd == "search":
         query = parts[2] if len(parts) > 2 else ""
         if not query:
-            console.print("[dim]用法: /memory search <关键词>[/dim]")
+            console.print("[dim]Usage: /memory search <keyword>[/dim]")
             return
         results = history.search_history(query)
         if not results:
-            console.print("[dim]未找到相关历史[/dim]")
+            console.print("[dim]No matching history found[/dim]")
         else:
-            console.print(f"[bold]搜索结果[/bold] ({len(results)} 条):")
+            console.print(
+                f"[bold]Search results[/bold] ({len(results)} entries):",
+            )
             for i, entry in enumerate(results, 1):
                 created = entry.get("created_at", "")[:16]
                 console.print(
@@ -222,10 +236,10 @@ async def _handle_memory_command(cmd: str):
     elif subcmd in ("remove", "rm"):
         entry_id = parts[2] if len(parts) > 2 else ""
         if not entry_id:
-            console.print("[dim]用法: /memory remove <id|num>[/dim]")
+            console.print("[dim]Usage: /memory remove <id|num>[/dim]")
             return
         if history.delete_history(entry_id):
-            console.print(f"[green]已删除记录 {entry_id}[/green]")
+            console.print(f"[green]Deleted record {entry_id}[/green]")
             return
         # Fallback: treat as 1-based index from /memory list
         try:
@@ -235,24 +249,24 @@ async def _handle_memory_command(cmd: str):
                 target = entries[idx]
                 if history.delete_history(target["id"]):
                     console.print(
-                        f"[green]已删除记录 #{entry_id}: "
+                        f"[green]Deleted record #{entry_id}: "
                         f"{target.get('summary', '')[:40]}[/green]",
                     )
                     return
         except ValueError:
             pass
-        console.print(f"[red]未找到记录 {entry_id}[/red]")
+        console.print(f"[red]Record {entry_id} not found[/red]")
 
     elif subcmd == "clear":
         count = history.clear_history()
-        console.print(f"[green]已清除 {count} 条历史记录[/green]")
+        console.print(f"[green]Cleared {count} history records[/green]")
 
     else:
         console.print(
-            "[dim]用法:\n"
-            "  /memory               — 显示统计\n"
-            "  /memory list [n]      — 查看最近 n 条\n"
-            "  /memory search <q>    — 搜索历史\n"
-            "  /memory remove <id|num>— 删除指定记录(ID 或列表编号)\n"
-            "  /memory clear         — 清空所有历史[/dim]",
+            "[dim]Usage:\n"
+            "  /memory               — show stats\n"
+            "  /memory list [n]      — show last n entries\n"
+            "  /memory search <q>    — search history\n"
+            "  /memory remove <id|num>— remove a record (ID or list index)\n"
+            "  /memory clear         — clear all history[/dim]",
         )

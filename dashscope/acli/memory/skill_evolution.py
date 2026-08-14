@@ -62,7 +62,15 @@ def analyze_trajectory(
     if not last_assistant:
         return None
 
-    error_keywords = ["错误", "失败", "error", "failed", "无法", "cannot"]
+    error_keywords = [
+        "错误",  # "error"
+        "失败",  # "failed"
+        "无法",  # "unable"
+        "error",
+        "failed",
+        "cannot",
+        "unable",
+    ]
     if any(kw in last_assistant.lower() for kw in error_keywords):
         return None  # Failed trajectory, not skill-worthy
 
@@ -133,7 +141,7 @@ def _extract_parameters(user_request: str) -> list[dict[str, str]]:
         params.append(
             {
                 "name": "file_path",
-                "description": "目标文件路径",
+                "description": "Target file path",
                 "example": paths[0],
             },
         )
@@ -144,7 +152,7 @@ def _extract_parameters(user_request: str) -> list[dict[str, str]]:
         params.append(
             {
                 "name": "command",
-                "description": "要执行的命令",
+                "description": "Command to execute",
                 "example": commands[0],
             },
         )
@@ -162,7 +170,7 @@ def generate_skill_markdown(analysis: dict[str, Any]) -> str:
     lines = [
         "---",
         f"name: {name}",
-        f"description: 自动化工作流 - {analysis['rationale']}",
+        f"description: Automated workflow - {analysis['rationale']}",
         "arguments:",
     ]
 
@@ -177,25 +185,25 @@ def generate_skill_markdown(analysis: dict[str, Any]) -> str:
     lines.append("")
     lines.append(f"# {name}")
     lines.append("")
-    lines.append("自动化执行以下工作流:")
+    lines.append("Automatically run the following workflow:")
     lines.append("")
     for i, tool in enumerate(tools, 1):
         lines.append(f"{i}. `{tool}`")
     lines.append("")
-    lines.append("## 使用示例")
+    lines.append("## Usage example")
     lines.append("")
     lines.append("```")
-    lines.append(f"/{name} {params[0]['example'] if params else '<参数>'}")
+    lines.append(f"/{name} {params[0]['example'] if params else '<arg>'}")
     lines.append("```")
     lines.append("")
-    lines.append("## 工作流程")
+    lines.append("## Workflow")
     lines.append("")
-    lines.append("按以下步骤自动执行:")
+    lines.append("Execute the following steps in order:")
     lines.append("")
     for i, tool in enumerate(tools, 1):
-        lines.append(f"{i}. 调用 `{tool}` 工具")
+        lines.append(f"{i}. Call the `{tool}` tool")
     lines.append("")
-    lines.append("完成后汇报结果。")
+    lines.append("Report the results when done.")
 
     return "\n".join(lines)
 

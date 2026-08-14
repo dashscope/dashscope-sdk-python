@@ -49,6 +49,15 @@ _FOLLOWUP_ONLY = {
     "嗯。",
     "行",
     "行。",
+    # English equivalents of the Chinese follow-ups above
+    "continue",
+    "continue.",
+    "yeah",
+    "yeah.",
+    "fine",
+    "fine.",
+    "sure",
+    "sure.",
 }
 
 
@@ -88,9 +97,10 @@ def extract_summary(messages: list[dict[str, str]]) -> str:
     Strategy: first meaningful user message + key tool calls.
     Skips compressed/auto-generated user messages that contain raw tool-call
     scaffolding, because those pollute memory recall. Also strips common
-    noise prefixes like ``任务1:``/``Task 2:``/``1. `` and ignores bare
-    follow-ups (``继续``, ``ok``, ``好的``) so the summary reflects the
-    actual intent rather than turn markers.
+    noise prefixes like ``Task 1:``/``1. `` (and their Chinese
+    equivalents) and ignores bare follow-ups (``ok``, ``continue``, and
+    their Chinese equivalents) so the summary reflects the actual intent
+    rather than turn markers.
     """
     if not messages:
         return ""
@@ -241,11 +251,11 @@ def export_history(path: str, fmt: str | None = None) -> str:
             encoding="utf-8",
         )
     elif fmt == "markdown":
-        lines = ["# 对话历史\n"]
+        lines = ["# Conversation History\n"]
         for e in entries:
-            lines.append(f"## {e.get('summary', '(无摘要)')}\n")
-            lines.append(f"- **时间**: {e.get('created_at', '')}")
-            lines.append(f"- **轮数**: {e.get('turns', 0)}\n")
+            lines.append(f"## {e.get('summary', '(no summary)')}\n")
+            lines.append(f"- **Time**: {e.get('created_at', '')}")
+            lines.append(f"- **Turns**: {e.get('turns', 0)}\n")
         output.write_text("\n".join(lines), encoding="utf-8")
     else:
         output.write_text(_generate_html(entries), encoding="utf-8")
@@ -257,7 +267,7 @@ def _generate_html(entries: list[dict[str, Any]]) -> str:
     """Build self-contained HTML from history entries."""
     rows = []
     for e in entries:
-        summary = e.get("summary", "(无摘要)")
+        summary = e.get("summary", "(no summary)")
         created = e.get("created_at", "")
         turns = e.get("turns", 0)
         rows.append(
@@ -271,10 +281,10 @@ def _generate_html(entries: list[dict[str, Any]]) -> str:
 
     return (
         f"""<!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>AgenticCLI 对话历史</title>
+<title>AgenticCLI Conversation History</title>
 <style>
 body {{ font-family: -apple-system, "Segoe UI", sans-serif; """
         f"margin: 2rem; background: #1e1e1e; color: #d4d4d4; }}"
@@ -288,10 +298,10 @@ tr:nth-child(even) {{ background: #252525; }}
 </style>
 </head>
 <body>
-<h1>AgenticCLI 对话历史</h1>
-<p class="stats">共 {total_count} 条记录，{total_turns} 轮对话</p>
+<h1>AgenticCLI Conversation History</h1>
+<p class="stats">{total_count} records, {total_turns} turns</p>
 <table>
-<tr><th>摘要</th><th>时间</th><th>轮数</th></tr>
+<tr><th>Summary</th><th>Time</th><th>Turns</th></tr>
 {''.join(rows)}
 </table>
 </body>

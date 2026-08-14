@@ -25,7 +25,10 @@ from dashscope.acli.tools.registry import PermissionLevel, tool
 # Lazy import helpers
 # ---------------------------------------------------------------------------
 
-_DDGS_HINT = "错误: 未安装 duckduckgo-search。请运行 `pip install duckduckgo-search`"
+_DDGS_HINT = (
+    "Error: duckduckgo-search is not installed. "
+    "Run `pip install duckduckgo-search`"
+)
 
 _MAX_QUERY_LEN = 500
 _DEFAULT_MAX_RESULTS = 10
@@ -46,10 +49,11 @@ def _validate_query(query: str) -> str:
     """Sanitise and validate a search query."""
     query = query.strip()
     if not query:
-        raise ValueError("搜索查询不能为空")
+        raise ValueError("Search query cannot be empty")
     if len(query) > _MAX_QUERY_LEN:
         raise ValueError(
-            f"搜索查询过长（{len(query)} 字符），最大 {_MAX_QUERY_LEN} 字符",
+            f"Search query too long ({len(query)} chars); "
+            f"max {_MAX_QUERY_LEN} chars",
         )
     return query
 
@@ -96,7 +100,10 @@ def _validate_region(region: str) -> str:
 
     # Basic format check: xx-xx or wt-wt
     if len(region) < 4 or len(region) > 10 or "-" not in region:
-        raise ValueError(f"无效的地区代码: '{region}'，示例: 'cn-zh', 'us-en', 'wt-wt'")
+        raise ValueError(
+            f"Invalid region code: '{region}'; "
+            "examples: 'cn-zh', 'us-en', 'wt-wt'",
+        )
     return region
 
 
@@ -104,7 +111,7 @@ def _format_results(results: list[dict], query: str) -> str:
     """Format search results into a readable string for the LLM."""
     if not results:
         return json.dumps(
-            {"query": query, "results": [], "message": "未找到相关结果"},
+            {"query": query, "results": [], "message": "No results found"},
             ensure_ascii=False,
         )
 
@@ -136,8 +143,9 @@ def _format_results(results: list[dict], query: str) -> str:
 @tool(
     name="web_search",
     description=(
-        "使用 DuckDuckGo 搜索网页信息。返回标题、URL 和摘要的 JSON 列表。"
-        "适合查找最新信息、文档、教程等。搜索后可用 scrape_web 工具获取页面详细内容。"
+        "Search the web with DuckDuckGo. Returns a JSON list of titles, "
+        "URLs, and snippets. Good for finding up-to-date info, docs, and "
+        "tutorials. Use scrape_web afterwards to fetch full page content."
     ),
     permission=PermissionLevel.AUTO,
 )
@@ -149,9 +157,11 @@ async def web_search(
     """Search the web using DuckDuckGo and return structured results.
 
     Args:
-        query: 搜索关键词，如 'Python asyncio 教程' 或 'Rust ownership explained'
-        max_results: 返回结果数量，默认 10，最大 30
-        region: 地区代码，如 'cn-zh'（中文）、'us-en'（英文）、'wt-wt'（全球，默认）
+        query: search keywords, e.g. 'Python asyncio tutorial'
+            or 'Rust ownership explained'
+        max_results: number of results to return, default 10, max 30
+        region: region code, e.g. 'cn-zh' (Chinese), 'us-en' (English),
+            'wt-wt' (global, default)
     """
     query = _validate_query(query)
     max_results = _validate_max_results(max_results)
@@ -174,7 +184,7 @@ async def web_search(
         return json.dumps(
             {
                 "query": query,
-                "error": f"搜索失败: {type(e).__name__}: {e}",
+                "error": f"Search failed: {type(e).__name__}: {e}",
                 "results": [],
             },
             ensure_ascii=False,

@@ -9,7 +9,11 @@ from dashscope.acli.tools.registry import PermissionLevel, tool
 
 @tool(
     name="camera_capture",
-    description="用摄像头拍一张照片并保存到指定路径。拍完后用户可以用 @路径 引用图片发给视觉模型分析。",
+    description=(
+        "Take a photo with the webcam and save it to the given path. "
+        "The user can then reference it via @path to send it to a "
+        "vision model for analysis."
+    ),
     permission=PermissionLevel.CONFIRM,
 )
 def camera_capture(path: str = "camera_capture.jpg") -> str:
@@ -20,7 +24,10 @@ def camera_capture(path: str = "camera_capture.jpg") -> str:
 
 @tool(
     name="camera_record",
-    description="用摄像头录制一段视频并保存到指定路径。可指定录制时长（秒）。",
+    description=(
+        "Record a video clip with the webcam and save it to the given "
+        "path. The recording duration (seconds) can be specified."
+    ),
     permission=PermissionLevel.CONFIRM,
 )
 def camera_record(

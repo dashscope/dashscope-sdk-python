@@ -269,7 +269,7 @@ class Hook:
         if self.action == "block":
             result.blocked = True
             result.warning = render_brace_template(
-                self.message or "操作被 hook 阻止",
+                self.message or "operation blocked by hook",
                 variables,
             )
             return result
@@ -277,7 +277,7 @@ class Hook:
         if self.action == "confirm":
             result.confirm = True
             result.warning = render_brace_template(
-                self.message or "需要确认",
+                self.message or "confirmation required",
                 variables,
             )
             return result
@@ -317,9 +317,13 @@ class Hook:
             if self.on_fail == "block":
                 result.blocked = True
             elif self.on_fail == "alert":
-                result.alert = f"hook 命令失败 (exit {code}): {output[:200]}"
+                result.alert = (
+                    f"hook command failed (exit {code}): " f"{output[:200]}"
+                )
             else:
-                result.warning = f"hook 命令失败 (exit {code}): {output[:200]}"
+                result.warning = (
+                    f"hook command failed (exit {code}): " f"{output[:200]}"
+                )
         else:
             result.output = output
         if not self.silent and output:

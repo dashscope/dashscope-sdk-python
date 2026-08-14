@@ -90,11 +90,15 @@ def _require_capability(config: Config, cap_key: str) -> bool:
         cap_key,
     )
     console.print(
-        f"[yellow]能力未启用: {cap_key} ({cap_name})[/yellow]\n"
-        f"[dim]启用方式:[/dim]\n"
-        f"[dim]  /capability enable {cap_key}    — 立即启用并按需补全凭证[/dim]\n"
-        f"[dim]  /setup                          — 重新选择启用的能力[/dim]\n"
-        f"[dim]  /capability list                  — 查看所有能力状态[/dim]",
+        f"[yellow]Capability not enabled: {cap_key} "
+        f"({cap_name})[/yellow]\n"
+        f"[dim]Ways to enable:[/dim]\n"
+        f"[dim]  /capability enable {cap_key}    — enable now, "
+        f"prompting for credentials as needed[/dim]\n"
+        f"[dim]  /setup                          — re-select "
+        f"capabilities[/dim]\n"
+        f"[dim]  /capability list                  — view all "
+        f"capability states[/dim]",
     )
     return False
 
@@ -110,9 +114,9 @@ def _prompt_missing_config(config: Config, requires: list[str]):
         if not current:
             try:
                 if is_secret_field(field_name):
-                    value = getpass.getpass(f"  请输入 {field_name}: ").strip()
+                    value = getpass.getpass(f"  Enter {field_name}: ").strip()
                 else:
-                    value = input(f"  请输入 {field_name}: ").strip()
+                    value = input(f"  Enter {field_name}: ").strip()
             except (EOFError, KeyboardInterrupt):
                 value = ""
             if not value:
@@ -127,7 +131,7 @@ def _handle_capability_command(cmd: str, config: Config):
     sub = parts[1] if len(parts) > 1 else ""
 
     if not sub or sub == "list":
-        console.print("[bold]能力状态:[/bold]")
+        console.print("[bold]Capability status:[/bold]")
         for cap in CAPABILITY_CATALOG:
             enabled = _cap_enabled(config, cap["key"])
             status = "[green]✓[/green]" if enabled else "[dim]✗[/dim]"
@@ -137,11 +141,13 @@ def _handle_capability_command(cmd: str, config: Config):
     if sub == "enable" and len(parts) > 2:
         cap_key = parts[2]
         if cap_key not in ALL_CAPABILITY_KEYS:
-            console.print(f"[red]未知能力: {cap_key}[/red]")
-            console.print(f"[dim]可选: {', '.join(ALL_CAPABILITY_KEYS)}[/dim]")
+            console.print(f"[red]Unknown capability: {cap_key}[/red]")
+            console.print(
+                f"[dim]Options: {', '.join(ALL_CAPABILITY_KEYS)}[/dim]",
+            )
             return
         if config.enabled_capabilities is None:
-            console.print("[dim]当前已全部启用[/dim]")
+            console.print("[dim]All capabilities currently enabled[/dim]")
             return
         if cap_key in config.enabled_capabilities:
             # Already enabled — but extension caps may still lack credentials
@@ -166,17 +172,19 @@ def _handle_capability_command(cmd: str, config: Config):
                 cap_key,
                 connect_mcp_fn=_connect_mcp,
             )
-            suffix = f" ({added} 个工具已注册)" if added else ""
-            console.print(f"[dim]{cap_key} 已启用[/dim]{suffix}")
+            suffix = f" ({added} tools registered)" if added else ""
+            console.print(f"[dim]{cap_key} already enabled[/dim]{suffix}")
             return
         cap_info = next(c for c in CAPABILITY_CATALOG if c["key"] == cap_key)
         missing = [
             f for f in cap_info["requires"] if not getattr(config, f, "")
         ]
         if missing:
-            console.print(f"[yellow]{cap_info['key']} 需要配置:[/yellow]")
+            console.print(
+                f"[yellow]{cap_info['key']} needs " f"configuration:[/yellow]",
+            )
             if not _prompt_missing_config(config, cap_info["requires"]):
-                console.print("[red]配置不完整，未启用[/red]")
+                console.print("[red]Config incomplete; not enabled[/red]")
                 return
 
         # Extension-capability bearer/apikey-header token
@@ -196,15 +204,21 @@ def _handle_capability_command(cmd: str, config: Config):
             cap_key,
             connect_mcp_fn=_connect_mcp,
         )
-        suffix = f" ({added} 个工具已注册)" if added else " (无可注册工具——可能缺凭证)"
-        console.print(f"[green]✓ 已启用: {cap_key}[/green]{suffix}")
+        suffix = (
+            f" ({added} tools registered)"
+            if added
+            else " (no tools registered — credentials may be missing)"
+        )
+        console.print(f"[green]✓ Enabled: {cap_key}[/green]{suffix}")
         return
 
     if sub == "disable" and len(parts) > 2:
         cap_key = parts[2]
         if cap_key not in ALL_CAPABILITY_KEYS:
-            console.print(f"[red]未知能力: {cap_key}[/red]")
-            console.print(f"[dim]可选: {', '.join(ALL_CAPABILITY_KEYS)}[/dim]")
+            console.print(f"[red]Unknown capability: {cap_key}[/red]")
+            console.print(
+                f"[dim]Options: {', '.join(ALL_CAPABILITY_KEYS)}[/dim]",
+            )
             return
         if config.enabled_capabilities is None:
             config.enabled_capabilities = [
@@ -213,13 +227,16 @@ def _handle_capability_command(cmd: str, config: Config):
         elif cap_key in config.enabled_capabilities:
             config.enabled_capabilities.remove(cap_key)
         else:
-            console.print(f"[dim]{cap_key} 未启用[/dim]")
+            console.print(f"[dim]{cap_key} not enabled[/dim]")
             return
         config.save_workspace()
         from dashscope.acli.tools.platform import unregister_capability_tools
 
         removed = unregister_capability_tools(cap_key)
-        console.print(f"[yellow]✗ 已禁用: {cap_key}[/yellow] ({removed} 个工具已撤销)")
+        console.print(
+            f"[yellow]✗ Disabled: {cap_key}[/yellow] "
+            f"({removed} tools unregistered)",
+        )
         return
 
     if sub in ("reload", "refresh"):
@@ -234,19 +251,20 @@ def _handle_capability_command(cmd: str, config: Config):
         # freshly loaded toml (endpoint/auth/token edits take effect now).
         refreshed = refresh_extension_capability_tools(config)
         console.print(
-            f"[green]✓ 已重新加载能力注册表[/green] ({refreshed} 个扩展工具已刷新)",
+            f"[green]✓ Capability registry reloaded[/green] "
+            f"({refreshed} extension tools refreshed)",
         )
         return
 
     if sub == "config":
         args = parts[2:]
         if not args:
-            console.print("[bold]能力配置:[/bold]")
+            console.print("[bold]Capability config:[/bold]")
             console.print(
-                "[dim]能力配置请使用 /subagents config <name> <key> <value>[/dim]",
+                "[dim]Use /subagents config <name> <key> <value>[/dim]",
             )
             console.print(
-                "[dim]支持的能力: " + ", ".join(ALL_CAPABILITY_KEYS) + "[/dim]",
+                "[dim]Supported: " + ", ".join(ALL_CAPABILITY_KEYS) + "[/dim]",
             )
             return
         # Delegate to subagents config for subagent-type capabilities
@@ -264,7 +282,8 @@ def _handle_capability_command(cmd: str, config: Config):
             )
         else:
             console.print(
-                f"[dim]{cap_key} 不是可配置子代理；请使用 /subagents config[/dim]",
+                f"[dim]{cap_key} is not a configurable subagent; "
+                f"use /subagents config[/dim]",
             )
         return
 
@@ -273,14 +292,15 @@ def _handle_capability_command(cmd: str, config: Config):
         currently_enabled = _cap_enabled(config, sub)
         action_hint = "disable" if currently_enabled else "enable"
         console.print(
-            f"[yellow]缺少操作: enable 或 disable[/yellow]\n"
-            f"[dim]当前 {sub}: {'已启用' if currently_enabled else '未启用'}[/dim]\n"
-            f"[dim]例如: /capability {action_hint} {sub}[/dim]",
+            f"[yellow]Missing action: enable or disable[/yellow]\n"
+            f"[dim]Current {sub}: "
+            f"{'enabled' if currently_enabled else 'disabled'}[/dim]\n"
+            f"[dim]e.g.: /capability {action_hint} {sub}[/dim]",
         )
         return
 
     console.print(
-        r"[dim]用法: /capability \[list|enable <cap>|disable <cap>|"
+        r"[dim]Usage: /capability \[list|enable <cap>|disable <cap>|"
         r"reload|config <cap>][/dim]" + "\n"
-        f"[dim]可选 cap: {', '.join(ALL_CAPABILITY_KEYS)}[/dim]",
+        f"[dim]Available caps: {', '.join(ALL_CAPABILITY_KEYS)}[/dim]",
     )

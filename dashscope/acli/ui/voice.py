@@ -22,7 +22,9 @@ def is_available() -> tuple[bool, str]:
 
         return True, ""
     except ImportError:
-        return False, "语音输入需要安装依赖: pip install acli[voice]"
+        return False, (
+            "Voice input requires dependencies: pip install acli[voice]"
+        )
 
 
 SAMPLE_RATE = 16000
@@ -140,7 +142,10 @@ class _RealtimeASR:
             if self._stopped:
                 return
             if self._restart_count >= MAX_ASR_RESTARTS:
-                self._error = f"ASR 服务断开，已达最大重启次数 ({MAX_ASR_RESTARTS})"
+                self._error = (
+                    f"ASR connection dropped; max restarts reached "
+                    f"({MAX_ASR_RESTARTS})"
+                )
                 return
             self._restart_count += 1
             self._partial_text = ""
@@ -284,7 +289,7 @@ async def _voice_input_impl(
         if console:
             console.print(f"[red]{err}[/red]")
         elif display_callback:
-            display_callback(f"[错误] {err}")
+            display_callback(f"[Error] {err}")
         return None
 
     import sounddevice as sd
@@ -296,9 +301,9 @@ async def _voice_input_impl(
         asr.start()
     except Exception as e:
         if console:
-            console.print(f"[red]ASR 连接失败: {e}[/red]")
+            console.print(f"[red]ASR connection failed: {e}[/red]")
         elif display_callback:
-            display_callback(f"[错误] ASR 连接失败: {e}")
+            display_callback(f"[Error] ASR connection failed: {e}")
         return None
 
     block_size = 3200  # 200ms of 16kHz 16-bit mono
@@ -347,19 +352,19 @@ async def _voice_input_impl(
         )
     except Exception as e:
         if console:
-            console.print(f"[red]麦克风打开失败: {e}[/red]")
+            console.print(f"[red]Failed to open microphone: {e}[/red]")
         elif display_callback:
-            display_callback(f"[错误] 麦克风打开失败: {e}")
+            display_callback(f"[Error] Failed to open microphone: {e}")
         asr.stop()
         return None
 
     if console:
         console.print(
-            "[bold green]🎤 录音中...[/bold green] "
-            "[dim](说完自动停止，或按 Enter 结束)[/dim]",
+            "[bold green]🎤 Recording...[/bold green] "
+            "[dim](auto-stops on silence, or press Enter)[/dim]",
         )
     elif display_callback:
-        display_callback("🎤 录音中... (说完自动停止)")
+        display_callback("🎤 Recording... (auto-stops on silence)")
 
     loop = asyncio.get_event_loop()
     last_display = ""
@@ -395,7 +400,7 @@ async def _voice_input_impl(
                     except (KeyboardInterrupt, EOFError):
                         stop_event.set()
                         asr.stop()
-                        console.print("[dim]已取消[/dim]")
+                        console.print("[dim]Cancelled[/dim]")
                         return None
         # TUI mode: use display_callback and cancel_event
         else:
@@ -405,7 +410,8 @@ async def _voice_input_impl(
                 if elapsed >= max_recording_seconds:
                     if display_callback:
                         display_callback(
-                            f"[提示] 达到最大录音时长 ({max_recording_seconds}秒)",
+                            f"[Info] Max recording duration reached "
+                            f"({max_recording_seconds}s)",
                         )
                     stop_event.set()
                     break
@@ -413,7 +419,7 @@ async def _voice_input_impl(
                 # Check if cancelled from outside
                 if cancel_event and cancel_event.is_set():
                     if display_callback:
-                        display_callback("[提示] 已取消录音")
+                        display_callback("[Info] Recording cancelled")
                     stop_event.set()
                     break
 
@@ -434,17 +440,17 @@ async def _voice_input_impl(
 
     if asr.error:
         if console:
-            console.print(f"[red]ASR 错误: {asr.error}[/red]")
+            console.print(f"[red]ASR error: {asr.error}[/red]")
         elif display_callback:
-            display_callback(f"[错误] ASR 错误: {asr.error}")
+            display_callback(f"[Error] ASR error: {asr.error}")
         return None
 
     text = asr.final_text.strip()
     if not text:
         if console:
-            console.print("[yellow]未识别到有效内容[/yellow]")
+            console.print("[yellow]Nothing recognized[/yellow]")
         elif display_callback:
-            display_callback("[提示] 未识别到有效内容")
+            display_callback("[Info] Nothing recognized")
         return None
 
     if console:

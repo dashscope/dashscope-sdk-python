@@ -26,13 +26,16 @@ def _handle_camera_command(cmd: str) -> None:
     if len(parts) < 2:
         ok, backend = is_available()
         status = (
-            f"可用 ({backend})"
+            f"available ({backend})"
             if ok
-            else "不可用 (安装: pip install acli[camera] 或 brew install imagesnap)"
+            else (
+                "unavailable (install: pip install acli[camera] "
+                "or brew install imagesnap)"
+            )
         )
-        console.print(f"[dim]摄像头状态: {status}[/dim]")
+        console.print(f"[dim]Camera status: {status}[/dim]")
         console.print(
-            "[dim]用法: /camera capture [file] | "
+            "[dim]Usage: /camera capture [file] | "
             "/camera record [duration] [file][/dim]",
         )
         return
@@ -49,15 +52,15 @@ def _handle_camera_command(cmd: str) -> None:
                 filename = args[1] if len(args) >= 2 else filename
             except ValueError:
                 filename = args[0]
-        console.print(f"[dim]📹 录制中 ({duration}s)...[/dim]")
+        console.print(f"[dim]📹 Recording ({duration}s)...[/dim]")
         result = record(filename, duration)
     else:
         console.print(
-            "[dim]用法: /camera capture [file] | "
+            "[dim]Usage: /camera capture [file] | "
             "/camera record [duration] [file][/dim]",
         )
         return
-    if result.startswith("错误"):
+    if result.startswith(("错误", "Error")):
         console.print(f"[red]{result}[/red]")
     else:
         console.print(f"[green]{result}[/green]")
@@ -86,33 +89,34 @@ def _handle_voice_command(cmd: str, config: Config) -> bool | str:
         from dashscope.acli.ui.voice import try_cancel_voice_input
 
         if try_cancel_voice_input():
-            console.print("[dim]已取消录音[/dim]")
+            console.print("[dim]Recording cancelled[/dim]")
         else:
-            console.print("[dim]没有正在进行的录音[/dim]")
+            console.print("[dim]No recording in progress[/dim]")
         return True
 
     if sub == "model":
         if len(parts) < 3:
-            console.print(f"[dim]当前 ASR 模型: {config.asr_model}[/dim]")
-            console.print(f"[dim]可选: {', '.join(ASR_MODELS)}[/dim]")
+            console.print(f"[dim]Current ASR model: {config.asr_model}[/dim]")
+            console.print(f"[dim]Available: {', '.join(ASR_MODELS)}[/dim]")
             return True
         name = parts[2]
         if name not in ASR_MODELS:
-            console.print(f"[red]未知 ASR 模型: {name}[/red]")
-            console.print(f"[dim]可选: {', '.join(ASR_MODELS)}[/dim]")
+            console.print(f"[red]Unknown ASR model: {name}[/red]")
+            console.print(f"[dim]Available: {', '.join(ASR_MODELS)}[/dim]")
             return True
         config.asr_model = name
         config.save_workspace()
         config.save_global()
-        console.print(f"[green]✓ ASR 模型已切换为: {name}[/green]")
+        console.print(f"[green]✓ ASR model switched to: {name}[/green]")
         return True
 
     if sub == "silence":
         if len(parts) < 3:
             console.print(
-                f"[dim]当前停顿阈值: {config.voice_silence_duration}s[/dim]",
+                f"[dim]Current silence threshold: "
+                f"{config.voice_silence_duration}s[/dim]",
             )
-            console.print("[dim]用法: /voice silence <seconds>[/dim]")
+            console.print("[dim]Usage: /voice silence <seconds>[/dim]")
             return True
         try:
             val = float(parts[2])
@@ -121,15 +125,20 @@ def _handle_voice_command(cmd: str, config: Config) -> bool | str:
             config.voice_silence_duration = val
             config.save_workspace()
             config.save_global()
-            console.print(f"[green]✓ 停顿阈值已设置为: {val}s[/green]")
+            console.print(
+                f"[green]✓ Silence threshold set to: {val}s[/green]",
+            )
         except ValueError:
-            console.print("[red]请输入大于 0 的数字[/red]")
+            console.print("[red]Please enter a number greater than 0[/red]")
         return True
 
     if sub == "max":
         if len(parts) < 3:
-            console.print(f"[dim]当前最大录音时长: {config.voice_max_seconds}s[/dim]")
-            console.print("[dim]用法: /voice max <seconds>[/dim]")
+            console.print(
+                f"[dim]Current max recording duration: "
+                f"{config.voice_max_seconds}s[/dim]",
+            )
+            console.print("[dim]Usage: /voice max <seconds>[/dim]")
             return True
         try:
             val = int(parts[2])
@@ -138,17 +147,20 @@ def _handle_voice_command(cmd: str, config: Config) -> bool | str:
             config.voice_max_seconds = val
             config.save_workspace()
             config.save_global()
-            console.print(f"[green]✓ 最大录音时长已设置为: {val}s[/green]")
+            console.print(
+                f"[green]✓ Max recording duration set to: {val}s[/green]",
+            )
         except ValueError:
-            console.print("[red]请输入大于 0 的整数[/red]")
+            console.print("[red]Please enter an integer greater than 0[/red]")
         return True
 
     if sub == "threshold":
         if len(parts) < 3:
             console.print(
-                f"[dim]当前静音 RMS 阈值: {config.voice_silence_threshold}[/dim]",
+                f"[dim]Current silence RMS threshold: "
+                f"{config.voice_silence_threshold}[/dim]",
             )
-            console.print("[dim]用法: /voice threshold <rms>[/dim]")
+            console.print("[dim]Usage: /voice threshold <rms>[/dim]")
             return True
         try:
             val = int(parts[2])
@@ -157,27 +169,35 @@ def _handle_voice_command(cmd: str, config: Config) -> bool | str:
             config.voice_silence_threshold = val
             config.save_workspace()
             config.save_global()
-            console.print(f"[green]✓ 静音 RMS 阈值已设置为: {val}[/green]")
+            console.print(
+                f"[green]✓ Silence RMS threshold set to: {val}[/green]",
+            )
         except ValueError:
-            console.print("[red]请输入非负整数[/red]")
+            console.print("[red]Please enter a non-negative integer[/red]")
         return True
 
     if sub == "status":
         pass
 
     # Default: show status/help
-    console.print("[bold]语音输入[/bold]")
-    console.print(f"  ASR 模型: [cyan]{config.asr_model}[/cyan]")
-    console.print(f"  停顿结束: [cyan]{config.voice_silence_duration}s[/cyan]")
-    console.print(f"  最大时长: [cyan]{config.voice_max_seconds}s[/cyan]")
-    console.print(f"  静音阈值: [cyan]{config.voice_silence_threshold}[/cyan]")
-    console.print("\n[dim]用法:[/dim]")
-    console.print("  /voice on              — 开始录音")
-    console.print("  /voice off             — 取消录音")
-    console.print("  /voice model <name>    — 切换 ASR 模型")
-    console.print("  /voice silence <sec>   — 设置停顿结束秒数")
-    console.print("  /voice max <sec>       — 设置最大录音秒数")
-    console.print("  /voice threshold <rms> — 设置静音检测阈值")
+    console.print("[bold]Voice Input[/bold]")
+    console.print(f"  ASR model: [cyan]{config.asr_model}[/cyan]")
+    console.print(
+        f"  Silence stop: [cyan]" f"{config.voice_silence_duration}s[/cyan]",
+    )
+    console.print(
+        f"  Max duration: [cyan]{config.voice_max_seconds}s[/cyan]",
+    )
+    console.print(
+        f"  RMS threshold: [cyan]" f"{config.voice_silence_threshold}[/cyan]",
+    )
+    console.print("\n[dim]Usage:[/dim]")
+    console.print("  /voice on              — start recording")
+    console.print("  /voice off             — cancel recording")
+    console.print("  /voice model <name>    — switch ASR model")
+    console.print("  /voice silence <sec>   — set silence-stop seconds")
+    console.print("  /voice max <sec>       — set max recording seconds")
+    console.print("  /voice threshold <rms> — silence detection threshold")
     return True
 
 
@@ -216,57 +236,64 @@ def _handle_tts_command(
         config.tts_enabled = True
         config.save_workspace()
         config.save_global()
-        console.print("[green]✓ 语音输出已开启[/green]")
+        console.print("[green]✓ Voice output enabled[/green]")
         return
 
     if sub == "off":
         config.tts_enabled = False
         config.save_workspace()
         config.save_global()
-        console.print("[dim]语音输出已关闭[/dim]")
+        console.print("[dim]Voice output disabled[/dim]")
         return
 
     if sub == "status":
-        console.print("[bold]TTS 语音输出[/bold]")
+        console.print("[bold]TTS Voice Output[/bold]")
         if config.tts_enabled:
-            console.print("  状态: [green]开启[/green]")
+            console.print("  Status: [green]on[/green]")
         else:
-            console.print("  状态: [dim]关闭[/dim]")
+            console.print("  Status: [dim]off[/dim]")
             console.print(
-                "  [yellow]提示: 自动朗读默认关闭，需执行 /tts on 显式开启[/yellow]",
+                "  [yellow]Hint: auto-speak is off by default; "
+                "run /tts on to enable it[/yellow]",
             )
-        console.print(f"  模型: [cyan]{config.tts_model}[/cyan]")
+        console.print(f"  Model: [cyan]{config.tts_model}[/cyan]")
         voice_name = VOICE_DISPLAY.get(config.tts_voice, config.tts_voice)
-        console.print(f"  语音: [cyan]{config.tts_voice}[/cyan] ({voice_name})")
-        console.print(f"  语速: [cyan]{config.tts_speed:.1f}[/cyan]")
+        console.print(
+            f"  Voice: [cyan]{config.tts_voice}[/cyan] ({voice_name})",
+        )
+        console.print(f"  Speed: [cyan]{config.tts_speed:.1f}[/cyan]")
         ok, err = is_available()
         if not ok:
-            console.print(f"\n[yellow]提示: {err}[/yellow]")
+            console.print(f"\n[yellow]Hint: {err}[/yellow]")
         else:
-            console.print(f"\n[dim]可用模型: {', '.join(TTS_MODELS)}[/dim]")
+            console.print(
+                f"\n[dim]Available models: " f"{', '.join(TTS_MODELS)}[/dim]",
+            )
             voices = TTS_VOICES.get(config.tts_model, [])
             if voices:
                 voice_list = ", ".join(
                     f"{v}({VOICE_DISPLAY.get(v, v)})" for v in voices[:5]
                 )
-                console.print(f"[dim]可用语音: {voice_list}...[/dim]")
+                console.print(f"[dim]Available voices: {voice_list}...[/dim]")
         return
 
     if sub == "model":
         if len(parts) < 3:
-            console.print(f"[dim]当前模型: {config.tts_model}[/dim]")
-            console.print(f"[dim]可选模型: {', '.join(TTS_MODELS)}[/dim]")
+            console.print(f"[dim]Current model: {config.tts_model}[/dim]")
+            console.print(f"[dim]Available: {', '.join(TTS_MODELS)}[/dim]")
             return
         model_name = parts[2]
         if model_name not in TTS_MODELS:
-            console.print(f"[red]未知模型: {model_name}[/red]")
-            console.print(f"[dim]可选模型: {', '.join(TTS_MODELS)}[/dim]")
+            console.print(f"[red]Unknown model: {model_name}[/red]")
+            console.print(f"[dim]Available: {', '.join(TTS_MODELS)}[/dim]")
             return
         config.tts_model = model_name
         config.tts_voice = DEFAULT_VOICE.get(model_name, config.tts_voice)
         config.save_workspace()
         config.save_global()
-        console.print(f"[green]✓ TTS 模型已切换为: {model_name}[/green]")
+        console.print(
+            f"[green]✓ TTS model switched to: {model_name}[/green]",
+        )
         return
 
     if sub == "voice":
@@ -274,31 +301,33 @@ def _handle_tts_command(
             # Interactive voice selection
             voices = TTS_VOICES.get(config.tts_model, [])
             if not voices:
-                console.print(f"[dim]当前语音: {config.tts_voice}[/dim]")
-                console.print("[dim]该模型无可选语音[/dim]")
+                console.print(f"[dim]Current voice: {config.tts_voice}[/dim]")
+                console.print("[dim]No voices available for this model[/dim]")
                 return
-            console.print("[bold]选择 TTS 语音[/bold]")
+            console.print("[bold]Select TTS Voice[/bold]")
             console.print(
-                f"[dim]当前: {config.tts_voice} "
+                f"[dim]Current: {config.tts_voice} "
                 f"({VOICE_DISPLAY.get(config.tts_voice, config.tts_voice)}"
                 f")[/dim]\n",
             )
             for i, v in enumerate(voices, 1):
                 display_name = VOICE_DISPLAY.get(v, v)
                 marker = (
-                    " [green]← 当前[/green]" if v == config.tts_voice else ""
+                    " [green]← current[/green]"
+                    if v == config.tts_voice
+                    else ""
                 )
                 console.print(
                     f"  [cyan][{i}][/cyan] {v} — {display_name}{marker}",
                 )
-            console.print("\n[dim]输入序号选择，q 取消[/dim]")
+            console.print("\n[dim]Enter a number to select, q to cancel[/dim]")
             try:
                 choice = input("> ").strip()
             except (EOFError, KeyboardInterrupt):
-                console.print("[dim]已取消[/dim]")
+                console.print("[dim]Cancelled[/dim]")
                 return
             if choice.lower() == "q" or not choice:
-                console.print("[dim]已取消[/dim]")
+                console.print("[dim]Cancelled[/dim]")
                 return
             try:
                 idx = int(choice) - 1
@@ -307,63 +336,63 @@ def _handle_tts_command(
                     config.save_workspace()
                     config.save_global()
                     console.print(
-                        f"[green]✓ TTS 语音已切换为: {voices[idx]} "
+                        f"[green]✓ TTS voice switched to: {voices[idx]} "
                         f"({VOICE_DISPLAY.get(voices[idx], voices[idx])}"
                         f")[/green]",
                     )
                 else:
-                    console.print("[red]无效的选择[/red]")
+                    console.print("[red]Invalid selection[/red]")
             except ValueError:
-                console.print("[red]请输入数字[/red]")
+                console.print("[red]Please enter a number[/red]")
             return
 
         voice_name = parts[2]
         voices = TTS_VOICES.get(config.tts_model, [])
         if voice_name not in voices:
-            console.print(f"[red]未知语音: {voice_name}[/red]")
+            console.print(f"[red]Unknown voice: {voice_name}[/red]")
             if voices:
                 voice_list = ", ".join(
                     f"{v}({VOICE_DISPLAY.get(v, v)})" for v in voices[:5]
                 )
-                console.print(f"[dim]可选语音: {voice_list}...[/dim]")
+                console.print(f"[dim]Available voices: {voice_list}...[/dim]")
             return
         config.tts_voice = voice_name
         config.save_workspace()
         config.save_global()
         console.print(
-            f"[green]✓ TTS 语音已切换为: {voice_name} "
+            f"[green]✓ TTS voice switched to: {voice_name} "
             f"({VOICE_DISPLAY.get(voice_name, voice_name)})[/green]",
         )
         return
 
     if sub == "speed":
         if len(parts) < 3:
-            console.print(f"[dim]当前语速: {config.tts_speed:.1f}[/dim]")
-            console.print("[dim]可选范围: 0.5-2.0[/dim]")
+            console.print(f"[dim]Current speed: {config.tts_speed:.1f}[/dim]")
+            console.print("[dim]Valid range: 0.5-2.0[/dim]")
             return
         try:
             speed = float(parts[2])
             if not 0.5 <= speed <= 2.0:
-                console.print("[red]语速必须在 0.5-2.0 之间[/red]")
+                console.print("[red]Speed must be between 0.5 and 2.0[/red]")
                 return
             config.tts_speed = speed
             config.save_workspace()
             config.save_global()
-            console.print(f"[green]✓ TTS 语速已设置为: {speed:.1f}[/green]")
+            console.print(f"[green]✓ TTS speed set to: {speed:.1f}[/green]")
         except ValueError:
-            console.print("[red]请输入有效的数字[/red]")
+            console.print("[red]Please enter a valid number[/red]")
         return
 
     if sub == "say":
         if len(parts) < 3:
-            console.print("[dim]用法: /tts say <text>[/dim]")
+            console.print("[dim]Usage: /tts say <text>[/dim]")
             return
         text = parts[2]
         ok, err = is_available()
         if not ok:
             console.print(f"[red]{err}[/red]")
             return
-        console.print(f"[dim]朗读: {text}[/dim]")
+        console.print(f"[dim]Speaking: {text}[/dim]")
         speak_text(
             config.tongyi_api_key,
             text,
@@ -375,13 +404,13 @@ def _handle_tts_command(
 
     if sub == "last":
         if not agent or not agent.last_output:
-            console.print("[dim]没有上一次回复可以朗读[/dim]")
+            console.print("[dim]No previous reply to speak[/dim]")
             return
         ok, err = is_available()
         if not ok:
             console.print(f"[red]{err}[/red]")
             return
-        console.print("[dim]朗读上一次回复...[/dim]")
+        console.print("[dim]Speaking last reply...[/dim]")
         speak_text(
             config.tongyi_api_key,
             agent.last_output,
@@ -392,12 +421,12 @@ def _handle_tts_command(
         return
 
     console.print(
-        "[dim]用法:\n"
-        "  /tts on/off           — 启用/禁用自动朗读\n"
-        "  /tts status           — 显示当前配置\n"
-        "  /tts model <name>     — 切换模型\n"
-        "  /tts voice <name>     — 切换语音\n"
-        "  /tts speed <0.5-2.0>  — 设置语速\n"
-        "  /tts say <text>       — 朗读指定文本\n"
-        "  /tts last             — 朗读上一次回复[/dim]",
+        "[dim]Usage:\n"
+        "  /tts on/off           — enable/disable auto-speak\n"
+        "  /tts status           — show current config\n"
+        "  /tts model <name>     — switch model\n"
+        "  /tts voice <name>     — switch voice\n"
+        "  /tts speed <0.5-2.0>  — set speech rate\n"
+        "  /tts say <text>       — speak given text\n"
+        "  /tts last             — speak last reply[/dim]",
     )

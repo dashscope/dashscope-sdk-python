@@ -41,7 +41,7 @@ def message_text_for_compress(msg: dict) -> str:
             args = fn.get("arguments", "")
             if isinstance(args, dict):
                 args = json.dumps(args, ensure_ascii=False)
-            parts.append(f"[调用工具 {name}({args})]")
+            parts.append(f"[calls tool {name}({args})]")
         return " ".join(parts)
 
     if role == "tool":
@@ -50,7 +50,7 @@ def message_text_for_compress(msg: dict) -> str:
         # Truncate long tool results to keep the compression prompt small.
         if len(result) > 500:
             result = result[:500] + "..."
-        return f"[工具 {name} 返回] {result}"
+        return f"[tool {name} returned] {result}"
 
     return content
 
@@ -117,9 +117,13 @@ def normalize_for_model(messages: list[dict], model: str) -> list[dict]:
                     if txt:
                         parts.append(txt)
                 elif t == "image_url":
-                    parts.append("[图片已省略 — 当前模型不支持图片]")
+                    parts.append(
+                        "[image omitted — model does not support images]",
+                    )
                 elif t == "input_audio":
-                    parts.append("[音频已省略 — 当前模型不支持音频]")
+                    parts.append(
+                        "[audio omitted — model does not support audio]",
+                    )
             new_m = dict(m)
             new_m["content"] = "\n".join(parts) if parts else ""
             out.append(new_m)
@@ -139,14 +143,22 @@ def normalize_for_model(messages: list[dict], model: str) -> list[dict]:
                     new_blocks.append(blk)
                 else:
                     new_blocks.append(
-                        {"type": "text", "text": "[图片已省略 — 当前模型不支持图片]"},
+                        {
+                            "type": "text",
+                            "text": "[image omitted — model does "
+                            "not support images]",
+                        },
                     )
             elif t == "input_audio":
                 if supports_audio:
                     new_blocks.append(blk)
                 else:
                     new_blocks.append(
-                        {"type": "text", "text": "[音频已省略 — 当前模型不支持音频]"},
+                        {
+                            "type": "text",
+                            "text": "[audio omitted — model does "
+                            "not support audio]",
+                        },
                     )
         new_m = dict(m)
         new_m["content"] = new_blocks

@@ -33,7 +33,7 @@ class Plan:
             return ""
         completed = sum(1 for s in self.steps if s.completed)
         total = len(self.steps)
-        lines = [f"\n当前计划进度: {completed}/{total}"]
+        lines = [f"\nPlan progress: {completed}/{total}"]
         for i, step in enumerate(self.steps, 1):
             status = "✓" if step.completed else "→"
             lines.append(f"  {status} {i}. {step.description}")
@@ -72,7 +72,7 @@ class PlanTracker:
             steps=[PlanStep(description=desc) for desc in steps],
         )
         self._created_at = self._clock()
-        return f"计划已创建: {goal}\n步骤: {len(steps)}"
+        return f"Plan created: {goal}\nSteps: {len(steps)}"
 
     def _expire_if_stale(self) -> None:
         if self.current_plan is None:

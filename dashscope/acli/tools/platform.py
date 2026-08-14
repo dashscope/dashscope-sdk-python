@@ -12,7 +12,8 @@ from dashscope.acli.tools.registry import (
 )
 
 # Track which tool names each capability registered, so /capability disable
-# can unregister them mid-session (the prior "重启后生效" caveat is gone).
+# can unregister them mid-session (the prior "takes effect on restart"
+# caveat is gone).
 # Populated by register_one_capability via a registry-diff.
 _capability_tools: dict[str, set[str]] = {}
 
@@ -39,26 +40,29 @@ _CAPABILITY_KEYS = [
 # would otherwise reach for.
 _DISABLED_CAPABILITY_HINTS: dict[str, str] = {
     "bailian.mcp": (
-        "用户已禁用 bailian.mcp。不要调用 mcp_connect，不要尝试调用 "
-        "mcp_<service>_* 工具，也不要建议用户用 /skill <name> 触发依赖 "
-        "MCP 的技能。"
+        "The user has disabled bailian.mcp. Do not call mcp_connect, "
+        "do not call any mcp_<service>_* tools, and do not suggest "
+        "using /skill <name> to trigger MCP-dependent skills."
     ),
     "bailian.cli": (
-        "用户已禁用 bailian.cli（百炼 CLI 全集）。**严禁** 通过 "
-        "run_command 调用 bl 命令（包括 bl image generate / bl video / "
-        "bl speech / bl knowledge / bl memory 等）实现相同能力"
-        "——这会消耗用户的配额。当请求落到 bl 能覆盖的范围"
-        "（图像/视频/语音生成、RAG 检索、文档解析、TTS/ASR 等），"
-        "直接告诉用户该能力已关闭，提示通过 /capability enable "
-        "bailian.cli 重新启用。"
+        "The user has disabled bailian.cli (the full Bailian CLI). "
+        "**Never** invoke bl commands via run_command (including "
+        "bl image generate / bl video / bl speech / bl knowledge / "
+        "bl memory etc.) to replicate the same capability — that "
+        "consumes the user's quota. When a request falls within bl's "
+        "scope (image/video/speech generation, RAG retrieval, document "
+        "parsing, TTS/ASR, etc.), tell the user the capability is off "
+        "and suggest re-enabling it via /capability enable bailian.cli."
     ),
     "local.delegate": (
-        "用户已禁用 local.delegate。不要调用 delegate 或 "
-        "delegate_parallel 工具；需要并行处理时请按顺序调用其他工具完成。"
+        "The user has disabled local.delegate. Do not call delegate or "
+        "delegate_parallel; handle parallel work by calling other "
+        "tools sequentially."
     ),
     "local.memory": (
-        "用户已禁用 local.memory。不要调用 memory_search / memory_store / "
-        "memory_delete 工具；需要用户档案信息时直接询问用户。"
+        "The user has disabled local.memory. Do not call memory_search "
+        "/ memory_store / memory_delete; ask the user directly when "
+        "you need profile info."
     ),
 }
 
@@ -77,7 +81,10 @@ def disabled_capabilities_hint(config: Config) -> str:
     ]
     if not disabled:
         return ""
-    lines = ["\n\n## 已禁用的能力（用户主动关闭，请严格遵守，不要绕道）"]
+    lines = [
+        "\n\n## Disabled capabilities (user turned these off; "
+        "strictly respect this — do not work around them)",
+    ]
     for k in disabled:
         lines.append(f"- **{k}**: {_DISABLED_CAPABILITY_HINTS[k]}")
     return "\n".join(lines)
@@ -239,28 +246,37 @@ def _register_local_memory_tools(config: Config) -> None:
     async def memory_search(query: str, top_k: int = 5) -> str:
         results = await cap.search(query, top_k=top_k)
         if not results:
-            return "未找到相关记忆。"
+            return "No relevant memories found."
         lines = [f"- [{r['id']}] {r['content']}" for r in results]
-        return "相关记忆:\n" + "\n".join(lines)
+        return "Relevant memories:\n" + "\n".join(lines)
 
     async def memory_store(content: str) -> str:
         entry_id = await cap.add(content, metadata={"source": "agent"})
         if not entry_id:
-            return "记忆未保存（内容为空或与已有记忆重复）"
-        return f"已记住（id: {entry_id}）"
+            return "Memory not saved (empty or duplicates existing)"
+        return f"Remembered (id: {entry_id})"
 
     async def memory_delete(entry_id: str) -> str:
         ok = await cap.delete(entry_id)
-        return "已删除" if ok else f"未找到记忆 {entry_id}"
+        return "Deleted" if ok else f"Memory {entry_id} not found"
 
     registry.register_mcp_tool(
         name="memory_search",
-        description="搜索用户长期记忆/档案（偏好、技术栈、项目约定等），用于补充对话上下文",
+        description=(
+            "Search the user's long-term memory/profile (preferences, "
+            "tech stack, project conventions) to enrich context"
+        ),
         parameters={
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "搜索关键词"},
-                "top_k": {"type": "integer", "description": "返回条数上限，默认 5"},
+                "query": {
+                    "type": "string",
+                    "description": "search keywords",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "max results to return, default 5",
+                },
             },
             "required": ["query"],
         },
@@ -268,11 +284,17 @@ def _register_local_memory_tools(config: Config) -> None:
     )
     registry.register_mcp_tool(
         name="memory_store",
-        description="把重要事实（用户偏好、项目约定、环境信息）存入长期记忆",
+        description=(
+            "Store important facts (user preferences, project "
+            "conventions, environment info) into long-term memory"
+        ),
         parameters={
             "type": "object",
             "properties": {
-                "content": {"type": "string", "description": "要记住的内容"},
+                "content": {
+                    "type": "string",
+                    "description": "content to remember",
+                },
             },
             "required": ["content"],
         },
@@ -280,11 +302,14 @@ def _register_local_memory_tools(config: Config) -> None:
     )
     registry.register_mcp_tool(
         name="memory_delete",
-        description="按 id 删除一条长期记忆",
+        description="Delete a long-term memory entry by id",
         parameters={
             "type": "object",
             "properties": {
-                "entry_id": {"type": "string", "description": "记忆条目 id"},
+                "entry_id": {
+                    "type": "string",
+                    "description": "memory entry id",
+                },
             },
             "required": ["entry_id"],
         },
@@ -364,15 +389,19 @@ def _register_mcp_tools(config: Config, connect_mcp_fn: Callable):
     async def mcp_connect(service: str) -> str:
         err = await connect_mcp_fn(service, config)
         if err:
-            return f"连接失败: {err}"
-        return f"已连接 MCP 服务: {service}，新工具已可用。可直接调用相关工具完成任务。"
+            return f"Connection failed: {err}"
+        return (
+            f"Connected to MCP service: {service}. New tools are now "
+            f"available; call them directly to complete the task."
+        )
 
     registry.register_mcp_tool(
         name="mcp_connect",
         description=(
-            "连接 MCP 云端服务以获取更多工具能力。当前可用: "
-            "time(时间)、code-interpreter(代码执行)、doc-analysis(文档解析)。"
-            "连接后会注册新工具供你调用。"
+            "Connect to an MCP cloud service to gain more tools. "
+            "Currently available: time (clock), code-interpreter "
+            "(code execution), doc-analysis (document parsing). "
+            "New tools are registered after connecting."
         ),
         parameters={
             "type": "object",
@@ -380,7 +409,8 @@ def _register_mcp_tools(config: Config, connect_mcp_fn: Callable):
                 "service": {
                     "type": "string",
                     "description": (
-                        "服务名称，当前可用: time、code-interpreter、" "doc-analysis"
+                        "service name; available: time, "
+                        "code-interpreter, doc-analysis"
                     ),
                 },
             },

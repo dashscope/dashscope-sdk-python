@@ -29,8 +29,9 @@ PERMISSION_STYLES = {
 }
 
 # Canonical prefix for tool-execution failure results. Agent code classifies
-# tool outcomes by this marker — keep the text stable.
-EXEC_ERROR_PREFIX = "执行错误"
+# tool outcomes by this marker — keep it in sync with agent's
+# _TOOL_ERROR_PREFIXES.
+EXEC_ERROR_PREFIX = "Error"
 
 
 class Executor:
@@ -125,9 +126,9 @@ class Executor:
         missing = missing_required_args(tool_def, arguments)
         if missing:
             return (
-                f"错误: 工具 {tool_def.name} 调用参数缺失: {', '.join(missing)}. "
-                f"请按 schema 重新调用（"
-                f"required: {tool_def.parameters.get('required', [])}）"
+                f"Error: tool {tool_def.name} missing required arguments: "
+                f"{', '.join(missing)}. Call again following the schema "
+                f"(required: {tool_def.parameters.get('required', [])})"
             )
 
         if not await self._async_check_permission(tool_def, arguments):
@@ -139,11 +140,11 @@ class Executor:
                 decision="denied",
                 reason="user declined",
             )
-            return "操作已取消"
+            return "Cancelled"
 
         try:
             arguments = coerce_types(tool_def.func, arguments)
-            with StderrSpinner(f"执行 {tool_def.name}..."):
+            with StderrSpinner(f"Running {tool_def.name}..."):
                 result = tool_def.func(**arguments)
                 if inspect.isawaitable(result):
                     result = await result
@@ -247,17 +248,17 @@ class Executor:
             )
             # pylint: enable=not-callable
             if result == "a":
-                # DANGEROUS never enters the trust cache (同步路径仅提供 y/n)
+                # DANGEROUS never enters the trust cache (sync path: y/n only)
                 if not is_dangerous:
                     self._always_allow.add(tool_def.name)
                 return True
             if result == "s":
-                raise UserAbortedTurn("用户中止本轮对话")
+                raise UserAbortedTurn("User aborted this turn")
             # [u]pdate should be handled by the confirmation callback itself
             # (it must prompt for supplement and raise UserSupplement). If a
             # callback returns "u" without doing that, treat it as abort.
             if result == "u":
-                raise UserAbortedTurn("用户未提供补充信息")
+                raise UserAbortedTurn("No supplementary info provided")
             return result == "y"
         return self._check_permission(tool_def, arguments)
 
@@ -273,12 +274,14 @@ class Executor:
         # deny must always win, even over read-only auto-approval.
         policy = get_permission_policy()
         if policy.check_tool(tool_def.name) == "deny":
-            console.print(f"[dim red]✗ {tool_def.name} (策略拒绝)[/dim red]")
+            console.print(
+                f"[dim red]✗ {tool_def.name} (policy denied)[/dim red]",
+            )
             return False
         if tool_def.name == "run_command":
             cmd = arguments.get("command", "")
             if isinstance(cmd, str) and policy.check_command(cmd) == "deny":
-                console.print("[dim red]✗ 命令被策略拒绝[/dim red]")
+                console.print("[dim red]✗ command denied by policy[/dim red]")
                 return False
 
         # Auto-pass read-only shell commands (grep, ls, find, git status, …).
@@ -297,7 +300,9 @@ class Executor:
         if policy_decision == "allow":
             return True
         if policy_decision == "deny":
-            console.print(f"[dim red]✗ {tool_def.name} (策略拒绝)[/dim red]")
+            console.print(
+                f"[dim red]✗ {tool_def.name} (policy denied)[/dim red]",
+            )
             return False
         if tool_def.name == "run_command":
             cmd = arguments.get("command", "")
@@ -306,31 +311,36 @@ class Executor:
                 if cmd_decision == "allow":
                     return True
                 if cmd_decision == "deny":
-                    console.print("[dim red]✗ 命令被策略拒绝[/dim red]")
+                    console.print(
+                        "[dim red]✗ command denied by policy[/dim red]",
+                    )
                     return False
 
         # Consult turn-scoped trust cache (CONFIRM only; DANGEROUS never
         # caches).
         if tool_def.name in self._always_deny:
-            console.print(f"[dim red]✗ {tool_def.name} (本次对话已拒绝)[/dim red]")
+            console.print(
+                f"[dim red]✗ {tool_def.name} (denied this turn)[/dim red]",
+            )
             return False
         if tool_def.name in self._always_allow:
             console.print(
-                f"[dim green]✓ {tool_def.name} (本次对话已授信)[/dim green]",
+                f"[dim green]✓ {tool_def.name} "
+                f"(trusted this turn)[/dim green]",
             )
             return True
 
         style = PERMISSION_STYLES[tool_def.permission]
         title = (
-            "⚠️  危险操作"
+            "⚠️  Dangerous operation"
             if tool_def.permission == PermissionLevel.DANGEROUS
-            else "需要确认"
+            else "Confirmation required"
         )
 
         args_display = "\n".join(
             f"  {k}: {truncate_value(v)}" for k, v in arguments.items()
         )
-        content = f"工具: {tool_def.name}\n参数:\n{args_display}"
+        content = f"Tool: {tool_def.name}\nArguments:\n{args_display}"
 
         console.print()
         console.print(Panel(content, title=title, border_style=style))
@@ -339,12 +349,12 @@ class Executor:
         # crosses a line nobody benefits from.
         if tool_def.permission == PermissionLevel.DANGEROUS:
             try:
-                return Confirm.ask("是否执行?", default=False)
+                return Confirm.ask("Execute?", default=False)
             except (KeyboardInterrupt, EOFError):
                 # Ctrl-C / Ctrl-D at the confirmation prompt = abort the turn.
                 # asyncio + prompt_toolkit can swallow the signal mid-prompt,
                 # so we explicitly translate it here.
-                raise UserAbortedTurn("Ctrl-C 中止本轮对话") from None
+                raise UserAbortedTurn("Ctrl-C aborted this turn") from None
 
         # CONFIRM gets the four-way prompt with turn-scoped memory.
         # Brackets are escaped (\[…\]) so Rich doesn't parse them as markup
@@ -352,22 +362,22 @@ class Executor:
         # top" rendering previously.
         try:
             choice = Prompt.ask(
-                r"是否执行? \[y]es / \[n]o / \[u]pdate (补充信息，重新规划) / "
-                r"\[a]lways (本次对话该工具直接放行) / \[s]top (中止本轮对话)",
+                r"Execute? \[y]es / \[n]o / \[u]pdate (add info, replan) / "
+                r"\[a]lways (allow this tool for the turn) / \[s]top (abort)",
                 choices=["y", "n", "u", "a", "s"],
                 default="y",
                 show_choices=False,
             )
         except (KeyboardInterrupt, EOFError):
-            raise UserAbortedTurn("Ctrl-C 中止本轮对话") from None
+            raise UserAbortedTurn("Ctrl-C aborted this turn") from None
         if choice == "a":
             self._always_allow.add(tool_def.name)
             return True
         if choice == "u":
-            supplement = Prompt.ask("[dim]补充信息[/dim]")
+            supplement = Prompt.ask("[dim]Supplementary info[/dim]")
             if supplement.strip():
                 raise UserSupplement(supplement.strip())
             return True  # empty supplement = proceed
         if choice == "s":
-            raise UserAbortedTurn("用户中止本轮对话")
+            raise UserAbortedTurn("User aborted this turn")
         return choice == "y"

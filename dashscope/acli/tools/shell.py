@@ -417,19 +417,28 @@ def _is_safe_single(chunk: str) -> bool:
 
 @tool(
     name="run_command",
-    description="执行 shell 命令并返回输出。危险命令会被拦截。",
+    description=(
+        "Execute a shell command and return its output. "
+        "Dangerous commands are blocked."
+    ),
     permission=PermissionLevel.CONFIRM,
 )
 async def run_command(command: str, timeout: int | None = None) -> str:
     if not command or not command.strip():
-        return "错误: command 参数为空，请重新发起调用并填入要执行的命令"
+        return (
+            "Error: empty command argument; re-invoke with the "
+            "command to run"
+        )
     for pattern in BLOCKED_PATTERNS:
         if pattern in command:
-            return f"错误: 命令被拦截 (包含危险模式: {pattern})"
+            return (
+                f"Error: command blocked "
+                f"(contains dangerous pattern: {pattern})"
+            )
     if _RM_ROOT_RE.search(command):
-        return "错误: 命令被拦截 (包含危险模式: rm -rf /)"
+        return "Error: command blocked (contains dangerous pattern: rm -rf /)"
     if _FORMAT_CMD_RE.search(command):
-        return "错误: 命令被拦截 (包含危险模式: format)"
+        return "Error: command blocked (contains dangerous pattern: format)"
 
     # Belt-and-suspenders on top of utils.validation.coerce_types: if the model
     # still managed to slip something un-castable through (e.g. "auto"),
@@ -467,9 +476,9 @@ async def run_command(command: str, timeout: int | None = None) -> str:
             proc.kill()
         except Exception:
             pass
-        return f"错误: 命令超时 ({timeout}s)"
+        return f"Error: command timed out ({timeout}s)"
     except Exception as e:
-        return f"错误: 执行失败 - {e}"
+        return f"Error: execution failed - {e}"
 
     # Enforce hard size limits to prevent OOM on huge outputs
     stdout_bytes = len(stdout) if stdout else 0
@@ -500,7 +509,7 @@ async def run_command(command: str, timeout: int | None = None) -> str:
     if len(output) > MAX_OUTPUT_LENGTH:
         output = (
             output[:MAX_OUTPUT_LENGTH]
-            + f"\n\n... (输出被截断，总长度 {total_bytes} 字节)"
+            + f"\n\n... (output truncated, {total_bytes} bytes total)"
         )
 
     exit_info = f"\n[exit code: {proc.returncode}]"

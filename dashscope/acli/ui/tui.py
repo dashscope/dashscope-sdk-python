@@ -24,18 +24,23 @@ from typing import Any
 # want it back can set TEXTUAL_DISABLE_KITTY_KEY=0 before launching.
 os.environ.setdefault("TEXTUAL_DISABLE_KITTY_KEY", "1")
 
-# JediTerm (PyCharm 终端) 从不应答 Textual 的 DECRQM 探测，且 2025.3.2 之前
-# 的版本不支持 synchronized-output (mode 2026) 缓冲：每帧裸写、逐段绘制，
-# 输出区停留在底部时的整屏重绘就表现为屏闪。无法探测 JediTerm 版本，故对
-# JediTerm 一律加大攒批力度（新版本有 sync 兜底，多攒批无害）。
+# JediTerm (the PyCharm terminal) never answers Textual's DECRQM probe,
+# and versions before 2025.3.2 lack synchronized-output (mode 2026)
+# buffering: every frame is written raw, segment by segment, so a
+# full-screen repaint while the output sits at the bottom shows up as
+# flicker. The JediTerm version cannot be probed, so always batch more
+# aggressively for JediTerm (new versions have sync as a fallback, so
+# extra batching is harmless).
 _IS_JEDITERM = (
     os.environ.get("TERMINAL_EMULATOR", "").startswith("JetBrains")
     or "jediterm" in os.environ.get("TERM_PROGRAM", "").lower()
 )
-# 流式输出 flush：时间窗口 + 行数阈值（行数阈值只防突发大量输出时过于频繁）
+# Stream flush: time window + line-count threshold (the threshold only
+# guards against over-frequent flushes on bursty bulk output)
 _STREAM_FLUSH_INTERVAL = 0.8 if _IS_JEDITERM else 0.3
 _STREAM_FLUSH_LINES = 400 if _IS_JEDITERM else 20
-# 滚轮攒批窗口：JediTerm 上整屏重绘昂贵，降帧换稳定
+# Wheel batching window: full repaints are costly on JediTerm; trade
+# frame rate for stability
 _WHEEL_FLUSH_INTERVAL = 0.12 if _IS_JEDITERM else 0.03
 
 from rich.cells import cell_len  # noqa: E402
@@ -154,8 +159,12 @@ class RichLogWriter(io.StringIO):
         super().flush()
 
 
-# 输入框底部常驻提示：无动态参数提示时显示，键入 / 命令时被参数提示覆盖
-_INPUT_IDLE_HINT = "Ctrl+C 清空 · Ctrl+T 语音 · Ctrl+J 换行 · ↑ 历史 · / 命令 · @ 文件"
+# Persistent hint below the input box: shown when no dynamic arg hint is
+# available; arg hints override it while typing a / command
+_INPUT_IDLE_HINT = (
+    "Ctrl+C clear · Ctrl+T voice · Ctrl+J newline · "
+    "↑ history · / commands · @ files"
+)
 
 
 class OutputLog(RichLog):
@@ -218,9 +227,10 @@ class OutputLog(RichLog):
                     select_style = self.screen.get_component_rich_style(
                         "screen--selection",
                     )
-                    # Strip.apply_style 是 pre-style，会被每段自带的底色
-                    # (rich_style 的 surface 背景) 覆盖；post-style 才能让
-                    # 选区背景真正显示出来
+                    # Strip.apply_style is a pre-style and gets overridden
+                    # by each segment's own background (the surface
+                    # background of rich_style); only post-style makes the
+                    # selection background truly visible
                     middle = strip.crop(from_x, to_x)
                     middle = Strip(
                         Segment.apply_style(middle, post_style=select_style),
@@ -331,10 +341,13 @@ class AcliScreen(Screen):
             int(event.pointer_screen_x),
             int(event.pointer_screen_y),
         )
-        # 拖到屏幕顶/底边缘时，指针可能落在不可滚动控件（下方固定输入框）或
-        # 无命中区域（输出区 padding 行的 hit-test 返回 None）——Textual 都
-        # 会停掉自动滚动定时器，选区冻结在一屏内（iTerm2 拖过窗口边缘被钳到
-        # 首/末行时必现）。这里兜底直接滚 #output。
+        # When dragging to the top/bottom screen edge, the pointer may land
+        # on a non-scrollable widget (the fixed input box below) or a no-hit
+        # area (hit-test on the output area's padding rows returns None) —
+        # Textual then stops the auto-scroll timer and the selection freezes
+        # within one screen (always reproducible in iTerm2 when a drag past
+        # the window edge is clamped to the first/last row). Fall back to
+        # scrolling #output directly here.
         if self._auto_select_scroll_timer is not None:
             return
         try:
@@ -362,8 +375,10 @@ class AcliScreen(Screen):
             pointer.y,
         )
         if select_widget is None:
-            # 指针在命中盲区（如输出区 padding 行 hit-test 返回 None）：把探测
-            # 点钳进输出区内容范围，让选区端点继续跟着边缘下的内容走
+            # Pointer is in a no-hit zone (e.g. output-area padding rows
+            # whose hit-test returns None): clamp the probe point into the
+            # output content region so the selection end keeps following
+            # the content under the edge
             try:
                 region = self.query_one("#output").content_region
             except Exception:
@@ -488,7 +503,7 @@ class Spinner(Static):
 
     FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
-    def __init__(self, text: str = "思考中...", **kwargs):
+    def __init__(self, text: str = "Thinking...", **kwargs):
         super().__init__(**kwargs)
         self.text = text
         self.frame_idx = 0
@@ -783,10 +798,13 @@ class CommandInput(TextArea):
                     output.scroll_down(animate=False)
                 return
 
-        # PyCharm 终端在备用屏上把滚轮翻译成连发的方向键（一个滚轮缺口发
-        # 2~3 个，间隔 < 10ms）；真实按键/自动重复间隔 >= 25ms。首键先延迟
-        # 一个窗口期再路由（历史/补全）；窗口期内出现同向连发则整段判为滚轮，
-        # 攒批一次滚到位（逐键滚 = 逐键整区重绘，PyCharm 上明显闪屏）。
+        # On the alternate screen the PyCharm terminal translates the wheel
+        # into bursts of arrow keys (2~3 per wheel notch, < 10ms apart);
+        # real key presses/auto-repeat are >= 25ms apart. Defer the first
+        # key by one window before routing it (history/completion);
+        # same-direction repeats within the window classify the whole burst
+        # as wheel input, batched into a single scroll (per-key scrolling =
+        # per-key full-area repaint, which flickers badly on PyCharm).
         if event.key in ("up", "down"):
             now = time.monotonic()
             is_burst = (
@@ -799,7 +817,8 @@ class CommandInput(TextArea):
                 event.prevent_default()
                 event.stop()
                 if self._arrow_pending_key:
-                    # 突发首键此前被延迟路由——取消，改记为一次滚动
+                    # The burst's first key was deferred earlier — cancel
+                    # it and count it as a scroll instead
                     first = self._arrow_pending_key
                     if self._arrow_timer is not None:
                         self._arrow_timer.stop()
@@ -809,7 +828,7 @@ class CommandInput(TextArea):
                 self._queue_wheel_scroll(event.key)
                 return
             if self._arrow_pending_key:
-                # 方向交替：先把上一个延迟键落掉
+                # Direction changed: flush the previously deferred key first
                 self._apply_deferred_arrow()
             event.prevent_default()
             event.stop()
@@ -908,8 +927,9 @@ class CommandInput(TextArea):
         except Exception:
             return
         output.scroll_to(y=output.scroll_offset.y + lines, animate=False)
-        # 框选中途的滚轮（PyCharm 滚轮=方向键）也要让选区跟随指针，
-        # 否则选不出一屏
+        # Wheel scrolling mid-drag (PyCharm wheel = arrow keys) must also
+        # keep the selection following the pointer, or the selection cannot
+        # grow past one screen
         extend = getattr(screen, "extend_selection_to", None)
         pointer = getattr(screen, "_auto_scroll_pointer", None)
         if extend is not None and pointer is not None:
@@ -1051,8 +1071,10 @@ class AgenticCLIApp(App):
     def get_css_variables(self) -> dict[str, str]:
         """Override to provide theme colors from config to CSS variables."""
         variables = super().get_css_variables()
-        # textual-dark/light 未定义 screen-selection-*，默认解析出前景≈背景的
-        # 近隐形样式（框选能复制但无高亮）；显式给出高对比选区配色
+        # textual-dark/light do not define screen-selection-*; the default
+        # resolves to a near-invisible style with foreground ≈ background
+        # (selection copies but shows no highlight); set explicit
+        # high-contrast selection colors
         try:
             light = self._is_light_mode()
         except Exception:
@@ -1259,18 +1281,25 @@ class AgenticCLIApp(App):
             self.screen.refresh(layout=True)
 
     BINDINGS = [
-        # priority=True: 从 App 侧优先命中，盖过 Screen 自带的
-        # ctrl+c→copy_text（仅 OSC 52，PyCharm/JediTerm 不支持会静默失败）
-        Binding("ctrl+c", "smart_quit", "取消/退出", show=True, priority=True),
+        # priority=True: match on the App side first, overriding the
+        # Screen's own ctrl+c→copy_text (OSC 52 only, silently fails on
+        # PyCharm/JediTerm)
+        Binding(
+            "ctrl+c",
+            "smart_quit",
+            "Cancel/Quit",
+            show=True,
+            priority=True,
+        ),
         Binding(
             "super+c",
             "copy_selection",
-            "复制选中",
+            "Copy selection",
             show=False,
             priority=True,
         ),
         Binding("ctrl+t", "voice_input", "Voice", show=False),
-        Binding("ctrl+q", "quote_selection", "引用选中", show=False),
+        Binding("ctrl+q", "quote_selection", "Quote selection", show=False),
     ]
 
     def action_voice_input(self) -> None:
@@ -1279,13 +1308,17 @@ class AgenticCLIApp(App):
             asyncio.create_task(self._handle_voice_input())
 
     def action_copy_selection(self) -> bool:
-        """Cmd+C / super+c：用户主动复制——把输出区选中文本写入系统剪贴板。
+        """Cmd+C / super+c: user-initiated copy — write the output-area
+        selection to the system clipboard.
 
-        终端在 alternate screen 下只会复制可见屏，多屏选区会丢失屏外内容。
-        这里显式取 Textual 内部选区（含滚出屏幕部分）写入系统剪贴板：
-        优先原生工具（pbcopy 等），没有时退回 OSC 52。松手时不自动复制，
-        避免覆盖用户剪贴板里已有的内容。返回是否执行了复制（供 Ctrl+C
-        兜底路径判断：PyCharm 等终端会吞掉 Cmd+C）。
+        A terminal on the alternate screen only copies the visible screen,
+        so a multi-screen selection loses off-screen content. Explicitly
+        take Textual's internal selection (including the scrolled-off part)
+        and write it to the system clipboard: prefer native tools (pbcopy
+        etc.), fall back to OSC 52 when unavailable. No auto-copy on
+        mouse-up, to avoid clobbering the user's existing clipboard
+        content. Returns whether a copy was performed (for the Ctrl+C
+        fallback path: terminals like PyCharm swallow Cmd+C).
         """
         text = self.screen.get_selected_text()
         if not text or not text.strip():
@@ -1295,21 +1328,30 @@ class AgenticCLIApp(App):
         tool = copy_to_clipboard(text)
         n_lines = len(text.splitlines())
         if tool:
-            self.notify(f"已复制 {n_lines} 行到剪贴板", timeout=2)
+            self.notify(f"Copied {n_lines} lines to clipboard", timeout=2)
         else:
-            # OSC 52：由终端把文本写入系统剪贴板（macOS Terminal 不支持，
-            # iTerm2 需开启 "Allow clipboard access to terminal apps"）
+            # OSC 52: the terminal writes the text to the system clipboard
+            # (unsupported by macOS Terminal; iTerm2 needs "Allow clipboard
+            # access to terminal apps" enabled)
             self.copy_to_clipboard(text)
-            self.notify(f"已复制 {n_lines} 行（OSC 52，终端不支持时无效）", timeout=3)
-        # 清除选区高亮：防止终端在 Cmd+C 时用可见屏内容覆盖剪贴板
+            self.notify(
+                f"Copied {n_lines} lines (OSC 52; no-op if the terminal "
+                "does not support it)",
+                timeout=3,
+            )
+        # Clear the selection highlight: prevents the terminal from
+        # overwriting the clipboard with visible-screen content on Cmd+C
         self.screen.clear_selection()
         return True
 
     def action_smart_quit(self) -> None:
-        # Ctrl+C = 取消：关补全弹窗 → 取消录音 → 丢弃输入框内容 → 取消任务 →
-        # 空输入时再按一次退出
-        # 例外：输出区有选区时 Ctrl+C = 复制全量选区（PyCharm 等终端吞掉
-        # Cmd+C，只复制可见屏；Ctrl+C 一定会送达 app，作为可靠复制路径）
+        # Ctrl+C = cancel: close completion popup → cancel recording →
+        # discard input box content → cancel task → press again with empty
+        # input to quit
+        # Exception: with a selection in the output area, Ctrl+C = copy the
+        # full selection (PyCharm-style terminals swallow Cmd+C and copy
+        # only the visible screen; Ctrl+C always reaches the app, making it
+        # a reliable copy path)
         if self.action_copy_selection():
             self._ctrl_c_once = False
             return
@@ -1329,10 +1371,10 @@ class AgenticCLIApp(App):
         ):
             self._voice_cancel_event.set()
             output = self.query_one("#output", RichLog)
-            output.write(Text("已取消录音", style="yellow"))
+            output.write(Text("Recording cancelled", style="yellow"))
             return
 
-        # 输入框有内容：丢弃当前输入（不退出）
+        # Input box has content: discard current input (do not quit)
         input_widget = self.query_one("#command-input", CommandInput)
         if input_widget.text.strip():
             input_widget.text = ""
@@ -1344,13 +1386,13 @@ class AgenticCLIApp(App):
                 self._agent_task.cancel()
                 self._ctrl_c_once = True
                 output = self.query_one("#output", RichLog)
-                output.write(Text("再按一次 Ctrl+C 退出", style="dim"))
+                output.write(Text("Press Ctrl+C again to quit", style="dim"))
         elif self._ctrl_c_once:
             self.exit()
         else:
             self._ctrl_c_once = True
             output = self.query_one("#output", RichLog)
-            output.write(Text("再按一次 Ctrl+C 退出", style="dim"))
+            output.write(Text("Press Ctrl+C again to quit", style="dim"))
 
     def __init__(
         self,
@@ -1378,7 +1420,8 @@ class AgenticCLIApp(App):
         self._inline_input_future: threading.Event | None = None
         self._inline_input_value: list[str] = [""]
         self._inline_input_active: bool = False
-        # 平静流式（旧版 JediTerm 降级）：流式期间写输出不跟随滚动
+        # Calm streaming (old JediTerm fallback): writes during streaming
+        # do not follow-scroll
         self._calm_streaming: bool = False
         # Hook executor's confirm callback
         self.agent.executor._confirm_callback = self._tui_confirm_callback
@@ -1523,35 +1566,42 @@ class AgenticCLIApp(App):
         if isinstance(content, (str, Text)):
             widget_width = output.size.width or 80
             width = widget_width - 4 if widget_width > 4 else None
-        # 平静流式期间：内容照写但不跟随滚动——旧版 JediTerm 上跟随意味着
-        # 每次 flush 整屏撕裂（屏闪），冻结视口则零重绘
+        # During calm streaming: content is still written but the view does
+        # not follow-scroll — on old JediTerm following means a full-screen
+        # tear on every flush (flicker), while a frozen viewport means zero
+        # repaints
         scroll_end = False if self._calm_streaming else None
         output.write(content, width=width, scroll_end=scroll_end)
 
     def on_text_selected(self, event: events.TextSelected) -> None:
-        # 松手时不自动写剪贴板——避免覆盖用户剪贴板内容。只提示用 Cmd+C
-        # 主动复制（super+c 绑定会把完整选区，含滚出屏幕部分，写入剪贴板）。
+        # Do not write the clipboard automatically on mouse-up — that would
+        # clobber the user's clipboard content. Only hint at Cmd+C for an
+        # explicit copy (the super+c binding writes the full selection,
+        # including the scrolled-off part, to the clipboard).
         text = self.screen.get_selected_text()
         if not text or not text.strip():
             return
         n_lines = len(text.splitlines())
         self.notify(
-            f"已选中 {n_lines} 行：Cmd+C 复制（PyCharm 等终端用 Ctrl+C）；" "Ctrl+Q 引用到输入框",
+            f"Selected {n_lines} lines: Cmd+C to copy (Ctrl+C on "
+            "PyCharm-style terminals); Ctrl+Q to quote into input box",
             timeout=3,
         )
 
     def action_quote_selection(self) -> None:
-        """Ctrl+Q：把输出区选中文本作为引用块插入输入框，便于追问解释。"""
+        """Ctrl+Q: insert the output-area selection as a quote block into
+        the input box, handy for follow-up questions."""
         text = self.screen.get_selected_text()
         if not text or not text.strip():
-            self.notify("请先在输出区框选要引用的内容", timeout=3)
+            self.notify("Select content in the output area first", timeout=3)
             return
         quote = "\n".join(
             f"> {line}" for line in text.rstrip("\n").splitlines()
         )
         input_widget = self.query_one("#command-input", CommandInput)
         existing = input_widget.text
-        # 末尾补一个空行：光标落在引用块下方的新行，直接输入追问
+        # Append a blank line: the cursor lands on a fresh line below the
+        # quote block, ready for a follow-up question
         input_widget.text = (
             f"{existing}\n{quote}\n" if existing.strip() else f"{quote}\n"
         )
@@ -1572,7 +1622,8 @@ class AgenticCLIApp(App):
         if self._confirm_future and not self._confirm_future.done():
             input_widget.text = ""
             choice = command.lower() or "y"  # Empty = default to yes
-            # 危险操作仅接受 y/n，与同步路径一致（不提供 always 授信）
+            # Dangerous ops accept only y/n, matching the sync path (no
+            # always-trust granted)
             valid_choices = (
                 ("y", "n")
                 if self._confirm_is_dangerous
@@ -1584,10 +1635,15 @@ class AgenticCLIApp(App):
             else:
                 output = self.query_one("#output", RichLog)
                 if self._confirm_is_dangerous:
-                    output.write(render("[yellow]请输入 y/n（直接回车=是）[/yellow]"))
+                    output.write(
+                        render("[yellow]Enter y/n (Enter = yes)[/yellow]"),
+                    )
                 else:
                     output.write(
-                        render("[yellow]请输入 y/n/u/a/s（直接回车=是）[/yellow]"),
+                        render(
+                            "[yellow]Enter y/n/u/a/s "
+                            "(Enter = yes)[/yellow]",
+                        ),
                     )
             input_widget.focus()
             return
@@ -1684,11 +1740,11 @@ class AgenticCLIApp(App):
         embedded_name = getattr(self.config, "_embedded_app_name", None)
         info_lines = [
             f"[bold]{embedded_name or 'AgenticCLI'}[/bold] "
-            f"v{__version__} — 用自然语言驱动一切\n",
+            f"v{__version__} — Drive everything with natural language\n",
         ]
 
         # Provider, Model, User
-        user_display = self.config.user_name or "(未设置)"
+        user_display = self.config.user_name or "(not set)"
         info_lines.append(
             f"[bold]Provider:[/bold] [cyan]{self.config.provider}[/cyan]  "
             f"[bold]Model:[/bold] [cyan]{self.config.model}[/cyan]  "
@@ -1710,15 +1766,17 @@ class AgenticCLIApp(App):
                 )
             else:
                 info_lines.append(
-                    f"[bold]API Key:[/bold] [red]✗ 未设置[/red] "
+                    f"[bold]API Key:[/bold] [red]✗ not set[/red] "
                     f"[dim]({key_info['env']})[/dim]",
                 )
 
         # Enabled capabilities
         caps_display = self.config.enabled_capabilities
         if caps_display is not None:
-            caps_str = ", ".join(caps_display) if caps_display else "无"
-            info_lines.append(f"[bold]能力:[/bold] [dim]{caps_str}[/dim]")
+            caps_str = ", ".join(caps_display) if caps_display else "none"
+            info_lines.append(
+                f"[bold]Capabilities:[/bold] [dim]{caps_str}[/dim]",
+            )
 
         # Tool count
         tool_count = (
@@ -1726,14 +1784,18 @@ class AgenticCLIApp(App):
             if hasattr(registry, "list_tools")
             else "?"
         )
-        info_lines.append(f"[bold]工具:[/bold] [dim]{tool_count} 个已注册[/dim]")
+        info_lines.append(
+            f"[bold]Tools:[/bold] [dim]{tool_count} registered[/dim]",
+        )
 
         info_lines.append(
-            "\n[dim]输入: Enter 提交；Ctrl+J 换行；Ctrl+C 取消/退出 [/dim]",
+            "\n[dim]Input: Enter to submit; Ctrl+J newline; "
+            "Ctrl+C cancel/quit [/dim]",
         )
         info_lines.append(
-            "[dim]输出: 滚轮翻页；拖拽框选后 Cmd+C 复制（PyCharm 等终端用 "
-            "Ctrl+C）；Ctrl+Q 引用选中到输入框[/dim]",
+            "[dim]Output: wheel to scroll; drag to select, then Cmd+C "
+            "to copy (Ctrl+C on PyCharm-style terminals); Ctrl+Q to "
+            "quote the selection into the input box[/dim]",
         )
 
         panel_border = (
@@ -1744,9 +1806,11 @@ class AgenticCLIApp(App):
 
     def on_mount(self) -> None:
         """Initialize the app."""
-        # JetBrains 终端 (PyCharm 等) 支持 synchronized-output (2026) 但不
-        # 回应 Textual 的 DECRQM 探测，导致每帧裸写、滚动/流式时整屏撕裂闪
-        # 烁。探测不到也强制开启：不支持该模式的终端会静默忽略私有模式序列。
+        # JetBrains terminals (PyCharm etc.) support synchronized-output
+        # (2026) but never answer Textual's DECRQM probe, so every frame is
+        # written raw and scrolling/streaming tears the whole screen
+        # (flicker). Force it on even though undetected: terminals without
+        # support silently ignore the private mode sequence.
         if _IS_JEDITERM:
             self._sync_available = True
 
@@ -1764,15 +1828,15 @@ class AgenticCLIApp(App):
                 if restored:
                     output.write(
                         Text(
-                            f"  [已恢复 {restored} 条历史消息]",
+                            f"  [Restored {restored} history messages]",
                             style="dim",
                         ),
                     )
                 else:
-                    output.write(Text("  [当前无历史消息]", style="dim"))
+                    output.write(Text("  [No history messages]", style="dim"))
                 output.write("")
             except Exception:
-                output.write(Text("  [历史加载失败]", style="dim"))
+                output.write(Text("  [Failed to load history]", style="dim"))
                 output.write("")
 
         # Focus the input
@@ -1835,12 +1899,16 @@ class AgenticCLIApp(App):
         from dashscope.acli.utils.text import truncate_value
 
         # Build the confirmation panel
-        title = "⚠️  危险操作" if is_dangerous else "需要确认"
+        title = (
+            "⚠️  Dangerous operation"
+            if is_dangerous
+            else "Confirmation required"
+        )
         border_style = "red bold" if is_dangerous else "yellow"
         args_display = "\n".join(
             f"  {k}: {truncate_value(v)}" for k, v in arguments.items()
         )
-        content = f"工具: {tool_def.name}\n参数:\n{args_display}"
+        content = f"Tool: {tool_def.name}\nArguments:\n{args_display}"
 
         self._write_output(
             Panel(content, title=title, border_style=border_style),
@@ -1848,11 +1916,11 @@ class AgenticCLIApp(App):
 
         # Prompt text
         if is_dangerous:
-            prompt_text = Text("是否执行? [y]es / [n]o  [y]", style="bold")
+            prompt_text = Text("Execute? [y]es / [n]o  [y]", style="bold")
         else:
             prompt_text = Text(
-                "是否执行? [y]es / [n]o / [u]pdate (补充信息，重新规划) / "
-                "[a]lways (本次对话放行) / [s]top (中止本轮)  [y]",
+                "Execute? [y]es / [n]o / [u]pdate (add info, replan) / "
+                "[a]lways (allow this session) / [s]top (abort turn)  [y]",
                 style="bold",
             )
         self._write_output(prompt_text)
@@ -1863,7 +1931,7 @@ class AgenticCLIApp(App):
         spinner = self.query_one("#spinner", Spinner)
         old_spinner_text = spinner.text
         was_active = spinner.active
-        spinner.text = "等待确认中..."
+        spinner.text = "Waiting for confirmation..."
         if not was_active:
             spinner.start()
         else:
@@ -1877,8 +1945,11 @@ class AgenticCLIApp(App):
         try:
             result = await self._confirm_future
             if result == "u":
-                self._write_output(Text("请输入补充信息:", style="bold yellow"))
-                # 平静流式期间 _write_output 不跟随滚动，需显式滚到可见
+                self._write_output(
+                    Text("Enter supplemental info:", style="bold yellow"),
+                )
+                # During calm streaming _write_output does not follow-
+                # scroll, so scroll explicitly to make it visible
                 self.query_one("#output", RichLog).scroll_end(animate=False)
                 input_widget.focus()
                 self._supplement_future = (
@@ -1891,7 +1962,7 @@ class AgenticCLIApp(App):
                 finally:
                     self._supplement_future = None
                 if not supplement.strip():
-                    raise UserAbortedTurn("用户未提供补充信息")
+                    raise UserAbortedTurn("No supplemental info provided")
                 raise UserSupplement(supplement.strip())
             return result
         except (asyncio.CancelledError, asyncio.InvalidStateError):
@@ -1930,7 +2001,7 @@ class AgenticCLIApp(App):
             # Write prompt to output (inline, not modal)
             output = self.query_one("#output", RichLog)
             if password:
-                output.write(Text(prompt + " (密码输入)", style="bold"))
+                output.write(Text(prompt + " (password input)", style="bold"))
             else:
                 output.write(Text(prompt, style="bold"))
             # Focus the command input widget
@@ -1971,7 +2042,9 @@ class AgenticCLIApp(App):
                 or "acli> "
             )
             output.write(Text(prompt_sym, style="bold green") + Text(command))
-            output.write(render("[dim](已排队，等待当前任务完成后执行)[/dim]"))
+            output.write(
+                render("[dim](queued; runs after current task)[/dim]"),
+            )
             return
 
         # Echo user data (skipped for dequeued commands that were already
@@ -1997,7 +2070,7 @@ class AgenticCLIApp(App):
                 asyncio.create_task(self._run_shell_escape(shell_cmd))
             else:
                 self._write_output(
-                    Text("用法: !<shell command>", style="yellow"),
+                    Text("Usage: !<shell command>", style="yellow"),
                 )
         elif command in ("/feedback good", "/feedback bad"):
             import dashscope.acli.cli as cli_module
@@ -2021,7 +2094,7 @@ class AgenticCLIApp(App):
             self._write_output(
                 Panel(
                     render(help_text),
-                    title="帮助",
+                    title="Help",
                     border_style=panel_border,
                 ),
             )
@@ -2031,7 +2104,7 @@ class AgenticCLIApp(App):
             if self.agent.session_path:
                 self.agent.save_session()
             self._render_banner()
-            self._write_output(Text("对话已清空", style="dim"))
+            self._write_output(Text("Conversation cleared", style="dim"))
         elif command.startswith("/"):
             # Try to handle as a slash command from cli.py
             import dashscope.acli.cli as cli_module
@@ -2077,7 +2150,9 @@ class AgenticCLIApp(App):
                         self.config,
                     )
                 except Exception as e:
-                    self._write_output(Text(f"命令执行出错: {e}", style="red"))
+                    self._write_output(
+                        Text(f"Command failed: {e}", style="red"),
+                    )
                     return
 
             if result is True:
@@ -2114,9 +2189,10 @@ class AgenticCLIApp(App):
                 output = self.query_one("#output", RichLog)
                 output.write(
                     Text(
-                        f"当前模型 {self.config.model} "
-                        f"不支持图片，{len(images)} "
-                        f"张图片已忽略。切换到视觉模型（如 qwen-vl-max）后重试。",
+                        f"Model {self.config.model} does not support "
+                        f"images; {len(images)} image(s) ignored. "
+                        "Switch to a vision model (e.g. qwen-vl-max) "
+                        "and retry.",
                         style="yellow",
                     ),
                 )
@@ -2125,9 +2201,10 @@ class AgenticCLIApp(App):
                 output = self.query_one("#output", RichLog)
                 output.write(
                     Text(
-                        f"当前模型 {self.config.model} "
-                        f"不支持音频，{len(audio_clips)} "
-                        f"段音频已忽略。切换到音频模型（如 qwen-omni-turbo）后重试。",
+                        f"Model {self.config.model} does not support "
+                        f"audio; {len(audio_clips)} clip(s) ignored. "
+                        "Switch to an audio model (e.g. qwen-omni-turbo) "
+                        "and retry.",
                         style="yellow",
                     ),
                 )
@@ -2148,7 +2225,7 @@ class AgenticCLIApp(App):
                 shell_cmd,
             )
         except Exception as e:
-            self._write_output(Text(f"错误: {e}", style="red"))
+            self._write_output(Text(f"Error: {e}", style="red"))
             return
         if stdout:
             self._write_output(Text(stdout.rstrip(), style="dim"))
@@ -2157,7 +2234,7 @@ class AgenticCLIApp(App):
         if rc != 0:
             self._write_output(Text(f"(exit code {rc})", style="yellow"))
         elif not stdout and not stderr:
-            self._write_output(Text("执行完成", style="dim"))
+            self._write_output(Text("Done", style="dim"))
 
     async def _handle_device_command(self, command: str) -> None:
         """Handle /camera and /tts in a worker thread — they block on
@@ -2174,7 +2251,7 @@ class AgenticCLIApp(App):
                     self.config,
                 )
             except Exception as e:
-                output.write(Text(f"错误: {e}", style="red"))
+                output.write(Text(f"Error: {e}", style="red"))
 
         try:
             input_widget = self.query_one("#command-input", CommandInput)
@@ -2195,7 +2272,9 @@ class AgenticCLIApp(App):
         self._voice_cancel_event = cancel_event
         self._voice_recording = True
 
-        output.write(Text("🎤 录音中... (说完自动停止)", style="cyan"))
+        output.write(
+            Text("🎤 Recording... (auto-stops when done)", style="cyan"),
+        )
 
         # Real-time display callback
         last_text = [""]
@@ -2204,9 +2283,9 @@ class AgenticCLIApp(App):
             if text != last_text[0]:
                 # Style errors in red, diagnostics in cyan, normal ASR
                 # output in dim
-                if text.startswith("[错误]") or text.startswith("[提示]"):
+                if text.startswith(("[错误]", "[提示]", "[Error]", "[Info]")):
                     output.write(Text(text, style="red"))
-                elif text.startswith("[诊断]") or text.startswith("[警告]"):
+                elif text.startswith(("[诊断]", "[警告]", "[Diag]", "[Warn]")):
                     output.write(Text(text, style="cyan"))
                 else:
                     output.write(Text(f"  → {text}", style="dim"))
@@ -2223,15 +2302,15 @@ class AgenticCLIApp(App):
                 max_recording_seconds=self.config.voice_max_seconds,
             )
             if text:
-                output.write(Text(f"✓ 识别结果: {text}", style="green"))
+                output.write(Text(f"✓ Recognized: {text}", style="green"))
                 # Put the transcribed text into the input area
                 input_widget = self.query_one("#command-input", CommandInput)
                 input_widget.text = text
                 input_widget.focus()
             else:
-                output.write(Text("未识别到语音", style="yellow"))
+                output.write(Text("No speech recognized", style="yellow"))
         except Exception as e:
-            output.write(Text(f"语音输入失败: {e}", style="red"))
+            output.write(Text(f"Voice input failed: {e}", style="red"))
         finally:
             self._voice_recording = False
             self._voice_cancel_event = None
@@ -2317,7 +2396,7 @@ class AgenticCLIApp(App):
                         self.agent,
                     )
             except Exception as e:
-                output.write(Text(f"错误: {e}", style="red"))
+                output.write(Text(f"Error: {e}", style="red"))
 
         try:
             input_widget = self.query_one("#command-input", CommandInput)
@@ -2344,7 +2423,7 @@ class AgenticCLIApp(App):
                         self.run_agent(rendered),
                     )
             except Exception as e:
-                output.write(Text(f"错误: {e}", style="red"))
+                output.write(Text(f"Error: {e}", style="red"))
 
         try:
             input_widget = self.query_one("#command-input", CommandInput)
@@ -2428,7 +2507,8 @@ class AgenticCLIApp(App):
             delta_cached = cur["cached_tokens"] - snap["cached_tokens"]
             delta_api = cur["api_calls"] - snap["api_calls"]
             if delta_in > 0 or delta_out > 0:
-                # 斜杠后为会话累计；首轮（本轮==累计）时不重复显示
+                # After the slash are session totals; on the first turn
+                # (this turn == totals) do not show them twice
                 is_first_turn = (
                     cur["input_tokens"] == delta_in
                     and cur["output_tokens"] == delta_out
@@ -2502,11 +2582,13 @@ class AgenticCLIApp(App):
             None,
         )
 
-        # 旧版 JediTerm 无 synchronized-output，跟随滚动的每次 flush 都是一次
-        # 整屏撕裂（屏闪）。降级为平静流式：期间内容照写但视口冻结（零重绘，
-        # spinner 仍动），turn 结束一次性滚到底（仅一帧）。frozen_y 取 turn
-        # 开始时的 max_scroll_y（提交时的 scroll_end 是延迟生效的，直接读
-        # scroll_offset.y 可能是滚动前的旧值）。
+        # Old JediTerm has no synchronized-output, so every follow-scrolling
+        # flush tears the whole screen (flicker). Degrade to calm streaming:
+        # content is still written but the viewport stays frozen (zero
+        # repaints, spinner keeps animating), and we scroll to the bottom
+        # once at turn end (a single frame). frozen_y uses max_scroll_y at
+        # turn start (the scroll_end on submit takes effect lazily, so
+        # reading scroll_offset.y directly may yield the pre-scroll value).
         self._calm_streaming = _IS_JEDITERM
         frozen_y = output.max_scroll_y if self._calm_streaming else None
 
@@ -2518,7 +2600,8 @@ class AgenticCLIApp(App):
             last_flush = loop.time()
 
             def _flush_lines() -> None:
-                # 每行一次 write 会逐行触发重绘，聚合后一次写入消除底部屏闪
+                # One write per line triggers a repaint per line;
+                # aggregating into a single write eliminates bottom flicker
                 if pending_lines:
                     self._write_output(
                         Text("\n".join(pending_lines), style="cyan"),
@@ -2552,9 +2635,12 @@ class AgenticCLIApp(App):
                     pending_lines.append(line)
                     buffer = rest
                 now = loop.time()
-                # 每次 flush 都会滚动并重绘整个可见区；窗口太小（如 0.1s）在不支持
-                # synchronized-output 的终端（旧版 PyCharm）上仍会每秒多次全屏重绘、
-                # 底部屏闪。行数阈值仅限制突发大量输出的 flush 频率。
+                # Every flush scrolls and repaints the whole visible area;
+                # too small a window (e.g. 0.1s) still causes several
+                # full-screen repaints per second on terminals without
+                # synchronized-output (old PyCharm) and bottom flicker. The
+                # line threshold only limits flush frequency for bursty
+                # bulk output.
                 if (
                     now - last_flush >= _STREAM_FLUSH_INTERVAL
                     or len(pending_lines) >= _STREAM_FLUSH_LINES
@@ -2585,14 +2671,14 @@ class AgenticCLIApp(App):
                 except Exception:
                     pass
         except asyncio.CancelledError:
-            self._write_output(Text("\n(已中断)", style="yellow"))
+            self._write_output(Text("\n(Interrupted)", style="yellow"))
         except UserAbortedTurn:
-            self._write_output(Text("\n已中止本轮", style="dim"))
+            self._write_output(Text("\nTurn aborted", style="dim"))
         except Exception as e:
             import traceback
 
             tb = traceback.format_exc()
-            self._write_output(Text(f"\n错误: {e}", style="red"))
+            self._write_output(Text(f"\nError: {e}", style="red"))
             # Log full traceback to workspace for debugging
             try:
                 from dashscope.acli.config import WORKSPACE_DIR
@@ -2616,9 +2702,11 @@ class AgenticCLIApp(App):
             if self._calm_streaming:
                 self._calm_streaming = False
                 self._write_output("")
-                # 一次性补滚到底（仅一帧）；用户中途向上滚入历史则不拽回
-                # （位置 >= frozen_y 都视为跟随意图：含确认提示的自动滚动、
-                # 以及用户手动滚回底部）
+                # Catch-up scroll to the bottom once (a single frame); if
+                # the user scrolled up into history mid-turn, do not yank
+                # back (any position >= frozen_y counts as follow intent:
+                # auto-scrolls from confirm prompts, or the user manually
+                # scrolling back to the bottom)
                 if (
                     frozen_y is not None
                     and output.scroll_offset.y >= frozen_y - 2
@@ -2664,7 +2752,7 @@ class AgenticCLIApp(App):
                 try:
                     self.call_from_thread(
                         self._write_output,
-                        Text(f"TTS 错误: {e}", style="yellow"),
+                        Text(f"TTS error: {e}", style="yellow"),
                     )
                 except Exception:
                     pass  # App already shutting down

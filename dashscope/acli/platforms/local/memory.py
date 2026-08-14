@@ -42,7 +42,7 @@ class LocalMemoryClient:
 
     def __init__(self, user_id: str = "default", memory_library_id: str = ""):
         if not re.fullmatch(r"[A-Za-z0-9._-]+", user_id) or ".." in user_id:
-            raise ValueError(f"非法的 memory user_id: {user_id}")
+            raise ValueError(f"invalid memory user_id: {user_id}")
         self.user_id = user_id
         self.memory_library_id = memory_library_id  # accepted but unused
         self._dir = _workspace_memory_dir()
@@ -90,7 +90,7 @@ class LocalMemoryClient:
         """Extract key facts from messages and store as memory nodes.
 
         For local mode we do simple extraction: pull out lines that look
-        like user preferences / facts (contains "我", "my", "prefer", etc.)
+        like user preferences / facts (contains "I", "my", "prefer", etc.)
         or just store custom_content directly.
         """
         from dashscope.acli.utils import sanitize_text

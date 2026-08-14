@@ -72,12 +72,14 @@ def context_window_for_model(model: str) -> int:
 
 
 def normalize_model_name(model: str) -> str:
-    """API 模型 ID 大小写敏感且惯例全小写，注册/切换前统一归一化。"""
+    """API model IDs are case-sensitive and conventionally lowercase;
+    normalize before register/switch."""
     return model.strip().lower()
 
 
 def register_custom_model(config: "Config", provider: str, model: str) -> str:
-    """注册自定义模型：归一化 → 并入 PROVIDER_MODELS → 持久化到 workspace。"""
+    """Register a custom model: normalize, merge into PROVIDER_MODELS,
+    persist to workspace."""
     model = normalize_model_name(model)
     if provider in PROVIDER_MODELS and model not in PROVIDER_MODELS[provider]:
         PROVIDER_MODELS[provider].append(model)

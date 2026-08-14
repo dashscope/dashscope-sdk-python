@@ -34,9 +34,10 @@ def extract_keywords(text: str) -> set[str]:
 def expand_scoring_terms(keywords: set[str]) -> set[str]:
     """Expand keywords into scoring terms with CJK bigram overlap.
 
-    extract_keywords emits only the full contiguous CJK run ("登录报错"),
-    which never substring-matches "登录接口错误". Adding overlapping bigrams
-    ("登录", "报错") keeps Chinese retrieval working without single-char
+    extract_keywords emits only the full contiguous CJK run ("登录报错",
+    "login error"), which never substring-matches "登录接口错误" ("login
+    API error"). Adding overlapping bigrams ("登录" / "login", "报错" /
+    "error") keeps Chinese retrieval working without single-char
     noise. Falls back to the raw set when nothing multi-char exists.
     """
     terms: set[str] = set()

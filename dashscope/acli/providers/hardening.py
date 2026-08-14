@@ -17,14 +17,16 @@ from typing import AsyncIterator
 
 from dashscope.acli.providers.base import LLMChunk, LLMProvider, LLMResponse
 
-# Retry classification patterns. Provider errors are bilingual: the
-# wrappers raise Chinese RuntimeErrors ("API 请求超时…", "无法连接到 API
-# 服务器…") while SDK/network errors surface in English. Both layers
-# (HardenedProvider retry + ProviderChain fallback) share
+# Retry classification patterns. Provider errors are bilingual: parts of
+# the provider layer can raise Chinese RuntimeErrors (e.g. request
+# timeout / connection failures) while SDK/network errors surface in
+# English.
+# Both layers (HardenedProvider retry + ProviderChain fallback) share
 # ``is_retryable_error`` below so they classify identically.
 #
-# NOTE: "不可用" / "服务异常" stay retryable so the stream-empty message
-# "…可能是限流、模型不可用或服务异常" is treated as transient.
+# NOTE: the "unavailable" / "service error" entries stay retryable so a
+# stream-empty message blaming rate limiting or model/service trouble
+# is treated as transient.
 _RETRYABLE_PATTERNS = (
     # English
     "timeout",
@@ -39,21 +41,27 @@ _RETRYABLE_PATTERNS = (
     "parse",
     "jsondecodeerror",
     "unexpected eof",
-    # 中文
-    "超时",
-    "连接",
-    "网络",
-    "限流",
-    "不可用",
-    "空响应",
-    "未返回任何内容",
-    "服务异常",
-    "内部错误",
-    "流式中断",
+    # Chinese patterns
+    "超时",  # timeout
+    "连接",  # connection
+    "网络",  # network
+    "限流",  # rate limiting
+    "不可用",  # unavailable
+    "空响应",  # empty response
+    "未返回任何内容",  # returned no content
+    "服务异常",  # service error
+    "内部错误",  # internal error
+    "流式中断",  # stream interrupted
+    # English equivalents of the Chinese entries not already covered
+    # by the English block above
+    "network",
+    "unavailable",
+    "no content",
+    "service error",
 )
 
 # Checked FIRST and wins over retryable patterns — e.g.
-# "API 端点不存在 (404)" must not be retried.
+# "API endpoint not found (404)" must not be retried.
 _NON_RETRYABLE_PATTERNS = (
     # English
     "invalid api key",
@@ -65,21 +73,31 @@ _NON_RETRYABLE_PATTERNS = (
     "model not found",
     "insufficient_quota",
     "billing",
-    # 中文
-    "权限",
-    "认证",
-    "鉴权",
-    "无效 api key",
-    "密钥",
-    "配额",
-    "账单",
-    "不存在",
+    # Chinese patterns
+    "权限",  # permission
+    "认证",  # authentication
+    "鉴权",  # authorization
+    "无效 api key",  # invalid api key
+    "密钥",  # secret key
+    "配额",  # quota
+    "账单",  # billing
+    "不存在",  # does not exist
+    # English equivalents of the Chinese entries not already covered
+    # by the English block above
+    "permission",
+    "secret key",
+    "quota",
+    "does not exist",
 )
 
 # Hint appended to a retry when the model produced an empty reply.
 _EMPTY_RECOVERY_HINT = {
     "role": "user",
-    "content": ("你刚才没有输出任何内容。请根据上下文继续，必要时直接调用工具完成用户请求。"),
+    "content": (
+        "Your previous reply was empty. Continue based on the context "
+        "above, calling tools directly when needed to complete the "
+        "user's request."
+    ),
 }
 
 
@@ -143,7 +161,7 @@ class HardenedProvider:
                     continue
             return resp
 
-        raise last_error or RuntimeError("Provider 调用失败")
+        raise last_error or RuntimeError("Provider call failed")
 
     async def chat_stream(
         self,

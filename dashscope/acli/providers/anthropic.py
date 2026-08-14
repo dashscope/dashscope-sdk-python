@@ -60,7 +60,8 @@ class AnthropicProvider:
     ):
         if anthropic is None:
             raise ImportError(
-                "anthropic 包未安装。请运行: pip install 'acli[anthropic]'",
+                "The anthropic package is not installed. "
+                "Run: pip install 'acli[anthropic]'",
             )
         self.model = model
         self.client = anthropic.AsyncAnthropic(
@@ -159,16 +160,20 @@ class AnthropicProvider:
         try:
             response = await self.client.messages.create(**kwargs)
         except httpx.TimeoutException as e:
-            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试") from e
+            raise RuntimeError(
+                "API request timeout; check your network or retry later",
+            ) from e
         except httpx.ConnectError as e:
-            raise RuntimeError("无法连接到 API 服务器，请检查网络连接") from e
+            raise RuntimeError(
+                "Unable to connect to the API server; check your network",
+            ) from e
         except anthropic.NotFoundError as e:
             raise RuntimeError(
-                "API 端点不存在 (404): base_url 与 protocol 可能不匹配，"
-                "请运行 /provider 检查配置",
+                "API endpoint not found (404): base_url and protocol may "
+                "not match; run /provider to check the config",
             ) from e
         except anthropic.APIError as e:
-            raise RuntimeError(f"API 请求失败: {e}") from e
+            raise RuntimeError(f"API request failed: {e}") from e
 
         content = ""
         tool_calls = []
@@ -288,7 +293,9 @@ class AnthropicProvider:
                                 # instead of crashing.
                                 args = {}
                                 yield LLMChunk(
-                                    delta_content=(f"[工具参数解析失败: {e}]"),
+                                    delta_content=(
+                                        f"[Failed to parse tool args: {e}]"
+                                    ),
                                 )
                             # pylint: disable=unsubscriptable-object
                             yield LLMChunk(
@@ -346,18 +353,25 @@ class AnthropicProvider:
                     except Exception:
                         pass
                     if stop and stop != "end_turn":
-                        raise RuntimeError(f"API 流式响应异常结束: stop_reason={stop}")
+                        raise RuntimeError(
+                            f"API stream ended abnormally: stop_reason={stop}",
+                        )
                     raise RuntimeError(
-                        "API 流式响应未返回任何内容，可能是限流、模型不可用或服务异常",
+                        "API stream returned no content; possibly rate "
+                        "limit, model unavailable, or service disruption",
                     )
         except httpx.TimeoutException as e:
-            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试") from e
+            raise RuntimeError(
+                "API request timeout; check your network or retry later",
+            ) from e
         except httpx.ConnectError as e:
-            raise RuntimeError("无法连接到 API 服务器，请检查网络连接") from e
+            raise RuntimeError(
+                "Unable to connect to the API server; check your network",
+            ) from e
         except anthropic.NotFoundError as e:
             raise RuntimeError(
-                "API 端点不存在 (404): base_url 与 protocol 可能不匹配，"
-                "请运行 /provider 检查配置",
+                "API endpoint not found (404): base_url and protocol may "
+                "not match; run /provider to check the config",
             ) from e
         except anthropic.APIError as e:
-            raise RuntimeError(f"API 请求失败: {e}") from e
+            raise RuntimeError(f"API request failed: {e}") from e

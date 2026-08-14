@@ -88,25 +88,27 @@ def ensure_provider_key(config: Config, agent) -> bool:
     else:
         env_name = f"{config.provider.upper()}_API_KEY"
 
-    console.print(f"\n[yellow]未检测到 {config.provider} 的 API Key[/yellow]")
-    console.print("请选择设置方式:")
+    console.print(
+        f"\n[yellow]No API Key detected for " f"{config.provider}[/yellow]",
+    )
+    console.print("Choose how to set it up:")
     if env_name:
-        console.print(f"  [1] 设置环境变量 {env_name} (退出后设置)")
+        console.print(f"  [1] Set env var {env_name} (exit and set)")
     else:
-        console.print("  [1] 设置对应环境变量 (退出后设置)")
-    console.print("  [2] 现在输入 API Key")
-    console.print("  [3] 启动后使用 /provider 命令设置")
-    choice = input("\n输入选项 [1/2/3]: ").strip()
+        console.print("  [1] Set corresponding env var (exit and set)")
+    console.print("  [2] Enter API Key now")
+    console.print("  [3] Set up later with /provider after startup")
+    choice = input("\nChoose [1/2/3]: ").strip()
 
     if choice == "1":
-        console.print("[dim]请设置环境变量后重新启动:[/dim]")
+        console.print("[dim]Set the env var, then restart:[/dim]")
         if env_name:
             console.print(f"[dim]  export {env_name}=sk-xxx[/dim]")
         sys.exit(0)
     elif choice == "2":
         api_key = _prompt_input("API Key: ", secret=True)
         if not api_key:
-            console.print("[red]未输入 API Key，退出[/red]")
+            console.print("[red]No API Key entered; exiting[/red]")
             sys.exit(0)
         if ext is not None:
             if _set_extension_provider_token(
@@ -123,14 +125,16 @@ def ensure_provider_key(config: Config, agent) -> bool:
         else:
             config.api_key = api_key
         config.save_global()
-        console.print("[green]API Key 已保存[/green]")
+        console.print("[green]API Key saved[/green]")
         agent.provider = get_provider_chain(config)
         return True
     elif choice == "3":
-        console.print("[dim]提示: 启动后输入 /provider 设置 API Key[/dim]\n")
+        console.print(
+            "[dim]Hint: run /provider after startup to set API Key[/dim]\n",
+        )
         return True
     else:
-        console.print("[red]未设置 API Key，退出[/red]")
+        console.print("[red]API Key not set; exiting[/red]")
         sys.exit(0)
 
 
@@ -151,7 +155,10 @@ def _set_extension_cap_token(cap_key: str, direct_value: str = "") -> None:
 
     cap = find_capability(cap_key)
     if cap is None:
-        console.print(f"[red]{cap_key} 不是已注册的扩展能力[/red]")
+        console.print(
+            f"[red]{cap_key} is not a registered "
+            f"extension capability[/red]",
+        )
         return
     if (
         cap.auth
@@ -162,27 +169,34 @@ def _set_extension_cap_token(cap_key: str, direct_value: str = "") -> None:
         env_hint = cap.api_key_env or auth_env_name(cap.auth)
     else:
         console.print(
-            f"[yellow]{cap_key} 当前 auth 配置 "
-            f"({cap.auth or 'none'}) 不需要 token[/yellow]",
+            f"[yellow]{cap_key} current auth config "
+            f"({cap.auth or 'none'}) does not need a token[/yellow]",
         )
         return
 
     secret = direct_value or _prompt_input(
-        f"  {cap_key} 凭证 (env {env_hint} 的值, 输入隐藏): ",
+        f"  {cap_key} credential (value of env {env_hint}, "
+        f"hidden input): ",
         secret=True,
     )
     if not secret:
-        console.print("[dim]已取消[/dim]")
+        console.print("[dim]Cancelled[/dim]")
         return
 
     enc = encrypt_for_toml(secret)
     target = Path(cap.source) if cap.source else GLOBAL_EXTENSIONS_FILE
     if not set_capability_secret(target, cap_key, api_key_enc=enc):
-        console.print(f"[red]写入失败: 在 {target} 中找不到 {cap_key} 块[/red]")
+        console.print(
+            f"[red]Write failed: {cap_key} block "
+            f"not found in {target}[/red]",
+        )
         return
     apply_extensions(PROVIDER_MODELS)
-    console.print(f"[green]✓ 已加密保存到 {target}[/green]")
-    console.print(f"[dim]运行时优先级: 环境变量 {env_hint} > 加密 token[/dim]")
+    console.print(f"[green]✓ Saved encrypted to {target}[/green]")
+    console.print(
+        f"[dim]Runtime priority: env var {env_hint} "
+        f"> encrypted token[/dim]",
+    )
 
 
 def _set_extension_provider_token(
@@ -198,11 +212,11 @@ def _set_extension_provider_token(
     (an error message is already printed on failure).
     """
     secret = direct_value or _prompt_input(
-        f"  {ext_prov.name} API Key (输入隐藏，加密后写入): ",
+        f"  {ext_prov.name} API Key (hidden input, saved encrypted): ",
         secret=True,
     )
     if not secret:
-        console.print("[dim]已取消[/dim]")
+        console.print("[dim]Cancelled[/dim]")
         return False
 
     # Save to the provider's dynamic slot, e.g. ideatalk_api_key.
@@ -213,11 +227,15 @@ def _set_extension_provider_token(
     finally:
         config.provider = old_provider
     config.save_global()
-    env_hint = ext_prov.api_key_env or "(无)"
+    env_hint = ext_prov.api_key_env or "(none)"
     console.print(
-        f"[green]✓ {ext_prov.name}_api_key 已加密保存到 ~/.acli/config.toml[/green]",
+        f"[green]✓ {ext_prov.name}_api_key saved encrypted "
+        f"to ~/.acli/config.toml[/green]",
     )
-    console.print(f"[dim]运行时优先级: 环境变量 {env_hint} > 加密 token[/dim]")
+    console.print(
+        f"[dim]Runtime priority: env var {env_hint} "
+        f"> encrypted token[/dim]",
+    )
     return True
 
 
@@ -248,9 +266,14 @@ def _maybe_prompt_extension_token(cap_key: str, config=None) -> None:
         # (e.g. tongyi ↔ DASHSCOPE_API_KEY) — no second prompt needed.
         return
     console.print(
-        f"[yellow]{cap_key} 缺凭证[/yellow] "
-        f"[dim](env {env_name} 未设；toml 中也无加密 key)[/dim]",
+        f"[yellow]{cap_key} missing credential[/yellow] "
+        f"[dim](env {env_name} unset; no encrypted key in "
+        f"toml either)[/dim]",
     )
-    yn = input("现在录入? (加密保存，下次自动用) [Y/n]: ").strip().lower()
+    yn = (
+        input("Enter it now? (saved encrypted, reused later) [Y/n]: ")
+        .strip()
+        .lower()
+    )
     if yn in ("", "y", "yes"):
         _set_extension_cap_token(cap_key)

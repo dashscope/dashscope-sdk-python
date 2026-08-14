@@ -62,14 +62,14 @@ def _handle_slash_command(
         _handle_camera_command(cmd)
         return True
     if cmd in ("/exit", "/quit", "/q"):
-        console.print("[dim]再见![/dim]")
+        console.print("[dim]Bye![/dim]")
         sys.exit(0)
     elif cmd == "/copy":
         import dashscope.acli.cli as _cli
 
         _cons = _cli.console
         if not agent.last_output:
-            _cons.print("[yellow]没有可复制的内容[/yellow]")
+            _cons.print("[yellow]Nothing to copy[/yellow]")
             return True
         import shutil
         import subprocess as _sp
@@ -85,9 +85,15 @@ def _handle_slash_command(
         elif shutil.which("clip"):
             _sp.run(["clip"], input=agent.last_output.encode(), check=False)
         else:
-            _cons.print("[yellow]未找到剪贴板工具 (pbcopy/xclip/clip)[/yellow]")
+            _cons.print(
+                "[yellow]No clipboard tool found "
+                "(pbcopy/xclip/clip)[/yellow]",
+            )
             return True
-        _cons.print(f"[green]✓ 已复制 {len(agent.last_output)} 字符到剪贴板[/green]")
+        _cons.print(
+            f"[green]✓ Copied {len(agent.last_output)} "
+            f"chars to clipboard[/green]",
+        )
         return True
     elif cmd == "/json" or cmd.startswith("/json "):
         parts = cmd.strip().split()
@@ -96,24 +102,26 @@ def _handle_slash_command(
             if arg in ("on", "true", "1"):
                 agent.json_mode = True
                 console.print(
-                    "[green]✓ JSON 输出模式已开启（后续回复强制 JSON 格式）[/green]",
+                    "[green]✓ JSON output mode on "
+                    "(replies forced to JSON)[/green]",
                 )
             elif arg in ("off", "false", "0"):
                 agent.json_mode = False
-                console.print("[green]✓ JSON 输出模式已关闭[/green]")
+                console.print("[green]✓ JSON output mode off[/green]")
             else:
-                console.print("[dim]用法: /json on|off[/dim]")
+                console.print("[dim]Usage: /json on|off[/dim]")
         else:
-            state = "开启" if agent.json_mode else "关闭"
-            console.print(f"[bold]JSON 输出模式: {state}[/bold]")
+            state = "on" if agent.json_mode else "off"
+            console.print(f"[bold]JSON output mode: {state}[/bold]")
             console.print(
-                "[dim]用法: /json on|off — 开启后 Agent 回复强制 JSON 格式[/dim]",
+                "[dim]Usage: /json on|off — when on, "
+                "replies are forced to JSON[/dim]",
             )
         return True
     elif cmd == "/save" or cmd.startswith("/save "):
         parts = cmd.strip().split(None, 1)
         if not agent.last_output:
-            console.print("[yellow]没有可保存的内容[/yellow]")
+            console.print("[yellow]Nothing to save[/yellow]")
             return True
         save_path = parts[1].strip() if len(parts) > 1 else None
         if not save_path:
@@ -129,21 +137,24 @@ def _handle_slash_command(
             p = Path(save_path)
             p.write_text(agent.last_output, encoding="utf-8")
             console.print(
-                f"[green]✓ 已保存 {len(agent.last_output)} 字符到: {p}[/green]",
+                f"[green]✓ Saved {len(agent.last_output)} "
+                f"chars to: {p}[/green]",
             )
         except Exception as e:
-            console.print(f"[red]保存失败: {e}[/red]")
+            console.print(f"[red]Save failed: {e}[/red]")
         return True
     elif cmd == "/clear":
         agent.reset()
         # Persist empty history so the cleared state survives restart.
         if agent.session_path:
             agent.save_session()
-        console.print("[dim]对话已清空[/dim]")
+        console.print("[dim]Conversation cleared[/dim]")
         return True
     elif cmd == "/compress":
         if len(agent.messages) < 4:
-            console.print("[yellow]对话太短，无需压缩[/yellow]")
+            console.print(
+                "[yellow]Conversation too short to compress[/yellow]",
+            )
             return True
         return "compress"
     elif cmd == "/info":
@@ -154,7 +165,7 @@ def _handle_slash_command(
         )
 
         console.print()
-        console.print("[bold]ℹ️ 当前运行信息[/bold]")
+        console.print("[bold]ℹ️ Current runtime info[/bold]")
         console.print(
             f"  Provider:     [cyan]"
             f"{agent.provider_name or config.provider}[/cyan]",
@@ -171,39 +182,39 @@ def _handle_slash_command(
         profiles = build_profiles_from_config(config)
         actual_base_url = profiles[0].base_url if profiles else config.base_url
         console.print(
-            f"  Base URL:     [cyan]{actual_base_url or '(默认)'}[/cyan]",
+            f"  Base URL:     [cyan]{actual_base_url or '(default)'}[/cyan]",
         )
         console.print(f"  User:         [cyan]{config.user_name}[/cyan]")
         console.print(
             f"  Memory:       "
-            f"{'[green]开启' if config.memory_enabled else '[dim]关闭'}[/]",
+            f"{'[green]on' if config.memory_enabled else '[dim]off'}[/]",
         )
         console.print(
             f"  Capabilities: [cyan]"
-            f"{', '.join(config.enabled_capabilities or []) or '(无)'}"
+            f"{', '.join(config.enabled_capabilities or []) or '(none)'}"
             f"[/cyan]",
         )
         console.print(
             f"  JSON mode:    "
-            f"{'[green]开启' if agent.json_mode else '[dim]关闭'}[/]",
+            f"{'[green]on' if agent.json_mode else '[dim]off'}[/]",
         )
         console.print(f"  Loop mode:    [cyan]{config.loop_mode}[/cyan]")
         console.print(f"  Max turns:    [cyan]{config.max_turns}[/cyan]")
         console.print(f"  Timeout:      [cyan]{config.timeout}s[/cyan]")
         console.print(
-            f"  TUI:          {'[green]开启' if config.tui else '[dim]关闭'}[/]",
+            f"  TUI:          {'[green]on' if config.tui else '[dim]off'}[/]",
         )
         console.print(
             f"  Privacy:      "
-            f"{'[green]开启' if config.privacy_mode else '[dim]关闭'}[/]",
+            f"{'[green]on' if config.privacy_mode else '[dim]off'}[/]",
         )
 
-        console.print("\n[bold]配置文件[/bold]")
+        console.print("\n[bold]Config files[/bold]")
         for label, path in [
-            ("全局配置", CONFIG_FILE),
-            ("工作区配置", WORKSPACE_CONFIG_FILE),
-            ("全局扩展", GLOBAL_EXTENSIONS_FILE),
-            ("工作区扩展", WORKSPACE_EXTENSIONS_FILE),
+            ("Global config", CONFIG_FILE),
+            ("Workspace config", WORKSPACE_CONFIG_FILE),
+            ("Global extensions", GLOBAL_EXTENSIONS_FILE),
+            ("Workspace extensions", WORKSPACE_EXTENSIONS_FILE),
         ]:
             if path.exists():
                 console.print(f"  [green]✓[/green] {label}: [dim]{path}[/dim]")
@@ -216,26 +227,26 @@ def _handle_slash_command(
             agent.executor.get_stats() if hasattr(agent, "executor") else {}
         )
         console.print()
-        console.print("[bold]📊 会话统计[/bold]")
+        console.print("[bold]📊 Session stats[/bold]")
         console.print(f"  Provider: [cyan]{agent.provider_name}[/cyan]")
-        console.print(f"  模型:     [cyan]{agent.model_name}[/cyan]")
+        console.print(f"  Model:    [cyan]{agent.model_name}[/cyan]")
 
         # Token usage
         token_usage = stats.get("token_usage", {})
         if token_usage.get("total_tokens", 0) > 0:
             cached = token_usage.get("cached_tokens", 0)
-            cached_part = f", 缓存: {cached}" if cached else ""
+            cached_part = f", cached: {cached}" if cached else ""
             console.print(
-                f"  Token 使用: [green]{token_usage['total_tokens']}[/green]"
-                f" (输入: {token_usage['input_tokens']},"
-                f" 输出: {token_usage['output_tokens']}{cached_part})",
+                f"  Tokens: [green]{token_usage['total_tokens']}[/green]"
+                f" (in: {token_usage['input_tokens']},"
+                f" out: {token_usage['output_tokens']}{cached_part})",
             )
 
         # Prompt composition (chars sent per LLM call, cumulative)
         prompt_comp = stats.get("prompt_composition", {})
         comp_total = sum(prompt_comp.values())
         if comp_total > 0:
-            console.print(f"  Prompt 组成: [green]{comp_total}[/green] 字符")
+            console.print(f"  Prompt mix: [green]{comp_total}[/green] chars")
             for key, label in [
                 ("system", "system"),
                 ("user", "user"),
@@ -252,38 +263,39 @@ def _handle_slash_command(
         # API calls
         api_calls = stats.get("api_calls", 0)
         if api_calls > 0:
-            console.print(f"  API 调用: [blue]{api_calls}[/blue] 次")
+            console.print(f"  API calls: [blue]{api_calls}[/blue]")
 
         # Tool calls
         console.print(
-            f"  工具调用: [yellow]{stats.get('total_tool_calls', 0)}[/yellow] 次",
+            f"  Tool calls: [yellow]"
+            f"{stats.get('total_tool_calls', 0)}[/yellow]",
         )
         tool_counts = stats.get("tool_counts", {})
         if tool_counts:
-            console.print("  工具明细:")
+            console.print("  Tool breakdown:")
             for name, count in sorted(
                 tool_counts.items(),
                 key=lambda x: -x[1],
             ):
-                console.print(f"    [dim]{name}[/dim] → {count} 次")
+                console.print(f"    [dim]{name}[/dim] → {count}")
 
         # Skill activations
         skill_calls = stats.get("skill_calls", 0)
         if skill_calls > 0:
-            console.print(f"  Skill 使用: [magenta]{skill_calls}[/magenta] 次")
+            console.print(f"  Skill calls: [magenta]{skill_calls}[/magenta]")
             skill_counts = stats.get("skill_counts", {})
             if skill_counts:
-                console.print("  Skill 明细:")
+                console.print("  Skill breakdown:")
                 for name, count in sorted(
                     skill_counts.items(),
                     key=lambda x: -x[1],
                 ):
-                    console.print(f"    [dim]{name}[/dim] → {count} 次")
+                    console.print(f"    [dim]{name}[/dim] → {count}")
 
         # Errors
         errors = stats.get("errors", 0)
         if errors > 0:
-            console.print(f"  错误: [red]{errors}[/red] 次")
+            console.print(f"  Errors: [red]{errors}[/red]")
 
         # Session duration
         duration = stats.get("session_duration", 0)
@@ -292,10 +304,10 @@ def _handle_slash_command(
             seconds = int(duration % 60)
             if minutes > 0:
                 console.print(
-                    f"  会话时长: [magenta]{minutes}分{seconds}秒[/magenta]",
+                    f"  Duration: [magenta]{minutes}m{seconds}s[/magenta]",
                 )
             else:
-                console.print(f"  会话时长: [magenta]{seconds}秒[/magenta]")
+                console.print(f"  Duration: [magenta]{seconds}s[/magenta]")
 
         console.print()
         return True
@@ -315,18 +327,22 @@ def _handle_slash_command(
             task_summary = (
                 agent.messages[-2]["content"][:100]
                 if len(agent.messages) > 1
-                else "用户任务"
+                else "user task"
             )
-            lesson = "用户反馈: 结果满意" if outcome == "success" else "用户反馈: 结果不满意"
+            lesson = (
+                "User feedback: satisfied"
+                if outcome == "success"
+                else "User feedback: unsatisfied"
+            )
             tracker.record_experience(
                 task_summary=task_summary,
                 tools_used=tools_used,
                 outcome=outcome,
                 lesson=lesson,
             )
-            console.print(f"[green]已记录反馈: {outcome}[/green]")
+            console.print(f"[green]Feedback recorded: {outcome}[/green]")
         else:
-            console.print("[yellow]没有可记录的任务结果[/yellow]")
+            console.print("[yellow]No task result to record[/yellow]")
         return True
     elif cmd == "/summarize":
         return "summarize"
@@ -425,20 +441,21 @@ def _handle_slash_command(
                         raise ValueError
                 except ValueError:
                     console.print(
-                        "[yellow]用法: /audit recent [N]（N 为正整数）[/yellow]",
+                        "[yellow]Usage: /audit recent [N] "
+                        "(N = positive integer)[/yellow]",
                     )
                     return True
             events = logger.recent(limit=limit)
         elif action == "clear":
             logger.clear()
-            console.print("[green]✓ 审计日志已清空[/green]")
+            console.print("[green]✓ Audit log cleared[/green]")
             return True
         else:
             events = logger.query(limit=50)
         if not events:
-            console.print("[dim]无审计记录[/dim]")
+            console.print("[dim]No audit records[/dim]")
             return True
-        console.print(f"[bold]审计日志 ({len(events)} 条)[/bold]")
+        console.print(f"[bold]Audit log ({len(events)} entries)[/bold]")
         for ev in events:
             ts = ev.get("timestamp", "")[:19]
             src = ev.get("source", "")

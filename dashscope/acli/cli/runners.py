@@ -60,10 +60,10 @@ async def _run_oneshot(config: Config, prompt: str):
             if key_info
             else f"{config.provider.upper()}_API_KEY"
         )
-        print(f"错误: 未找到 {config.provider} 的 API Key")
-        print(f"  1) 设置环境变量: export {env_hint}=sk-xxx")
-        print("  2) 启动后设置:   /provider")
-        print("  3) 交互式设置:   /setup")
+        print(f"Error: no API Key found for {config.provider}")
+        print(f"  1) Set env var:       export {env_hint}=sk-xxx")
+        print("  2) Set after launch:  /provider")
+        print("  3) Interactive setup: /setup")
         sys.exit(1)
 
     provider = get_provider_chain(config)
@@ -105,14 +105,14 @@ async def _run_oneshot(config: Config, prompt: str):
     expanded, images, audio_clips = _expand_at_references(prompt)
     if images and not is_vision_model(config.model):
         console.print(
-            f"[yellow]当前模型 {config.model} 不支持图片，"
-            f"{len(images)} 张图片已忽略。[/yellow]",
+            f"[yellow]Model {config.model} does not support images; "
+            f"{len(images)} image(s) ignored.[/yellow]",
         )
         images = []
     if audio_clips and not is_audio_model(config.model):
         console.print(
-            f"[yellow]当前模型 {config.model} 不支持音频，"
-            f"{len(audio_clips)} 段音频已忽略。[/yellow]",
+            f"[yellow]Model {config.model} does not support audio; "
+            f"{len(audio_clips)} audio clip(s) ignored.[/yellow]",
         )
         audio_clips = []
     agent_input = _to_multimodal_content(expanded, images, audio_clips)
@@ -131,16 +131,23 @@ def _run_dry_run(config: Config):
     """
     from rich.table import Table
 
-    console.print("\n[bold cyan]acli --dry-run[/bold cyan]  配置预览\n")
+    console.print("\n[bold cyan]acli --dry-run[/bold cyan]  Config preview\n")
 
     # 1. Provider & Model
-    provider_table = Table(title="Provider 配置", show_header=False, box=None)
+    provider_table = Table(
+        title="Provider config",
+        show_header=False,
+        box=None,
+    )
     provider_table.add_column("Key", style="cyan")
     provider_table.add_column("Value", style="green")
     provider_table.add_row("Provider", config.provider)
     provider_table.add_row("Model", config.model)
     provider_table.add_row("Protocol", config.protocol or "openai")
-    provider_table.add_row("API Key", "✓ 已配置" if config.api_key else "✗ 未配置")
+    provider_table.add_row(
+        "API Key",
+        "✓ configured" if config.api_key else "✗ not configured",
+    )
     if config.base_url:
         provider_table.add_row("Base URL", config.base_url)
     console.print(provider_table)
@@ -153,68 +160,75 @@ def _run_dry_run(config: Config):
     skills = list(BUILTIN_SKILLS.values())
     if skills:
         skill_table = Table(
-            title=f"已加载 Skills ({len(skills)})",
+            title=f"Loaded Skills ({len(skills)})",
             show_header=True,
         )
-        skill_table.add_column("名称", style="cyan")
-        skill_table.add_column("描述", style="dim")
+        skill_table.add_column("Name", style="cyan")
+        skill_table.add_column("Description", style="dim")
         for skill in skills:
             skill_table.add_row(skill.name, skill.description or "")
         console.print(skill_table)
     else:
-        console.print("[yellow]Skills:[/yellow] 无\n")
+        console.print("[yellow]Skills:[/yellow] none\n")
     console.print()
 
     # 3. MCP Services
     mcp_servers = getattr(config, "mcp_servers", None) or []
     if mcp_servers:
         mcp_table = Table(
-            title=f"MCP 服务 ({len(mcp_servers)})",
+            title=f"MCP Services ({len(mcp_servers)})",
             show_header=True,
         )
-        mcp_table.add_column("名称", style="cyan")
+        mcp_table.add_column("Name", style="cyan")
         mcp_table.add_column("URL", style="dim")
-        mcp_table.add_column("状态", style="green")
+        mcp_table.add_column("Status", style="green")
         for svc in mcp_servers:
             if isinstance(svc, dict):
                 name, url = svc.get("service", "?"), svc.get("url", "?")
             else:
                 name, url = svc.service, svc.url
-            mcp_table.add_row(name or "?", url or "?", "待连接")
+            mcp_table.add_row(name or "?", url or "?", "pending")
         console.print(mcp_table)
     else:
-        console.print("[yellow]MCP 服务:[/yellow] 无\n")
+        console.print("[yellow]MCP Services:[/yellow] none\n")
     console.print()
 
     # 4. Tools
     from dashscope.acli.tools.registry import registry
 
     tools = registry.list_tools()
-    tool_table = Table(title=f"可用 Tools ({len(tools)})", show_header=True)
-    tool_table.add_column("名称", style="cyan")
-    tool_table.add_column("描述", style="dim")
+    tool_table = Table(
+        title=f"Available Tools ({len(tools)})",
+        show_header=True,
+    )
+    tool_table.add_column("Name", style="cyan")
+    tool_table.add_column("Description", style="dim")
     for tool in tools[:20]:  # Show first 20 tools
         tool_table.add_row(tool.name, (tool.description or "")[:60])
     if len(tools) > 20:
-        tool_table.add_row("...", f"(还有 {len(tools) - 20} 个工具)")
+        tool_table.add_row("...", f"({len(tools) - 20} more tools)")
     console.print(tool_table)
     console.print()
 
     # 5. Capabilities
-    caps_table = Table(title="Capability 状态", show_header=False, box=None)
+    caps_table = Table(title="Capability status", show_header=False, box=None)
     caps_table.add_column("Capability", style="cyan")
-    caps_table.add_column("状态", style="green")
+    caps_table.add_column("Status", style="green")
     caps_table.add_row(
         "Memory",
-        "✓ 启用" if getattr(config, "memory_enabled", False) else "✗ 禁用",
+        (
+            "✓ enabled"
+            if getattr(config, "memory_enabled", False)
+            else "✗ disabled"
+        ),
     )
     caps_table.add_row(
         "Session Persist",
-        "✓ 启用" if config.session_persist else "✗ 禁用",
+        "✓ enabled" if config.session_persist else "✗ disabled",
     )
     caps_table.add_row(
         "Auto Approve",
-        "✓ 启用" if config.auto_approve else "✗ 禁用",
+        "✓ enabled" if config.auto_approve else "✗ disabled",
     )
     console.print(caps_table)
     console.print()
@@ -222,9 +236,9 @@ def _run_dry_run(config: Config):
     # 6. Readiness assessment
     issues = []
     if not config.api_key:
-        issues.append("API Key 未配置")
+        issues.append("API Key not configured")
     if not tools:
-        issues.append("无可用工具")
+        issues.append("No tools available")
 
     if issues:
         console.print("[bold red]⚠ Readiness: Warning[/bold red]")
@@ -234,7 +248,8 @@ def _run_dry_run(config: Config):
         console.print("[bold green]✓ Readiness: Ready[/bold green]")
 
     console.print(
-        "\n[dim]这是配置预览，agent 未启动。移除 --dry-run 以正常启动。[/dim]\n",
+        "\n[dim]This is a config preview; the agent was not started. "
+        "Remove --dry-run to launch normally.[/dim]\n",
     )
 
 
@@ -358,8 +373,8 @@ def _run_tui_mode(config: Config):
         from dashscope.acli.ui.tui import run_tui
     except ImportError:
         console.print(
-            "[yellow]TUI 需要 textual 依赖，请先安装: pip install textual"
-            "（或使用 CLI 模式: --cli）[/yellow]",
+            "[yellow]TUI requires the textual dependency: "
+            "pip install textual (or use CLI mode: --cli)[/yellow]",
         )
         return
 

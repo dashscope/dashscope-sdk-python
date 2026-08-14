@@ -141,7 +141,7 @@ class ExperienceTracker:
         if not experiences:
             return ""
 
-        lines = ["\n\n## 历史经验教训（参考）"]
+        lines = ["\n\n## Past Lessons (reference)"]
         for i, exp in enumerate(experiences, 1):
             task = exp.get("task", "")
             outcome = exp.get("outcome", "unknown")
@@ -158,8 +158,8 @@ class ExperienceTracker:
             )
             lines.append(f"{i}. {outcome_emoji} {task}")
             if tools:
-                lines.append(f"   使用工具: {', '.join(tools)}")
+                lines.append(f"   Tools used: {', '.join(tools)}")
             if lesson:
-                lines.append(f"   教训: {lesson}")
+                lines.append(f"   Lesson: {lesson}")
 
         return "\n".join(lines)

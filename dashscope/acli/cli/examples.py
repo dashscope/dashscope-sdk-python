@@ -16,7 +16,7 @@ from rich.console import Console
 
 console = Console()
 
-_DEFAULT_EXAMPLES_REPO = ""  # 通过 ~/.acli/config.toml 的 examples_repo 配置
+_DEFAULT_EXAMPLES_REPO = ""  # set via examples_repo in ~/.acli/config.toml
 _DEFAULT_EXAMPLES_BRANCH = "main"
 
 _KNOWN_EXAMPLES = [
@@ -109,13 +109,13 @@ def _clone_example_to_temp(
         )
     except subprocess.CalledProcessError as e:
         err = (e.stderr or "").strip()
-        raise RuntimeError(f"git 操作失败: {err or e}") from e
+        raise RuntimeError(f"git operation failed: {err or e}") from e
     except FileNotFoundError:
-        raise RuntimeError("未找到 git 命令，请先安装 git") from None
+        raise RuntimeError("git not found; please install git") from None
 
     src = tmp / name
     if not src.is_dir():
-        raise FileNotFoundError(f"仓库中不存在示例 {name}")
+        raise FileNotFoundError(f"example {name} not found in the repo")
     return src
 
 
@@ -208,19 +208,27 @@ def _copy_example_flat(src: Path, dst: Path, *, force: bool) -> bool:
     if conflicts and not force:
         listing = "\n".join(f"  .acli/{rel}" for _, rel in conflicts)
         console.print(
-            f"[yellow]以下文件已存在，继续将覆盖（原文件自动备份）:[/yellow]\n{listing}",
+            f"[yellow]These files already exist; continuing will "
+            f"overwrite them (originals are auto-backed up):[/yellow]\n"
+            f"{listing}",
         )
         if not sys.stdin.isatty():
-            console.print("[yellow]存在冲突文件且当前为非交互模式，已取消。[/yellow]")
-            console.print("[dim]确认覆盖请加 --force（冲突文件会自动备份）。[/dim]")
+            console.print(
+                "[yellow]Conflicts found in non-interactive mode; "
+                "cancelled.[/yellow]",
+            )
+            console.print(
+                "[dim]Pass --force to overwrite (conflict files are "
+                "auto-backed up).[/dim]",
+            )
             return False
         try:
-            answer = input("继续? [Y/n] ").strip().lower()
+            answer = input("Continue? [Y/n] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             console.print()
             return False
         if answer in ("n", "no"):
-            console.print("[dim]已取消。[/dim]")
+            console.print("[dim]Cancelled.[/dim]")
             return False
 
     backup_dir: Path | None = None
@@ -247,10 +255,11 @@ def _copy_example_flat(src: Path, dst: Path, *, force: bool) -> bool:
             encoding="utf-8",
         )
 
-    console.print(f"[green]✓ 示例已复制到: {acli_dir}[/green]")
+    console.print(f"[green]✓ Example copied to: {acli_dir}[/green]")
     if backup_dir is not None:
         console.print(
-            f"[dim]被覆盖文件已备份: {backup_dir}（可用 /example restore 恢复）[/dim]",
+            f"[dim]Overwritten files backed up to: {backup_dir} "
+            f"(undo with /example restore)[/dim]",
         )
     readmes = sorted(
         (
@@ -261,9 +270,14 @@ def _copy_example_flat(src: Path, dst: Path, *, force: bool) -> bool:
         key=lambda p: (len(p.parts), str(p)),
     )
     if readmes:
-        console.print(f"[dim]使用说明见 README: {readmes[0]}[/dim]")
-    console.print("[dim]可编辑 .acli/ 下的配置与技能定制你的 Agent[/dim]")
-    console.print("[dim]运行 /setup 进行个性化设置，/help 查看全部命令[/dim]")
+        console.print(f"[dim]See README for usage: {readmes[0]}[/dim]")
+    console.print(
+        "[dim]Edit config and skills under .acli/ "
+        "to customize your Agent[/dim]",
+    )
+    console.print(
+        "[dim]Run /setup to personalize, /help for all commands[/dim]",
+    )
     return True
 
 
@@ -281,7 +295,9 @@ def _restore_example_backup(dst: Path) -> bool:
     removed."""
     backup = dst / ".acli" / "backup"
     if not backup.is_dir():
-        console.print("[yellow]没有找到可恢复的备份（.acli/backup/）。[/yellow]")
+        console.print(
+            "[yellow]No restorable backup found (.acli/backup/).[/yellow]",
+        )
         return False
 
     removed = 0
@@ -314,7 +330,8 @@ def _restore_example_backup(dst: Path) -> bool:
     shutil.rmtree(backup)
     _prune_empty_dirs(backup.parent, dst)
     console.print(
-        f"[green]✓ 已恢复（还原 {restored} 个原文件，移除 {removed} 个示例新增文件）[/green]",
+        f"[green]✓ Restored ({restored} original files restored, "
+        f"{removed} example-added files removed)[/green]",
     )
     return True
 
@@ -331,7 +348,7 @@ def _print_example_list():
                 available = []
     if not available:
         available = _KNOWN_EXAMPLES
-    console.print("[bold]可用示例:[/bold]")
+    console.print("[bold]Available examples:[/bold]")
     for name in available:
         readme = examples_dir / name / "README.md"
         desc = ""
@@ -340,25 +357,26 @@ def _print_example_list():
             desc = first_line.lstrip("# ").strip()
         console.print(f"  [cyan]{name}[/cyan]  — {desc}")
     console.print()
-    console.print("[bold]用法:[/bold]")
+    console.print("[bold]Usage:[/bold]")
     console.print(
         "  acli example download <name>                 "
-        "[dim]# 合并到 ./.acli/（冲突自动备份）[/dim]",
+        "[dim]# merge into ./.acli/ (conflicts backed up)[/dim]",
     )
     console.print(
-        "  acli example download <name> --target <dir>  [dim]# 合并到指定目录[/dim]",
+        "  acli example download <name> --target <dir>  "
+        "[dim]# merge into the given directory[/dim]",
     )
     console.print(
         "  acli example download <name> --force         "
-        "[dim]# 跳过确认直接覆盖（仍备份）[/dim]",
+        "[dim]# overwrite without asking (still backed up)[/dim]",
     )
     console.print(
         "  acli example download <name> --repo <url>    "
-        "[dim]# 指定示例仓库并写入配置[/dim]",
+        "[dim]# use this repo and save it to config[/dim]",
     )
     console.print(
         "  acli example restore                         "
-        "[dim]# 恢复最近一次备份（撤销合并）[/dim]",
+        "[dim]# restore the latest backup (undo merge)[/dim]",
     )
 
 
@@ -393,9 +411,11 @@ def _handle_example_command(args):
     # download <name> [--target DIR] [--force]
     if sub == "download":
         if len(args) < 2:
-            console.print("[yellow]错误: download 需要指定示例名称[/yellow]")
+            console.print(
+                "[yellow]Error: download requires an example name[/yellow]",
+            )
             available = _list_examples() or _KNOWN_EXAMPLES
-            console.print(f"[dim]可用: {', '.join(available)}[/dim]")
+            console.print(f"[dim]Available: {', '.join(available)}[/dim]")
             return
         name = args[1]
         target_dir = Path.cwd()
@@ -421,46 +441,64 @@ def _handle_example_command(args):
 
         repo, branch = _get_configured_repo()
         if not repo and not provided and sys.stdin.isatty():
-            console.print("[yellow]未配置示例仓库。[/yellow]")
+            console.print("[yellow]No examples repo configured.[/yellow]")
             try:
-                provided = input("请输入示例仓库 git 地址（留空取消）: ").strip()
+                provided = input(
+                    "Enter the examples git repo URL (empty to cancel): ",
+                ).strip()
             except (EOFError, KeyboardInterrupt):
                 console.print()
                 return
             if not provided:
-                console.print("[dim]已取消。[/dim]")
+                console.print("[dim]Cancelled.[/dim]")
                 return
         repo = provided or repo
         if not repo:
-            console.print("[yellow]未配置示例仓库，无法下载。[/yellow]")
-            console.print("可直接指定（自动写入 ~/.acli/config.toml）:")
             console.print(
-                f"  acli example download {name} --repo <示例 git 仓库地址>",
+                "[yellow]No examples repo configured; "
+                "cannot download.[/yellow]",
             )
-            console.print("或手动在 ~/.acli/config.toml 中添加:")
-            console.print('  examples_repo = "<示例所在 git 仓库地址>"')
+            console.print(
+                "Pass one directly (auto-saved to ~/.acli/config.toml):",
+            )
+            console.print(
+                f"  acli example download {name} --repo <git repo URL>",
+            )
+            console.print("Or add it manually to ~/.acli/config.toml:")
+            console.print('  examples_repo = "<git repo URL>"')
             return
         if provided:
             _save_examples_repo(provided)
-            console.print("[dim]已保存 examples_repo 到 ~/.acli/config.toml[/dim]")
-        console.print(f"[dim]正在从 {repo} 下载示例 '{name}'...[/dim]")
+            console.print(
+                "[dim]Saved examples_repo to ~/.acli/config.toml[/dim]",
+            )
+        console.print(
+            f"[dim]Downloading example '{name}' from {repo}...[/dim]",
+        )
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 fetched = _clone_example_to_temp(name, repo, branch, Path(tmp))
                 _copy_example_flat(fetched, target_dir, force=force)
         except (RuntimeError, FileNotFoundError, OSError) as e:
-            console.print(f"[yellow]错误: {e}[/yellow]")
-            console.print(f"[dim]仓库: {repo} (分支: {branch})[/dim]")
+            console.print(f"[yellow]Error: {e}[/yellow]")
+            console.print(f"[dim]Repo: {repo} (branch: {branch})[/dim]")
             console.print(
-                "[dim]可在 ~/.acli/config.toml 中设置 examples_repo[/dim]",
+                "[dim]You can set examples_repo in "
+                "~/.acli/config.toml[/dim]",
             )
         return
 
     # Unknown subcommand — show hint
-    console.print(f"[yellow]未知子命令: '{sub}'[/yellow]")
-    console.print("[dim]用法:[/dim]")
-    console.print("  acli example                         [dim]# 列出示例[/dim]")
-    console.print("  acli example download <name>         [dim]# 下载示例[/dim]")
+    console.print(f"[yellow]Unknown subcommand: '{sub}'[/yellow]")
+    console.print("[dim]Usage:[/dim]")
     console.print(
-        "  acli example restore                 [dim]# 恢复最近一次备份[/dim]",
+        "  acli example                         [dim]# list examples[/dim]",
+    )
+    console.print(
+        "  acli example download <name>         "
+        "[dim]# download an example[/dim]",
+    )
+    console.print(
+        "  acli example restore                 "
+        "[dim]# restore the latest backup[/dim]",
     )

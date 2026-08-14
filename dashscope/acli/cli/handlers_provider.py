@@ -66,7 +66,7 @@ def _numbered_pick(
         if custom_hint:
             console.print(f"[dim]{custom_hint}[/dim]")
     hint = f" [{default}]" if default else ""
-    raw = _read_choice(f"选择 (编号或名称){hint}: ", default=default)
+    raw = _read_choice(f"Choose (number or name){hint}: ", default=default)
     if raw.isdigit() and options and 1 <= int(raw) <= len(options):
         raw = options[int(raw) - 1]
     return raw
@@ -77,8 +77,10 @@ def _rebuild_provider(agent: Agent, config: Config) -> bool:
     try:
         agent.provider = get_provider_chain(config)
     except Exception as e:
-        console.print(f"[red]切换失败: {e}[/red]")
-        console.print("[dim]若缺少 API Key，请重新运行 /provider 设置[/dim]")
+        console.print(f"[red]Switch failed: {e}[/red]")
+        console.print(
+            "[dim]If an API Key is missing, run /provider again[/dim]",
+        )
         return False
     agent.provider_name = config.provider
     agent.model_name = config.model
@@ -96,10 +98,11 @@ def _warn_missing_ext_key(config: Config) -> None:
         or ext.resolve_api_key(config)
     ):
         return
-    env_hint = ext.api_key_env or "(无)"
+    env_hint = ext.api_key_env or "(none)"
     console.print(
-        f"[yellow]⚠️  {config.provider} 缺少 API Key "
-        f"(env {env_hint} 未设；toml 中也无加密 key)[/yellow]",
+        f"[yellow]⚠️  {config.provider} is missing an API Key "
+        f"(env {env_hint} unset; no encrypted key in toml either)"
+        f"[/yellow]",
     )
 
 
@@ -115,7 +118,7 @@ def _wizard_key_step(config: Config) -> None:
         return
     if info.get("no_auth"):
         console.print(
-            f"[dim]{config.provider} 无需 API Key (auth = false)[/dim]",
+            f"[dim]{config.provider} needs no API Key (auth = false)[/dim]",
         )
         return
 
@@ -127,18 +130,18 @@ def _wizard_key_step(config: Config) -> None:
             existing = ext.resolve_api_key(config) or ""
 
     if existing:
-        hint = f" [已设置 …{existing[-4:]}, 回车保持]"
+        hint = f" [set …{existing[-4:]}, Enter to keep]"
     elif info.get("env"):
-        hint = f" ({info['env']}) [直接回车跳过]"
+        hint = f" ({info['env']}) [Enter to skip]"
     else:
-        hint = " [直接回车跳过]"
+        hint = " [Enter to skip]"
     value = _read_secret(f"\n{config.provider} API Key{hint}: ")
     if not value:
         if not existing:
-            env_hint = f"或环境变量 {info['env']} " if info.get("env") else ""
+            env_hint = f"or env var {info['env']} " if info.get("env") else ""
             console.print(
-                f"[dim]已跳过 {config.provider} key，"
-                f"稍后可用 /provider {env_hint}设置[/dim]",
+                f"[dim]Skipped {config.provider} key; set it later "
+                f"via /provider {env_hint}[/dim]",
             )
         return
 
@@ -149,7 +152,7 @@ def _wizard_key_step(config: Config) -> None:
         return
     setattr(config, info["field"], value)
     config.save_global()
-    console.print(f"[green]✓ {config.provider} API Key 已保存[/green]")
+    console.print(f"[green]✓ {config.provider} API Key saved[/green]")
 
 
 def _provider_wizard(agent: Agent, config: Config) -> bool:
@@ -157,7 +160,7 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
     from dashscope.acli.extensions import current as ext_current
 
     console.print(
-        f"[dim]当前: {config.provider}/{config.model}  "
+        f"[dim]Current: {config.provider}/{config.model}  "
         f"protocol={config.protocol}[/dim]\n",
     )
 
@@ -169,9 +172,9 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
     names = list(PROVIDER_MODELS) + [
         p.name for p in loaded.providers if p.name not in PROVIDER_MODELS
     ]
-    provider = _numbered_pick("可用 Provider", names, config.provider)
+    provider = _numbered_pick("Available providers", names, config.provider)
     if provider not in names:
-        console.print(f"[red]未知 Provider: {provider}，已取消[/red]")
+        console.print(f"[red]Unknown provider: {provider}; cancelled[/red]")
         return True
 
     ext = find_provider(provider)
@@ -199,18 +202,25 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
         default_model = config.model if config.model in models else models[0]
     else:
         default_model = config.model
-        console.print(f"[dim]{config.provider} 无预置模型列表，直接输入模型名[/dim]")
+        console.print(
+            f"[dim]{config.provider} has no preset model list; "
+            f"enter a model name directly[/dim]",
+        )
     model = _numbered_pick(
-        f"{config.provider} 可用模型",
+        f"{config.provider} available models",
         models,
         default_model,
-        custom_hint="未列出？直接输入新模型名即可注册（同 /dev model add）",
+        custom_hint=(
+            "Not listed? Enter a new model name to register it "
+            "(same as /dev model add)"
+        ),
     )
     if model:
         normalized = normalize_model_name(model)
         if normalized != model.strip():
             console.print(
-                f"[dim]模型名归一化为 {normalized} (API 模型 ID 大小写敏感)[/dim]",
+                f"[dim]Model name normalized to {normalized} "
+                f"(API model IDs are case-sensitive)[/dim]",
             )
         if (
             models
@@ -219,30 +229,41 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
         ):
             register_custom_model(config, config.provider, normalized)
             console.print(
-                f"[green]✓ 已注册 {config.provider}/{normalized}[/green]",
+                f"[green]✓ Registered {config.provider}/{normalized}[/green]",
             )
         config.model = normalized
 
     # 4) Protocol — for extension providers the default comes from the toml.
     ext_proto = ext.resolved_protocol() if ext is not None else None
     if ext_proto:
-        console.print(f"[dim]{config.provider} toml 声明协议: {ext_proto}[/dim]")
-    proto = _numbered_pick("协议", ["openai", "anthropic"], config.protocol)
+        console.print(
+            f"[dim]{config.provider} toml declares protocol: "
+            f"{ext_proto}[/dim]",
+        )
+    proto = _numbered_pick(
+        "Protocol",
+        ["openai", "anthropic"],
+        config.protocol,
+    )
     if proto in ("openai", "anthropic"):
         if ext_proto and proto != ext_proto:
             console.print(
-                f"[yellow]⚠️  {config.provider} 的 toml 声明协议为 {ext_proto}，"
-                f"改用 {proto} 可能调用失败 (404)[/yellow]",
+                f"[yellow]⚠️  {config.provider}'s toml declares "
+                f"protocol {ext_proto}; switching to {proto} may fail "
+                f"with 404[/yellow]",
             )
         config.protocol = proto
     elif proto:
-        console.print(f"[yellow]未知协议 '{proto}'，保持 {config.protocol}[/yellow]")
+        console.print(
+            f"[yellow]Unknown protocol '{proto}'; "
+            f"keeping {config.protocol}[/yellow]",
+        )
 
     config.save_global()
     config.save_workspace()
     if _rebuild_provider(agent, config):
         console.print(
-            f"[green]✓ 已切换: {config.provider}/{config.model}  "
+            f"[green]✓ Switched: {config.provider}/{config.model}  "
             f"protocol={config.protocol}[/green]",
         )
     return True
@@ -255,5 +276,7 @@ def handle_provider_command(cmd: str, agent: Agent, config: Config) -> bool:
     (/provider use|model|protocol|key ...) are ignored.
     """
     if cmd.split()[1:]:
-        console.print("[dim]/provider 已改为问答式配置，参数已忽略[/dim]")
+        console.print(
+            "[dim]/provider is now a Q&A wizard; args ignored[/dim]",
+        )
     return _provider_wizard(agent, config)

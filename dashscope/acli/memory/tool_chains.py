@@ -16,82 +16,115 @@ from dashscope.acli.utils.keywords import (
 # Common tool chain patterns with examples
 TOOL_CHAINS = {
     "file_edit": {
-        "description": "编辑文件的完整流程",
+        "description": "Full flow for editing a file",
         "steps": [
-            "1. read_file 读取当前内容",
-            "2. write_file 写入修改后的完整内容",
-            "3. 可选: run_command 验证（如 python -m py_compile 检查语法）",
+            "1. read_file to read the current content",
+            "2. write_file with the full updated content",
+            "3. Optional: run_command to verify (e.g. python -m py_compile "
+            "to check syntax)",
         ],
         "example": (
-            "用户: '修改 config.py 中的端口为 8080'\n"
-            "→ read_file config.py → 修改内容 → write_file config.py"
+            "User: 'change the port in config.py to 8080'\n"
+            "→ read_file config.py → edit content → write_file config.py"
         ),
     },
     "code_refactor": {
-        "description": "重构代码的完整流程",
+        "description": "Full flow for refactoring code",
         "steps": [
-            "1. search_files 找到所有使用位置",
-            "2. read_file 阅读相关代码",
-            "3. create_plan 制定重构计划",
-            "4. write_file 逐个修改",
-            "5. run_command 运行测试验证",
+            "1. search_files to find all usages",
+            "2. read_file to read the relevant code",
+            "3. create_plan for the refactor plan",
+            "4. write_file to edit files one by one",
+            "5. run_command to run tests and verify",
         ],
         "example": (
-            "用户: '重构 auth 模块，提取公共函数'\n"
+            "User: 'refactor the auth module, extract shared functions'\n"
             "→ search_files 'def auth' → read_file → create_plan "
             "→ write_file → run_command pytest"
         ),
     },
     "bug_fix": {
-        "description": "修复 bug 的完整流程",
+        "description": "Full flow for fixing a bug",
         "steps": [
-            "1. read_file 阅读相关代码",
-            "2. search_files 搜索相关上下文",
-            "3. write_file 修复代码",
-            "4. run_command 运行测试验证",
+            "1. read_file to read the relevant code",
+            "2. search_files for related context",
+            "3. write_file to apply the fix",
+            "4. run_command to run tests and verify",
         ],
         "example": (
-            "用户: '修复登录时的空指针错误'\n"
+            "User: 'fix the null pointer error on login'\n"
             "→ read_file auth.py → search_files 'login' "
-            "→ write_file 修复 → run_command pytest tests/test_auth.py"
+            "→ write_file fix → run_command pytest tests/test_auth.py"
         ),
     },
     "project_setup": {
-        "description": "设置新项目的完整流程",
+        "description": "Full flow for setting up a new project",
         "steps": [
-            "1. create_directory 创建目录结构",
-            "2. write_file 创建配置文件（pyproject.toml, .gitignore 等）",
-            "3. write_file 创建基础代码文件",
-            "4. run_command 初始化（git init, pip install 等）",
+            "1. create_directory for the directory layout",
+            "2. write_file for config files (pyproject.toml, .gitignore, "
+            "etc.)",
+            "3. write_file for starter code files",
+            "4. run_command to initialize (git init, pip install, etc.)",
         ],
         "example": (
-            "用户: '创建一个 FastAPI 项目'\n"
+            "User: 'create a FastAPI project'\n"
             "→ create_directory → write_file pyproject.toml "
             "→ write_file main.py → run_command git init"
         ),
     },
     "code_review": {
-        "description": "审查代码的完整流程",
+        "description": "Full flow for reviewing code",
         "steps": [
-            "1. list_directory 查看项目结构",
-            "2. read_file 阅读关键文件",
-            "3. search_files 搜索潜在问题模式",
-            "4. 输出审查报告",
+            "1. list_directory to view the project structure",
+            "2. read_file to read key files",
+            "3. search_files for potential problem patterns",
+            "4. Output the review report",
         ],
         "example": (
-            "用户: '审查这个项目的安全性'\n"
-            "→ list_directory → read_file 关键文件 → search_files 危险模式 "
-            "→ 输出报告"
+            "User: 'review this project's security'\n"
+            "→ list_directory → read_file key files → search_files "
+            "risky patterns → output report"
         ),
     },
 }
 
-# Trigger phrases that directly activate a chain.
+# Trigger phrases that directly activate a chain. Bilingual on purpose:
+# they are substring-matched against the raw user query.
 _CHAIN_TRIGGERS = {
-    "file_edit": ("修改", "编辑", "更新一下", "改一下", "改动", "edit", "modify"),
+    "file_edit": (
+        "修改",
+        "编辑",
+        "更新一下",
+        "改一下",
+        "改动",
+        "edit",
+        "modify",
+        "update",
+        "change",
+    ),
     "code_refactor": ("重构", "refactor"),
-    "bug_fix": ("修复", "修一下", "fix", "bug", "报错", "错误", "崩溃", "error"),
-    "project_setup": ("初始化", "创建项目", "新项目", "搭建", "setup", "scaffold"),
+    "bug_fix": (
+        "修复",
+        "修一下",
+        "fix",
+        "bug",
+        "报错",
+        "错误",
+        "崩溃",
+        "error",
+        "crash",
+    ),
+    "project_setup": (
+        "初始化",
+        "创建项目",
+        "新项目",
+        "搭建",
+        "setup",
+        "scaffold",
+        "init",
+        "new project",
+        "create project",
+    ),
     "code_review": ("审查", "评审", "review"),
 }
 
@@ -101,7 +134,7 @@ def get_relevant_chains(query: str = "", limit: int = 2) -> str:
 
     Matching: trigger phrases first, then multi-char keyword overlap with
     the chain text (requires >=2 distinct hits so generic words like
-    "文件"/"file" can't match every chain). Steps only — examples are
+    "file" can't match every chain). Steps only — examples are
     omitted to keep the injected section small. Empty query injects nothing.
     """
     if not query.strip():
@@ -124,7 +157,7 @@ def get_relevant_chains(query: str = "", limit: int = 2) -> str:
 
     if not matched:
         return ""
-    lines = ["\n\n## 相关工具链模式"]
+    lines = ["\n\n## Relevant tool chain patterns"]
     for name in matched[:limit]:
         chain = TOOL_CHAINS[name]
         lines.append(f"\n### {chain['description']}")
@@ -136,14 +169,21 @@ def get_relevant_chains(query: str = "", limit: int = 2) -> str:
 def get_fallback_hints(tool_name: str) -> str:
     """Get fallback tool suggestions when a tool fails."""
     fallbacks = {
-        "read_file": "如果 read_file 失败，先用 list_directory 确认路径是否正确",
-        "search_files": "如果 search_files 失败，尝试 run_command grep 或 rg 命令",
-        "list_directory": "如果 list_directory 失败，尝试 run_command ls 命令",
-        "run_command": "如果 run_command 失败，检查命令语法或使用其他工具",
+        "read_file": (
+            "if read_file failed, use list_directory to verify the path"
+        ),
+        "search_files": (
+            "if search_files failed, try run_command with grep or rg"
+        ),
+        "list_directory": "if list_directory failed, try run_command with ls",
+        "run_command": (
+            "if run_command failed, check the command syntax or "
+            "use another tool"
+        ),
     }
     hint = fallbacks.get(tool_name, "")
     if hint:
-        return f"\n**备选方案**: {hint}"
+        return f"\n**Fallback**: {hint}"
     return ""
 
 

@@ -118,7 +118,7 @@ def get_provider_chain(config) -> ProviderChain:
     """Build a ProviderChain from acli Config (primary + fallbacks)."""
     profiles = build_profiles_from_config(config)
     if not profiles:
-        raise RuntimeError("没有可用的 provider 配置")
+        raise RuntimeError("No usable provider configuration")
 
     # Surface key/url mismatches as warnings for the primary provider only.
     if profiles:

@@ -128,38 +128,55 @@ def main():
                 "[--cli | --tui] [--dry-run]",
             )
             print()
-            print("对话即操作——你说需求，AI 来执行。")
+            print("Chat is action — describe what you need, AI executes it.")
             print()
             print("Options:")
-            print("  -c, --command <prompt>  执行单次对话后退出（适合脚本/管道）")
-            print("  --cli                   使用传统 readline REPL 模式")
+            print(
+                "  -c, --command <prompt>  Run a single prompt, then "
+                "exit (good for scripts/pipes)",
+            )
+            print(
+                "  --cli                   Use the classic readline "
+                "REPL mode",
+            )
             print(
                 "  --tui                   "
-                "使用 Textual 富 UI 模式（默认从 config.toml 读取）",
+                "Use the Textual rich UI mode (default read from "
+                "config.toml)",
             )
-            print("  --protocol <name>       指定 API 协议（openai | anthropic）")
-            print("  --max-turns <n>         覆盖最大对话轮数（默认 1000）")
             print(
-                "  --dry-run               预览当前配置（加载的 skill、MCP、tool 等）而不启动",
+                "  --protocol <name>       API protocol "
+                "(openai | anthropic)",
+            )
+            print(
+                "  --max-turns <n>         Override max conversation "
+                "turns (default 1000)",
+            )
+            print(
+                "  --dry-run               Preview current config (loaded "
+                "skills, MCP, tools, etc.) without starting",
             )
             print()
             print("Subcommands:")
-            print("  example                         列出可用示例")
             print(
-                "  example download <name>         平铺合并示例到当前目录（冲突自动备份）",
+                "  example                         List available examples",
+            )
+            print(
+                "  example download <name>         Flat-merge an example "
+                "into the current directory (conflicts auto-backed-up)",
             )
             print(
                 "  mcp-server                      "
-                "启动 MCP Server（stdio 对外暴露工具）",
+                "Start an MCP Server (exposes tools over stdio)",
             )
             print()
-            print("启动后输入 /help 查看内置命令。")
+            print("Type /help after startup to see built-in commands.")
             return
         elif arg in ("-c", "--command"):
             prompt = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else ""
             if not prompt:
-                print("错误: -c 需要提供 prompt 参数")
-                print('用法: acli -c "你的需求"')
+                print("Error: -c requires a prompt argument")
+                print('Usage: acli -c "your request"')
                 sys.exit(1)
             config = Config.load()
             asyncio.run(_run_oneshot(config, prompt))
@@ -178,7 +195,10 @@ def main():
         if protocol_override.lower() in ("openai", "anthropic"):
             config.protocol = protocol_override.lower()
         else:
-            print(f"错误: 未知协议 '{protocol_override}'（可选: openai, anthropic）")
+            print(
+                f"Error: unknown protocol '{protocol_override}' "
+                f"(choices: openai, anthropic)",
+            )
             sys.exit(1)
 
     # Apply --max-turns override
@@ -186,7 +206,10 @@ def main():
         try:
             config.max_turns = int(max_turns_override)
         except ValueError:
-            print(f"错误: --max-turns 必须是整数，收到 '{max_turns_override}'")
+            print(
+                f"Error: --max-turns must be an integer, got "
+                f"'{max_turns_override}'",
+            )
             sys.exit(1)
 
     # Handle --dry-run: preview configuration without starting the agent

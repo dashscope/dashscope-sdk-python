@@ -272,7 +272,7 @@ class ProviderChain(LLMProvider):
                 if not is_retryable_error(e):
                     break
                 continue
-        raise last_error or RuntimeError("所有 provider 均调用失败")
+        raise last_error or RuntimeError("All providers failed")
 
     async def chat_stream(  # pylint: disable=invalid-overridden-method
         self,
@@ -302,4 +302,4 @@ class ProviderChain(LLMProvider):
                 if emitted_anything or not is_retryable_error(e):
                     break
                 continue
-        raise last_error or RuntimeError("所有 provider 均调用失败")
+        raise last_error or RuntimeError("All providers failed")

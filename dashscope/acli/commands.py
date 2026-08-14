@@ -14,122 +14,173 @@ import subprocess as _sp
 # this structure so that adding or renaming a command only requires one edit.
 HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
     (
-        "会话",
+        "Session",
         [
-            ("/help", "显示帮助"),
-            ("/clear", "清空对话历史"),
-            ("/info", "查看当前运行信息（provider、model、配置等）"),
-            ("/stats", "查看会话统计（工具调用次数、模型信息）"),
-            ("/voice", "语音输入控制 (on/off/model/silence/max/threshold)"),
-            ("/tts", "语音输出控制 (on/off/status/model/voice/speed/say/last)"),
-            ("/camera capture [file]", "摄像头拍照"),
-            ("/camera record [duration] [file]", "摄像头录像(默认5s)"),
-            ("/copy", "复制最近一条回复到剪贴板"),
-            ("/save [path]", "保存最近一条回复到文件（默认 acli_output_<时间>.md）"),
-            ("/json on|off", "JSON 输出模式开关（开启后 Agent 回复强制 JSON 格式）"),
-            ("/compress", "压缩对话上下文（LLM 摘要后替换历史）"),
-            ("/history", "对话历史管理 (stats/list/export/clear)"),
-            ("/feedback good|bad", "标注任务满意度（存入经验记忆）"),
-            ("/report", "生成 trace 性能报告"),
+            ("/help", "Show help"),
+            ("/clear", "Clear conversation history"),
+            ("/info", "Show runtime info (provider, model, config)"),
+            ("/stats", "Show session stats (tool calls, model info)"),
+            ("/voice", "Voice input (on/off/model/silence/max/threshold)"),
+            (
+                "/tts",
+                "Voice output (on/off/status/model/voice/speed/say/last)",
+            ),
+            ("/camera capture [file]", "Take a photo with the camera"),
+            ("/camera record [duration] [file]", "Record video (default 5s)"),
+            ("/copy", "Copy the last reply to the clipboard"),
+            (
+                "/save [path]",
+                "Save the last reply to a file "
+                "(default acli_output_<time>.md)",
+            ),
+            (
+                "/json on|off",
+                "JSON output mode (replies forced to JSON when on)",
+            ),
+            ("/compress", "Compress context (LLM summary replaces history)"),
+            ("/history", "Conversation history (stats/list/export/clear)"),
+            (
+                "/feedback good|bad",
+                "Rate task satisfaction (stored in experience memory)",
+            ),
+            ("/report", "Generate a trace performance report"),
             (
                 "/log",
-                "查看调试模式记录的 LLM prompt (tail [N]/search <关键词>/clear)，支持翻页",
+                "View LLM prompts logged in debug mode "
+                "(tail [N]/search <keyword>/clear), paged",
             ),
             (
                 "/trace",
-                "查看执行 trace（函数调用/耗时/数据流）(tail [N]/search <关键词>/clear)，支持翻页",
+                "View execution traces (calls/latency/data flow) "
+                "(tail [N]/search <keyword>/clear), paged",
             ),
-            ("/exit", "退出"),
+            ("/exit", "Exit"),
         ],
     ),
     (
-        "配置",
+        "Config",
         [
-            ("/setup", "初始化 Workspace（用户名、Provider、模型、能力）"),
-            ("/capability", "能力开关 (list/enable/disable/reload/config)"),
-            ("/subagents", "子代理管理 (list/reload/enable/disable/config)"),
+            (
+                "/setup",
+                "Set up the workspace (user, Provider, model, capabilities)",
+            ),
+            (
+                "/capability",
+                "Capability toggles (list/enable/disable/reload/config)",
+            ),
+            (
+                "/subagents",
+                "Subagent management (list/reload/enable/disable/config)",
+            ),
             (
                 "/provider",
-                "依次配置 Provider / Key / 模型 / 协议（问答式）",
+                "Configure Provider / Key / model / protocol (Q&A style)",
             ),
-            ("/trust", "本次对话工具授信/拒绝缓存 (list/clear/allow/deny)"),
+            (
+                "/trust",
+                "Tool trust/deny cache for this session "
+                "(list/clear/allow/deny)",
+            ),
             (
                 "/rule",
-                "用户长效操作规则 (list/add/remove/edit/clear)，每轮注入 system prompt",
+                "Long-term user rules (list/add/remove/edit/clear), "
+                "injected into the system prompt each turn",
             ),
-            ("/privacy", "隐私模式 (on/off/status)，启用后数据本地化"),
-            ("/debug", "调试模式 (on/off/status)，开启后最终 LLM prompt 写入日志"),
-            ("/theme", "主题设置 (list/set/自定义颜色)"),
-            ("/directives", "Directives 自动学习提议 (proposals/accept/reject)"),
+            (
+                "/privacy",
+                "Privacy mode (on/off/status); data stays local when on",
+            ),
+            (
+                "/debug",
+                "Debug mode (on/off/status); logs the final LLM prompt",
+            ),
+            ("/theme", "Theme settings (list/set/custom colors)"),
+            (
+                "/directives",
+                "Directives auto-learning proposals (proposals/accept/reject)",
+            ),
         ],
     ),
     (
-        "能力",
+        "Capabilities",
         [
-            ("/profile", "用户档案 (list/search/add/remove/clear)"),
-            ("/memory", "对话历史 (list/search/remove <id|num>/clear)"),
-            ("/session", "会话管理 (new/list/switch/rename/remove)"),
-            ("/summarize", "总结当前任务，记录关键步骤和教训"),
-            ("/mcp", "MCP 服务 (list/add/remove)"),
+            ("/profile", "User profile (list/search/add/remove/clear)"),
+            ("/memory", "Chat history (list/search/remove <id|num>/clear)"),
+            ("/session", "Session management (new/list/switch/rename/remove)"),
+            (
+                "/summarize",
+                "Summarize the current task; record key steps and lessons",
+            ),
+            ("/mcp", "MCP services (list/add/remove)"),
             (
                 "/skill",
-                "技能调用与管理 (list/add/remove/install/uninstall/"
-                "enable/disable/update)",
+                "Skill invocation and management (list/add/remove/install/"
+                "uninstall/enable/disable/update)",
             ),
-            ("/cron", "定时任务 (add/list/remove/pause/resume)"),
-            ("/audit", "审计日志 (recent [N]/query/clear)"),
+            ("/cron", "Scheduled tasks (add/list/remove/pause/resume)"),
+            ("/audit", "Audit log (recent [N]/query/clear)"),
         ],
     ),
     (
-        "开发 / 扩展",
+        "Dev / Extensions",
         [
-            ("/dev", "总览（含运行时模型注册 + 扩展指南）"),
+            ("/dev", "Overview (model registry + extension guides)"),
             (
                 "/dev model add|list|remove <provider> [<name>]",
-                "给 provider 注册/列出/删除模型（持久化到 workspace）",
+                "Register/list/remove models for a provider "
+                "(persisted to workspace)",
             ),
             (
                 "/dev provider add|list|remove [name]",
-                "Layer-1 扩展 LLM Provider（OpenAI 兼容），写入 custom-extensions.toml",
+                "Layer-1 LLM Provider extension (OpenAI-compatible), "
+                "written to custom-extensions.toml",
             ),
             (
                 "/dev capability add|list|remove [key]",
-                "Layer-1 扩展 HTTP 工具能力，scaffold + 编辑",
+                "Layer-1 HTTP tool capability extension, scaffold + edit",
             ),
             (
                 "/dev skill add|list|remove [name]",
-                "Layer-1 自定义 Skill（Prompt 模板），写入 custom-extensions.toml",
+                "Layer-1 custom Skill (prompt template), "
+                "written to custom-extensions.toml",
             ),
             (
                 "/dev tool add|list|remove [name]",
-                "Layer-1 自定义 Shell 工具（命令包装为 LLM 工具）",
+                "Layer-1 custom Shell tool (wrap a command as an LLM tool)",
             ),
             (
                 "/dev debug tools|schema|call|prompt",
-                "调试：已注册工具 / 参数 Schema / 手动调用 / system prompt",
+                "Debug: registered tools / param schemas / manual call / "
+                "system prompt",
             ),
             (
                 "/dev test provider <name> | reload | log",
-                "测试 provider 连通性 / 热重载扩展 / 工具注册统计",
+                "Test provider connectivity / hot-reload extensions / "
+                "tool registration stats",
             ),
             (
                 "/dev platform | tool | skill",
-                "Layer-2 写真实 Python 模块的扩展指南（打印步骤）",
+                "Layer-2 guide for real Python module extensions "
+                "(prints steps)",
             ),
-            ("/example", "列出可用示例项目"),
+            ("/example", "List available example projects"),
             (
                 "/example download <name>",
-                "合并示例到 ./.acli/（冲突自动备份，restore 可撤销）",
+                "Merge an example into ./.acli/ (conflicts auto-backed "
+                "up, restore undoes)",
             ),
-            ("/example restore", "恢复 .acli/backup/ 备份（撤销最近一次合并）"),
+            (
+                "/example restore",
+                "Restore the .acli/backup/ backup (undo the last merge)",
+            ),
         ],
     ),
 ]
 
 # Examples shown at the bottom of /help.
 _HELP_EXAMPLES = [
-    "列出当前目录的文件",
-    "创建一个 test.txt，内容为 hello world",
+    "List files in the current directory",
+    "Create a test.txt containing hello world",
     "/mcp add code-interpreter",
     "/cron add every 5m /skill my-skill arg1",
     "/history export history.json --format json",
@@ -140,12 +191,12 @@ _HELP_EXAMPLES = [
 
 def render_help_text() -> str:
     """Return the /help content as Rich-tagged text."""
-    lines = ["[bold]可用命令[/bold]"]
+    lines = ["[bold]Available commands[/bold]"]
     for title, items in HELP_SECTIONS:
         lines.append(f"\n[bold yellow]{title}[/bold yellow]")
         for cmd_text, desc in items:
             lines.append(f"  [cyan]{cmd_text}[/cyan] [dim]—[/dim] {desc}")
-    lines.append("\n[bold]使用示例[/bold]")
+    lines.append("\n[bold]Examples[/bold]")
     for ex in _HELP_EXAMPLES:
         lines.append(f"  [dim]·[/dim] {ex}")
     return "\n".join(lines)

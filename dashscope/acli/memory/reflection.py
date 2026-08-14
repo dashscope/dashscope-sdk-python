@@ -43,14 +43,14 @@ class ReflectionTracker:
 
         failed_tools_str = ", ".join(set(self.last_failed_tools))
         return (
-            f"\n\n## ⚠️ 反思提示\n"
-            f"检测到连续 {self.consecutive_failures} 次工具执行失败 "
-            f"({failed_tools_str})。\n"
-            f"建议:\n"
-            f"1. 检查之前的方法是否有问题\n"
-            f"2. 尝试不同的工具或参数\n"
-            f"3. 向用户确认需求是否有误解\n"
-            f"4. 如果任务复杂，考虑 create_plan 重新规划步骤\n"
+            f"\n\n## ⚠️ Reflection hint\n"
+            f"Detected {self.consecutive_failures} consecutive "
+            f"tool failures ({failed_tools_str}).\n"
+            f"Suggestions:\n"
+            f"1. Check whether the previous approach is flawed\n"
+            f"2. Try different tools or parameters\n"
+            f"3. Confirm the requirements with the user\n"
+            f"4. For complex tasks, re-plan steps via create_plan\n"
         )
 
     def get_failure_lesson(self) -> str:
@@ -58,7 +58,10 @@ class ReflectionTracker:
         if self.consecutive_failures < self.threshold:
             return ""
         failed_tools_str = ", ".join(set(self.last_failed_tools))
-        return f"连续 {self.consecutive_failures} 次失败 ({failed_tools_str})，需要换策略"
+        return (
+            f"{self.consecutive_failures} consecutive failures "
+            f"({failed_tools_str}); need a new strategy"
+        )
 
     def reset(self) -> None:
         """Reset the tracker for a new turn."""

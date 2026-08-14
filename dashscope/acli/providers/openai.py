@@ -21,7 +21,10 @@ class OpenAIProvider:
         base_url: str | None = None,
     ):
         if AsyncOpenAI is None:
-            raise ImportError("openai 包未安装。请运行: pip install 'acli[openai]'")
+            raise ImportError(
+                "openai package not installed. "
+                "Run: pip install 'acli[openai]'",
+            )
         self.model = model
         self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
@@ -111,8 +114,8 @@ class OpenAIProvider:
         except Exception as e:
             if getattr(e, "status_code", None) == 404:
                 raise RuntimeError(
-                    "API 端点不存在 (404): base_url 与 protocol 可能不匹配，"
-                    "请运行 /provider 检查配置",
+                    "API endpoint not found (404): base_url may not match "
+                    "protocol; run /provider to check config",
                 ) from e
             raise
 
@@ -188,8 +191,8 @@ class OpenAIProvider:
         except Exception as e:
             if getattr(e, "status_code", None) == 404:
                 raise RuntimeError(
-                    "API 端点不存在 (404): base_url 与 protocol 可能不匹配，"
-                    "请运行 /provider 检查配置",
+                    "API endpoint not found (404): base_url may not match "
+                    "protocol; run /provider to check config",
                 ) from e
             raise
         async for chunk in stream:

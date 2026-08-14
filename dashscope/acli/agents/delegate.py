@@ -81,19 +81,25 @@ def _child_system_prompt(
     if override:
         base = override
     else:
-        base = "你是 acli 的子代理，专注于完成被指派的子任务。"
+        base = (
+            "You are an acli subagent focused on completing the "
+            "assigned sub-task."
+        )
     if tools:
-        base += f"\n你只能使用以下工具: {', '.join(tools)}"
+        base += f"\nYou may only use these tools: {', '.join(tools)}"
     else:
-        base += "\n你可以使用当前可用的任何工具。"
-    base += "\n不要调用 delegate、delegate_parallel 或 subagent_invoke 工具（子代理无权委派）。"
+        base += "\nYou may use any currently available tool."
+    base += (
+        "\nDo not call delegate, delegate_parallel, or subagent_invoke "
+        "(subagents may not delegate further)."
+    )
     return base
 
 
 def _build_prompt(task: str, context_files: list[str] | None) -> str:
     parts = []
     if context_files:
-        parts.append("上下文文件：")
+        parts.append("Context files:")
         for path in context_files:
             parts.append(f"- {path}")
             try:
@@ -103,9 +109,9 @@ def _build_prompt(task: str, context_files: list[str] | None) -> str:
                 )
                 parts.append(f"```\n{content}\n```")
             except Exception as e:
-                parts.append(f"（读取失败: {e}）")
+                parts.append(f"(read failed: {e})")
         parts.append("")
-    parts.append(f"任务：{task}")
+    parts.append(f"Task: {task}")
     return "\n".join(parts)
 
 
@@ -128,7 +134,10 @@ async def _run_child(
         return {
             "task_id": str(uuid.uuid4())[:8],
             "status": "failed",
-            "result": "错误: delegate 未初始化（缺少 parent agent 引用）",
+            "result": (
+                "Error: delegate not initialized "
+                "(missing parent agent reference)"
+            ),
         }
 
     from dashscope.acli.agent import Agent
@@ -215,7 +224,7 @@ async def _run_child(
             continue
         cleaned.append(chunk)
 
-    result = ("".join(cleaned)).strip() or "(子代理无内容返回)"
+    result = ("".join(cleaned)).strip() or "(subagent returned no content)"
     return {"task_id": task_id, "status": status, "result": result}
 
 
@@ -277,44 +286,66 @@ def register_delegate_tools() -> None:
     registry.register_mcp_tool(
         name="delegate",
         description=(
-            "委派一个独立子代理处理子任务。子代理共享当前 provider/executor，"
-            "但拥有隔离的消息历史，不会污染主对话。可限制工具白名单、传入上下文文件、"
-            "设置超时、模型、system_prompt 和 max_turns。返回 "
-            "{task_id, status, result} 的 JSON。"
+            "Delegate a sub-task to an independent subagent. The "
+            "subagent shares the current provider/executor but has an "
+            "isolated message history that won't pollute the main "
+            "conversation. You may restrict its tool whitelist, pass "
+            "context files, and set timeout, model, system_prompt, "
+            "and max_turns. Returns JSON with {task_id, status, "
+            "result}."
         ),
         parameters={
             "type": "object",
             "properties": {
                 "task": {
                     "type": "string",
-                    "description": "子任务描述，子代理会把它当作用户消息处理。",
+                    "description": (
+                        "sub-task description; the subagent treats it "
+                        "as a user message."
+                    ),
                 },
                 "tools": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "允许子代理使用的工具白名单（可选，默认全部）。",
+                    "description": (
+                        "tool whitelist the subagent may use "
+                        "(optional; default is all)."
+                    ),
                 },
                 "context_files": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "传入的文件路径列表，内容会附加到子任务前。",
+                    "description": (
+                        "file paths whose contents are prepended to "
+                        "the sub-task."
+                    ),
                 },
                 "timeout": {
                     "type": "integer",
-                    "description": "子代理执行超时秒数（默认 120）。",
+                    "description": (
+                        "subagent timeout in seconds (default 120)."
+                    ),
                     "default": 120,
                 },
                 "model": {
                     "type": "string",
-                    "description": "子代理使用的模型名（可选，默认继承主代理）。",
+                    "description": (
+                        "model name for the subagent (optional; "
+                        "defaults to the main agent's)."
+                    ),
                 },
                 "system_prompt": {
                     "type": "string",
-                    "description": "覆盖子代理 system prompt，限定角色（可选）。",
+                    "description": (
+                        "override the subagent's system prompt to "
+                        "specialize its role (optional)."
+                    ),
                 },
                 "max_turns": {
                     "type": "integer",
-                    "description": "子代理最大轮次（默认 10，上限 50）。",
+                    "description": (
+                        "max subagent turns (default 10, cap 50)."
+                    ),
                 },
             },
             "required": ["task"],
@@ -325,10 +356,10 @@ def register_delegate_tools() -> None:
     registry.register_mcp_tool(
         name="delegate_parallel",
         description=(
-            "并行委派多个子任务，自动限制最大并发数。每个元素是一个任务配置，"
-            "支持 task/tools/context_files/timeout/model/"
-            "system_prompt/max_turns。"
-            "返回任务结果数组的 JSON。"
+            "Delegate multiple sub-tasks in parallel with a cap on "
+            "max concurrency. Each element is a task config supporting "
+            "task/tools/context_files/timeout/model/system_prompt/"
+            "max_turns. Returns a JSON array of task results."
         ),
         parameters={
             "type": "object",
@@ -336,12 +367,13 @@ def register_delegate_tools() -> None:
                 "tasks": {
                     "type": "array",
                     "items": {"type": "object"},
-                    "description": "子任务配置列表。",
+                    "description": "list of sub-task configs.",
                 },
                 "max_concurrent": {
                     "type": "integer",
                     "description": (
-                        "最大并发数（可选，默认读取配置 " "delegation.max_concurrent）。"
+                        "max concurrency (optional; defaults to config "
+                        "delegation.max_concurrent)."
                     ),
                 },
             },

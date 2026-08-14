@@ -33,17 +33,17 @@ def capture(output_path: str = "camera_capture.jpg") -> str:
     ok, backend = is_available()
     if not ok:
         return (
-            "错误: 未找到摄像头依赖。\n"
-            "  一次性安装所有可选依赖: pip install 'acli[all]'\n"
-            "  仅安装摄像头依赖:      pip install 'acli[camera]'\n"
-            "  macOS 备用方案:        brew install imagesnap"
+            "Error: camera dependencies not found.\n"
+            "  Install all optional deps: pip install 'acli[all]'\n"
+            "  Install camera deps only:  pip install 'acli[camera]'\n"
+            "  macOS fallback:            brew install imagesnap"
         )
 
     if backend == "opencv":
         return _capture_opencv(output_path)
     elif backend == "imagesnap":
         return _capture_imagesnap(output_path)
-    return "错误: 未知的摄像头后端"
+    return "Error: unknown camera backend"
 
 
 def _capture_opencv(output_path: str) -> str:
@@ -51,7 +51,7 @@ def _capture_opencv(output_path: str) -> str:
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        return "错误: 无法打开摄像头"
+        return "Error: cannot open camera"
 
     # Warm up the camera (first few frames may be dark)
     for _ in range(5):
@@ -62,12 +62,12 @@ def _capture_opencv(output_path: str) -> str:
     cap.release()
 
     if not ret or frame is None:
-        return "错误: 无法从摄像头读取画面"
+        return "Error: cannot read frame from camera"
 
     cv2.imwrite(output_path, frame)
     abs_path = os.path.abspath(output_path)
     size = os.path.getsize(abs_path)
-    return f"已拍照保存: {abs_path} ({size / 1024:.1f} KB)"
+    return f"Photo saved: {abs_path} ({size / 1024:.1f} KB)"
 
 
 def _capture_imagesnap(output_path: str) -> str:
@@ -80,14 +80,14 @@ def _capture_imagesnap(output_path: str) -> str:
             check=False,
         )
         if result.returncode != 0:
-            return f"错误: imagesnap 失败 - {result.stderr.strip()}"
+            return f"Error: imagesnap failed - {result.stderr.strip()}"
         abs_path = os.path.abspath(output_path)
         size = os.path.getsize(abs_path)
-        return f"已拍照保存: {abs_path} ({size / 1024:.1f} KB)"
+        return f"Photo saved: {abs_path} ({size / 1024:.1f} KB)"
     except subprocess.TimeoutExpired:
-        return "错误: 摄像头超时"
+        return "Error: camera timed out"
     except FileNotFoundError:
-        return "错误: imagesnap 未安装 (brew install imagesnap)"
+        return "Error: imagesnap not installed (brew install imagesnap)"
 
 
 # ---------------------------------------------------------------------------
@@ -109,17 +109,17 @@ def record(
     ok, backend = is_available()
     if not ok:
         return (
-            "错误: 未找到摄像头依赖。\n"
-            "  一次性安装所有可选依赖: pip install 'acli[all]'\n"
-            "  仅安装摄像头依赖:      pip install 'acli[camera]'\n"
-            "  macOS 备用方案:        brew install imagesnap"
+            "Error: camera dependencies not found.\n"
+            "  Install all optional deps: pip install 'acli[all]'\n"
+            "  Install camera deps only:  pip install 'acli[camera]'\n"
+            "  macOS fallback:            brew install imagesnap"
         )
 
     if backend == "opencv":
         return _record_opencv(output_path, duration)
     elif backend == "imagesnap":
         return _record_ffmpeg(output_path, duration)
-    return "错误: 未知的摄像头后端"
+    return "Error: unknown camera backend"
 
 
 def _record_opencv(output_path: str, duration: float) -> str:
@@ -127,7 +127,7 @@ def _record_opencv(output_path: str, duration: float) -> str:
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        return "错误: 无法打开摄像头"
+        return "Error: cannot open camera"
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps <= 0:
@@ -139,7 +139,7 @@ def _record_opencv(output_path: str, duration: float) -> str:
     writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
     if not writer.isOpened():
         cap.release()
-        return "错误: 无法创建视频文件"
+        return "Error: cannot create video file"
 
     start = time.time()
     frames = 0
@@ -154,21 +154,24 @@ def _record_opencv(output_path: str, duration: float) -> str:
     cap.release()
 
     if frames == 0:
-        return "错误: 未录到任何画面"
+        return "Error: no frames recorded"
 
     abs_path = os.path.abspath(output_path)
     size = os.path.getsize(abs_path)
     actual_dur = time.time() - start
     return (
-        f"已录制保存: {abs_path} ({size / 1024:.1f} KB, "
-        f"{actual_dur:.1f}s, {frames} 帧)"
+        f"Recording saved: {abs_path} ({size / 1024:.1f} KB, "
+        f"{actual_dur:.1f}s, {frames} frames)"
     )
 
 
 def _record_ffmpeg(output_path: str, duration: float) -> str:
     """Fallback: use ffmpeg with avfoundation on macOS."""
     if not shutil.which("ffmpeg"):
-        return "错误: 录制视频需要 opencv 或 ffmpeg (brew install ffmpeg)"
+        return (
+            "Error: video recording needs opencv or ffmpeg "
+            "(brew install ffmpeg)"
+        )
     try:
         result = subprocess.run(
             [
@@ -194,9 +197,12 @@ def _record_ffmpeg(output_path: str, duration: float) -> str:
             check=False,
         )
         if result.returncode != 0:
-            return f"错误: ffmpeg 失败 - {result.stderr.strip()[:200]}"
+            return f"Error: ffmpeg failed - {result.stderr.strip()[:200]}"
         abs_path = os.path.abspath(output_path)
         size = os.path.getsize(abs_path)
-        return f"已录制保存: {abs_path} ({size / 1024:.1f} KB, {duration:.1f}s)"
+        return (
+            f"Recording saved: {abs_path} ({size / 1024:.1f} KB, "
+            f"{duration:.1f}s)"
+        )
     except subprocess.TimeoutExpired:
-        return "错误: 录制超时"
+        return "Error: recording timed out"

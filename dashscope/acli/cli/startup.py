@@ -93,20 +93,21 @@ def _print_banner(config: Config | None = None):
     )
     console.print(f"[bold cyan]{logo}[/bold cyan]", highlight=False)
     console.print(
-        f"  [bold]AgenticCLI[/bold] [dim]v{__version__}[/dim] — 用自然语言驱动一切",
+        f"  [bold]AgenticCLI[/bold] [dim]v{__version__}[/dim] "
+        f"— Drive everything with natural language",
     )
     console.print(f"  [dim]Workspace: {WORKSPACE_DIR}[/dim]\n")
 
-    # ── 启动信息：provider / model / 用户 / 能力 / 工具 ──
+    # ── Startup info: provider / model / user / capabilities / tools ──
     if config is not None:
-        user_display = config.user_name or "(未设置)"
+        user_display = config.user_name or "(not set)"
         console.print(
             f"  [bold]Provider:[/bold] [cyan]{config.provider}[/cyan]  "
             f"[bold]Model:[/bold] [cyan]{config.model}[/cyan]  "
             f"[bold]User:[/bold] [cyan]{user_display}[/cyan]",
         )
 
-        # API Key 状态（当前 provider）
+        # API Key status (current provider)
         from dashscope.acli.cli.handlers_key import all_key_targets
 
         targets = all_key_targets(config)
@@ -121,28 +122,30 @@ def _print_banner(config: Config | None = None):
                 )
             else:
                 console.print(
-                    f"  [bold]API Key:[/bold] [red]✗ 未设置[/red] "
-                    f"[dim]({key_info['env']}, 用 /provider 设置)[/dim]",
+                    f"  [bold]API Key:[/bold] [red]✗ not set[/red] "
+                    f"[dim]({key_info['env']}, set via /provider)[/dim]",
                 )
 
-        # 已启用能力
+        # Enabled capabilities
         caps_display = (
             ALL_CAPABILITY_KEYS
             if config.enabled_capabilities is None
             else config.enabled_capabilities
         )
-        caps_str = ", ".join(caps_display) if caps_display else "无"
-        console.print(f"  [bold]能力:[/bold]   [dim]{caps_str}[/dim]")
+        caps_str = ", ".join(caps_display) if caps_display else "none"
+        console.print(f"  [bold]Caps:[/bold]   [dim]{caps_str}[/dim]")
 
-        # 已注册工具数量
+        # Registered tool count
         tool_count = (
             len(registry.list_tools())
             if hasattr(registry, "list_tools")
             else "?"
         )
-        console.print(f"  [bold]工具:[/bold]   [dim]{tool_count} 个已注册[/dim]")
+        console.print(
+            f"  [bold]Tools:[/bold]   [dim]{tool_count} registered[/dim]",
+        )
 
-        # SDK 知识库（仅 embedded 模式）
+        # SDK knowledge base (embedded mode only)
         sdk_index = getattr(config, "_embedded_sdk_index", None)
         if sdk_index:
             console.print(
@@ -152,19 +155,20 @@ def _print_banner(config: Config | None = None):
 
         console.print()
 
-    console.print("  [dim]会话: /help /clear /exit[/dim]")
+    console.print("  [dim]Session: /help /clear /exit[/dim]")
     console.print(
-        "  [dim]配置: /setup /capability /subagents /provider /trust "
+        "  [dim]Config: /setup /capability /subagents /provider /trust "
         "/rule[/dim]",
     )
-    console.print("  [dim]能力: /profile /mcp /skill[/dim]")
+    console.print("  [dim]Capabilities: /profile /mcp /skill[/dim]")
     console.print(
-        "  [dim]开发: /dev model|provider|capability (运行时) "
-        "/dev platform|tool|skill (扩展指南)[/dim]",
+        "  [dim]Dev: /dev model|provider|capability (runtime) "
+        "/dev platform|tool|skill (extension guides)[/dim]",
     )
     console.print(
-        "  [dim]输入: Enter 提交 / Ctrl+J 换行 / 粘贴多行自动保留 / "
-        "@文件 展开内容 / /v 语音输入[/dim]",
+        "  [dim]Input: Enter to submit / Ctrl+J for newline / "
+        "multi-line paste preserved / @file expands content / "
+        "/v voice input[/dim]",
     )
     console.print()
 

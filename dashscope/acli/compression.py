@@ -60,7 +60,7 @@ def shrink_old_tool_messages(
         if (
             not isinstance(content, str)
             or len(content) <= max_chars
-            or "[省略" in content  # already truncated — keep idempotent
+            or "[omitted" in content  # truncate_head_tail marker — idempotent
         ):
             continue
         m["content"] = truncate_head_tail(content, max_chars)
@@ -166,7 +166,10 @@ async def _summarize(messages: list[dict], chat: _ChatCallable) -> str:
         {
             "role": "system",
             "content": (
-                "把以下对话压缩为简要摘要，保留关键决策、代码变更、文件路径、" "用户偏好和工具执行结果。直接输出摘要，不要解释。"
+                "Compress the conversation below into a brief summary. "
+                "Keep key decisions, code changes, file paths, user "
+                "preferences, and tool results. Output only the summary; "
+                "do not explain."
             ),
         },
         {"role": "user", "content": _prepare_compress_dump(messages)},
@@ -271,9 +274,17 @@ async def compress_messages(
 
     try:
         summary = await _summarize(older, chat)
-        content = "以下是本会话早期对话的摘要（系统自动压缩生成，仅作背景参考）：\n" f"{summary}"
+        content = (
+            "Summary of earlier conversation (auto-compressed, "
+            "background context only):\n"
+            f"{summary}"
+        )
     except Exception:
-        content = f"本会话早期的 {len(older)} 条消息已省略" "（系统自动压缩失败，为控制上下文长度仅保留最近对话）。"
+        content = (
+            f"Omitted {len(older)} earlier messages "
+            "(auto-compress failed; keeping only recent "
+            "messages to bound context)."
+        )
     return [{"role": "user", "content": content}, *recent]
 
 

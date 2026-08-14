@@ -68,7 +68,10 @@ async def _subagent_invoke(
     intermediates are NOT included; that's the whole point).
     """
     if _parent_agent is None:
-        return "错误: subagent 未初始化（缺少 parent agent 引用）"
+        return (
+            "Error: subagent not initialized "
+            "(missing parent agent reference)"
+        )
 
     from dashscope.acli.agent import (
         Agent,
@@ -126,7 +129,7 @@ async def _subagent_invoke(
         if chunk.startswith("\n[") and "] →" in chunk:
             continue  # skip tool-call trail markers
         buffer.append(chunk)
-    return ("".join(buffer)).strip() or "(子代理无内容返回)"
+    return ("".join(buffer)).strip() or "(subagent returned no content)"
 
 
 def register_subagent_tool() -> None:
@@ -178,36 +181,41 @@ def register_subagent_tool() -> None:
 
 
 # Specialist subagent system prompts
-CODE_REVIEWER_PROMPT = """你是一个专业的代码审查员。审查代码时关注：
-1. 潜在 bug 和逻辑错误
-2. 安全问题（SQL 注入、XSS、权限绕过等）
-3. 性能问题（低效算法、不必要的循环）
-4. 代码风格（命名、注释、可读性）
+CODE_REVIEWER_PROMPT = """You are a professional code reviewer.
+When reviewing code, focus on:
+1. Potential bugs and logic errors
+2. Security issues (SQL injection, XSS, permission bypass, etc.)
+3. Performance problems (inefficient algorithms, unnecessary loops)
+4. Code style (naming, comments, readability)
 
-使用 read_file 和 search_files 工具阅读代码。输出格式：
-- 严重问题（必须修复）
-- 建议改进（可选）
-- 代码优点
+Use the read_file and search_files tools to read code. Output format:
+- Critical issues (must fix)
+- Suggested improvements (optional)
+- Code strengths
 
-只报告具体发现，不要泛泛而谈。"""
+Report only concrete findings; avoid generic remarks."""
 
-TEST_WRITER_PROMPT = """你是一个专业的测试工程师。为给定的代码生成全面的测试用例。关注：
-1. 正常路径测试（happy path）
-2. 边界条件（空值、极端值、特殊字符）
-3. 错误处理（异常、失败场景）
-4. 性能测试（如适用）
+TEST_WRITER_PROMPT = """You are a professional test engineer.
+Generate comprehensive test cases for the given code. Focus on:
+1. Happy-path tests
+2. Boundary conditions (empty, extreme, and special-character values)
+3. Error handling (exceptions, failure scenarios)
+4. Performance tests (where applicable)
 
-使用 read_file 阅读源码，使用 write_file 创建测试文件。测试框架优先使用 pytest。
-输出测试代码，不要多余解释。"""
+Use read_file to read source code and write_file to create test files.
+Prefer pytest as the test framework.
+Output test code only, without extra explanation."""
 
-DOC_GENERATOR_PROMPT = """你是一个专业的技术文档工程师。为代码生成清晰的文档。包括：
-1. 模块/类的用途概述
-2. 公共 API 的详细说明（参数、返回值、示例）
-3. 使用示例
-4. 注意事项和限制
+DOC_GENERATOR_PROMPT = """You are a professional technical writer.
+Generate clear documentation for code. Include:
+1. Overview of the module/class purpose
+2. Detailed public API reference (parameters, return values, examples)
+3. Usage examples
+4. Caveats and limitations
 
-使用 read_file 阅读源码，使用 write_file 生成文档（Markdown 格式或代码注释）。
-文档要简洁实用，避免冗余。"""
+Use read_file to read source code and write_file to generate docs
+(Markdown format or code comments).
+Keep documentation concise and practical; avoid redundancy."""
 
 
 async def _specialist_invoke(specialist_type: str, task: str) -> str:
@@ -220,7 +228,8 @@ async def _specialist_invoke(specialist_type: str, task: str) -> str:
     system_prompt = prompts.get(specialist_type, "")
     if not system_prompt:
         return (
-            f"错误: 未知的专家类型 '{specialist_type}'，可选: {', '.join(prompts.keys())}"
+            f"Error: unknown specialist type '{specialist_type}'; "
+            f"options: {', '.join(prompts.keys())}"
         )
 
     return await _subagent_invoke(
@@ -247,13 +256,19 @@ def _register_specialist_tools() -> None:
 
     registry.register_mcp_tool(
         name="review_code",
-        description="调用专业代码审查员审查代码，发现 bug、安全问题、性能问题和风格问题",
+        description=(
+            "Invoke a specialist code reviewer to find bugs, security "
+            "issues, performance problems, and style issues"
+        ),
         parameters={
             "type": "object",
             "properties": {
                 "task": {
                     "type": "string",
-                    "description": "审查任务描述，如'审查 src/auth.py 的安全性'",
+                    "description": (
+                        "review task, e.g. 'check src/auth.py for "
+                        "security issues'"
+                    ),
                 },
             },
             "required": ["task"],
@@ -262,13 +277,18 @@ def _register_specialist_tools() -> None:
     )
     registry.register_mcp_tool(
         name="write_tests",
-        description="调用专业测试工程师为代码生成全面的测试用例",
+        description=(
+            "Invoke a specialist test engineer to generate "
+            "comprehensive test cases for code"
+        ),
         parameters={
             "type": "object",
             "properties": {
                 "task": {
                     "type": "string",
-                    "description": "测试任务描述，如'为 src/utils.py 生成测试'",
+                    "description": (
+                        "test task, e.g. 'generate tests for " "src/utils.py'"
+                    ),
                 },
             },
             "required": ["task"],
@@ -277,13 +297,18 @@ def _register_specialist_tools() -> None:
     )
     registry.register_mcp_tool(
         name="generate_docs",
-        description="调用专业文档工程师为代码生成清晰的文档",
+        description=(
+            "Invoke a specialist doc writer to generate clear "
+            "documentation for code"
+        ),
         parameters={
             "type": "object",
             "properties": {
                 "task": {
                     "type": "string",
-                    "description": "文档任务描述，如'为 src/api.py 生成 API 文档'",
+                    "description": (
+                        "doc task, e.g. 'generate API docs for " "src/api.py'"
+                    ),
                 },
             },
             "required": ["task"],

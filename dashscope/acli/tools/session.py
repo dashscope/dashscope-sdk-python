@@ -43,13 +43,13 @@ def register_session_tools(
         )
         agent.model_name = config.model
         config.save_workspace()
-        return f"已切换模型: {config.provider}/{config.model}"
+        return f"Switched model: {config.provider}/{config.model}"
 
     async def switch_provider(provider_name: str) -> str:
         if provider_name not in PROVIDER_MODELS:
             return (
-                f"未知 Provider: {provider_name}，可选: "
-                f"{', '.join(PROVIDER_MODELS)}"
+                f"Unknown provider: {provider_name}; "
+                f"options: {', '.join(PROVIDER_MODELS)}"
             )
         agent = get_agent()
         config.provider = provider_name
@@ -64,25 +64,31 @@ def register_session_tools(
         agent.model_name = config.model
         config.save_global()
         config.save_workspace()
-        return f"已切换: {provider_name}/{config.model}"
+        return f"Switched: {provider_name}/{config.model}"
 
     async def list_models() -> str:
         lines = []
         for provider, models in PROVIDER_MODELS.items():
-            marker = " ← 当前" if provider == config.provider else ""
+            marker = " ← current" if provider == config.provider else ""
             lines.append(f"{provider}{marker}: {', '.join(models)}")
         return "\n".join(lines)
 
     registry.register(
         ToolDefinition(
             name="switch_model",
-            description="切换当前使用的 AI 模型（如 qwen-plus、claude-sonnet-4-20250514）",
+            description=(
+                "Switch the current AI model "
+                "(e.g. qwen-plus, claude-sonnet-4-20250514)"
+            ),
             permission=PermissionLevel.AUTO,
             func=switch_model,
             parameters={
                 "type": "object",
                 "properties": {
-                    "model_name": {"type": "string", "description": "模型名称"},
+                    "model_name": {
+                        "type": "string",
+                        "description": "Model name",
+                    },
                 },
                 "required": ["model_name"],
             },
@@ -91,7 +97,10 @@ def register_session_tools(
     registry.register(
         ToolDefinition(
             name="switch_provider",
-            description="切换 AI 服务商（tongyi/anthropic/openai/deepseek/zhipu）",
+            description=(
+                "Switch AI provider "
+                "(tongyi/anthropic/openai/deepseek/zhipu)"
+            ),
             permission=PermissionLevel.AUTO,
             func=switch_provider,
             parameters={
@@ -99,7 +108,7 @@ def register_session_tools(
                 "properties": {
                     "provider_name": {
                         "type": "string",
-                        "description": "Provider 名称",
+                        "description": "Provider name",
                     },
                 },
                 "required": ["provider_name"],
@@ -108,7 +117,7 @@ def register_session_tools(
     )
     registry.register_mcp_tool(
         name="list_models",
-        description="列出所有可用的 AI 模型和服务商",
+        description="List all available AI models and providers",
         parameters={"type": "object", "properties": {}},
         call_fn=list_models,
     )
@@ -126,9 +135,9 @@ def register_session_tools(
         )
         lines = []
         for k in all_keys:
-            status = "✓ 已启用" if k in enabled else "✗ 未启用"
+            status = "✓ enabled" if k in enabled else "✗ disabled"
             lines.append(f"  {k} — {status}")
-        return "能力列表:\n" + "\n".join(lines)
+        return "Capabilities:\n" + "\n".join(lines)
 
     async def capability_enable(key: str) -> str:
         from dashscope.acli.tools.platform import (
@@ -139,26 +148,35 @@ def register_session_tools(
 
         all_keys = all_capability_keys()
         if key not in all_keys:
-            return f"未知能力: {key}，可选: {', '.join(all_keys)}"
+            return (
+                f"Unknown capability: {key}; "
+                f"options: {', '.join(all_keys)}"
+            )
         if config.privacy_mode and _is_cloud_capability(key):
-            return f"隐私模式已启用，无法开启云端能力 {key}；如需使用请先 /privacy off"
+            return (
+                f"Privacy mode is on; cannot enable cloud capability "
+                f"{key}. Run /privacy off first to use it."
+            )
         enabled = (
             set(config.enabled_capabilities)
             if config.enabled_capabilities is not None
             else set(all_keys)
         )
         if key in enabled:
-            return f"{key} 已处于启用状态"
+            return f"{key} is already enabled"
         enabled.add(key)
         config.enabled_capabilities = sorted(enabled)
         config.save_workspace()
         count = register_one_capability(config, key, connect_mcp_fn)
         if count == 0:
             return (
-                f"已启用 {key}，但注册了 0 个工具——很可能缺少凭证或运行条件（如 bl 不在 PATH）。"
-                f"agent 无法交互式补录凭证，请告知用户运行 /capability enable {key} 手动补全。"
+                f"Enabled {key} but registered 0 tools — credentials "
+                f"or runtime requirements are likely missing (e.g. bl "
+                f"not in PATH). The agent cannot add credentials "
+                f"interactively; tell the user to run "
+                f"/capability enable {key} to finish setup."
             )
-        return f"已启用 {key}（注册了 {count} 个工具）"
+        return f"Enabled {key} (registered {count} tools)"
 
     async def capability_disable(key: str) -> str:
         from dashscope.acli.tools.platform import (
@@ -168,30 +186,36 @@ def register_session_tools(
 
         all_keys = all_capability_keys()
         if key not in all_keys:
-            return f"未知能力: {key}，可选: {', '.join(all_keys)}"
+            return (
+                f"Unknown capability: {key}; "
+                f"options: {', '.join(all_keys)}"
+            )
         enabled = (
             set(config.enabled_capabilities)
             if config.enabled_capabilities is not None
             else set(all_keys)
         )
         if key not in enabled:
-            return f"{key} 已处于禁用状态"
+            return f"{key} is already disabled"
         enabled.discard(key)
         config.enabled_capabilities = sorted(enabled)
         config.save_workspace()
         unregister_capability_tools(key)
-        return f"已禁用 {key}"
+        return f"Disabled {key}"
 
     registry.register_mcp_tool(
         name="capability_list",
-        description="列出所有可用能力及其启用状态",
+        description="List all capabilities and their enabled status",
         parameters={"type": "object", "properties": {}},
         call_fn=capability_list,
     )
     registry.register(
         ToolDefinition(
             name="capability_enable",
-            description="启用一项云端能力（如知识库、联网搜索、MCP 等）",
+            description=(
+                "Enable a cloud capability "
+                "(e.g. knowledge base, web search, MCP)"
+            ),
             permission=PermissionLevel.CONFIRM,
             func=capability_enable,
             parameters={
@@ -199,7 +223,9 @@ def register_session_tools(
                 "properties": {
                     "key": {
                         "type": "string",
-                        "description": "能力标识，如 bailian.mcp、bailian.cli",
+                        "description": (
+                            "Capability key, e.g. bailian.mcp, bailian.cli"
+                        ),
                     },
                 },
                 "required": ["key"],
@@ -209,13 +235,16 @@ def register_session_tools(
     registry.register(
         ToolDefinition(
             name="capability_disable",
-            description="禁用一项云端能力",
+            description="Disable a cloud capability",
             permission=PermissionLevel.CONFIRM,
             func=capability_disable,
             parameters={
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "能力标识"},
+                    "key": {
+                        "type": "string",
+                        "description": "Capability key",
+                    },
                 },
                 "required": ["key"],
             },
@@ -230,10 +259,13 @@ def register_session_tools(
     async def mcp_connect(service: str) -> str:
         clients = get_mcp_clients_fn()
         if service in clients:
-            return f"{service} 已连接（{len(clients[service].tools)} 个工具）"
+            return (
+                f"{service} already connected "
+                f"({len(clients[service].tools)} tools)"
+            )
         error = await connect_mcp_fn(service, config)
         if error:
-            return f"连接 {service} 失败: {error}"
+            return f"Failed to connect {service}: {error}"
         clients = get_mcp_clients_fn()
         client = clients.get(service)
         tool_count = len(client.tools) if client else 0
@@ -242,29 +274,35 @@ def register_session_tools(
         if not any(m.service == service for m in config.mcp_servers):
             config.mcp_servers.append(MCPServerConfig(service=service))
             config.save_workspace()
-        return f"已连接 {service}，发现 {tool_count} 个工具"
+        return f"Connected {service}; found {tool_count} tools"
 
     async def mcp_disconnect(service: str) -> str:
         clients = get_mcp_clients_fn()
         if service not in clients:
-            return f"{service} 未连接"
+            return f"{service} is not connected"
         await disconnect_mcp_fn(service)
         config.mcp_servers = [
             m for m in config.mcp_servers if m.service != service
         ]
         config.save_workspace()
-        return f"已断开 {service}"
+        return f"Disconnected {service}"
 
     registry.register_mcp_tool(
         name="mcp_list_services",
-        description="列出可用的 MCP 云端服务（时间、代码执行、文档解析等）",
+        description=(
+            "List available MCP cloud services "
+            "(time, code execution, doc parsing, etc.)"
+        ),
         parameters={"type": "object", "properties": {}},
         call_fn=mcp_list_services,
     )
     registry.register(
         ToolDefinition(
             name="mcp_connect",
-            description="连接一个 MCP 云端服务（连接后其工具自动可用）",
+            description=(
+                "Connect an MCP cloud service "
+                "(its tools become available once connected)"
+            ),
             permission=PermissionLevel.CONFIRM,
             func=mcp_connect,
             parameters={
@@ -273,7 +311,8 @@ def register_session_tools(
                     "service": {
                         "type": "string",
                         "description": (
-                            "服务名称，如 time、code-interpreter、" "doc-analysis"
+                            "Service name, e.g. time, "
+                            "code-interpreter, doc-analysis"
                         ),
                     },
                 },
@@ -284,13 +323,16 @@ def register_session_tools(
     registry.register(
         ToolDefinition(
             name="mcp_disconnect",
-            description="断开一个 MCP 云端服务",
+            description="Disconnect an MCP cloud service",
             permission=PermissionLevel.CONFIRM,
             func=mcp_disconnect,
             parameters={
                 "type": "object",
                 "properties": {
-                    "service": {"type": "string", "description": "服务名称"},
+                    "service": {
+                        "type": "string",
+                        "description": "Service name",
+                    },
                 },
                 "required": ["service"],
             },
@@ -309,18 +351,21 @@ def register_session_tools(
         tracker.mark_step_complete(step_index)
         if tracker.is_complete():
             tracker.clear_plan()
-            return "所有步骤已完成"
-        return f"步骤 {step_index + 1} 已完成"
+            return "All steps completed"
+        return f"Step {step_index + 1} completed"
 
     async def get_plan_status() -> str:
         """Get current plan progress."""
         section = get_agent().memory_manager.session.plan.get_plan_section()
-        return section if section else "当前没有进行中的计划"
+        return section if section else "No plan in progress"
 
     registry.register(
         ToolDefinition(
             name="create_plan",
-            description="为复杂任务创建多步骤执行计划。用于需要多步操作的任务（如重构、设计、实现功能）。",
+            description=(
+                "Create a multi-step execution plan for complex "
+                "tasks (e.g. refactors, designs, new features)."
+            ),
             permission=PermissionLevel.AUTO,
             func=create_plan,
             parameters={
@@ -328,12 +373,12 @@ def register_session_tools(
                 "properties": {
                     "goal": {
                         "type": "string",
-                        "description": "计划的总体目标",
+                        "description": "Overall goal of the plan",
                     },
                     "steps": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "步骤描述列表",
+                        "description": "List of step descriptions",
                     },
                 },
                 "required": ["goal", "steps"],
@@ -343,7 +388,7 @@ def register_session_tools(
     registry.register(
         ToolDefinition(
             name="complete_step",
-            description="标记计划中的一个步骤为已完成",
+            description="Mark a plan step as completed",
             permission=PermissionLevel.AUTO,
             func=complete_step,
             parameters={
@@ -351,7 +396,7 @@ def register_session_tools(
                 "properties": {
                     "step_index": {
                         "type": "integer",
-                        "description": "步骤索引（从 0 开始）",
+                        "description": "Step index (0-based)",
                     },
                 },
                 "required": ["step_index"],
@@ -361,7 +406,7 @@ def register_session_tools(
     registry.register(
         ToolDefinition(
             name="get_plan_status",
-            description="获取当前计划的执行进度",
+            description="Get progress of the current plan",
             permission=PermissionLevel.AUTO,
             func=get_plan_status,
             parameters={"type": "object", "properties": {}},

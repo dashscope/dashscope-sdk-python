@@ -45,7 +45,7 @@ def load_skill_files():
                 import logging
 
                 logging.getLogger(__name__).warning(
-                    "跳过无法解析的 skill 文件 %s: %s",
+                    "Skipping unparseable skill file %s: %s",
                     path,
                     e,
                 )
@@ -115,15 +115,15 @@ def _parse_simple_yaml(text: str) -> dict:
 
 
 KNOWN_MCP_SERVICES = {
-    "time": "时间服务 — 获取当前时间、时区转换",
-    "code-interpreter": "代码解释器 — 执行 Python 代码",
-    "doc-analysis": "文档解析 — 解析 PDF/Word 等文档内容",
+    "time": "Time service — current time, timezone conversion",
+    "code-interpreter": "Code interpreter — run Python code",
+    "doc-analysis": "Document analysis — parse PDF/Word documents",
 }
 
 
 def list_skills(connected_services: set[str] | None = None) -> str:
     """Format skills list for display."""
-    lines = ["可用技能:"]
+    lines = ["Available skills:"]
     lines.append("=" * 40)
 
     available = []
@@ -139,7 +139,7 @@ def list_skills(connected_services: set[str] | None = None) -> str:
 
     if available:
         lines.append("")
-        lines.append("[可直接使用]")
+        lines.append("[Ready to use]")
         for s in available:
             args = " ".join(f"<{a}>" for a in s.arguments)
             lines.append(f"  \u25b8 {s.name} {args}")
@@ -147,26 +147,26 @@ def list_skills(connected_services: set[str] | None = None) -> str:
 
     if needs_mcp:
         lines.append("")
-        lines.append("[需先连接 MCP 服务]")
+        lines.append("[Requires MCP connection]")
         for s in needs_mcp:
             args = " ".join(f"<{a}>" for a in s.arguments)
-            lines.append(f"  \u25ab {s.name} {args}  (需要: {s.mcp_service})")
+            lines.append(f"  \u25ab {s.name} {args}  (needs: {s.mcp_service})")
             lines.append(f"     {s.description}")
 
     lines.append("")
-    lines.append("用法: /skill <name> <arg1> <arg2> ...")
-    lines.append("示例: /skill my-skill arg1 arg2")
+    lines.append("Usage: /skill <name> <arg1> <arg2> ...")
+    lines.append("Example: /skill my-skill arg1 arg2")
     return "\n".join(lines)
 
 
 def list_known_services() -> str:
     """Format known MCP services for display."""
-    lines = ["百炼 MCP 可用服务:"]
+    lines = ["Bailian MCP services:"]
     lines.append("-" * 40)
     for svc, desc in KNOWN_MCP_SERVICES.items():
         lines.append(f"  {svc:20s} {desc}")
     lines.append("")
-    lines.append("添加服务: /mcp add <service-name>")
+    lines.append("Add a service: /mcp add <service-name>")
     return "\n".join(lines)
 
 
@@ -186,7 +186,9 @@ def skills_summary_for_llm(connected_services: set[str] | None = None) -> str:
         head = f"- {skill.name} {args} — {skill.description}"
         if skill.mcp_service:
             state = (
-                "已连接" if skill.mcp_service in connected else "需 mcp_connect"
+                "connected"
+                if skill.mcp_service in connected
+                else "needs mcp_connect"
             )
             head += f"  [MCP:{skill.mcp_service}({state})]"
         lines.append(head)

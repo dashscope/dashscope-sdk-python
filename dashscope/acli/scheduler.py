@@ -125,7 +125,7 @@ _INTERVAL_RE = re.compile(r"^(\d+)\s*([smh])$")
 def parse_interval(s: str) -> float:
     m = _INTERVAL_RE.match(s.strip().lower())
     if not m:
-        raise ValueError(f"无法解析间隔: {s}（支持格式: 30s, 5m, 2h）")
+        raise ValueError(f"cannot parse interval: {s} (formats: 30s, 5m, 2h)")
     val, unit = int(m.group(1)), m.group(2)
     return val * {"s": 1, "m": 60, "h": 3600}[unit]
 
@@ -136,7 +136,9 @@ def parse_at_time(s: str) -> datetime:
         return datetime.fromisoformat(s)
     parts = s.split(":")
     if len(parts) != 2:
-        raise ValueError(f"无法解析时间: {s}（支持格式: 14:30, 2026-06-12T09:00）")
+        raise ValueError(
+            f"cannot parse time: {s} (formats: 14:30, 2026-06-12T09:00)",
+        )
     h, m = int(parts[0]), int(parts[1])
     now = datetime.now()
     candidate = now.replace(hour=h, minute=m, second=0, microsecond=0)
@@ -157,7 +159,7 @@ def _parse_cron_field(field_str: str, lo: int, hi: int) -> set[int]:
         elif part.startswith("*/"):
             step = int(part[2:])
             if step <= 0:
-                raise ValueError(f"cron 步长必须 > 0: {part}")
+                raise ValueError(f"cron step must be > 0: {part}")
             values.update(range(lo, hi + 1, step))
         elif "-" in part:
             a, b = part.split("-", 1)
@@ -220,7 +222,7 @@ def parse_cron_add(
         tok = tokens[i]
         if tok in ("every", "at", "cron"):
             if i + 1 >= len(tokens):
-                raise ValueError(f"{tok} 需要参数")
+                raise ValueError(f"{tok} requires an argument")
             val = tokens[i + 1]
             if tok == "every":
                 secs = parse_interval(val)
@@ -239,7 +241,7 @@ def parse_cron_add(
             elif tok == "cron":
                 parts = val.strip().split()
                 if len(parts) != 5:
-                    raise ValueError(f"cron 表达式需要 5 个字段: {val}")
+                    raise ValueError(f"cron expression needs 5 fields: {val}")
                 schedule = ScheduleSpec(
                     kind="cron",
                     raw=f"cron {val}",
@@ -248,7 +250,7 @@ def parse_cron_add(
             i += 2
         elif tok == "condition":
             if i + 1 >= len(tokens):
-                raise ValueError("condition 需要参数")
+                raise ValueError("condition requires an argument")
             condition = tokens[i + 1]
             i += 2
         elif tok == "no-subagent":
@@ -257,7 +259,7 @@ def parse_cron_add(
         elif tok == "skill":
             i += 1
             if i >= len(tokens):
-                raise ValueError("skill 需要技能名")
+                raise ValueError("skill requires a skill name")
             name = tokens[i]
             i += 1
             skill_args: list[str] = []
@@ -273,12 +275,12 @@ def parse_cron_add(
                 i += 1
             skills.append(SkillInvocation(name, skill_args))
         else:
-            raise ValueError(f"未知参数: {tok}")
+            raise ValueError(f"unknown argument: {tok}")
 
     if not schedule:
-        raise ValueError("需要指定调度方式: every, at, 或 cron")
+        raise ValueError("a schedule is required: every, at, or cron")
     if not skills:
-        raise ValueError("需要至少一个 skill")
+        raise ValueError("at least one skill is required")
 
     return schedule, skills, condition, subagent
 
@@ -370,26 +372,31 @@ class Scheduler:
 
     def print_jobs(self) -> None:
         if not self.jobs:
-            console.print("[dim]无定时任务[/dim]")
-            console.print("[dim]用法: /cron add every 5m skill weather 杭州[/dim]")
+            console.print("[dim]No scheduled jobs[/dim]")
+            console.print(
+                "[dim]Usage: /cron add every 5m skill "
+                "weather Hangzhou[/dim]",
+            )
             return
 
-        console.print("[bold]📋 定时任务[/bold]")
+        console.print("[bold]📋 Scheduled jobs[/bold]")
         for job in self.jobs.values():
             status = (
-                "[green]运行中[/green]" if job.enabled else "[yellow]已暂停[/yellow]"
+                "[green]running[/green]"
+                if job.enabled
+                else "[yellow]paused[/yellow]"
             )
             skill_names = ", ".join(s.name for s in job.skills)
             console.print(f"  [{job.id}] {status}  {job.schedule.raw}")
-            console.print(f"    技能: {skill_names}")
+            console.print(f"    skills: {skill_names}")
             if job.condition:
-                console.print(f"    条件: {job.condition}")
+                console.print(f"    condition: {job.condition}")
             if job.last_run:
-                console.print(f"    上次执行: {job.last_run}")
+                console.print(f"    last run: {job.last_run}")
             if job.last_result:
                 result_preview = job.last_result[:80].replace("\n", " ")
-                console.print(f"    结果: {result_preview}...")
-            console.print(f"    执行次数: {job.run_count}")
+                console.print(f"    result: {result_preview}...")
+            console.print(f"    runs: {job.run_count}")
             console.print()
 
     # ── Internal ──────────────────────────────────────────────
@@ -406,9 +413,12 @@ class Scheduler:
             return
         exc = task.exception()
         if exc is not None:
-            print(f"\n[CRON] 任务 {job_id} 意外退出: {type(exc).__name__}: {exc}")
+            print(
+                f"\n[CRON] job {job_id} exited unexpectedly: "
+                f"{type(exc).__name__}: {exc}",
+            )
         elif job_id in self.jobs and self.jobs[job_id].enabled:
-            print(f"\n[CRON] 任务 {job_id} 已结束（调度类型可能是一次性的）")
+            print(f"\n[CRON] job {job_id} ended (schedule may be one-shot)")
 
     async def _job_loop(self, job_id: str) -> None:
         job = self.jobs[job_id]
@@ -430,19 +440,33 @@ class Scheduler:
                     )
                 except asyncio.TimeoutError:
                     job.last_run = datetime.now().isoformat()
-                    job.last_result = "执行超时 (>300秒)"
+                    job.last_result = "execution timed out (>300s)"
                     job.run_count += 1
                     self._persist()
-                    print(f"\n[CRON {job.id}] 执行超时: 任务执行超过 300 秒被终止")
-                    print(f"  调度: {job.schedule.raw} · 第{job.run_count}次执行")
+                    print(
+                        f"\n[CRON {job.id}] timeout: job ran over "
+                        f"300s and was terminated",
+                    )
+                    print(
+                        f"  schedule: {job.schedule.raw} "
+                        f"· run #{job.run_count}",
+                    )
                 except Exception as e:
                     # Log error but continue the loop
                     job.last_run = datetime.now().isoformat()
-                    job.last_result = f"执行异常: {type(e).__name__}: {e}"
+                    job.last_result = (
+                        f"execution error: {type(e).__name__}: {e}"
+                    )
                     job.run_count += 1
                     self._persist()
-                    print(f"\n[CRON {job.id}] 执行失败: {type(e).__name__}: {e}")
-                    print(f"  调度: {job.schedule.raw} · 第{job.run_count}次执行")
+                    print(
+                        f"\n[CRON {job.id}] failed: "
+                        f"{type(e).__name__}: {e}",
+                    )
+                    print(
+                        f"  schedule: {job.schedule.raw} "
+                        f"· run #{job.run_count}",
+                    )
                 if job.schedule.kind == "at":
                     job.enabled = False
                     self._persist()
@@ -479,17 +503,20 @@ class Scheduler:
         return None
 
     async def _execute_job(self, job: CronJob) -> None:
-        print(f"\n[CRON {job.id}] 开始执行...")
+        print(f"\n[CRON {job.id}] starting...")
 
         # Privacy mode: skip every job. Jobs may embed cloud-capable tools
         # (MCP, subagent) in their prompt, and there is no reliable way to
         # prove a job is local-only from the outside — so all of them pause.
         if getattr(self.config, "privacy_mode", False):
-            job.last_result = "已跳过：隐私模式启用中，cron 任务不执行云端能力"
+            job.last_result = (
+                "skipped: privacy mode on, cron jobs do not run "
+                "cloud capabilities"
+            )
             job.last_run = datetime.now().isoformat()
             job.run_count += 1
             self._persist()
-            print(f"[CRON {job.id}] 已跳过（隐私模式）")
+            print(f"[CRON {job.id}] skipped (privacy mode)")
             return
 
         # Condition check
@@ -502,13 +529,13 @@ class Scheduler:
                 )
                 exit_code = await proc.wait()
                 if exit_code != 0:
-                    job.last_result = f"条件不满足 (exit {exit_code})"
+                    job.last_result = f"condition not met (exit {exit_code})"
                     job.last_run = datetime.now().isoformat()
                     job.run_count += 1
                     self._persist()
                     return
             except Exception as e:
-                job.last_result = f"条件检查异常: {e}"
+                job.last_result = f"condition check error: {e}"
                 job.last_run = datetime.now().isoformat()
                 self._persist()
                 return
@@ -522,25 +549,34 @@ class Scheduler:
                 from dashscope.acli.cli import _connect_mcp, _mcp_clients
 
                 if skill.mcp_service not in _mcp_clients:
-                    print(f"[CRON {job.id}] 正在连接 MCP: {skill.mcp_service}...")
+                    print(
+                        f"[CRON {job.id}] connecting MCP: "
+                        f"{skill.mcp_service}...",
+                    )
                     try:
                         err = await asyncio.wait_for(
                             _connect_mcp(skill.mcp_service, self.config),
                             timeout=30.0,
                         )
                         if err:
-                            print(f"[CRON {job.id}] MCP 连接失败: {err}")
+                            print(
+                                f"[CRON {job.id}] MCP connect "
+                                f"failed: {err}",
+                            )
                     except asyncio.TimeoutError:
-                        print(f"[CRON {job.id}] MCP 连接超时: {skill.mcp_service}")
+                        print(
+                            f"[CRON {job.id}] MCP connect "
+                            f"timeout: {skill.mcp_service}",
+                        )
                     except Exception as e:
-                        print(f"[CRON {job.id}] MCP 连接异常: {e}")
+                        print(f"[CRON {job.id}] MCP connect error: {e}")
 
         # Execute skills
         results = []
         for inv in job.skills:
             skill = BUILTIN_SKILLS.get(inv.name)
             if not skill:
-                results.append(f"未知技能: {inv.name}")
+                results.append(f"unknown skill: {inv.name}")
                 continue
 
             # Check MCP dependency
@@ -549,14 +585,17 @@ class Scheduler:
 
                 if skill.mcp_service not in _mcp_clients:
                     results.append(
-                        f"跳过 {inv.name}: 需要 MCP 服务 {skill.mcp_service}（连接失败）",
+                        f"skipped {inv.name}: requires MCP service "
+                        f"{skill.mcp_service} (connect failed)",
                     )
                     continue
 
             rendered = render_skill(skill, inv.args)
             if not rendered:
                 arg_hint = " ".join(f"<{a}>" for a in skill.arguments)
-                results.append(f"参数不足: /skill {inv.name} {arg_hint}")
+                results.append(
+                    f"missing args: /skill {inv.name} {arg_hint}",
+                )
                 continue
 
             if job.subagent:
@@ -565,13 +604,15 @@ class Scheduler:
                 result = await _subagent_invoke(
                     prompt=rendered,
                     system_prompt=(
-                        f"你是定时任务的执行代理。当前任务: {inv.name}。" f"直接输出结果，不要多余解释。"
+                        f"You are the execution agent for a scheduled "
+                        f"job. Current job: {inv.name}. Output the "
+                        f"result directly, no extra explanation."
                     ),
                     max_turns=15,
                 )
             else:
                 self._pending_prompts.append(rendered)
-                result = "(已排队至主对话)"
+                result = "(queued to the main conversation)"
 
             results.append(result)
 
@@ -584,7 +625,7 @@ class Scheduler:
         skill_names = ", ".join(inv.name for inv in job.skills)
         content = "\n\n".join(results)
         print(f"\n⏰ [CRON {job.id}] {skill_names}")
-        print(f"  调度: {job.schedule.raw} · 第{job.run_count}次执行")
+        print(f"  schedule: {job.schedule.raw} · run #{job.run_count}")
         print("─" * 60)
         print(content)
         print("─" * 60)

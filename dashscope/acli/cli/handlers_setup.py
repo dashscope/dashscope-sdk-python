@@ -33,7 +33,7 @@ def _prompt_input(prompt: str, secret: bool = False) -> str:
 def _setup_user_name(config: Config) -> None:
     current_name = config.user_name or ""
     name = input(
-        f"用户名{f' [{current_name}]' if current_name else ''}: ",
+        f"Username{f' [{current_name}]' if current_name else ''}: ",
     ).strip()
     if name:
         config.user_name = name
@@ -59,16 +59,18 @@ def _ensure_provider_key(config: Config) -> None:
     if getattr(config, field, ""):
         return
     value = _prompt_input(
-        f"\n{config.provider} API Key ({key_info['env']}) [直接回车跳过]: ",
+        f"\n{config.provider} API Key ({key_info['env']}) [Enter to skip]: ",
         secret=True,
     )
     if value:
         setattr(config, field, value)
     else:
-        env_hint = f"或环境变量 {key_info['env']} " if key_info.get("env") else ""
+        env_hint = (
+            f"or env var {key_info['env']} " if key_info.get("env") else ""
+        )
         console.print(
-            f"[dim]已跳过 {config.provider} key，稍后可用 /provider "
-            f"{env_hint}设置[/dim]",
+            f"[dim]Skipped {config.provider} key; set it later via "
+            f"/provider {env_hint}[/dim]",
         )
 
 
@@ -99,8 +101,9 @@ def _warn_unsatisfiable_capabilities(config: Config) -> None:
         if not missing_before:
             continue
         console.print(
-            f"\n[yellow]{cap_info['key']} 需要配置[/yellow] "
-            f"[dim](直接回车跳过该字段，能力保留启用、稍后用 /setup 补即可)[/dim]:",
+            f"\n[yellow]{cap_info['key']} needs configuration[/yellow] "
+            f"[dim](Enter skips a field; the capability stays enabled "
+            f"and can be completed later via /setup)[/dim]:",
         )
         for field in cap_info["requires"]:
             if getattr(config, field, ""):
@@ -118,14 +121,19 @@ def _warn_unsatisfiable_capabilities(config: Config) -> None:
             deferred.append((cap_info["key"], missing_after))
 
     if deferred:
-        console.print("\n[yellow]以下能力凭证暂缺，已保留启用、暂不可调用:[/yellow]")
+        console.print(
+            "\n[yellow]These capabilities lack credentials; they stay "
+            "enabled but are not callable yet:[/yellow]",
+        )
         for cap_key, miss in deferred:
             console.print(
-                f"  [dim]·[/dim] [bold]{cap_key}[/bold] 待补: {', '.join(miss)}",
+                f"  [dim]·[/dim] [bold]{cap_key}[/bold] "
+                f"missing: {', '.join(miss)}",
             )
         console.print(
-            "[dim]补完后下次启动自动生效；也可运行 /setup 补齐后 "
-            "[bold]/capability enable <cap>[/bold] 即时触发。[/dim]",
+            "[dim]They take effect on the next launch once filled in; "
+            "or run /setup, then [bold]/capability enable <cap>[/bold] "
+            "to activate immediately.[/dim]",
         )
 
 
@@ -161,7 +169,7 @@ def _setup_finalize(config: Config, agent) -> None:
 
     register_platform_tools(config, connect_mcp_fn=_connect_mcp)
 
-    console.print("\n[green]✓ 配置已保存到 .acli/config.toml[/green]")
+    console.print("\n[green]✓ Config saved to .acli/config.toml[/green]")
     caps_display = (
         ALL_CAPABILITY_KEYS
         if config.enabled_capabilities is None
@@ -170,16 +178,16 @@ def _setup_finalize(config: Config, agent) -> None:
     from dashscope.acli.tools.registry import registry
 
     tool_count = len(registry.list_tools())
-    console.print(f"[dim]  用户: {config.user_name}[/dim]")
-    console.print(f"[dim]  模型: {config.provider}/{config.model}[/dim]")
+    console.print(f"[dim]  User: {config.user_name}[/dim]")
+    console.print(f"[dim]  Model: {config.provider}/{config.model}[/dim]")
     console.print(
-        f"[dim]  能力: "
-        f"{', '.join(caps_display) if caps_display else '(无)'}[/dim]",
+        f"[dim]  Capabilities: "
+        f"{', '.join(caps_display) if caps_display else '(none)'}[/dim]",
     )
-    console.print(f"[dim]  工具: {tool_count} 个已注册[/dim]")
+    console.print(f"[dim]  Tools: {tool_count} registered[/dim]")
 
 
-# ---- preset 1: 阿里/百炼 ----
+# ---- preset 1: Alibaba/Bailian ----
 
 
 def _apply_preset_bailian(config: Config) -> None:
@@ -193,7 +201,7 @@ def _apply_preset_bailian(config: Config) -> None:
     _warn_unsatisfiable_capabilities(config)
 
 
-# ---- preset 2: 国内通用 ----
+# ---- preset 2: China general ----
 
 
 def _apply_preset_china_common(config: Config) -> None:
@@ -204,7 +212,7 @@ def _apply_preset_china_common(config: Config) -> None:
     _warn_unsatisfiable_capabilities(config)
 
 
-# ---- preset 3: 个性化（原 _handle_setup 全量交互流程）----
+# ---- preset 3: custom (former _handle_setup full interactive flow) ----
 
 
 async def _setup_preset_custom(config: Config) -> None:
@@ -216,7 +224,7 @@ async def _setup_preset_custom(config: Config) -> None:
     all_providers = list(PROVIDER_MODELS.keys()) + [
         p for p in ext_providers if p not in PROVIDER_MODELS
     ]
-    console.print(f"\n可选 Provider: {', '.join(all_providers)}")
+    console.print(f"\nAvailable providers: {', '.join(all_providers)}")
     provider_input = input(f"Provider [{config.provider}]: ").strip()
     if provider_input and provider_input in all_providers:
         config.provider = provider_input
@@ -226,12 +234,12 @@ async def _setup_preset_custom(config: Config) -> None:
         [],
     )
     if models:
-        console.print(f"可选模型: {', '.join(models)}")
+        console.print(f"Available models: {', '.join(models)}")
         # If current model isn't in this provider's list, suggest the first one
         default_model = config.model if config.model in models else models[0]
     else:
         default_model = config.model
-    model_input = input(f"模型 [{default_model}]: ").strip()
+    model_input = input(f"Model [{default_model}]: ").strip()
     if model_input:
         config.model = normalize_model_name(model_input)
     elif default_model != config.model:
@@ -239,12 +247,14 @@ async def _setup_preset_custom(config: Config) -> None:
 
     _ensure_provider_key(config)
 
-    console.print("\n[bold]可用平台能力:[/bold]")
+    console.print("\n[bold]Available platform capabilities:[/bold]")
     for i, cap in enumerate(CAPABILITY_CATALOG, 1):
         console.print(f"  [{i}] {cap['key']:20s} — {cap['name']}")
 
     console.print(
-        "\n[bold]请输入要启用的能力编号[/bold] [dim](多个用逗号或空格分隔，直接回车则不启用)[/dim]",
+        "\n[bold]Enter the numbers of capabilities to enable[/bold] "
+        "[dim](separate multiple with commas or spaces; "
+        "Enter enables none)[/dim]",
     )
 
     selection = input("> ").strip()
@@ -264,33 +274,38 @@ async def _setup_preset_custom(config: Config) -> None:
 
 async def _handle_setup(config: Config, agent) -> None:
     """Workspace setup — ask username first, then pick a preset
-    (default [1] 阿里/百炼), or take the full interactive flow."""
-    console.print("[bold]Workspace 初始化[/bold]\n")
+    (default [1] Alibaba/Bailian), or take the full interactive flow."""
+    console.print("[bold]Workspace setup[/bold]\n")
 
     # Username comes first — it's identity, not configuration. The preset
     # then says "for user X, here are sensible defaults".
     _setup_user_name(config)
 
-    console.print("\n请选择配置模式:")
+    console.print("\nSelect a configuration mode:")
     console.print(
-        "  [cyan][1][/cyan] [bold]阿里/百炼配置[/bold] (默认) — "
+        "  [cyan][1][/cyan] [bold]Alibaba/Bailian[/bold] (default) — "
         "tongyi/qwen3.7-plus + bailian.mcp/cli",
     )
     console.print(
-        "  [cyan][2][/cyan] 国内通用配置          — tongyi/qwen-max + bailian.mcp",
+        "  [cyan][2][/cyan] China general        — "
+        "tongyi/qwen-max + bailian.mcp",
     )
     console.print(
-        "  [cyan][3][/cyan] 个性化配置             — 逐项选择（Provider / 模型 / 能力）",
+        "  [cyan][3][/cyan] Custom               — "
+        "pick each item (Provider / Model / Capabilities)",
     )
 
-    choice = input("\n选择 [1]: ").strip() or "1"
+    choice = input("\nChoice [1]: ").strip() or "1"
     if choice == "2":
         _apply_preset_china_common(config)
     elif choice == "3":
         await _setup_preset_custom(config)
     else:
         if choice != "1":
-            console.print(f"[dim]未识别 '{choice}'，按 [1] 阿里/百炼 处理[/dim]")
+            console.print(
+                f"[dim]Unrecognized '{choice}'; "
+                f"using [1] Alibaba/Bailian[/dim]",
+            )
         _apply_preset_bailian(config)
 
     _setup_finalize(config, agent)

@@ -5,7 +5,7 @@ Based on the ACE/MCE pattern (Weng 2026): Agent observes recurring user
 behaviors and proposes operational rules ("directives") that the user
 can accept or reject.
 
-Example: "我发现你总在做 git commit 后立即 git push，要不要加为 rule？"
+Example: "I noticed you always git push right after git commit. Add a rule?"
 
 Architecture:
 - Track tool call sequences and user preferences
@@ -118,7 +118,7 @@ def analyze_patterns() -> list[dict[str, Any]]:
             directive = _generate_directive(tool1, tool2, count)
             proposals.append(
                 {
-                    "pattern": f"在执行 {tool1} 后经常执行 {tool2}",
+                    "pattern": f"often runs {tool2} after {tool1}",
                     "directive": directive,
                     "frequency": count,
                     "confidence": confidence,
@@ -133,13 +133,13 @@ def _generate_directive(tool1: str, tool2: str, count: int) -> str:
     """Generate a directive text from a tool pattern."""
     # Common patterns
     if tool1 == "run_command" and "git commit" in tool2:
-        return "在 git commit 后自动执行 git push"
+        return "Auto-run git push after git commit"
     elif tool1 == "read_file" and tool2 == "write_file":
-        return "读取文件后如需修改，直接使用 write_file 而非 run_command"
+        return "To modify a file, use write_file rather than run_command"
     elif tool1 == "write_file" and tool2 == "run_command":
-        return "修改文件后自动运行测试或构建命令"
+        return "Auto-run tests or build after modifying a file"
     else:
-        return f"在执行 {tool1} 后考虑执行 {tool2}（已观察到 {count} 次）"
+        return f"Consider running {tool2} after {tool1} (seen {count} times)"
 
 
 def propose_directive(directive: str, rationale: str) -> dict[str, Any]:
@@ -215,9 +215,9 @@ def get_directive_proposals_summary() -> str:
     if not proposals:
         return ""
 
-    lines = ["\n\n## Agent 观察到的行为模式（可提议为规则）"]
+    lines = ["\n\n## Observed behavior patterns (rule candidates)"]
     for p in proposals[:2]:  # Show max 2
         lines.append(f"- {p['rationale'][:60]}")
-    lines.append("\n使用 /directives 查看详情并决定是否添加为规则")
+    lines.append("\nUse /directives to review and accept as rules")
 
     return "\n".join(lines)

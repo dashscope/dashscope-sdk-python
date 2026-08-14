@@ -139,7 +139,7 @@ def format_project_instructions_block(text: str | None) -> str:
     """Wrap discovered instructions as a system-prompt fragment."""
     if not text:
         return ""
-    return f"\n\n## 项目指令（来自项目配置文件）\n{text}"
+    return f"\n\n## Project Instructions (from project config files)\n{text}"
 
 
 class PromptAssembly:

@@ -19,15 +19,20 @@ def register_evolution_tools(get_agent: Callable) -> None:
         Tool(
             name="evolve_skill",
             description=(
-                "从当前对话的成功工作流中生成新 Skill（Skill Evolution）。"
-                "分析工具调用序列，提炼为可复用的 Skill 模板。"
+                "Generate a new skill from the current conversation's "
+                "successful workflow (Skill Evolution). Analyzes the tool "
+                "call sequence and distills it into a reusable skill "
+                "template."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "force": {
                         "type": "boolean",
-                        "description": "强制生成（即使模式识别不确定）",
+                        "description": (
+                            "Force generation even when pattern "
+                            "recognition is uncertain"
+                        ),
                         "default": False,
                     },
                 },
@@ -44,20 +49,27 @@ def register_evolution_tools(get_agent: Callable) -> None:
 
         agent = get_agent()
         if not agent or not agent.messages:
-            return "错误: 无法获取当前对话历史"
+            return "Error: cannot access the current conversation history"
 
         analysis = analyze_trajectory(agent.messages)
         if not analysis:
-            return "未检测到可提炼的工作流模式（需要至少 2 个工具的成功调用序列）"
+            return (
+                "No distillable workflow pattern detected (needs a "
+                "successful sequence of at least 2 tool calls)"
+            )
 
         skill_path = save_generated_skill(analysis)
         if not skill_path:
-            return f"Skill '{analysis['pattern_name']}' 已存在或生成失败"
+            return (
+                f"Skill '{analysis['pattern_name']}' already exists "
+                "or generation failed"
+            )
 
         return (
-            f"✓ 已从当前对话生成新 Skill\n"
-            f"  名称: {analysis['pattern_name']}\n"
-            f"  路径: {skill_path}\n"
-            f"  工作流: {' → '.join(analysis['tools_sequence'][:3])}\n\n"
-            f"下次启动时自动加载。使用 /{analysis['pattern_name']} 触发。"
+            f"✓ Generated new skill from this conversation\n"
+            f"  Name: {analysis['pattern_name']}\n"
+            f"  Path: {skill_path}\n"
+            f"  Workflow: {' → '.join(analysis['tools_sequence'][:3])}\n\n"
+            f"Auto-loaded on next start. "
+            f"Trigger with /{analysis['pattern_name']}."
         )

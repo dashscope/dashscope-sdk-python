@@ -54,7 +54,10 @@ def validate_path(path: str) -> str:
     parts = set(os.path.normpath(abs_path).split(os.sep))
     hit = parts & SENSITIVE_NAMES
     if hit:
-        raise ValueError(f"路径 '{path}' 包含敏感组件 {hit}，操作被拒绝（安全防护）")
+        raise ValueError(
+            f"Path '{path}' contains sensitive component {hit}, "
+            "operation denied (safety guard)",
+        )
     return path
 
 
@@ -69,7 +72,10 @@ def validate_write_path(path: str) -> str:
     abs_path = os.path.realpath(path)
     cwd = os.path.realpath(".")
     if not abs_path.startswith(cwd + os.sep) and abs_path != cwd:
-        raise ValueError(f"写入路径 '{path}' 不在当前工作目录内（路径穿越防护）")
+        raise ValueError(
+            f"Write path '{path}' is outside the current working "
+            "directory (path traversal guard)",
+        )
     return path
 
 

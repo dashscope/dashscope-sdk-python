@@ -36,7 +36,7 @@ async def _connect_mcp(service: str, config: Config, url: str = "") -> str:
     if not await client.initialize():
         error = client.last_error
         await client.close()
-        return error or "初始化失败"
+        return error or "Initialization failed"
 
     tools = await client.list_tools()
     for tool_info in tools:
@@ -84,15 +84,16 @@ async def _handle_mcp_command(cmd: str, config: Config):
     if len(parts) == 1:
         # /mcp — list connected services
         if not _mcp_clients:
-            console.print("[dim]未连接任何 MCP 服务[/dim]")
+            console.print("[dim]No MCP services connected[/dim]")
             console.print(
-                "[dim]使用 /mcp list 查看可用服务，/mcp add <service> 添加[/dim]",
+                "[dim]Use /mcp list to see available services, "
+                "/mcp add <service> to add one[/dim]",
             )
         else:
-            console.print("[bold]已连接 MCP 服务:[/bold]")
+            console.print("[bold]Connected MCP services:[/bold]")
             for svc, client in _mcp_clients.items():
                 tool_count = len(client.tools)
-                console.print(f"  {svc} — {tool_count} 个工具")
+                console.print(f"  {svc} — {tool_count} tools")
                 for t in client.tools:
                     console.print(
                         f"    • {t['name']}: {t.get('description', '')[:60]}",
@@ -101,7 +102,7 @@ async def _handle_mcp_command(cmd: str, config: Config):
         service = parts[2]
         url = parts[3] if len(parts) > 3 else ""
         with Status(
-            f"[dim]连接 MCP 服务 {service}...[/dim]",
+            f"[dim]Connecting to MCP service {service}...[/dim]",
             console=console,
             spinner="aesthetic",
         ):
@@ -109,7 +110,8 @@ async def _handle_mcp_command(cmd: str, config: Config):
         if not error:
             client = _mcp_clients[service]
             console.print(
-                f"[green]已连接 {service}，发现 {len(client.tools)} 个工具[/green]",
+                f"[green]Connected to {service}, found "
+                f"{len(client.tools)} tools[/green]",
             )
             if not any(m.service == service for m in config.mcp_servers):
                 config.mcp_servers.append(
@@ -117,7 +119,7 @@ async def _handle_mcp_command(cmd: str, config: Config):
                 )
                 config.save_workspace()
         else:
-            console.print(f"[red]连接 {service} 失败: {error}[/red]")
+            console.print(f"[red]Failed to connect {service}: {error}[/red]")
     elif parts[1] == "remove" and len(parts) >= 3:
         service = parts[2]
         await _disconnect_mcp(service)
@@ -125,16 +127,16 @@ async def _handle_mcp_command(cmd: str, config: Config):
             m for m in config.mcp_servers if m.service != service
         ]
         config.save_workspace()
-        console.print(f"[dim]已移除 {service}[/dim]")
+        console.print(f"[dim]Removed {service}[/dim]")
     elif parts[1] == "list":
         console.print(list_known_services())
     else:
         console.print(
-            "[dim]用法:\n"
-            "  /mcp              — 列出已连接服务\n"
-            "  /mcp list         — 查看百炼可用服务列表\n"
-            "  /mcp add <svc>    — 添加 MCP 服务\n"
-            "  /mcp remove <svc> — 移除 MCP 服务[/dim]",
+            "[dim]Usage:\n"
+            "  /mcp              — list connected services\n"
+            "  /mcp list         — show Bailian available services\n"
+            "  /mcp add <svc>    — add an MCP service\n"
+            "  /mcp remove <svc> — remove an MCP service[/dim]",
         )
 
 
@@ -144,11 +146,14 @@ async def _init_mcp_servers(config: Config):
         error = await _connect_mcp(mcp_cfg.service, config, url=mcp_cfg.url)
         if not error:
             client = _mcp_clients[mcp_cfg.service]
-            summary = f"{len(client.tools)} 工具"
+            summary = f"{len(client.tools)} tools"
             if client.prompts:
-                summary += f", {len(client.prompts)} 技能"
-            console.print(f"[dim]MCP: {mcp_cfg.service} 已连接 ({summary})[/dim]")
+                summary += f", {len(client.prompts)} skills"
+            console.print(
+                f"[dim]MCP: {mcp_cfg.service} connected ({summary})[/dim]",
+            )
         else:
             console.print(
-                f"[yellow]MCP: {mcp_cfg.service} 连接失败 - {error}[/yellow]",
+                f"[yellow]MCP: {mcp_cfg.service} connection failed - "
+                f"{error}[/yellow]",
             )

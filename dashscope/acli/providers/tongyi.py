@@ -169,9 +169,13 @@ class TongyiProvider:
                     headers=headers,
                 )
         except httpx.TimeoutException as e:
-            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试") from e
+            raise RuntimeError(
+                "API request timed out; check network or retry later",
+            ) from e
         except httpx.ConnectError as e:
-            raise RuntimeError("无法连接到 API 服务器，请检查网络连接") from e
+            raise RuntimeError(
+                "Cannot connect to API server; check network",
+            ) from e
 
         if response.status_code != 200:
             raise RuntimeError(
@@ -424,11 +428,16 @@ class TongyiProvider:
                             )
                             usage_sent = usage_sent or last_usage is not None
 
-                    # include_usage 的 usage 独立尾包在 finish 之后到达，
-                    # 上面 finish 块 yield 时 last_usage 仍为 None，在此补发
+                    # include_usage payload arrives as a separate tail
+                    # chunk after finish; last_usage was still None when
+                    # the finish block above yielded, so flush it here.
                     if last_usage and not usage_sent:
                         yield LLMChunk(usage=last_usage)
         except httpx.TimeoutException as e:
-            raise RuntimeError("API 请求超时，请检查网络连接或稍后重试") from e
+            raise RuntimeError(
+                "API request timed out; check network or retry later",
+            ) from e
         except httpx.ConnectError as e:
-            raise RuntimeError("无法连接到 API 服务器，请检查网络连接") from e
+            raise RuntimeError(
+                "Cannot connect to API server; check network",
+            ) from e

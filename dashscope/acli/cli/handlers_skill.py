@@ -30,25 +30,29 @@ async def _handle_skill_package_command(sub: str, args: list[str]):
 
     if sub == "reload":
         manager.reload()
-        console.print("[green]✓ Skill 包已重新加载[/green]")
+        console.print("[green]✓ Skill packages reloaded[/green]")
         _print_skill_packages()
         return None
 
     if sub in ("enable", "disable"):
         if not args:
-            console.print(f"[red]用法: /skill {sub} <package-name>[/red]")
+            console.print(f"[red]Usage: /skill {sub} <package-name>[/red]")
             return None
         name = args[0]
         if sub == "enable":
             if manager.enable(name):
-                console.print(f"[green]✓ 已启用 Skill 包: {name}[/green]")
+                console.print(
+                    f"[green]✓ Enabled skill package: {name}[/green]",
+                )
             else:
-                console.print(f"[red]未找到 Skill 包: {name}[/red]")
+                console.print(f"[red]Skill package not found: {name}[/red]")
         else:
             if manager.disable(name):
-                console.print(f"[green]✓ 已禁用 Skill 包: {name}[/green]")
+                console.print(
+                    f"[green]✓ Disabled skill package: {name}[/green]",
+                )
             else:
-                console.print(f"[red]未找到 Skill 包: {name}[/red]")
+                console.print(f"[red]Skill package not found: {name}[/red]")
         return None
 
     def _strip_at(value: str) -> str:
@@ -57,28 +61,28 @@ async def _handle_skill_package_command(sub: str, args: list[str]):
     if sub == "install":
         if not args:
             console.print(
-                "[red]用法: /skill install "
+                "[red]Usage: /skill install "
                 "<local-dir|git-url|name[@version]>[/red]",
             )
             return None
         source = _strip_at(args[0])
         try:
             name = manager.install(source)
-            console.print(f"[green]✓ 已安装 Skill 包: {name}[/green]")
+            console.print(f"[green]✓ Installed skill package: {name}[/green]")
         except Exception as e:
-            console.print(f"[red]安装失败: {e}[/red]")
+            console.print(f"[red]Install failed: {e}[/red]")
         return None
 
     if sub == "link":
         if not args:
-            console.print("[red]用法: /skill link <local-dir>[/red]")
+            console.print("[red]Usage: /skill link <local-dir>[/red]")
             return None
         source_dir = _strip_at(args[0])
         try:
             name = manager.link(source_dir)
-            console.print(f"[green]✓ 已链接 Skill 包: {name}[/green]")
+            console.print(f"[green]✓ Linked skill package: {name}[/green]")
         except Exception as e:
-            console.print(f"[red]链接失败: {e}[/red]")
+            console.print(f"[red]Link failed: {e}[/red]")
         return None
 
     if sub == "update":
@@ -88,51 +92,57 @@ async def _handle_skill_package_command(sub: str, args: list[str]):
             failed = [(n, err) for n, err in results if err is not None]
             if ok:
                 console.print(
-                    f"[green]✓ 已更新 {len(ok)} 个 Skill 包: "
+                    f"[green]✓ Updated {len(ok)} skill packages: "
                     f"{', '.join(ok)}[/green]",
                 )
             if failed:
-                console.print("[red]更新失败:[/red]")
+                console.print("[red]Update failed:[/red]")
                 for n, err in failed:
                     console.print(f"  - {n}: {err}")
             if not ok and not failed:
-                console.print("[dim]没有需要更新的 Skill 包[/dim]")
+                console.print("[dim]No skill packages to update[/dim]")
             return None
         if not args:
             console.print(
-                "[red]用法: /skill update <package-name> 或 "
+                "[red]Usage: /skill update <package-name> or "
                 "/skill update --all[/red]",
             )
             return None
         name = args[0]
         try:
             manager.update(name)
-            console.print(f"[green]✓ 已更新 Skill 包: {name}[/green]")
+            console.print(f"[green]✓ Updated skill package: {name}[/green]")
         except Exception as e:
-            console.print(f"[red]更新失败: {e}[/red]")
+            console.print(f"[red]Update failed: {e}[/red]")
         return None
 
     if sub == "uninstall":
         if not args:
-            console.print("[red]用法: /skill uninstall <package-name>[/red]")
+            console.print("[red]Usage: /skill uninstall <package-name>[/red]")
             return None
         name = args[0]
         if manager.uninstall(name):
-            console.print(f"[green]✓ 已卸载 Skill 包: {name}[/green]")
+            console.print(
+                f"[green]✓ Uninstalled skill package: {name}[/green]",
+            )
         else:
-            console.print(f"[red]未找到 Skill 包: {name}[/red]")
+            console.print(f"[red]Skill package not found: {name}[/red]")
         return None
 
     if sub == "search":
         query = args[0] if args else ""
         search_results = manager.search(query)
         if not search_results:
-            console.print("[dim]未找到匹配的 Skill 包[/dim]")
+            console.print("[dim]No matching skill packages found[/dim]")
             return None
-        console.print(f"\n[bold]搜索结果 ({len(search_results)}):[/bold]")
+        console.print(
+            f"\n[bold]Search results ({len(search_results)}):[/bold]",
+        )
         for r in search_results:
             status = (
-                "[green]已安装[/green]" if r["installed"] else "[dim]未安装[/dim]"
+                "[green]installed[/green]"
+                if r["installed"]
+                else "[dim]not installed[/dim]"
             )
             console.print(f"  {r['name']} v{r['version']} {status}")
             if r.get("description"):
@@ -141,17 +151,17 @@ async def _handle_skill_package_command(sub: str, args: list[str]):
 
     if sub == "publish":
         if not args:
-            console.print("[red]用法: /skill publish <package-dir>[/red]")
+            console.print("[red]Usage: /skill publish <package-dir>[/red]")
             return None
         source_dir = _strip_at(args[0])
         try:
             url = manager.publish(source_dir)
-            console.print(f"[green]✓ 已发布 Skill 包: {url}[/green]")
+            console.print(f"[green]✓ Published skill package: {url}[/green]")
         except Exception as e:
-            console.print(f"[red]发布失败: {e}[/red]")
+            console.print(f"[red]Publish failed: {e}[/red]")
         return None
 
-    console.print(f"[red]未知的 /skill 子命令: {sub}[/red]")
+    console.print(f"[red]Unknown /skill subcommand: {sub}[/red]")
     return None
 
 
@@ -162,13 +172,17 @@ def _print_skill_packages():
     manager = get_skill_manager()
     packages = manager.list()
     if not packages:
-        console.print("[dim]未安装任何 Skill 包[/dim]")
+        console.print("[dim]No skill packages installed[/dim]")
         return
 
-    console.print(f"\n[bold]已安装 Skill 包 ({len(packages)}):[/bold]")
+    console.print(
+        f"\n[bold]Installed skill packages ({len(packages)}):[/bold]",
+    )
     for pkg in packages:
         status = (
-            "[green]常驻[/green]" if pkg["always_active"] else "[dim]按需[/dim]"
+            "[green]always-on[/green]"
+            if pkg["always_active"]
+            else "[dim]on-demand[/dim]"
         )
         desc = f" — {pkg['description']}" if pkg.get("description") else ""
         console.print(f"  {pkg['name']} v{pkg['version']} {status}{desc}")
@@ -229,27 +243,33 @@ async def _handle_skill_command(
 
     skill = BUILTIN_SKILLS.get(skill_name)
     if not skill:
-        console.print(f"[red]未知技能: {skill_name}[/red]")
-        console.print("[dim]查看可用技能: /skill[/dim]")
+        console.print(f"[red]Unknown skill: {skill_name}[/red]")
+        console.print("[dim]List available skills: /skill[/dim]")
         return None
 
     # Auto-connect required MCP service
     if skill.mcp_service and skill.mcp_service not in _mcp_clients:
-        console.print(f"[dim]正在连接 MCP 服务: {skill.mcp_service}...[/dim]")
+        console.print(
+            f"[dim]Connecting to MCP service: "
+            f"{skill.mcp_service}...[/dim]",
+        )
         err = await _connect_mcp(skill.mcp_service, config)
         if err:
-            console.print(f"[red]连接失败: {err}[/red]")
+            console.print(f"[red]Connection failed: {err}[/red]")
             return None
 
     if not args:
         arg_hint = " ".join(f"<{a}>" for a in skill.arguments)
-        console.print(f"[dim]用法: /skill {skill_name} {arg_hint}[/dim]")
+        console.print(f"[dim]Usage: /skill {skill_name} {arg_hint}[/dim]")
         return None
 
     rendered = render_skill(skill, args)
     if not rendered:
         arg_hint = " ".join(f"<{a}>" for a in skill.arguments)
-        console.print(f"[red]参数不足。用法: /skill {skill_name} {arg_hint}[/red]")
+        console.print(
+            f"[red]Missing arguments. Usage: "
+            f"/skill {skill_name} {arg_hint}[/red]",
+        )
         return None
 
     if agent is not None:
@@ -279,13 +299,16 @@ async def _handle_cron_command(cmd: str, config: Config, agent: Agent):
     if subcmd.startswith("add"):
         args_str = subcmd[3:].strip()
         if not args_str:
-            console.print("[dim]用法: /cron add every 5m skill weather 杭州[/dim]")
             console.print(
-                "[dim]      /cron add at 14:30 skill search AI新闻[/dim]",
+                "[dim]Usage: /cron add every 5m skill weather "
+                "Hangzhou[/dim]",
             )
             console.print(
-                '[dim]      /cron add cron "0 9 * * 1-5" skill search 早报 '
-                'condition "curl -sf http://health"[/dim]',
+                "[dim]      /cron add at 14:30 skill search AI news[/dim]",
+            )
+            console.print(
+                '[dim]      /cron add cron "0 9 * * 1-5" skill search '
+                'morning news condition "curl -sf http://health"[/dim]',
             )
             return
         from dashscope.acli.scheduler import parse_cron_add
@@ -299,50 +322,52 @@ async def _handle_cron_command(cmd: str, config: Config, agent: Agent):
 
         for inv in skills:
             if inv.name not in BUILTIN_SKILLS:
-                console.print(f"[red]未知技能: {inv.name}[/red]")
-                console.print("[dim]查看可用技能: /skill[/dim]")
+                console.print(f"[red]Unknown skill: {inv.name}[/red]")
+                console.print("[dim]List available skills: /skill[/dim]")
                 return
         job = _scheduler.add_job(schedule, skills, condition, subagent)
-        console.print(f"[green]✓ 已创建定时任务:[/green] {job.id}")
-        console.print(f"  调度: {schedule}")
-        console.print(f"  技能: {', '.join(s.name for s in skills)}")
+        console.print(f"[green]✓ Scheduled job created:[/green] {job.id}")
+        console.print(f"  Schedule: {schedule}")
+        console.print(f"  Skills: {', '.join(s.name for s in skills)}")
         if condition:
-            console.print(f"  条件: {condition}")
+            console.print(f"  Condition: {condition}")
         if schedule.kind == "at":
-            console.print("  [dim]（一次性任务，执行后自动禁用）[/dim]")
+            console.print(
+                "  [dim](one-shot job; auto-disabled after run)[/dim]",
+            )
         return
 
     if subcmd.startswith("remove"):
         job_id = subcmd[6:].strip()
         if not job_id:
-            console.print("[red]用法: /cron remove <job-id>[/red]")
+            console.print("[red]Usage: /cron remove <job-id>[/red]")
             return
         if _scheduler.remove_job(job_id):
-            console.print(f"[green]✓ 已删除定时任务: {job_id}[/green]")
+            console.print(f"[green]✓ Removed scheduled job: {job_id}[/green]")
         else:
-            console.print(f"[red]未找到定时任务: {job_id}[/red]")
+            console.print(f"[red]Scheduled job not found: {job_id}[/red]")
         return
 
     if subcmd.startswith("pause"):
         job_id = subcmd[5:].strip()
         if not job_id:
-            console.print("[red]用法: /cron pause <job-id>[/red]")
+            console.print("[red]Usage: /cron pause <job-id>[/red]")
             return
         if _scheduler.pause_job(job_id):
-            console.print(f"[green]✓ 已暂停定时任务: {job_id}[/green]")
+            console.print(f"[green]✓ Paused scheduled job: {job_id}[/green]")
         else:
-            console.print(f"[red]未找到定时任务: {job_id}[/red]")
+            console.print(f"[red]Scheduled job not found: {job_id}[/red]")
         return
 
     if subcmd.startswith("resume"):
         job_id = subcmd[6:].strip()
         if not job_id:
-            console.print("[red]用法: /cron resume <job-id>[/red]")
+            console.print("[red]Usage: /cron resume <job-id>[/red]")
             return
         if _scheduler.resume_job(job_id):
-            console.print(f"[green]✓ 已恢复定时任务: {job_id}[/green]")
+            console.print(f"[green]✓ Resumed scheduled job: {job_id}[/green]")
         else:
-            console.print(f"[red]未找到定时任务: {job_id}[/red]")
+            console.print(f"[red]Scheduled job not found: {job_id}[/red]")
         return
 
-    console.print(f"[red]未知的 /cron 子命令: {subcmd}[/red]")
+    console.print(f"[red]Unknown /cron subcommand: {subcmd}[/red]")

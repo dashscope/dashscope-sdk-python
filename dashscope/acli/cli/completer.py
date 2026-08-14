@@ -115,7 +115,7 @@ class AcliCompleter(Completer):
         text = document.text_before_cursor
 
         # @path completion takes priority — works even inside natural
-        # language (e.g., `帮我看 @src/acli/cli.py`).
+        # language (e.g., `check @src/acli/cli.py`).
         m = _AT_PATH_AT_CURSOR_RE.search(text)
         if m:
             yield from self._path_completions(m.group(1))
@@ -207,7 +207,7 @@ class AcliCompleter(Completer):
                 insertion,
                 start_position=-len(prefix),
                 display=insertion,
-                display_meta="目录" if is_dir else "文件",
+                display_meta="dir" if is_dir else "file",
             )
             shown += 1
 

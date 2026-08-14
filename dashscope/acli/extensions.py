@@ -239,7 +239,7 @@ def load_extensions() -> CustomExtensions:
             ext.errors.append(f"{path}: TOML parse error: {e}")
             continue
         except OSError as e:
-            ext.errors.append(f"{path}: 读取失败: {e}")
+            ext.errors.append(f"{path}: read failed: {e}")
             continue
         for raw in data.get("providers", []):
             err = _validate_provider(raw)
@@ -564,7 +564,10 @@ def build_http_tool(cap: CustomCapability, tool: CustomTool):
             body_dict = json.loads(body_str) if body_str.strip() else None
             endpoint = _render_url_template(tool.endpoint, kwargs)
         except json.JSONDecodeError as e:
-            return f"错误: body 模板渲染后不是合法 JSON ({e}); 模板片段: {body_str[:200]!r}"
+            return (
+                f"Error: body template did not render to valid JSON "
+                f"({e}); template snippet: {body_str[:200]!r}"
+            )
 
         headers = dict(tool.headers)
         auth_spec = tool.auth or cap.auth
@@ -579,18 +582,20 @@ def build_http_tool(cap: CustomCapability, tool: CustomTool):
                 pair = ("Authorization", f"Bearer {fallback}")
             elif cap.api_key_env or cap.api_key_enc:
                 return (
-                    f"错误: 工具 {tool.name} 需要凭证 "
-                    f"(env: {cap.api_key_env or '未配置'})，"
-                    f"但环境变量未设、toml 中也无加密 key。"
-                    f"运行 /capability enable {cap.key} 录入。"
+                    f"Error: tool {tool.name} requires credentials "
+                    f"(env: {cap.api_key_env or 'not configured'}), "
+                    f"but the env var is unset and no encrypted key "
+                    f"exists in toml. Run /capability enable {cap.key} "
+                    f"to enter one."
                 )
         if pair:
             headers[pair[0]] = pair[1]
         elif auth_spec and auth_spec != "none":
             return (
-                f"错误: 工具 {tool.name} 需要凭证 ({auth_spec})，但 env 未设、"
-                f"toml 中也无加密 key。运行 "
-                f"[bold]/capability enable {cap.key}[/bold] 录入。"
+                f"Error: tool {tool.name} requires credentials "
+                f"({auth_spec}), but the env var is unset and no "
+                f"encrypted key exists in toml. Run "
+                f"[bold]/capability enable {cap.key}[/bold] to enter one."
             )
 
         try:
@@ -607,10 +612,10 @@ def build_http_tool(cap: CustomCapability, tool: CustomTool):
                     headers=headers,
                 )
         except Exception as e:
-            return f"错误: HTTP 调用失败: {type(e).__name__}: {e}"
+            return f"Error: HTTP call failed: {type(e).__name__}: {e}"
 
         if resp.status_code >= 400:
-            return f"错误: HTTP {resp.status_code}: {resp.text[:500]}"
+            return f"Error: HTTP {resp.status_code}: {resp.text[:500]}"
 
         try:
             data = resp.json()
@@ -644,17 +649,17 @@ def build_vision_tool(cap: CustomCapability, tool: CustomTool):
         from dashscope.acli.utils.paths import validate_path
 
         image_path = kwargs.get("image_path", "")
-        question = kwargs.get("question") or "描述这张图片的内容"
+        question = kwargs.get("question") or "Describe this image"
 
         if not image_path:
-            return "错误: 缺少 image_path 参数"
+            return "Error: missing image_path parameter"
         try:
             safe_path = validate_path(image_path)
             data_url = image_to_data_url(safe_path)
         except ValueError as e:
-            return f"错误: 读取图片失败: {e}"
+            return f"Error: failed to read image: {e}"
         except OSError as e:
-            return f"错误: 读取图片失败: {e}"
+            return f"Error: failed to read image: {e}"
 
         ext = find_provider(provider_name)
         api_key = ext.resolve_api_key() if ext else ""
@@ -686,7 +691,7 @@ def build_vision_tool(cap: CustomCapability, tool: CustomTool):
             response = await provider.chat(messages)
             return response.content
         except Exception as e:
-            return f"视觉模型调用失败: {e}"
+            return f"Vision model call failed: {e}"
 
     return _call
 
@@ -1280,11 +1285,11 @@ def _register_custom_shell_tools(ext: CustomExtensions) -> None:
                     output = result.stdout
                     if result.returncode != 0 and result.stderr:
                         output += f"\n[stderr] {result.stderr}"
-                    return output.strip() or "(无输出)"
+                    return output.strip() or "(no output)"
                 except sp.TimeoutExpired:
-                    return "命令执行超时 (60s)"
+                    return "Command timed out (60s)"
                 except Exception as e:
-                    return f"执行失败: {e}"
+                    return f"Execution failed: {e}"
 
             return _run
 

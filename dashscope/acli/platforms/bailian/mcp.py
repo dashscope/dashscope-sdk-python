@@ -28,7 +28,7 @@ class MCPClient:
 
     def __init__(self, service: str, api_key: str, url: str = ""):
         if not api_key:
-            raise MCPError("未配置 API Key，无法连接 MCP 服务")
+            raise MCPError("API key not configured; cannot connect to MCP")
         self.service = service
         base_url = url or f"{BAILIAN_MCP_BASE}/{service}"
         self.sse_url = f"{base_url}/sse"
@@ -64,7 +64,7 @@ class MCPClient:
             await asyncio.wait_for(self._connected.wait(), timeout=15)
         except asyncio.TimeoutError as exc:
             self._sse_task.cancel()
-            raise MCPError("SSE 连接超时，未收到 endpoint 事件") from exc
+            raise MCPError("SSE connect timed out; no endpoint event") from exc
 
     async def _sse_loop(self):
         """Background task: read SSE stream."""
@@ -80,7 +80,8 @@ class MCPClient:
                         body += line
                         break
                     self.last_error = (
-                        f"服务不可用: {body or f'HTTP {resp.status_code}'}"
+                        "Service unavailable: "
+                        f"{body or f'HTTP {resp.status_code}'}"
                     )
                     self._connected.set()
                     return
@@ -105,7 +106,7 @@ class MCPClient:
             pass
         except Exception as e:
             self.last_error = f"SSE stream error: {e}"
-            self._fail_all_pending(f"SSE 连接中断: {e}")
+            self._fail_all_pending(f"SSE stream interrupted: {e}")
 
     def _fail_all_pending(self, reason: str) -> None:
         """Resolve every in-flight request with an error so awaiters
@@ -176,7 +177,7 @@ class MCPClient:
             return result
         except asyncio.TimeoutError:
             self._pending.pop(req_id, None)
-            return {"error": {"message": "请求超时"}}
+            return {"error": {"message": "request timed out"}}
 
     async def _send_notification(
         self,
@@ -282,7 +283,7 @@ class MCPClient:
                 if item.get("type") == "text":
                     parts.append(item.get("text", ""))
                 elif item.get("type") == "image":
-                    parts.append(f"[图片: {item.get('mimeType', 'image')}]")
+                    parts.append(f"[image: {item.get('mimeType', 'image')}]")
                 else:
                     parts.append(str(item))
             else:
@@ -290,7 +291,7 @@ class MCPClient:
         return "\n".join(parts) if parts else str(result)
 
     async def close(self):
-        self._fail_all_pending("连接已关闭")
+        self._fail_all_pending("connection closed")
         if self._sse_task and not self._sse_task.done():
             self._sse_task.cancel()
             try:

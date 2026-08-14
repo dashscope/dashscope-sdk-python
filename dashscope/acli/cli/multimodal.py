@@ -148,7 +148,7 @@ def _expand_at_references(text: str) -> tuple[str, list[str], list[dict]]:
                 lang = lang_map.get(fp.suffix.lower(), "")
                 blocks.append(
                     f"\n--- @{raw}{rel} ---\n```{lang}\n"
-                    f"{content}\n... (截断)\n```\n",
+                    f"{content}\n... (truncated)\n```\n",
                 )
                 file_count += 1
                 break
@@ -161,8 +161,8 @@ def _expand_at_references(text: str) -> tuple[str, list[str], list[dict]]:
             file_count += 1
 
         if not blocks:
-            return f"[@{raw} 目录为空或无文本文件]"
-        header = f"\n--- @{raw} ({file_count} 个文件, {total} 字符) ---\n"
+            return f"[@{raw} directory is empty or has no text files]"
+        header = f"\n--- @{raw} ({file_count} files, {total} chars) ---\n"
         return header + "".join(blocks)
 
     def _replace(match: re.Match) -> str:
@@ -183,7 +183,7 @@ def _expand_at_references(text: str) -> tuple[str, list[str], list[dict]]:
             except ValueError as e:
                 return f"[@{raw} {e}]"
             except OSError as e:
-                return f"[@{raw} 读取失败: {e}]"
+                return f"[@{raw} read failed: {e}]"
             images.append(url)
             return f"<<__ACLI_IMG_{len(images) - 1}__>>"
 
@@ -193,11 +193,11 @@ def _expand_at_references(text: str) -> tuple[str, list[str], list[dict]]:
             try:
                 data = p.read_bytes()
             except OSError as e:
-                return f"[@{raw} 读取失败: {e}]"
+                return f"[@{raw} read failed: {e}]"
             if len(data) > _AT_AUDIO_MAX_BYTES:
                 return (
-                    f"[@{raw} 音频过大 ({len(data)//1024} KB > "
-                    f"{_AT_AUDIO_MAX_BYTES//1024} KB)，已忽略]"
+                    f"[@{raw} audio too large ({len(data)//1024} KB > "
+                    f"{_AT_AUDIO_MAX_BYTES//1024} KB); ignored]"
                 )
             audio_clips.append(
                 {
@@ -209,16 +209,18 @@ def _expand_at_references(text: str) -> tuple[str, list[str], list[dict]]:
             return f"<<__ACLI_AUDIO_{len(audio_clips) - 1}__>>"
 
         if suffix in _BINARY_EXTS:
-            return f"[@{raw} 二进制文件，已跳过]"
+            return f"[@{raw} binary file, skipped]"
 
         try:
             content = p.read_text(encoding="utf-8", errors="replace")
         except OSError as e:
-            return f"[@{raw} 读取失败: {e}]"
+            return f"[@{raw} read failed: {e}]"
         truncated = ""
         if len(content) > _AT_FILE_MAX_CHARS:
             content = content[:_AT_FILE_MAX_CHARS]
-            truncated = f"\n... (截断，原文件 > {_AT_FILE_MAX_CHARS} 字符)"
+            truncated = (
+                f"\n... (truncated; original > {_AT_FILE_MAX_CHARS} chars)"
+            )
         lang = lang_map.get(suffix, "")
         return f"\n--- @{raw} ---\n```{lang}\n{content}{truncated}\n```\n"
 

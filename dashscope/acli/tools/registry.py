@@ -224,11 +224,15 @@ class ToolRegistry:
             "bailian_memory_profile_get",
         ]
 
-        # Keyword → tool mapping for conditional inclusion
+        # Keyword → tool mapping for conditional inclusion.
+        # Chinese keywords are kept for CJK input; English equivalents
+        # are appended alongside them so English prompts match too.
         keyword_tools = {
             "memory": ["memory_search", "memory_store"] + b_memory,
             "档案": ["memory_search", "memory_store"],
+            "profile": ["memory_search", "memory_store"],
             "偏好": ["memory_search", "memory_store"],
+            "preference": ["memory_search", "memory_store"],
             "记忆": b_memory,
             "数据": [
                 "data_upload",
@@ -256,6 +260,13 @@ class ToolRegistry:
                 "prompt_delete",
                 "prompt_render",
             ],
+            "template": [
+                "prompt_list",
+                "prompt_get",
+                "prompt_create",
+                "prompt_delete",
+                "prompt_render",
+            ],
             "搜索": ["web_search", "context_search"],
             "search": ["web_search", "context_search"],
             "模型": ["switch_model", "switch_provider"],
@@ -274,6 +285,11 @@ class ToolRegistry:
                 "scrape_web_screenshot",
             ],
             "网页": [
+                "scrape_web",
+                "scrape_web_html",
+                "scrape_web_screenshot",
+            ],
+            "webpage": [
                 "scrape_web",
                 "scrape_web_html",
                 "scrape_web_screenshot",
@@ -305,16 +321,20 @@ class ToolRegistry:
             ],
             # Camera tools
             "拍照": ["camera_capture", "camera_record"],
+            "photo": ["camera_capture", "camera_record"],
             "摄像头": ["camera_capture", "camera_record"],
             "录屏": ["camera_capture", "camera_record"],
             "录制": ["camera_capture", "camera_record"],
+            "record": ["camera_capture", "camera_record"],
             "camera": ["camera_capture", "camera_record"],
             # Bailian platform tools (schemas are keyword-gated, see b_* above)
             "图片": b_image,
             "画图": b_image,
+            "draw": b_image,
             "image": b_image,
             "vision": b_image,
             "多模态": ["bailian_omni"],
+            "multimodal": ["bailian_omni"],
             "omni": ["bailian_omni"],
             "视频": b_video,
             "video": b_video,
@@ -322,11 +342,14 @@ class ToolRegistry:
             "speech": b_speech,
             "tts": ["bailian_speech_synthesize"],
             "朗读": ["bailian_speech_synthesize"],
+            "read aloud": ["bailian_speech_synthesize"],
             "知识库": ["bailian_knowledge_retrieve"],
             "knowledge": ["bailian_knowledge_retrieve"],
             "rag": ["bailian_knowledge_retrieve"],
             "百炼应用": ["bailian_app_call", "bailian_app_list"],
+            "bailian app": ["bailian_app_call", "bailian_app_list"],
             "用量": ["bailian_usage_free"],
+            "usage": ["bailian_usage_free"],
             "quota": ["bailian_usage_free"],
             "上传": ["bailian_file_upload"],
             "upload": ["bailian_file_upload"],
@@ -362,7 +385,7 @@ class ToolRegistry:
         # making /capability enable a no-op in practice.
         # Exception: bailian_* CLI wrappers are numerous (~25 full schemas);
         # they ride only when a keyword matches (see keyword_tools above),
-        # with 百炼/bailian as the catch-all.
+        # with the platform name as the catch-all.
         # Lazy import: acli.tools.platform imports this module.
         from dashscope.acli.tools.platform import capability_tool_names
 

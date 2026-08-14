@@ -26,7 +26,7 @@ _MAX_WRITE_SIZE = 50 * 1024 * 1024
 
 @tool(
     name="read_file",
-    description="读取文件内容。可指定起始行和读取行数。",
+    description="Read file contents. Optional start line and line count.",
     permission=PermissionLevel.AUTO,
 )
 def read_file(
@@ -37,9 +37,9 @@ def read_file(
     try:
         path = validate_path(path)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
     if not os.path.isfile(path):
-        return f"错误: 文件不存在 - {path}"
+        return f"Error: file not found - {path}"
 
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
@@ -56,7 +56,10 @@ def read_file(
 
 @tool(
     name="write_file",
-    description="将内容写入文件。如果文件已存在则覆盖。返回结果会包含 unified diff。",
+    description=(
+        "Write content to a file; overwrites if it exists. "
+        "The result includes a unified diff."
+    ),
     permission=PermissionLevel.CONFIRM,
 )
 def write_file(path: str, content: str) -> str:
@@ -65,12 +68,12 @@ def write_file(path: str, content: str) -> str:
     try:
         path = validate_write_path(path)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
 
     if len(content) > _MAX_WRITE_SIZE:
         return (
-            f"错误: 内容过大 ({len(content)} 字节)，上限为 "
-            f"{_MAX_WRITE_SIZE // (1024*1024)} MB"
+            f"Error: content too large ({len(content)} bytes); "
+            f"limit is {_MAX_WRITE_SIZE // (1024*1024)} MB"
         )
 
     parent = os.path.dirname(path)
@@ -92,10 +95,10 @@ def write_file(path: str, content: str) -> str:
         f.write(content)
 
     if not existed:
-        return f"已创建文件: {path} ({len(content)} 字符)"
+        return f"Created file: {path} ({len(content)} chars)"
 
     if old_content == content:
-        return f"内容未变化: {path}"
+        return f"Content unchanged: {path}"
 
     # Cap displayed diff so a 5000-line full rewrite doesn't drown the UI;
     # full content is in messages so LLM still sees everything it wrote.
@@ -120,12 +123,13 @@ def write_file(path: str, content: str) -> str:
         )
         diff_lines = diff_lines[:MAX_DIFF_LINES]
         truncated = (
-            f"\n... (diff 截断，共 {total_added} 行新增，仅展示前 {MAX_DIFF_LINES} 行)"
+            f"\n... (diff truncated: {total_added} lines added, "
+            f"showing first {MAX_DIFF_LINES})"
         )
     diff_text = "".join(diff_lines)
 
     return (
-        f"已写入文件: {path} ({len(content)} 字符)\n"
+        f"Wrote file: {path} ({len(content)} chars)\n"
         f"--- diff ---\n"
         f"{diff_text}{truncated}"
     )
@@ -133,84 +137,89 @@ def write_file(path: str, content: str) -> str:
 
 @tool(
     name="list_directory",
-    description="列出目录内容，显示文件类型和大小。",
+    description="List directory contents with file type and size.",
     permission=PermissionLevel.AUTO,
 )
 def list_directory(path: str) -> str:
     try:
         path = validate_path(path)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
     if not os.path.isdir(path):
-        return f"错误: 目录不存在 - {path}"
+        return f"Error: directory not found - {path}"
 
     entries = []
     for name in sorted(os.listdir(path)):
         full = os.path.join(path, name)
         if os.path.isdir(full):
-            entries.append(f"  [目录] {name}/")
+            entries.append(f"  [dir]  {name}/")
         else:
             size = os.path.getsize(full)
-            entries.append(f"  [文件] {name}  ({_format_size(size)})")
+            entries.append(f"  [file] {name}  ({_format_size(size)})")
 
-    header = f"目录: {path} ({len(entries)} 项)"
+    header = f"Directory: {path} ({len(entries)} entries)"
     return header + "\n" + "\n".join(entries)
 
 
 @tool(
     name="create_directory",
-    description="创建目录，支持创建多级目录。",
+    description="Create a directory, including nested levels.",
     permission=PermissionLevel.CONFIRM,
 )
 def create_directory(path: str) -> str:
     try:
         path = validate_write_path(path)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
     os.makedirs(path, exist_ok=True)
-    return f"已创建目录: {path}"
+    return f"Created directory: {path}"
 
 
 @tool(
     name="delete_file",
-    description="删除指定文件。此操作不可撤销。",
+    description="Delete the specified file. This cannot be undone.",
     permission=PermissionLevel.DANGEROUS,
 )
 def delete_file(path: str) -> str:
     try:
         path = validate_path(path)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
     if not os.path.isfile(path):
-        return f"错误: 文件不存在 - {path}"
+        return f"Error: file not found - {path}"
     os.remove(path)
-    return f"已删除文件: {path}"
+    return f"Deleted file: {path}"
 
 
 @tool(
     name="delete_directory",
-    description="删除指定目录及其所有内容。此操作不可撤销。",
+    description=(
+        "Delete a directory and all its contents. " "This cannot be undone."
+    ),
     permission=PermissionLevel.DANGEROUS,
 )
 def delete_directory(path: str) -> str:
     try:
         path = validate_path(path)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
     if not os.path.isdir(path):
-        return f"错误: 目录不存在 - {path}"
+        return f"Error: directory not found - {path}"
     # Prevent deleting cwd itself
     abs_path = os.path.abspath(path)
     cwd = os.path.abspath(".")
     if abs_path == cwd:
-        return "错误: 不允许删除当前工作目录"
+        return "Error: cannot delete the current working directory"
     shutil.rmtree(path)
-    return f"已删除目录: {path}"
+    return f"Deleted directory: {path}"
 
 
 @tool(
     name="search_files",
-    description="按文件名模式搜索文件。支持通配符如 *.py、test_*。",
+    description=(
+        "Search files by name pattern. "
+        "Supports wildcards like *.py, test_*."
+    ),
     permission=PermissionLevel.AUTO,
 )
 def search_files(pattern: str, path: str | None = None) -> str:
@@ -218,9 +227,9 @@ def search_files(pattern: str, path: str | None = None) -> str:
     try:
         search_root = validate_path(search_root)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
     if not os.path.isdir(search_root):
-        return f"错误: 搜索路径不存在 - {search_root}"
+        return f"Error: search path not found - {search_root}"
 
     matches = []
     root_depth = search_root.rstrip(os.sep).count(os.sep)
@@ -246,15 +255,15 @@ def search_files(pattern: str, path: str | None = None) -> str:
             break
 
     if not matches:
-        return f"未找到匹配 '{pattern}' 的文件"
-    result = f"找到 {len(matches)} 个匹配文件:\n"
+        return f"No files match '{pattern}'"
+    result = f"Found {len(matches)} matching files:\n"
     result += "\n".join(f"  {m}" for m in matches)
     return result
 
 
 @tool(
     name="move_file",
-    description="移动或重命名文件/目录。",
+    description="Move or rename a file/directory.",
     permission=PermissionLevel.CONFIRM,
 )
 def move_file(src: str, dst: str) -> str:
@@ -262,11 +271,11 @@ def move_file(src: str, dst: str) -> str:
         src = validate_path(src)
         dst = validate_write_path(dst)
     except ValueError as e:
-        return f"错误: {e}"
+        return f"Error: {e}"
     if not os.path.exists(src):
-        return f"错误: 源路径不存在 - {src}"
+        return f"Error: source path not found - {src}"
     shutil.move(src, dst)
-    return f"已移动: {src} → {dst}"
+    return f"Moved: {src} → {dst}"
 
 
 def _format_size(size: int) -> str:
