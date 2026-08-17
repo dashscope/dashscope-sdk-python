@@ -16,10 +16,16 @@ class MockTranslationCallback(TranslationRecognizerCallback):
     def on_open(self):
         pass
 
-    def on_event(self, request_id, transcription, translations, usage):
+    def on_event(
+        self,
+        request_id,
+        transcription_result,
+        translation_result,
+        usage,
+    ):
         pass
 
-    def on_error(self, result):
+    def on_error(self, message):
         pass
 
     def on_close(self):
