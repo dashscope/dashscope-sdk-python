@@ -8,6 +8,7 @@ from typing import Callable, Optional, Dict, Union
 
 import aiohttp
 import requests
+from requests.adapters import HTTPAdapter
 
 from dashscope.api_entities.aio_session import (
     get_shared_aio_session,
@@ -39,13 +40,21 @@ def _get_shared_sync_session() -> requests.Session:
     """Return a shared requests.Session for connection pooling.
 
     The session is created lazily and reused for the process lifetime;
-    it is never closed explicitly.
+    it is never closed explicitly. Connection pool is configured with
+    pool size limits to control concurrent connections.
     """
     global _shared_sync_session
     if _shared_sync_session is None:
         with _shared_sync_session_lock:
             if _shared_sync_session is None:
                 _shared_sync_session = requests.Session()
+                # Configure connection pool size
+                adapter = HTTPAdapter(
+                    pool_connections=10,
+                    pool_maxsize=10,
+                )
+                _shared_sync_session.mount("http://", adapter)
+                _shared_sync_session.mount("https://", adapter)
     return _shared_sync_session
 
 
