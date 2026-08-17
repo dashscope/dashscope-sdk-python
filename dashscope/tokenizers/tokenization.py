@@ -91,11 +91,17 @@ class Tokenization(BaseApi):
         if model is None or not model:
             raise ModelRequired("Model is required!")
         if input is None:
+            # Extract model-specific parameters
+            enable_search = kwargs.pop("enable_search", False)
+            customized_model_id = kwargs.pop("customized_model_id", None)
+
             input, parameters = cls._build_llm_parameters(
                 model,
                 prompt,
                 history,
                 messages,
+                enable_search=enable_search,
+                customized_model_id=customized_model_id,
                 **kwargs,
             )
         else:
@@ -116,7 +122,30 @@ class Tokenization(BaseApi):
         )
 
     @classmethod
-    def _build_llm_parameters(cls, model, prompt, history, messages, **kwargs):
+    def _build_llm_parameters(
+        cls,
+        model,
+        prompt,
+        history,
+        messages,
+        enable_search: bool = False,
+        customized_model_id: str = None,
+        **kwargs,
+    ):
+        """Build LLM parameters for tokenization.
+
+        Args:
+            model: Model name
+            prompt: User prompt
+            history: Conversation history (deprecated)
+            messages: Conversation messages
+            enable_search: Enable search for qwen models
+            customized_model_id: Customized model ID for bailian models
+            **kwargs: Additional parameters
+
+        Returns:
+            Tuple of (input, parameters)
+        """
         parameters = {}
         input = {}  # pylint: disable=redefined-builtin
         if history is not None:
@@ -133,11 +162,9 @@ class Tokenization(BaseApi):
             input[PROMPT] = prompt
 
         if model.startswith("qwen"):
-            enable_search = kwargs.pop("enable_search", False)
             if enable_search:
                 parameters["enable_search"] = enable_search
         elif model.startswith("bailian"):
-            customized_model_id = kwargs.pop("customized_model_id", None)
             if customized_model_id is None:
                 raise InputRequired(
                     f"customized_model_id is required for {model}",

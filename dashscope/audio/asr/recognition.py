@@ -165,6 +165,13 @@ class Recognition(BaseApi):
         format: str,  # pylint: disable=redefined-builtin
         sample_rate: int,
         workspace: str = None,
+        # Recognition parameters
+        disfluency_removal_enabled: bool = None,
+        diarization_enabled: bool = None,
+        speaker_count: int = None,
+        timestamp_alignment_enabled: bool = None,
+        special_word_filter: str = None,
+        audio_event_detection_enabled: bool = None,
         **kwargs,
     ):
         if model is None:
@@ -185,6 +192,25 @@ class Recognition(BaseApi):
         self._worker = None
         self._silence_timer = None
         self._kwargs = kwargs
+        # Store recognition parameters
+        if disfluency_removal_enabled is not None:
+            self._kwargs[
+                "disfluency_removal_enabled"
+            ] = disfluency_removal_enabled
+        if diarization_enabled is not None:
+            self._kwargs["diarization_enabled"] = diarization_enabled
+        if speaker_count is not None:
+            self._kwargs["speaker_count"] = speaker_count
+        if timestamp_alignment_enabled is not None:
+            self._kwargs[
+                "timestamp_alignment_enabled"
+            ] = timestamp_alignment_enabled
+        if special_word_filter is not None:
+            self._kwargs["special_word_filter"] = special_word_filter
+        if audio_event_detection_enabled is not None:
+            self._kwargs[
+                "audio_event_detection_enabled"
+            ] = audio_event_detection_enabled
         self._workspace = workspace
         self._start_stream_timestamp = -1
         self._first_package_timestamp = -1
@@ -318,7 +344,18 @@ class Recognition(BaseApi):
         )
         return responses
 
-    def start(self, phrase_id: str = None, **kwargs):
+    def start(
+        self,
+        phrase_id: str = None,
+        # Recognition parameters
+        disfluency_removal_enabled: bool = None,
+        diarization_enabled: bool = None,
+        speaker_count: int = None,
+        timestamp_alignment_enabled: bool = None,
+        special_word_filter: str = None,
+        audio_event_detection_enabled: bool = None,
+        **kwargs,
+    ):
         """Real-time speech recognition in asynchronous mode.
            Please call 'stop()' after you have completed recognition.
 
@@ -354,6 +391,25 @@ class Recognition(BaseApi):
         self._stop_stream_timestamp = -1
         self._on_complete_timestamp = -1
         self._phrase = phrase_id
+        # Update recognition parameters
+        if disfluency_removal_enabled is not None:
+            self._kwargs[
+                "disfluency_removal_enabled"
+            ] = disfluency_removal_enabled
+        if diarization_enabled is not None:
+            self._kwargs["diarization_enabled"] = diarization_enabled
+        if speaker_count is not None:
+            self._kwargs["speaker_count"] = speaker_count
+        if timestamp_alignment_enabled is not None:
+            self._kwargs[
+                "timestamp_alignment_enabled"
+            ] = timestamp_alignment_enabled
+        if special_word_filter is not None:
+            self._kwargs["special_word_filter"] = special_word_filter
+        if audio_event_detection_enabled is not None:
+            self._kwargs[
+                "audio_event_detection_enabled"
+            ] = audio_event_detection_enabled
         self._kwargs.update(**kwargs)
         self._recognition_once = False
         self._worker = threading.Thread(target=self.__receive_worker)
@@ -372,11 +428,18 @@ class Recognition(BaseApi):
             self._running = False
             raise InvalidTask("Invalid task, task create failed.")
 
-    # pylint: disable=R1702,too-many-branches,too-many-statements
+    # pylint: disable=W0237,R1702,too-many-branches,too-many-statements
     def call(  # type: ignore[override]  # noqa: E501
         self,
         file: str,
         phrase_id: str = None,
+        # Recognition parameters
+        disfluency_removal_enabled: bool = None,
+        diarization_enabled: bool = None,
+        speaker_count: int = None,
+        timestamp_alignment_enabled: bool = None,
+        special_word_filter: str = None,
+        audio_event_detection_enabled: bool = None,
         **kwargs,
     ) -> RecognitionResult:
         """Real-time speech recognition in synchronous mode.
@@ -418,6 +481,25 @@ class Recognition(BaseApi):
         self._recognition_once = True
         self._stream_data = Queue()
         self._phrase = phrase_id
+        # Update recognition parameters
+        if disfluency_removal_enabled is not None:
+            self._kwargs[
+                "disfluency_removal_enabled"
+            ] = disfluency_removal_enabled
+        if diarization_enabled is not None:
+            self._kwargs["diarization_enabled"] = diarization_enabled
+        if speaker_count is not None:
+            self._kwargs["speaker_count"] = speaker_count
+        if timestamp_alignment_enabled is not None:
+            self._kwargs[
+                "timestamp_alignment_enabled"
+            ] = timestamp_alignment_enabled
+        if special_word_filter is not None:
+            self._kwargs["special_word_filter"] = special_word_filter
+        if audio_event_detection_enabled is not None:
+            self._kwargs[
+                "audio_event_detection_enabled"
+            ] = audio_event_detection_enabled
         self._kwargs.update(**kwargs)
         error_flag: bool = False
         sentences: List[Any] = []
