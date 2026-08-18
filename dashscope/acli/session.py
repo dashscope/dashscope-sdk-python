@@ -5,6 +5,8 @@ Each topic gets its own directory under WORKSPACE_DIR/session/<topic>/:
   - history.json: message history
   - input-history.txt: command input history
   - meta.json: metadata (created, last_accessed, message_count)
+  - events.jsonl: append-only event sidecar (lifecycle; see
+    session_events.SessionEventLog)
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from dashscope.acli.config import WORKSPACE_DIR
+from dashscope.acli.session_events import EVENTS_FILENAME, SessionEventLog
 
 DEFAULT_TOPIC = "default"
 
@@ -103,6 +106,20 @@ class SessionManager:
         """Get the meta.json path for a topic."""
         return self._topic_dir(topic) / "meta.json"
 
+    def _events_file(self, topic: str) -> Path:
+        """Get the events.jsonl sidecar path for a topic."""
+        return self._topic_dir(topic) / EVENTS_FILENAME
+
+    def event_log(self, topic: str | None = None) -> SessionEventLog:
+        """Return the append-only event log for a topic (default: current).
+
+        The sidecar is advisory: callers may append lifecycle/turn events
+        without affecting the history.json read/write path.
+        """
+        return SessionEventLog(
+            self._events_file(topic or self.current_topic),
+        )
+
     def list_topics(self) -> list[SessionMeta]:
         """List all available topics with metadata."""
         topics = []
@@ -165,6 +182,7 @@ class SessionManager:
             return False
         self.current_topic = topic
         self._update_last_accessed(topic)
+        self.event_log(topic).append("topic/switched", {"topic": topic})
         return True
 
     def create_topic(self, topic: str) -> bool:
@@ -180,6 +198,7 @@ class SessionManager:
         )
         self._save_meta(topic, meta)
         self.current_topic = topic
+        self.event_log(topic).append("topic/created", {"topic": topic})
         return True
 
     def rename_topic(self, old_name: str, new_name: str) -> bool:
@@ -222,6 +241,10 @@ class SessionManager:
 
             if self.current_topic == old_name:
                 self.current_topic = new_name
+            self.event_log(new_name).append(
+                "topic/renamed",
+                {"from": old_name, "to": new_name},
+            )
             return True
         except OSError:
             return False
