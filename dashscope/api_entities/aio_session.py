@@ -16,9 +16,6 @@ from typing import Awaitable, Callable, Optional
 import aiohttp
 import certifi
 
-from dashscope.common.constants import (
-    DEFAULT_CONNECTION_POOL_IDLE_TIMEOUT_SECONDS,
-)
 from dashscope.common.logging import logger
 
 _shared_ssl_context: Optional[ssl.SSLContext] = None
@@ -41,8 +38,7 @@ async def get_shared_aio_session() -> aiohttp.ClientSession:
 
     The session is lazily created on first use and reused for all
     subsequent calls on the same event loop. Connection pooling (keep-alive)
-    is handled by the underlying TCPConnector with idle timeout configured
-    to close stale connections.
+    is handled by the underlying TCPConnector.
     """
     loop = asyncio.get_running_loop()
 
@@ -51,10 +47,7 @@ async def get_shared_aio_session() -> aiohttp.ClientSession:
         if session is not None and not session.closed:
             return session
 
-        connector = aiohttp.TCPConnector(
-            ssl=get_ssl_context(),
-            keepalive_timeout=DEFAULT_CONNECTION_POOL_IDLE_TIMEOUT_SECONDS,
-        )
+        connector = aiohttp.TCPConnector(ssl=get_ssl_context())
         session = aiohttp.ClientSession(connector=connector, trust_env=True)
 
         _aio_sessions[loop] = session
