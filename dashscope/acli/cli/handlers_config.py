@@ -53,9 +53,7 @@ def _handle_privacy_command(cmd: str, config: Config) -> None:
         get_audit_logger().set_privacy_mode(True)
         # Enforce at the tool surface too (not just the slash-command gate):
         # drop every registered cloud capability tool + connected MCP tools.
-        from dashscope.acli.tools.platform import (
-            unregister_cloud_capability_tools,
-        )
+        from dashscope.acli.tools.platform import unregister_cloud_capability_tools
         from dashscope.acli.tools.registry import registry
 
         removed = unregister_cloud_capability_tools()
@@ -607,9 +605,7 @@ def _handle_directives_command(cmd: str, config: Config) -> None:
         return
 
     if sub == "proposals":
-        from dashscope.acli.memory.directives_learning import (
-            list_proposed_directives,
-        )
+        from dashscope.acli.memory.directives_learning import list_proposed_directives
 
         proposals = list_proposed_directives("pending")
         if not proposals:

@@ -353,9 +353,7 @@ def _handle_slash_command(
         console.print(render_help_text())
         return True
     elif cmd.startswith("/provider"):
-        from dashscope.acli.cli.handlers_provider import (
-            handle_provider_command,
-        )
+        from dashscope.acli.cli.handlers_provider import handle_provider_command
 
         handle_provider_command(cmd, agent, config)
         return True
@@ -402,6 +400,11 @@ def _handle_slash_command(
         return True
     elif cmd.startswith("/history"):
         _handle_history_command(cmd)
+        return True
+    elif cmd == "/undo":
+        from dashscope.acli.tools.checkpoint import handle_undo_command
+
+        handle_undo_command()
         return True
     elif cmd.startswith("/privacy"):
         _handle_privacy_command(cmd, config)

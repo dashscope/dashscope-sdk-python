@@ -134,9 +134,7 @@ class TongyiProvider:
         # If protocol is anthropic, convert input from Anthropic to
         # OpenAI format
         if self.protocol == "anthropic":
-            from dashscope.acli.providers.adapter import (
-                anthropic_to_openai_request,
-            )
+            from dashscope.acli.providers.adapter import anthropic_to_openai_request
 
             # Agent may send system as first message, extract it
             system_msg = None
@@ -235,9 +233,7 @@ class TongyiProvider:
         # If protocol is anthropic, convert input from Anthropic to
         # OpenAI format
         if self.protocol == "anthropic":
-            from dashscope.acli.providers.adapter import (
-                anthropic_to_openai_request,
-            )
+            from dashscope.acli.providers.adapter import anthropic_to_openai_request
 
             # Agent may send system as first message, extract it
             system_msg = None

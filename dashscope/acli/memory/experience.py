@@ -10,10 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from dashscope.acli.utils.keywords import (
-    expand_scoring_terms,
-    extract_keywords,
-)
+from dashscope.acli.utils.keywords import expand_scoring_terms, extract_keywords
 
 
 class ExperienceTracker:

@@ -58,18 +58,10 @@ from textual.message import Message  # noqa: E402
 from textual.screen import Screen  # noqa: E402
 from textual.selection import SelectEnd, Selection  # noqa: E402
 from textual.strip import Strip  # noqa: E402
-from textual.widgets import (  # noqa: E402
-    OptionList,
-    RichLog,
-    Static,
-    TextArea,
-)
+from textual.widgets import OptionList, RichLog, Static, TextArea  # noqa: E402
 from textual.widgets.option_list import Option  # noqa: E402
 
-from dashscope.acli.commands import (  # noqa: E402
-    handle_shell_escape,
-    render_help_text,
-)
+from dashscope.acli.commands import handle_shell_escape, render_help_text  # noqa: E402
 from dashscope.acli.utils import (  # noqa: E402
     UserAbortedTurn,
     UserSupplement,

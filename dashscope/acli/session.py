@@ -13,6 +13,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from dashscope.acli.config import WORKSPACE_DIR
 
@@ -253,6 +254,24 @@ class SessionManager:
         """Get the input-history path for a topic (default: current)."""
         topic = topic or self.current_topic
         return self._input_history_file(topic)
+
+    def load_messages(
+        self,
+        topic: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Load stored chat messages for a topic (default: current).
+
+        Returns an empty list when the history file is missing,
+        unreadable, or not a JSON list.
+        """
+        path = self._history_file(topic or self.current_topic)
+        if not path.exists():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return []
+        return data if isinstance(data, list) else []
 
     def update_message_count(
         self,

@@ -524,9 +524,9 @@ class Agent:
             async for chunk in self.provider.chat_stream(
                 normalize_for_model(messages_with_system, self.model_name),
                 tools_schema,
-                response_format={"type": "json_object"}
-                if self.json_mode
-                else None,
+                response_format=(
+                    {"type": "json_object"} if self.json_mode else None
+                ),
             ):
                 if chunk.delta_content:
                     full_content += chunk.delta_content

@@ -453,9 +453,7 @@ def _hot_reload(config: Config | None = None) -> None:
 
     sync_extensions_into_catalog(ext)
     if config is not None:
-        from dashscope.acli.tools.platform import (
-            refresh_extension_capability_tools,
-        )
+        from dashscope.acli.tools.platform import refresh_extension_capability_tools
 
         refresh_extension_capability_tools(config)
 
@@ -608,10 +606,7 @@ def _provider_remove(name: str) -> None:
 def _capability_add(config: Config) -> None:
     """Scaffold a [[capabilities]] block in toml the user then edits in their
     editor — tool definitions are too complex for a smooth one-shot prompt."""
-    from dashscope.acli.extensions import (
-        append_capability_scaffold,
-        load_extensions,
-    )
+    from dashscope.acli.extensions import append_capability_scaffold, load_extensions
 
     console.print("\n[bold]Add Capability (HTTP tool group)[/bold]")
     console.print(
@@ -683,11 +678,7 @@ def _capability_remove(key: str, config: Config) -> None:
 
 
 def _skill_add() -> None:
-    from dashscope.acli.extensions import (
-        CustomSkill,
-        append_skill,
-        load_extensions,
-    )
+    from dashscope.acli.extensions import CustomSkill, append_skill, load_extensions
     from dashscope.acli.skills.base import BUILTIN_SKILLS, Skill, register
 
     console.print("\n[bold]Add Skill (Prompt template)[/bold]")
@@ -984,10 +975,7 @@ async def _test_provider(name: str, config: Config) -> None:
     import copy as _copy
 
     from dashscope.acli.extensions import find_provider
-    from dashscope.acli.providers import (
-        _create_provider,
-        build_profiles_from_config,
-    )
+    from dashscope.acli.providers import _create_provider, build_profiles_from_config
 
     console.print(f"[dim]Testing provider {name}...[/dim]")
     try:

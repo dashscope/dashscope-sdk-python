@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
 """Miscellaneous command handlers (trust, history, report)."""
 # pylint: disable=protected-access,too-many-branches,too-many-statements
+# pylint: disable=too-many-return-statements
 
 from __future__ import annotations
 
+from typing import Any
+
 from rich.console import Console
+from rich.markup import escape
 
 from dashscope.acli.agent import Agent
 
@@ -77,6 +81,86 @@ def _handle_trust_command(cmd: str, agent: Agent) -> None:
     )
 
 
+def _message_text(msg: dict[str, Any]) -> str:
+    """Flatten a chat message's content into one-line plain text."""
+    content = msg.get("content", "")
+    if isinstance(content, list):
+        content = " ".join(
+            part.get("text", "") for part in content if isinstance(part, dict)
+        )
+    if not isinstance(content, str):
+        return ""
+    return " ".join(content.split())
+
+
+def _search_snippet(text: str, idx: int, kw_len: int) -> str:
+    """Build a short one-line snippet centered on a match position."""
+    start = max(0, idx - 20)
+    end = min(len(text), idx + kw_len + 40)
+    prefix = "..." if start > 0 else ""
+    suffix = "..." if end < len(text) else ""
+    return prefix + text[start:end] + suffix
+
+
+def _highlight_keyword(text: str, keyword: str) -> str:
+    """Wrap keyword occurrences in rich markup (case-insensitive)."""
+    lower_kw = keyword.lower()
+    if not lower_kw:
+        return escape(text)
+    lower_text = text.lower()
+    out: list[str] = []
+    pos = 0
+    while True:
+        idx = lower_text.find(lower_kw, pos)
+        if idx < 0:
+            out.append(escape(text[pos:]))
+            break
+        out.append(escape(text[pos:idx]))
+        out.append("[bold yellow]")
+        out.append(escape(text[idx : idx + len(keyword)]))
+        out.append("[/bold yellow]")
+        pos = idx + len(keyword)
+    return "".join(out)
+
+
+def _history_search_matches(
+    keyword: str,
+    limit: int = 20,
+) -> list[dict[str, str]]:
+    """Case-insensitive substring search across all session history.
+
+    Scans every stored session's messages and returns up to ``limit``
+    matches, each carrying the session topic, a timestamp, the message
+    role, and a one-line snippet with match context.
+    """
+    from dashscope.acli.session import get_session_manager
+
+    needle = keyword.lower()
+    if not needle or limit <= 0:
+        return []
+    mgr = get_session_manager()
+    matches: list[dict[str, str]] = []
+    for meta in mgr.list_topics():
+        if len(matches) >= limit:
+            break
+        for msg in mgr.load_messages(meta.topic):
+            text = _message_text(msg)
+            idx = text.lower().find(needle) if text else -1
+            if idx < 0:
+                continue
+            matches.append(
+                {
+                    "session": meta.topic,
+                    "timestamp": meta.last_accessed or "",
+                    "role": str(msg.get("role", "?")),
+                    "snippet": _search_snippet(text, idx, len(needle)),
+                },
+            )
+            if len(matches) >= limit:
+                break
+    return matches
+
+
 def _handle_history_command(cmd: str) -> None:
     """Manage conversation history."""
     from dashscope.acli.platforms.local.history import (
@@ -107,6 +191,8 @@ def _handle_history_command(cmd: str) -> None:
             "\n[dim]Usage:\n"
             "  /history stats                          — show stats\n"
             "  /history list [n]                       — list recent n\n"
+            "  /history search <keyword> [limit]       — full-text "
+            "search\n"
             "  /history export <file> [--format json|md|html]  — export\n"
             "  /history clear                           — clear "
             "history[/dim]",
@@ -147,6 +233,41 @@ def _handle_history_command(cmd: str) -> None:
                 )
         return
 
+    if sub == "search":
+        if len(parts) < 3:
+            console.print(
+                "[dim]Usage: /history search <keyword> [limit][/dim]",
+            )
+            return
+        keyword = parts[2]
+        limit = 20
+        if len(parts) >= 4:
+            try:
+                limit = int(parts[3])
+            except ValueError:
+                limit = 0
+        if limit <= 0:
+            console.print(
+                "[red]limit must be a positive integer[/red]",
+            )
+            return
+        matches = _history_search_matches(keyword, limit=limit)
+        if not matches:
+            console.print(f"[dim]No matches for '{keyword}'[/dim]")
+            return
+        header = f"[bold]{len(matches)} match(es) for '{keyword}':[/bold]"
+        console.print(header)
+        for i, m in enumerate(matches, 1):
+            ts = m["timestamp"][:16]
+            head = (
+                f"  {i}. [cyan]{m['session']}[/cyan] "
+                f"[dim]{ts}[/dim] [bold]{m['role']}[/bold]"
+            )
+            console.print(head)
+            snippet = _highlight_keyword(m["snippet"], keyword)
+            console.print(f"     {snippet}")
+        return
+
     if sub == "export" and len(parts) >= 3:
         output_path = parts[2]
         fmt = "html"
@@ -174,7 +295,8 @@ def _handle_history_command(cmd: str) -> None:
         console.print(f"[green]✓ Cleared {count} history records[/green]")
         return
 
-    console.print("[dim]Usage: /history [stats|list|export|clear][/dim]")
+    usage = "[dim]Usage: /history [stats|list|search|export|clear][/dim]"
+    console.print(usage)
 
 
 def _handle_report_command(agent: Agent) -> None:

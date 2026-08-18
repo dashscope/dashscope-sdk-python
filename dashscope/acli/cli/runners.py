@@ -10,14 +10,8 @@ from rich.console import Console
 
 from dashscope.acli.agent import Agent
 from dashscope.acli.cli.handlers_key import ensure_provider_key
-from dashscope.acli.cli.multimodal import (
-    _expand_at_references,
-    _to_multimodal_content,
-)
-from dashscope.acli.cli.startup import (
-    _compose_system_prompt,
-    _load_system_prompt,
-)
+from dashscope.acli.cli.multimodal import _expand_at_references, _to_multimodal_content
+from dashscope.acli.cli.startup import _compose_system_prompt, _load_system_prompt
 from dashscope.acli.config import (
     PROVIDER_MODELS,
     Config,
@@ -79,18 +73,10 @@ async def _run_oneshot(config: Config, prompt: str):
     # Pin parent agent ref for local.subagent / local.delegate BEFORE platform
     # tool registration so register_one_capability finds a parent to attach to
     # (same ordering as cli/repl.py).
-    from dashscope.acli.agents.delegate import (
-        set_config as set_delegate_config,
-    )
-    from dashscope.acli.agents.delegate import (
-        set_parent_agent as set_delegate_parent,
-    )
-    from dashscope.acli.agents.subagent import (
-        set_config as set_subagent_config,
-    )
-    from dashscope.acli.agents.subagent import (
-        set_parent_agent as set_subagent_parent,
-    )
+    from dashscope.acli.agents.delegate import set_config as set_delegate_config
+    from dashscope.acli.agents.delegate import set_parent_agent as set_delegate_parent
+    from dashscope.acli.agents.subagent import set_config as set_subagent_config
+    from dashscope.acli.agents.subagent import set_parent_agent as set_subagent_parent
 
     set_subagent_parent(agent)
     set_subagent_config(config)
@@ -269,9 +255,7 @@ def _run_tui_mode(config: Config):
     from dashscope.acli.extensions import apply_extensions
 
     _ext = apply_extensions(PROVIDER_MODELS)
-    from dashscope.acli.cli.handlers_capability import (
-        sync_extensions_into_catalog,
-    )
+    from dashscope.acli.cli.handlers_capability import sync_extensions_into_catalog
 
     sync_extensions_into_catalog(_ext)
 
@@ -280,18 +264,10 @@ def _run_tui_mode(config: Config):
     provider = get_provider_chain(config)
     executor = Executor(auto_approve=config.auto_approve)
 
-    from dashscope.acli.agents.delegate import (
-        set_config as set_delegate_config,
-    )
-    from dashscope.acli.agents.delegate import (
-        set_parent_agent as set_delegate_parent,
-    )
-    from dashscope.acli.agents.subagent import (
-        set_config as set_subagent_config,
-    )
-    from dashscope.acli.agents.subagent import (
-        set_parent_agent as set_subagent_parent,
-    )
+    from dashscope.acli.agents.delegate import set_config as set_delegate_config
+    from dashscope.acli.agents.delegate import set_parent_agent as set_delegate_parent
+    from dashscope.acli.agents.subagent import set_config as set_subagent_config
+    from dashscope.acli.agents.subagent import set_parent_agent as set_subagent_parent
     from dashscope.acli.hooks import create_hook_bus
     from dashscope.acli.platforms import get_memory_provider
     from dashscope.acli.tools.platform import disabled_capabilities_hint

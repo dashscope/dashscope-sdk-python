@@ -13,15 +13,8 @@ from rich.text import Text
 
 from dashscope.acli.agent import Agent
 from dashscope.acli.config import Config
-from dashscope.acli.deliverable import (
-    collect_deliverables,
-    surface_deliverables,
-)
-from dashscope.acli.utils import (
-    AsyncSpinner,
-    UserAbortedTurn,
-    message_text_for_compress,
-)
+from dashscope.acli.deliverable import collect_deliverables, surface_deliverables
+from dashscope.acli.utils import AsyncSpinner, UserAbortedTurn, message_text_for_compress
 
 console = Console()
 

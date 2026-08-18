@@ -8,11 +8,7 @@ from __future__ import annotations
 from typing import Callable
 
 from dashscope.acli.config import PROVIDER_MODELS, Config, normalize_model_name
-from dashscope.acli.tools.registry import (
-    PermissionLevel,
-    ToolDefinition,
-    registry,
-)
+from dashscope.acli.tools.registry import PermissionLevel, ToolDefinition, registry
 
 
 def register_session_tools(

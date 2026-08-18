@@ -24,10 +24,7 @@ from dashscope.acli.dev import handle_dev_command  # noqa: F401,E402
 from dashscope.acli.skills import load_skill_files  # noqa: E402
 
 load_skill_files()
-from dashscope.acli.cli.completer import (  # noqa: F401,E402
-    _get_arg_hint,
-    _is_dir_safe,
-)
+from dashscope.acli.cli.completer import _get_arg_hint, _is_dir_safe  # noqa: F401,E402
 
 # Import constants and multimodal handling from submodules
 from dashscope.acli.cli.constants import (  # noqa: F401,E402
@@ -52,25 +49,16 @@ from dashscope.acli.cli.dispatch import (  # noqa: F401,E402
     _handle_slash_command,
     dispatch_async_command,
 )
-from dashscope.acli.cli.examples import (  # noqa: E402
-    _handle_example_command,
-)
+from dashscope.acli.cli.examples import _handle_example_command  # noqa: E402
 from dashscope.acli.cli.handlers_capability import (  # noqa: F401,E402
     _cap_enabled,
     sync_extensions_into_catalog,
 )
-from dashscope.acli.cli.handlers_misc import (  # noqa: F401,E402
-    _handle_report_command,
-)
-from dashscope.acli.cli.handlers_setup import (  # noqa: F401,E402
-    _handle_setup,
-)
+from dashscope.acli.cli.handlers_misc import _handle_report_command  # noqa: F401,E402
+from dashscope.acli.cli.handlers_setup import _handle_setup  # noqa: F401,E402
 
 # Import MCP management from submodule
-from dashscope.acli.cli.mcp import (  # noqa: F401,E402
-    _connect_mcp,
-    _mcp_clients,
-)
+from dashscope.acli.cli.mcp import _connect_mcp, _mcp_clients  # noqa: F401,E402
 from dashscope.acli.cli.repl import _run_loop  # noqa: E402
 from dashscope.acli.cli.runners import (  # noqa: E402
     _run_dry_run,
@@ -81,10 +69,7 @@ from dashscope.acli.cli.startup import (  # noqa: F401,E402
     _compose_system_prompt,
     _load_system_prompt,
 )
-from dashscope.acli.cli.streaming import (  # noqa: F401,E402
-    _do_compress,
-    _do_summarize,
-)
+from dashscope.acli.cli.streaming import _do_compress, _do_summarize  # noqa: F401,E402
 
 # Cron scheduler
 _scheduler = None

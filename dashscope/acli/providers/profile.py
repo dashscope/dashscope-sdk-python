@@ -13,10 +13,7 @@ from dataclasses import dataclass
 from typing import AsyncIterator
 
 from dashscope.acli.providers.base import LLMChunk, LLMProvider, LLMResponse
-from dashscope.acli.providers.hardening import (
-    HardenedProvider,
-    is_retryable_error,
-)
+from dashscope.acli.providers.hardening import HardenedProvider, is_retryable_error
 
 _API_KEY_ENVS = {
     "tongyi": "DASHSCOPE_API_KEY",

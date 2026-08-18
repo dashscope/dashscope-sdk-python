@@ -189,9 +189,9 @@ def generate_report(trace_logger: TraceLogger | None) -> dict | None:
     return {
         "total_llm_calls": llm_calls,
         "total_tool_calls": tool_calls,
-        "tool_success_rate": (tool_successes / tool_calls)
-        if tool_calls
-        else 0.0,
+        "tool_success_rate": (
+            (tool_successes / tool_calls) if tool_calls else 0.0
+        ),
         "avg_response_time": avg_response_time,
         "top_tools": top_tools,
     }

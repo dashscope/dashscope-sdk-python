@@ -7,10 +7,7 @@ from __future__ import annotations
 
 from rich.console import Console
 
-from dashscope.acli.cli.constants import (
-    ALL_CAPABILITY_KEYS,
-    CAPABILITY_CATALOG,
-)
+from dashscope.acli.cli.constants import ALL_CAPABILITY_KEYS, CAPABILITY_CATALOG
 from dashscope.acli.config import PROVIDER_MODELS, Config
 
 console = Console()
@@ -153,9 +150,7 @@ def _handle_capability_command(cmd: str, config: Config):
             # Already enabled — but extension caps may still lack credentials
             # (enabled without a token, or env var unset). Offer the prompt
             # again and re-register so the tools bind to fresh creds.
-            from dashscope.acli.cli.handlers_key import (
-                _maybe_prompt_extension_token,
-            )
+            from dashscope.acli.cli.handlers_key import _maybe_prompt_extension_token
 
             _maybe_prompt_extension_token(cap_key, config)
             from dashscope.acli.cli.mcp import _connect_mcp
@@ -188,9 +183,7 @@ def _handle_capability_command(cmd: str, config: Config):
                 return
 
         # Extension-capability bearer/apikey-header token
-        from dashscope.acli.cli.handlers_key import (
-            _maybe_prompt_extension_token,
-        )
+        from dashscope.acli.cli.handlers_key import _maybe_prompt_extension_token
 
         _maybe_prompt_extension_token(cap_key, config)
 
@@ -241,9 +234,7 @@ def _handle_capability_command(cmd: str, config: Config):
 
     if sub in ("reload", "refresh"):
         from dashscope.acli.extensions import apply_extensions
-        from dashscope.acli.tools.platform import (
-            refresh_extension_capability_tools,
-        )
+        from dashscope.acli.tools.platform import refresh_extension_capability_tools
 
         ext = apply_extensions(PROVIDER_MODELS)
         sync_extensions_into_catalog(ext)

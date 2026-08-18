@@ -8,11 +8,7 @@ from pathlib import Path
 
 from dashscope.acli.utils.crypto import decrypt_value, encrypt_value
 from dashscope.acli.utils.paths import atomic_write_text
-from dashscope.acli.utils.toml import (
-    load_toml,
-    parse_toml_inline_table,
-    toml_str,
-)
+from dashscope.acli.utils.toml import load_toml, parse_toml_inline_table, toml_str
 
 CONFIG_DIR = Path.home() / ".acli"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
@@ -165,6 +161,10 @@ def _valid_models_for_provider(
 class MCPServerConfig:
     service: str
     url: str = ""
+    # "sse" (remote, default) or "stdio" (local subprocess).
+    transport: str = "sse"
+    command: str = ""
+    args: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -659,7 +659,18 @@ class Config:
         if "mcp_servers" in data:
             for mcp_data in data["mcp_servers"]:
                 if isinstance(mcp_data, dict) and "service" in mcp_data:
-                    self.mcp_servers.append(MCPServerConfig(**mcp_data))
+                    kwargs = {
+                        k: v
+                        for k, v in mcp_data.items()
+                        if k
+                        in ("service", "url", "transport", "command", "args")
+                    }
+                    raw_args = kwargs.get("args")
+                    if isinstance(raw_args, list):
+                        kwargs["args"] = [str(a) for a in raw_args]
+                    else:
+                        kwargs.pop("args", None)
+                    self.mcp_servers.append(MCPServerConfig(**kwargs))
         if "examples_repo" in data:
             self.examples_repo = str(data["examples_repo"])
         if "examples_branch" in data:
@@ -846,4 +857,11 @@ class Config:
             lines.append(f"service = {toml_str(mcp.service)}")
             if mcp.url:
                 lines.append(f"url = {toml_str(mcp.url)}")
+            if mcp.transport and mcp.transport != "sse":
+                lines.append(f"transport = {toml_str(mcp.transport)}")
+            if mcp.command:
+                lines.append(f"command = {toml_str(mcp.command)}")
+            if mcp.args:
+                arg_list = ", ".join(toml_str(a) for a in mcp.args)
+                lines.append(f"args = [{arg_list}]")
         return lines

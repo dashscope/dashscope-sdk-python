@@ -214,11 +214,13 @@ class ProviderComparator:
             / max(len(results_a), 1),
             "avg_duration_b": sum(r.duration for r in results_b)
             / max(len(results_b), 1),
-            "winner": label_a
-            if avg_a > avg_b
-            else label_b
-            if avg_b > avg_a
-            else "tie",
+            "winner": (
+                label_a
+                if avg_a > avg_b
+                else label_b
+                if avg_b > avg_a
+                else "tie"
+            ),
             "results_a": [r.to_dict() for r in results_a],
             "results_b": [r.to_dict() for r in results_b],
         }
