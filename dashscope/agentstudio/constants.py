@@ -139,8 +139,6 @@ class WebhookDeliveryStatus(StrEnum):
 class WebhookEventType(StrEnum):
     """Event types accepted by webhook endpoint subscriptions."""
 
-    # Subscribe to every supported event type.
-    ALL = "*"
     # A session was created.
     SESSION_CREATED = "session.created"
     # A session was updated.
