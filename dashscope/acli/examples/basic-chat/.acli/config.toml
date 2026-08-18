@@ -1,0 +1,4 @@
+user_name = "dashscope"
+provider = "tongyi"
+model = "qwen3.7-max"
+memory_user_id = "acli-basic"

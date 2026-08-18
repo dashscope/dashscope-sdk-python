@@ -1,0 +1,25 @@
+[[hooks.after_tool_call]]
+match = "write_file"
+condition = "*.py"
+action = "run"
+run = "python -m py_compile {path}"
+on_fail = "warn"
+silent = true
+
+[[hooks.after_tool_call]]
+match = "write_file"
+condition = "*.py"
+action = "log"
+message = "{timestamp} | wrote {filename}"
+
+[[hooks.before_tool_call]]
+match = "run_command"
+content_pattern = "*pip*install*"
+action = "confirm"
+message = "About to run a pip install. Continue?"
+
+[[hooks.on_error]]
+match = "*"
+content_pattern = "*ModuleNotFoundError*"
+action = "warn"
+message = "Missing module detected. Check whether dashscope is installed first: pip show dashscope"
