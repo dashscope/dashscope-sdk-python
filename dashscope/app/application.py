@@ -6,7 +6,7 @@
 @Desc    :   Application calls for both http and http sse
 """
 import copy
-from typing import Any, Dict, Generator, List, Union
+from typing import Any, Dict, Generator, List, Optional, Union
 
 from dashscope.api_entities.api_request_factory import _build_api_request
 from dashscope.api_entities.dashscope_response import Message, Role
@@ -63,21 +63,21 @@ class Application(BaseApi):
         workspace: str = None,
         api_key: str = None,
         messages: List[Message] = None,
-        stream: bool = None,
-        temperature: float = None,
-        top_p: float = None,
-        top_k: int = None,
-        seed: int = None,
-        session_id: str = None,
-        biz_params: Dict[str, Any] = None,
-        has_thoughts: bool = None,
-        doc_tag_codes: List[str] = None,
-        doc_reference_type: str = None,
-        memory_id: str = None,
-        image_list: List[str] = None,
-        file_list: List[str] = None,
-        rag_options: Dict[str, Any] = None,
-        incremental_output: bool = None,
+        stream: Optional[bool] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        seed: Optional[int] = None,
+        session_id: Optional[str] = None,
+        biz_params: Optional[Dict[str, Any]] = None,
+        has_thoughts: Optional[bool] = None,
+        doc_tag_codes: Optional[List[str]] = None,
+        doc_reference_type: Optional[str] = None,
+        memory_id: Optional[str] = None,
+        image_list: Optional[List[str]] = None,
+        file_list: Optional[List[str]] = None,
+        rag_options: Optional[Dict[str, Any]] = None,
+        incremental_output: Optional[bool] = None,
         **kwargs,
     ) -> Union[
         ApplicationResponse,

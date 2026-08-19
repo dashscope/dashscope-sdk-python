@@ -2,7 +2,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import copy
-from typing import Any, List
+from typing import Any, List, Optional
 
 from dashscope.api_entities.dashscope_response import (
     DashScopeAPIResponse,
@@ -129,7 +129,7 @@ class Tokenization(BaseApi):
         history,
         messages,
         enable_search: bool = False,
-        customized_model_id: str = None,
+        customized_model_id: Optional[str] = None,
         **kwargs,
     ):
         """Build LLM parameters for tokenization.

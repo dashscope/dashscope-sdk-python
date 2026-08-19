@@ -10,7 +10,7 @@ import uuid
 from http import HTTPStatus
 from queue import Queue
 from threading import Timer
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from dashscope.api_entities.dashscope_response import RecognitionResponse
 from dashscope.client.base_api import BaseApi
@@ -25,6 +25,36 @@ from dashscope.common.error import (
 from dashscope.common.logging import logger
 from dashscope.common.utils import _get_task_group_and_task
 from dashscope.protocol.websocket import WebsocketStreamingMode
+
+
+def _merge_recognition_params(
+    kwargs: Dict[str, Any],
+    disfluency_removal_enabled: Optional[bool],
+    diarization_enabled: Optional[bool],
+    speaker_count: Optional[int],
+    timestamp_alignment_enabled: Optional[bool],
+    special_word_filter: Optional[str],
+    audio_event_detection_enabled: Optional[bool],
+) -> Dict[str, Any]:
+    """Merge explicit recognition parameters into ``kwargs`` in place.
+
+    Only parameters that are not None are written, so callers can pass
+    through values that the user did not set.
+
+    Returns:
+        The merged ``kwargs`` dict (the same object).
+    """
+    for key, value in (
+        ("disfluency_removal_enabled", disfluency_removal_enabled),
+        ("diarization_enabled", diarization_enabled),
+        ("speaker_count", speaker_count),
+        ("timestamp_alignment_enabled", timestamp_alignment_enabled),
+        ("special_word_filter", special_word_filter),
+        ("audio_event_detection_enabled", audio_event_detection_enabled),
+    ):
+        if value is not None:
+            kwargs[key] = value
+    return kwargs
 
 
 class RecognitionResult(RecognitionResponse):
@@ -166,12 +196,12 @@ class Recognition(BaseApi):
         sample_rate: int,
         workspace: str = None,
         # Recognition parameters
-        disfluency_removal_enabled: bool = None,
-        diarization_enabled: bool = None,
-        speaker_count: int = None,
-        timestamp_alignment_enabled: bool = None,
-        special_word_filter: str = None,
-        audio_event_detection_enabled: bool = None,
+        disfluency_removal_enabled: Optional[bool] = None,
+        diarization_enabled: Optional[bool] = None,
+        speaker_count: Optional[int] = None,
+        timestamp_alignment_enabled: Optional[bool] = None,
+        special_word_filter: Optional[str] = None,
+        audio_event_detection_enabled: Optional[bool] = None,
         **kwargs,
     ):
         if model is None:
@@ -193,24 +223,15 @@ class Recognition(BaseApi):
         self._silence_timer = None
         self._kwargs = kwargs
         # Store recognition parameters
-        if disfluency_removal_enabled is not None:
-            self._kwargs[
-                "disfluency_removal_enabled"
-            ] = disfluency_removal_enabled
-        if diarization_enabled is not None:
-            self._kwargs["diarization_enabled"] = diarization_enabled
-        if speaker_count is not None:
-            self._kwargs["speaker_count"] = speaker_count
-        if timestamp_alignment_enabled is not None:
-            self._kwargs[
-                "timestamp_alignment_enabled"
-            ] = timestamp_alignment_enabled
-        if special_word_filter is not None:
-            self._kwargs["special_word_filter"] = special_word_filter
-        if audio_event_detection_enabled is not None:
-            self._kwargs[
-                "audio_event_detection_enabled"
-            ] = audio_event_detection_enabled
+        _merge_recognition_params(
+            self._kwargs,
+            disfluency_removal_enabled,
+            diarization_enabled,
+            speaker_count,
+            timestamp_alignment_enabled,
+            special_word_filter,
+            audio_event_detection_enabled,
+        )
         self._workspace = workspace
         self._start_stream_timestamp = -1
         self._first_package_timestamp = -1
@@ -348,12 +369,12 @@ class Recognition(BaseApi):
         self,
         phrase_id: str = None,
         # Recognition parameters
-        disfluency_removal_enabled: bool = None,
-        diarization_enabled: bool = None,
-        speaker_count: int = None,
-        timestamp_alignment_enabled: bool = None,
-        special_word_filter: str = None,
-        audio_event_detection_enabled: bool = None,
+        disfluency_removal_enabled: Optional[bool] = None,
+        diarization_enabled: Optional[bool] = None,
+        speaker_count: Optional[int] = None,
+        timestamp_alignment_enabled: Optional[bool] = None,
+        special_word_filter: Optional[str] = None,
+        audio_event_detection_enabled: Optional[bool] = None,
         **kwargs,
     ):
         """Real-time speech recognition in asynchronous mode.
@@ -392,24 +413,15 @@ class Recognition(BaseApi):
         self._on_complete_timestamp = -1
         self._phrase = phrase_id
         # Update recognition parameters
-        if disfluency_removal_enabled is not None:
-            self._kwargs[
-                "disfluency_removal_enabled"
-            ] = disfluency_removal_enabled
-        if diarization_enabled is not None:
-            self._kwargs["diarization_enabled"] = diarization_enabled
-        if speaker_count is not None:
-            self._kwargs["speaker_count"] = speaker_count
-        if timestamp_alignment_enabled is not None:
-            self._kwargs[
-                "timestamp_alignment_enabled"
-            ] = timestamp_alignment_enabled
-        if special_word_filter is not None:
-            self._kwargs["special_word_filter"] = special_word_filter
-        if audio_event_detection_enabled is not None:
-            self._kwargs[
-                "audio_event_detection_enabled"
-            ] = audio_event_detection_enabled
+        _merge_recognition_params(
+            self._kwargs,
+            disfluency_removal_enabled,
+            diarization_enabled,
+            speaker_count,
+            timestamp_alignment_enabled,
+            special_word_filter,
+            audio_event_detection_enabled,
+        )
         self._kwargs.update(**kwargs)
         self._recognition_once = False
         self._worker = threading.Thread(target=self.__receive_worker)
@@ -434,12 +446,12 @@ class Recognition(BaseApi):
         file: str,
         phrase_id: str = None,
         # Recognition parameters
-        disfluency_removal_enabled: bool = None,
-        diarization_enabled: bool = None,
-        speaker_count: int = None,
-        timestamp_alignment_enabled: bool = None,
-        special_word_filter: str = None,
-        audio_event_detection_enabled: bool = None,
+        disfluency_removal_enabled: Optional[bool] = None,
+        diarization_enabled: Optional[bool] = None,
+        speaker_count: Optional[int] = None,
+        timestamp_alignment_enabled: Optional[bool] = None,
+        special_word_filter: Optional[str] = None,
+        audio_event_detection_enabled: Optional[bool] = None,
         **kwargs,
     ) -> RecognitionResult:
         """Real-time speech recognition in synchronous mode.
@@ -482,24 +494,15 @@ class Recognition(BaseApi):
         self._stream_data = Queue()
         self._phrase = phrase_id
         # Update recognition parameters
-        if disfluency_removal_enabled is not None:
-            self._kwargs[
-                "disfluency_removal_enabled"
-            ] = disfluency_removal_enabled
-        if diarization_enabled is not None:
-            self._kwargs["diarization_enabled"] = diarization_enabled
-        if speaker_count is not None:
-            self._kwargs["speaker_count"] = speaker_count
-        if timestamp_alignment_enabled is not None:
-            self._kwargs[
-                "timestamp_alignment_enabled"
-            ] = timestamp_alignment_enabled
-        if special_word_filter is not None:
-            self._kwargs["special_word_filter"] = special_word_filter
-        if audio_event_detection_enabled is not None:
-            self._kwargs[
-                "audio_event_detection_enabled"
-            ] = audio_event_detection_enabled
+        _merge_recognition_params(
+            self._kwargs,
+            disfluency_removal_enabled,
+            diarization_enabled,
+            speaker_count,
+            timestamp_alignment_enabled,
+            special_word_filter,
+            audio_event_detection_enabled,
+        )
         self._kwargs.update(**kwargs)
         error_flag: bool = False
         sentences: List[Any] = []

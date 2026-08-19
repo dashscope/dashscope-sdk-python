@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 from urllib.parse import urlencode
 
 import aiohttp
@@ -12,7 +12,6 @@ from dashscope.api_entities.encryption import Encryption
 from dashscope.api_entities.http_request import HttpRequest
 from dashscope.api_entities.websocket_request import WebSocketRequest
 from dashscope.common.constants import (
-    REQUEST_TIMEOUT_KEYWORD,
     SERVICE_API_PATH,
     ApiProtocol,
     HTTPMethod,
@@ -20,57 +19,6 @@ from dashscope.common.constants import (
 from dashscope.common.error import InputDataRequired, UnsupportedApiProtocol
 from dashscope.common.logging import logger
 from dashscope.protocol.websocket import WebsocketStreamingMode
-
-
-def _get_protocol_params(kwargs):
-    api_protocol = kwargs.pop("api_protocol", ApiProtocol.HTTPS)
-    ws_stream_mode = kwargs.pop("ws_stream_mode", WebsocketStreamingMode.OUT)
-    is_binary_input = kwargs.pop("is_binary_input", False)
-    http_method = kwargs.pop("http_method", HTTPMethod.POST)
-    stream = kwargs.get("stream", False)
-    if not stream and ws_stream_mode == WebsocketStreamingMode.OUT:
-        ws_stream_mode = WebsocketStreamingMode.NONE
-
-    async_request = kwargs.pop("async_request", False)
-    query = kwargs.pop("query", False)
-    headers = kwargs.pop("headers", None)
-    request_timeout = kwargs.pop(REQUEST_TIMEOUT_KEYWORD, None)
-    form = kwargs.pop("form", None)
-    resources = kwargs.pop("resources", None)
-    base_address = kwargs.pop("base_address", None)
-    flattened_output = kwargs.pop("flattened_output", False)
-    extra_url_parameters = kwargs.pop("extra_url_parameters", None)
-    session = kwargs.pop("session", None)
-
-    # Extract user_agent from kwargs (preferred) or from headers["user-agent"]
-    user_agent = kwargs.pop("user_agent", "")
-    if headers and "user-agent" in headers:
-        header_ua = headers.pop("user-agent")
-        if user_agent:
-            user_agent = (
-                f"{header_ua}; {user_agent}" if header_ua else user_agent
-            )
-        else:
-            user_agent = header_ua
-
-    return (
-        api_protocol,
-        ws_stream_mode,
-        is_binary_input,
-        http_method,
-        stream,
-        async_request,
-        query,
-        headers,
-        request_timeout,
-        form,
-        resources,
-        base_address,
-        flattened_output,
-        extra_url_parameters,
-        user_agent,
-        session,
-    )
 
 
 def _build_api_request(  # pylint: disable=too-many-branches
@@ -87,23 +35,23 @@ def _build_api_request(  # pylint: disable=too-many-branches
     http_method: HTTPMethod = HTTPMethod.POST,
     stream: bool = False,
     async_request: bool = False,
-    request_timeout: int = None,
+    request_timeout: Optional[int] = None,
     # WebSocket specific
     ws_stream_mode: WebsocketStreamingMode = WebsocketStreamingMode.OUT,
     is_binary_input: bool = False,
     # HTTP specific
     query: bool = False,
-    headers: Dict[str, str] = None,
-    form: Dict = None,
-    resources: Dict = None,
-    base_address: str = None,
+    headers: Optional[Dict[str, str]] = None,
+    form: Optional[Dict] = None,
+    resources: Optional[Dict] = None,
+    base_address: Optional[str] = None,
     flattened_output: bool = False,
-    extra_url_parameters: Dict[str, Any] = None,
+    extra_url_parameters: Optional[Dict[str, Any]] = None,
     user_agent: str = "",
-    session: Union[requests.Session, aiohttp.ClientSession] = None,
-    task_id: str = None,
+    session: Optional[Union[requests.Session, aiohttp.ClientSession]] = None,
+    task_id: Optional[str] = None,
     enable_encryption: bool = False,
-    pre_task_id: str = None,
+    pre_task_id: Optional[str] = None,
     # Additional parameters for API request data
     **kwargs,
 ):
