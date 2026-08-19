@@ -39,7 +39,7 @@ def test_error_uses_nested_code_and_message():
         "request_id": "req_001",
     }
     err = exceptions.from_response(status_code=400, body=body)
-    assert isinstance(err, exceptions.InvalidRequestError)
+    assert isinstance(err, exceptions.APIStatusError)
     assert err.code == "invalid_request_error"
     assert err.message == "bad arg"
     assert err.request_id == "req_001"
@@ -49,7 +49,7 @@ def test_permission_error_code_classifies():
     """The unified ``permission_error`` code classifies correctly."""
     body = {"type": "error", "error": {"code": "permission_error"}}
     err = exceptions.from_response(status_code=403, body=body)
-    assert isinstance(err, exceptions.PermissionDeniedError)
+    assert isinstance(err, exceptions.APIStatusError)
     assert err.code == "permission_error"
 
 
@@ -57,7 +57,7 @@ def test_missing_code_falls_back_to_api_error():
     """A HTTP response without a recognizable code resolves to the generic
     ``api_error`` — we no longer guess a public code from the status number."""
     err = exceptions.from_response(status_code=404, body=None)
-    assert isinstance(err, exceptions.InternalServerError)
+    assert isinstance(err, exceptions.APIStatusError)
     assert err.code == "api_error"
     assert err.message == "HTTP 404"
 
@@ -76,19 +76,19 @@ def test_flat_top_level_code_is_classified():
     top level (no ``error`` wrapper); a recognized code still classifies."""
     body = {"code": "not_found_error", "message": "gone", "request_id": "r_1"}
     err = exceptions.from_response(status_code=404, body=body)
-    assert isinstance(err, exceptions.NotFoundError)
+    assert isinstance(err, exceptions.APIStatusError)
     assert err.code == "not_found_error"
     assert err.message == "gone"
     assert err.request_id == "r_1"
 
 
-def test_flat_top_level_unknown_code_falls_back_to_api_error():
-    """An unrecognized flat code (e.g. ``InvalidParameter``) normalizes to
-    ``api_error`` while the server message is preserved."""
+def test_flat_top_level_unknown_code_is_preserved():
+    """A flat code (e.g. ``InvalidParameter``) is preserved as-is from the
+    server response, along with the server message."""
     body = {"code": "InvalidParameter", "message": "Model not exist."}
     err = exceptions.from_response(status_code=400, body=body)
-    assert isinstance(err, exceptions.InternalServerError)
-    assert err.code == "api_error"
+    assert isinstance(err, exceptions.APIStatusError)
+    assert err.code == "InvalidParameter"
     assert err.message == "Model not exist."
 
 
@@ -314,7 +314,7 @@ def test_from_response_spring_default():
         "path": "/api/v1/agentstudio/agents",
     }
     err = exceptions.from_response(status_code=404, body=body)
-    assert isinstance(err, exceptions.InternalServerError)
+    assert isinstance(err, exceptions.APIStatusError)
     assert err.code == "api_error"
     assert err.message == "Not Found"
 

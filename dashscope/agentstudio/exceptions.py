@@ -10,22 +10,22 @@ The AgentStudio service returns errors in the canonical CMA shape::
         "request_id": "req_..."
     }
 
-Codes come from :mod:`dashscope.common.error_registry` (the single source of
-truth). Because a HTTP response was received, :func:`from_response` always
-yields a status error: it keeps the server's code when recognized and
-otherwise falls back to generic ``api_error`` rather than guessing a public
-code from the status number. The raw payload stays on ``.raw``.
+Codes come from the server response and are preserved as-is. When no code
+is present in the response, :func:`from_response` falls back to generic
+``api_error`` rather than guessing from the status number. The raw payload
+stays on ``.raw``.
+
+Error classification is done via the ``code`` attribute rather than exception
+subclasses, reducing maintenance burden and eliminating synchronization issues
+with error registries.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Mapping, Optional
 
-from dashscope.common import error_registry as _error_registry
 from dashscope.common.error import DashScopeException
 from dashscope.common.error_registry import (
-    INTERNAL_ERROR,
-    PublicError,
     SDK_AGENTSTUDIO_API_CONNECTION_ERROR,
     SDK_AGENTSTUDIO_API_TIMEOUT_ERROR,
     SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR,
@@ -100,41 +100,14 @@ class APITimeoutError(APIConnectionError):
 
 
 class APIStatusError(AgentStudioError):
-    """Raised when the server returns a non-2xx status."""
+    """Raised when the server returns a non-2xx status.
+
+    The specific error type is identified by the ``code`` attribute rather
+    than exception subclasses. The code is preserved from the server response.
+    When no code is present, falls back to ``api_error``.
+    """
 
     code = "api_status_error"
-
-
-class InvalidRequestError(APIStatusError):
-    code = "invalid_request_error"
-
-
-class AuthenticationError(APIStatusError):
-    code = "authentication_error"
-
-
-class PermissionDeniedError(APIStatusError):
-    code = "permission_error"
-
-
-class NotFoundError(APIStatusError):
-    code = "not_found_error"
-
-
-class ConflictError(APIStatusError):
-    code = "conflict_error"
-
-
-class RateLimitError(APIStatusError):
-    code = "rate_limit_error"
-
-
-class OverloadedError(APIStatusError):
-    code = "overloaded_error"
-
-
-class InternalServerError(APIStatusError):
-    code = "api_error"
 
 
 # ---------------------------------------------------------------------------
@@ -159,44 +132,13 @@ class StreamClosedError(StreamError):
 # ---------------------------------------------------------------------------
 
 
-# Class routing: normalized code -> exception type.
-_CODE_TO_CLASS: Dict[str, type] = {
-    "invalid_request_error": InvalidRequestError,
-    "authentication_error": AuthenticationError,
-    "permission_error": PermissionDeniedError,
-    "not_found_error": NotFoundError,
-    "conflict_error": ConflictError,
-    "rate_limit_error": RateLimitError,
-    "overloaded_error": OverloadedError,
-    "api_error": InternalServerError,
-}
-
-# Codes the registry defines; a server code already in this set is kept
-# as-is (e.g. ``billing_error`` stays distinct from ``rate_limit_error``).
-_REGISTRY_CODES = frozenset(
-    pe.anthropic_error_code
-    for pe in vars(_error_registry).values()
-    if isinstance(pe, PublicError)
-)
-
-
-def _normalize_code(code: Optional[str]) -> Optional[str]:
-    """Return ``code`` when it is a recognized registry code, else ``None``
-    (the caller then falls back to generic ``api_error``).
-    """
-
-    if code is not None and code in _REGISTRY_CODES:
-        return code
-    return None
-
-
 def from_response(
     *,
     status_code: int,
     body: Any,
     headers: Optional[Mapping[str, str]] = None,
-) -> AgentStudioError:
-    """Build an :class:`AgentStudioError` instance from a HTTP response.
+) -> APIStatusError:
+    """Build an :class:`APIStatusError` instance from a HTTP response.
 
     Accepts the documented ``{type, error:{code,message}, request_id}`` shape
     and the classic flat DashScope ``{code, message, request_id}`` envelope,
@@ -204,6 +146,12 @@ def from_response(
 
     The ``x-request-id`` response header is preferred over the body
     ``request_id`` field (server-generated IDs are more reliable for tracing).
+
+    The server's code is preserved as-is. Only when no code is present
+    does the function fall back to generic ``api_error``.
+
+    Error classification is done via the ``code`` attribute rather than
+    exception subclasses, simplifying the API and reducing maintenance.
     """
 
     code: Optional[str] = None
@@ -229,22 +177,20 @@ def from_response(
             and isinstance(body["error"], str)
         ):
             message = body["error"]
-        # Flat DashScope envelope: code/message at the top level. An
-        # unrecognized code still normalizes to api_error below.
+        # Flat DashScope envelope: code/message at the top level.
         if code is None:
             code = body.get("code")
         if message is None:
             message = body.get("message")
 
-    # Keep the server's code when recognized; otherwise fall back to generic
-    # api_error rather than guessing from the status number.
-    code = _normalize_code(code) or INTERNAL_ERROR.anthropic_error_code
+    # Keep the server's code as-is; only fall back to api_error when missing.
+    if not code:
+        code = "api_error"
 
     if message is None:
         message = f"HTTP {status_code}"
 
-    cls = _CODE_TO_CLASS.get(code) or APIStatusError
-    return cls(
+    return APIStatusError(
         message,
         code=code,
         request_id=request_id,

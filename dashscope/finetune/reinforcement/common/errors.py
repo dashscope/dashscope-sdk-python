@@ -67,7 +67,7 @@ class AgenticRLError(_RootCauseMixin, Exception):
     def __init__(
         self,
         message: str,
-        error_code: str = "sdk.agentic_rl.AgenticRLError",
+        error_code: str = "sdk.agentic_rl.Error",
     ):
         super().__init__(message)
         self.error_code = error_code

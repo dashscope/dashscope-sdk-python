@@ -211,7 +211,7 @@ def build_headers(
     """Compose the canonical AgentStudio request headers."""
 
     if not api_key:
-        raise exceptions.AuthenticationError(
+        raise exceptions.APIStatusError(
             "api_key is required. Pass it via Client(api_key=...) or "
             "the DASHSCOPE_API_KEY environment variable.",
             code="authentication_error",

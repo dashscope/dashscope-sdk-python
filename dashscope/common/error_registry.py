@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-__version__ = "1.0.0"
-__commit__ = "aa17fe8"
+__version__ = "1.0.3"
+__commit__ = "8e9c1a0"
 __snapshot__ = False
 
 
@@ -17,10 +17,10 @@ class PublicError:
     error_msg: str
     anthropic_error_code: str
 
-    def format_msg(self, variables: Dict[str, str] = None) -> str:
+    def format_msg(self, substitutions: Dict[str, str] = None) -> str:
         msg = self.error_msg
-        if variables:
-            for k, v in variables.items():
+        if substitutions:
+            for k, v in substitutions.items():
                 msg = msg.replace("{" + k + "}", v)
         return msg
 
@@ -35,10 +35,10 @@ class InternalErrorDef:
     cause: str = ""
     solution: str = ""
 
-    def format_message(self, variables: Dict[str, str] = None) -> str:
+    def format_message(self, substitutions: Dict[str, str] = None) -> str:
         msg = self.message
-        if variables:
-            for k, v in variables.items():
+        if substitutions:
+            for k, v in substitutions.items():
                 msg = msg.replace("{" + k + "}", v)
         return msg
 

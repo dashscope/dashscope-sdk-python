@@ -22,6 +22,15 @@ from pydantic import (
 )
 import yaml
 
+from dashscope.common.error_registry import (
+    SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR,
+    SDK_AGENTIC_RL_INSTANCE_WARMUP_ERROR,
+    SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR,
+    SDK_AGENTIC_RL_BASE_CONNECTION_ERROR,
+    SDK_AGENTIC_RL_REGISTRATION_ERROR,
+    SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR,
+)
+
 # Local Application
 from dashscope.finetune.reinforcement.common.constants import (
     FC_API_KEY,
@@ -694,15 +703,13 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             root = e
             while root.__cause__:
                 root = root.__cause__
+            _err = SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR
             return ResponseFC(
                 status=Status(
                     task=StatusType.FAILED,
-                    name="DeploymentError",
-                    code=524,
-                    message=(
-                        "Function layer deployment failed: "
-                        f"{_exc_message(root)}"
-                    ),
+                    name=_err.name,
+                    code=_err.external.status_code,
+                    message=(f"{_err.message}: {_exc_message(root)}"),
                 ),
                 output={},
             )
@@ -713,10 +720,13 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             return ResponseFC(
                 status=Status(
                     task=StatusType.FAILED,
-                    name="DeploymentError",
-                    code=525,
+                    name=SDK_AGENTIC_RL_REGISTRATION_ERROR.name,
+                    code=(
+                        SDK_AGENTIC_RL_REGISTRATION_ERROR.external.status_code
+                    ),
                     message=(
-                        "Function deployment failed: " f"{_exc_message(root)}"
+                        f"{SDK_AGENTIC_RL_REGISTRATION_ERROR.message}: "
+                        f"{_exc_message(root)}"
                     ),
                 ),
             )
@@ -774,12 +784,13 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             root = e
             while root.__cause__:
                 root = root.__cause__
+            _err = SDK_AGENTIC_RL_BASE_CONNECTION_ERROR
             return ResponseFC(
                 status=Status(
                     task=StatusType.FAILED,
-                    name="DeploymentError",
-                    code=521,
-                    message=f"Full deployment failed: {_exc_message(root)}",
+                    name=_err.name,
+                    code=_err.external.status_code,
+                    message=(f"{_err.message}: {_exc_message(root)}"),
                 ),
                 output={},
             )
@@ -852,10 +863,13 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             return ResponseFC(
                 status=Status(
                     task=StatusType.FAILED,
-                    name="FunctionLoadError",
-                    code=522,
+                    name=SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR.name,
+                    code=(
+                        SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR.external.status_code
+                    ),
                     message=(
-                        "Instance initialization failed: " f"{_exc_message(e)}"
+                        f"{SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR.message}: "
+                        f"{_exc_message(e)}"
                     ),
                 ),
             )
@@ -892,12 +906,13 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     f"Warmup failed | InstanceID: {self.instance_id}, "
                     f"Error: {_exc_message(e)}",
                 )
+                _err = SDK_AGENTIC_RL_INSTANCE_WARMUP_ERROR
                 return ResponseFC(
                     status=Status(
                         task=StatusType.FAILED,
-                        name="InstanceWarmupError",
-                        code=511,
-                        message=f"Instance warmup failed: {_exc_message(e)}",
+                        name=_err.name,
+                        code=_err.external.status_code,
+                        message=(f"{_err.message}: {_exc_message(e)}"),
                     ),
                     output={"instance_id": self.instance_id},
                 )
@@ -943,12 +958,13 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 f"Status query failed | InstanceID: {instance_id}, "
                 f"Error: {_exc_message(e)}",
             )
+            _err = SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR
             return ResponseFC(
                 status=Status(
                     task=StatusType.FAILED,
-                    name="InstanceQueryError",
-                    code=523,
-                    message=f"Status query failed: {_exc_message(e)}",
+                    name=_err.name,
+                    code=_err.external.status_code,
+                    message=(f"{_err.message}: {_exc_message(e)}"),
                 ),
                 output={"instance_id": instance_id},
             )
