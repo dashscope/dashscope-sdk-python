@@ -538,12 +538,27 @@ async def run_command(command: str, timeout: int | None = None) -> str:
                 cwd=os.getcwd(),
             )
         else:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=os.getcwd(),
-            )
+            # Optional OS sandbox (opt-in; degrades to normal execution
+            # when disabled or when no backend is available).
+            from dashscope.acli import sandbox
+
+            sandbox_argv = None
+            if sandbox.is_enabled():
+                sandbox_argv = sandbox.build_argv(command, os.getcwd())
+            if sandbox_argv is not None:
+                proc = await asyncio.create_subprocess_exec(
+                    *sandbox_argv,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=os.getcwd(),
+                )
+            else:
+                proc = await asyncio.create_subprocess_shell(
+                    command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=os.getcwd(),
+                )
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(),
             timeout=timeout,

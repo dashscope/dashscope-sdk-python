@@ -7,7 +7,7 @@ from rich.console import Console
 
 from dashscope.acli import __version__
 from dashscope.acli.cli.constants import ALL_CAPABILITY_KEYS
-from dashscope.acli.config import WORKSPACE_DIR, Config
+from dashscope.acli.config import Config
 from dashscope.acli.tools.registry import registry
 from dashscope.acli.utils import mask_secret
 
@@ -21,7 +21,8 @@ def _load_system_prompt() -> str | None:
     are discovered separately by Agent.__init__ and passed to the prompt
     pipeline for proper stable/ephemeral separation.
     """
-    from dashscope.acli.config import CONFIG_DIR
+    # Imported at call time so tests can patch acli.config.WORKSPACE_DIR.
+    from dashscope.acli.config import CONFIG_DIR, WORKSPACE_DIR
 
     base: str | None = None
     for d in (WORKSPACE_DIR, CONFIG_DIR):
@@ -50,7 +51,7 @@ def _load_references() -> str | None:
     Unlike skills (invoked on demand), references are knowledge docs that must
     always be in the system prompt — e.g. generated SDK API indexes.
     """
-    from dashscope.acli.config import CONFIG_DIR
+    from dashscope.acli.config import CONFIG_DIR, WORKSPACE_DIR
 
     parts: dict[str, str] = {}
     for d in (CONFIG_DIR, WORKSPACE_DIR):
@@ -82,7 +83,9 @@ def _compose_system_prompt(base: str | None) -> str | None:
     return f"{base}\n\n---\n\n{section}" if base else section
 
 
-def _print_banner(config: Config | None = None):
+def _print_banner(config: Config | None = None) -> None:
+    from dashscope.acli.config import WORKSPACE_DIR
+
     logo = (
         "     _                    _   _       ____ _     ___\n"
         "    / \\   __ _  ___ _ __ | |_(_) ___ / ___| |   |_ _|\n"

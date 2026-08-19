@@ -8,6 +8,21 @@ from rich.console import Console
 
 console = Console()
 
+_SESSION_USAGE = (
+    "\n[dim]Usage:\n"
+    "  /session              — show current topic\n"
+    "  /session new [name]   — new session (default: default)\n"
+    "  /session list         — list all sessions\n"
+    "  /session switch <n>   — switch to a topic\n"
+    "  /session rename <old> <new> — rename\n"
+    "  /session remove <n>   — remove session "
+    "(default cannot be removed)\n"
+    "  /session scene        — show scene memory of the current topic\n"
+    "  /session scene <text> — append a note to scene memory\n"
+    "  /session scene set <text> — replace scene memory\n"
+    "  /session scene clear  — clear scene memory[/dim]"
+)
+
 
 def _handle_session_command(cmd: str, config, agent) -> None:
     """Handle /session commands for multi-topic session management."""
@@ -20,16 +35,7 @@ def _handle_session_command(cmd: str, config, agent) -> None:
         # Show current topic
         current = session_mgr.get_current_topic()
         console.print(f"[bold]Current session[/bold]: {current}")
-        console.print(
-            "\n[dim]Usage:\n"
-            "  /session              — show current topic\n"
-            "  /session new [name]   — new session (default: default)\n"
-            "  /session list         — list all sessions\n"
-            "  /session switch <n>   — switch to a topic\n"
-            "  /session rename <old> <new> — rename\n"
-            "  /session remove <n>   — remove session "
-            "(default cannot be removed)[/dim]",
-        )
+        console.print(_SESSION_USAGE)
         return
 
     subcmd = parts[1]
@@ -137,14 +143,39 @@ def _handle_session_command(cmd: str, config, agent) -> None:
         else:
             console.print(f"[red]Session '{topic}' does not exist[/red]")
 
+    elif subcmd == "scene":
+        topic = session_mgr.get_current_topic()
+        rest = parts[2].strip() if len(parts) > 2 else ""
+        if not rest:
+            text = session_mgr.get_scene()
+            if text:
+                console.print(
+                    f"[bold]Scene memory[/bold] [dim]({topic})[/dim]:",
+                )
+                console.print(text)
+            else:
+                console.print(
+                    f"[dim]No scene memory for '{topic}' yet. Add one "
+                    f"with: /session scene <text>[/dim]",
+                )
+        elif rest == "clear":
+            session_mgr.set_scene("")
+            console.print(f"[green]Scene memory cleared ({topic})[/green]")
+        elif rest.startswith("set "):
+            text = rest[len("set "):].strip()
+            if session_mgr.set_scene(text):
+                console.print(
+                    f"[green]Scene memory replaced ({topic})[/green]",
+                )
+            else:
+                console.print("[red]Failed to write scene memory[/red]")
+        else:
+            if session_mgr.append_scene(rest):
+                console.print(
+                    f"[green]Scene note appended ({topic})[/green]",
+                )
+            else:
+                console.print("[red]Failed to write scene memory[/red]")
+
     else:
-        console.print(
-            "[dim]Usage:\n"
-            "  /session              — show current topic\n"
-            "  /session new [name]   — new session (default: default)\n"
-            "  /session list         — list all sessions\n"
-            "  /session switch <n>   — switch to a topic\n"
-            "  /session rename <old> <new> — rename\n"
-            "  /session remove <n>   — remove session "
-            "(default cannot be removed)[/dim]",
-        )
+        console.print(_SESSION_USAGE)

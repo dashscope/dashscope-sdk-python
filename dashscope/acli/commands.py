@@ -110,7 +110,11 @@ HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
         [
             ("/profile", "User profile (list/search/add/remove/clear)"),
             ("/memory", "Chat history (list/search/remove <id|num>/clear)"),
-            ("/session", "Session management (new/list/switch/rename/remove)"),
+            (
+                "/session",
+                "Session management "
+                "(new/list/switch/rename/remove/scene)",
+            ),
             (
                 "/summarize",
                 "Summarize the current task; record key steps and lessons",

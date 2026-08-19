@@ -282,6 +282,9 @@ class Config:
     debug: bool = (
         False  # When True, log final LLM prompts to .acli/logs/llm.log
     )
+    sandbox: bool = (
+        False  # When True, run shell commands in an OS sandbox if available
+    )
     skill_registry: str = (
         ""  # Optional registry index URL/path for /skill search/install
     )
@@ -550,6 +553,9 @@ class Config:
         if "debug" in data:
             val = str(data["debug"]).lower()
             self.debug = val not in ("false", "0", "no")
+        if "sandbox" in data:
+            val = str(data["sandbox"]).lower()
+            self.sandbox = val not in ("false", "0", "no")
         if "voice_silence_duration" in data:
             try:
                 self.voice_silence_duration = float(
@@ -809,6 +815,8 @@ class Config:
             lines.append("privacy_mode = true")
         if self.debug:
             lines.append("debug = true")
+        if self.sandbox:
+            lines.append("sandbox = true")
         lines.append(f"tts_enabled = {str(self.tts_enabled).lower()}")
         if self.tts_model and self.tts_model != "cosyvoice-v2":
             lines.append(f"tts_model = {toml_str(self.tts_model)}")

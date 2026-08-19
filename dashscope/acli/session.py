@@ -5,6 +5,8 @@ Each topic gets its own directory under WORKSPACE_DIR/session/<topic>/:
   - history.json: message history
   - input-history.txt: command input history
   - meta.json: metadata (created, last_accessed, message_count)
+  - scene.md: persistent scene memory (topic-scoped notes injected into
+    the system prompt every turn)
   - events.jsonl: append-only event sidecar (lifecycle; see
     session_events.SessionEventLog)
 """
@@ -21,6 +23,7 @@ from dashscope.acli.config import WORKSPACE_DIR
 from dashscope.acli.session_events import EVENTS_FILENAME, SessionEventLog
 
 DEFAULT_TOPIC = "default"
+SCENE_FILENAME = "scene.md"
 
 
 @dataclass
@@ -109,6 +112,60 @@ class SessionManager:
     def _events_file(self, topic: str) -> Path:
         """Get the events.jsonl sidecar path for a topic."""
         return self._topic_dir(topic) / EVENTS_FILENAME
+
+    def _scene_file(self, topic: str) -> Path:
+        """Get the scene.md path for a topic."""
+        return self._topic_dir(topic) / SCENE_FILENAME
+
+    def get_scene(self, topic: str | None = None) -> str:
+        """Return the scene memory text for a topic (default: current).
+
+        Returns an empty string when the file is missing or unreadable.
+        """
+        path = self._scene_file(topic or self.current_topic)
+        if not path.exists():
+            return ""
+        try:
+            return path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+
+    def set_scene(self, text: str, topic: str | None = None) -> bool:
+        """Replace the scene memory for a topic (default: current).
+
+        An empty/whitespace-only *text* clears the scene file. Returns
+        False when the topic name is unsafe or the write fails.
+        """
+        topic = topic or self.current_topic
+        topic_dir = self._safe_topic_dir(topic)
+        if topic_dir is None:
+            return False
+        path = self._scene_file(topic)
+        content = text.strip()
+        try:
+            if not content:
+                if path.exists():
+                    path.unlink()
+            else:
+                topic_dir.mkdir(parents=True, exist_ok=True)
+                path.write_text(content + "\n", encoding="utf-8")
+        except OSError:
+            return False
+        self.event_log(topic).append(
+            "scene/updated",
+            {"topic": topic, "chars": len(content)},
+        )
+        return True
+
+    def append_scene(self, text: str, topic: str | None = None) -> bool:
+        """Append a note line to the scene memory of a topic."""
+        topic = topic or self.current_topic
+        note = text.strip()
+        if not note:
+            return False
+        existing = self.get_scene(topic)
+        merged = f"{existing}\n{note}" if existing else note
+        return self.set_scene(merged, topic)
 
     def event_log(self, topic: str | None = None) -> SessionEventLog:
         """Return the append-only event log for a topic (default: current).
