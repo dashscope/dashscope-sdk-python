@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 #****************************************************************#
 # ScriptName: start_reward_server.sh
-# Author: @alibaba-inc.com
 # Create Date: 2026-03-17 10:05
-# Modify Author: @alibaba-inc.com
 # Modify Date: 2026-03-24 17:54
 # Function:
 #***************************************************************#

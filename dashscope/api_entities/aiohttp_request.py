@@ -7,7 +7,10 @@ from typing import Optional
 
 import aiohttp
 
-from dashscope.api_entities.aio_session import get_shared_aio_session
+from dashscope.api_entities.aio_session import (
+    get_shared_aio_session,
+    send_with_retry_async,
+)
 from dashscope.api_entities.base_request import AioBaseRequest
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.common.constants import (
@@ -16,6 +19,7 @@ from dashscope.common.constants import (
     HTTPMethod,
 )
 from dashscope.common.logging import logger
+from dashscope.common.error import UnsupportedHTTPMethod
 from dashscope.common.error_registry import INTERNAL_ERROR
 from dashscope.common.utils import (
     async_to_sync,
@@ -273,32 +277,35 @@ class AioHttpRequest(AioBaseRequest):
                     body = json.dumps(obj, ensure_ascii=False).encode(
                         "utf-8",
                     )
-                    response = await session.post(
+                    response = await send_with_retry_async(
+                        lambda: session.request(
+                            "POST",
+                            url=self.url,
+                            data=body,
+                            headers=self.headers,
+                            timeout=request_timeout,
+                        ),
+                    )
+            elif self.method == HTTPMethod.GET:
+                params = {}
+                if hasattr(self, "data") and self.data is not None:
+                    params = getattr(self.data, "parameters", {})
+                response = await send_with_retry_async(
+                    lambda: session.get(
                         url=self.url,
-                        data=body,
+                        params=params,
                         headers=self.headers,
                         timeout=request_timeout,
-                    )
-                logger.debug("Response returned: %s", self.url)
-                async with response:
-                    async for rsp in self._handle_response(response):
-                        yield rsp
-        except Exception as e:
-            logger.error(
-                "Request failed: url=%s, method=%s, error=%s",
-                self.url,
-                self.method,
-                str(e),
-                exc_info=True,
-            )
-            from dashscope.common.error import DashScopeException
-
-            raise DashScopeException(
-                f"Request failed: {str(e)}",
-            ) from e
-        finally:
-            # Note: We don't close the session here because:
-            # - External sessions are managed by the caller
-            # - Shared sessions use connection pooling and are
-            #   managed centrally by get_shared_aio_session()
-            pass
+                    ),
+                )
+            else:
+                raise UnsupportedHTTPMethod(
+                    f"Unsupported http method: {self.method}",
+                )
+            logger.debug("Response returned: %s", self.url)
+            async with response:
+                async for rsp in self._handle_response(response):
+                    yield rsp
+        except Exception:
+            logger.exception("Request failed")
+            raise

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
+import warnings
 from typing import Optional
 
 from dashscope.assistants.assistant_types import (
@@ -17,8 +18,24 @@ from dashscope.common.error import InputRequired
 
 __all__ = ["Files"]
 
+# Deprecation warning message
+_DEPRECATION_MSG = (
+    "The Assistants API (dashscope.assistants) is deprecated and will be "
+    "removed in a future release. Please migrate to the Responses API. "
+    "See https://help.aliyun.com/zh/model-studio/"
+    "synchronous-call-api-reference for migration details."
+)
+
 
 class Files(CreateMixin, DeleteMixin, ListObjectMixin, GetStatusMixin):
+    """
+    .. deprecated::
+        The Files API (Assistants API) is deprecated and will be removed in
+        a future release. Please migrate to the Responses API.
+        See https://help.aliyun.com/zh/model-studio/
+        synchronous-call-api-reference for migration details.
+    """
+
     SUB_PATH = "assistants"
 
     @classmethod
@@ -46,6 +63,11 @@ class Files(CreateMixin, DeleteMixin, ListObjectMixin, GetStatusMixin):
         Returns:
             AssistantFile: The assistant file object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         return cls.create(
             assistant_id,
             file_id=file_id,
@@ -79,6 +101,11 @@ class Files(CreateMixin, DeleteMixin, ListObjectMixin, GetStatusMixin):
         Returns:
             AssistantFile: _description_
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not file_id or not assistant_id:
             raise InputRequired("input file_id and assistant_id is required!")
 
@@ -121,6 +148,11 @@ class Files(CreateMixin, DeleteMixin, ListObjectMixin, GetStatusMixin):
         Returns:
             ListAssistantFile: The list of file objects.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
 
         response = super().list(
             limit=limit,
@@ -157,6 +189,11 @@ class Files(CreateMixin, DeleteMixin, ListObjectMixin, GetStatusMixin):
         Returns:
             AssistantFile: The `AssistantFile` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not assistant_id or not file_id:
             raise InputRequired("assistant id and file id are required!")
         response = super().get(
@@ -191,6 +228,11 @@ class Files(CreateMixin, DeleteMixin, ListObjectMixin, GetStatusMixin):
         Returns:
             AssistantFile: The `AssistantFile` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         response = super().get(
             target=assistant_id + "/files/" + file_id,
             api_key=api_key,
@@ -224,6 +266,11 @@ class Files(CreateMixin, DeleteMixin, ListObjectMixin, GetStatusMixin):
         Returns:
             AssistantsDeleteResponse: _description_
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
 
         response = super().delete(
             file_id,

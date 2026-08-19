@@ -14,6 +14,7 @@ warnings.filterwarnings(
     category=Warning,
 )
 
+from dashscope.version import __version__
 from dashscope.aigc.code_generation import CodeGeneration
 from dashscope.aigc.conversation import Conversation, History, HistoryItem
 from dashscope.aigc.generation import AioGeneration, Generation
@@ -80,6 +81,7 @@ from dashscope.tokenizers import (
 )
 
 __all__ = [
+    "__version__",
     "base_compatible_api_url",
     "base_http_api_url",
     "base_websocket_api_url",
