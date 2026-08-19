@@ -11,10 +11,12 @@ import atexit
 import ssl
 import threading
 import weakref
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 import aiohttp
 import certifi
+
+from dashscope.common.logging import logger
 
 _shared_ssl_context: Optional[ssl.SSLContext] = None
 _aio_sessions: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
@@ -104,3 +106,24 @@ async def close_shared_aio_session() -> None:
         session = _aio_sessions.pop(loop, None)
     if session is not None and not session.closed:
         await session.close()
+
+
+async def send_with_retry_async(
+    send: Callable[[], Awaitable[aiohttp.ClientResponse]],
+) -> aiohttp.ClientResponse:
+    """Send an async request, retrying once on a dropped pooled connection.
+
+    A keep-alive connection idle in the connector pool may have been
+    closed by the server or an intermediate LB; reusing it raises
+    ClientConnectionError before any response bytes arrive, so the
+    request was not processed and is safe to resend on a fresh
+    connection.
+    """
+    try:
+        return await send()
+    except aiohttp.ClientConnectionError as e:
+        logger.debug(
+            "Connection dropped before response, retrying once: %s",
+            e,
+        )
+        return await send()

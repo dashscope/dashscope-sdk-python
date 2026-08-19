@@ -67,6 +67,17 @@ setuptools.setup(
     include_package_data=True,
     extras_require={
         "tokenizer": ["tiktoken"],
+        "acli-anthropic": ["anthropic>=0.40"],
+        "acli-openai": ["openai>=1.30"],
+        "acli-voice": ["sounddevice>=0.4", "numpy>=1.20"],
+        "acli-camera": ["opencv-python>=4.5"],
+        "acli-all": [
+            "anthropic>=0.40",
+            "openai>=1.30",
+            "sounddevice>=0.4",
+            "numpy>=1.20",
+            "opencv-python>=4.5",
+        ],
     },
     zip_safe=False,
     entry_points={"console_scripts": ["dashscope = dashscope.cli:main"]},

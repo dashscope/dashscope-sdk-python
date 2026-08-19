@@ -669,3 +669,99 @@ class TestAsyncSessionLifecycle:
 
         # 验证 session 没有被关闭（因为是外部 session）
         mock_session.close.assert_not_called()
+
+
+class TestAsyncConnectionRetry:
+    """测试异步池化连接被远端关闭后的重试行为"""
+
+    def _build_post_request(self):
+        http_request = HttpRequest(
+            url="http://example.com/api",
+            api_key="fake-api-key",
+            http_method=HTTPMethod.POST,
+            stream=False,
+        )
+        http_request.data = ApiRequestData(
+            model="test-model",
+            task_group="test",
+            task="test",
+            function="test",
+            input_data={"test": "data"},
+            form=None,
+            is_binary_input=False,
+            api_protocol=ApiProtocol.HTTPS,
+        )
+        return http_request
+
+    @staticmethod
+    def _ok_response():
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+        return mock_response
+
+    @pytest.mark.asyncio
+    async def test_retry_once_on_connection_error(self):
+        """连接被远端关闭时重试一次并成功"""
+        mock_session = AsyncMock()
+        mock_response = self._ok_response()
+        mock_session.request.side_effect = [
+            aiohttp.ClientConnectionError("Server disconnected"),
+            mock_response,
+        ]
+
+        http_request = self._build_post_request()
+
+        async def mock_handle_response(_response):
+            yield mock_response
+
+        with patch(
+            "dashscope.api_entities.http_request.get_shared_aio_session",
+            return_value=mock_session,
+        ):
+            with patch.object(
+                http_request,
+                "_handle_aio_response",
+                side_effect=mock_handle_response,
+            ):
+                _ = await http_request.aio_call()
+
+        assert mock_session.request.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_retry_exhausted_raises(self):
+        """连续两次 ClientConnectionError 后向上抛出"""
+        mock_session = AsyncMock()
+        mock_session.request.side_effect = aiohttp.ClientConnectionError(
+            "Server disconnected",
+        )
+
+        http_request = self._build_post_request()
+
+        with patch(
+            "dashscope.api_entities.http_request.get_shared_aio_session",
+            return_value=mock_session,
+        ):
+            with pytest.raises(aiohttp.ClientConnectionError):
+                _ = await http_request.aio_call()
+
+        assert mock_session.request.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_other_exceptions(self):
+        """非连接类异常不重试"""
+        mock_session = AsyncMock()
+        mock_session.request.side_effect = ValueError("bad request")
+
+        http_request = self._build_post_request()
+
+        with patch(
+            "dashscope.api_entities.http_request.get_shared_aio_session",
+            return_value=mock_session,
+        ):
+            with pytest.raises(ValueError, match="bad request"):
+                _ = await http_request.aio_call()
+
+        assert mock_session.request.call_count == 1

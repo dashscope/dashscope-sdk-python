@@ -1,0 +1,5 @@
+user_name = "dashscope"
+provider = "tongyi"
+model = "qwen3.8-max"
+memory_user_id = "acli-dashscope"
+enabled_capabilities = "local.subagent,local.delegate,local.memory"

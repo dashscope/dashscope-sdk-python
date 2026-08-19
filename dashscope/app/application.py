@@ -6,7 +6,7 @@
 @Desc    :   Application calls for both http and http sse
 """
 import copy
-from typing import Generator, List, Union
+from typing import Any, Dict, Generator, List, Optional, Union
 
 from dashscope.api_entities.api_request_factory import _build_api_request
 from dashscope.api_entities.dashscope_response import Message, Role
@@ -54,6 +54,8 @@ class Application(BaseApi):
 
     @classmethod
     def call(  # type: ignore[override]
+        # pylint: disable=too-many-locals,arguments-renamed
+        # pylint: disable=too-many-branches,too-many-statements
         cls,
         app_id: str,
         prompt: str = None,
@@ -61,6 +63,21 @@ class Application(BaseApi):
         workspace: str = None,
         api_key: str = None,
         messages: List[Message] = None,
+        stream: Optional[bool] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        seed: Optional[int] = None,
+        session_id: Optional[str] = None,
+        biz_params: Optional[Dict[str, Any]] = None,
+        has_thoughts: Optional[bool] = None,
+        doc_tag_codes: Optional[List[str]] = None,
+        doc_reference_type: Optional[str] = None,
+        memory_id: Optional[str] = None,
+        image_list: Optional[List[str]] = None,
+        file_list: Optional[List[str]] = None,
+        rag_options: Optional[Dict[str, Any]] = None,
+        incremental_output: Optional[bool] = None,
         **kwargs,
     ) -> Union[
         ApplicationResponse,
@@ -84,51 +101,51 @@ class Application(BaseApi):
             api_key (str, optional): The api api_key, can be None,
                 if None, will get by default rule(TODO: api key doc).
             messages(list): The generation messages.
+            stream (bool, optional): Enable server-sent events
+                (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501  # pylint: disable=line-too-long
+                the result will back partially[qwen-turbo,bailian-v1].
+            temperature (float, optional): Used to control the degree
+                of randomness and diversity. Specifically, the temperature
+                value controls the degree to which the probability distribution
+                of each candidate word is smoothed when generating text.
+                A higher temperature value will reduce the peak value of
+                the probability, allowing more low-probability words to be
+                selected, and the generated results will be more diverse;
+                while a lower temperature value will enhance the peak value
+                of the probability, making it easier for high-probability
+                words to be selected, the generated results are more
+                deterministic, range(0, 2) .[qwen-turbo,qwen-plus].
+            top_p (float, optional): A sampling strategy, called nucleus
+                sampling, where the model considers the results of the
+                tokens with top_p probability mass. So 0.1 means only
+                the tokens comprising the top 10% probability mass are
+                considered[qwen-turbo,bailian-v1].
+            top_k (int, optional): The size of the sample candidate set when generated.  # noqa E501  # pylint: disable=line-too-long
+                For example, when the value is 50, only the 50 highest-scoring tokens  # noqa E501  # pylint: disable=line-too-long
+                in a single generation form a randomly sampled candidate set. # noqa E501
+                The larger the value, the higher the randomness generated;  # noqa E501
+                the smaller the value, the higher the certainty generated. # noqa E501
+                The default value is 0, which means the top_k policy is  # noqa E501
+                not enabled. At this time, only the top_p policy takes effect. # noqa E501
+            seed (int, optional): When generating, the seed of the random number is used to control the  # pylint: disable=line-too-long
+                randomness of the model generation. If you use the same seed, each run will generate the same results;  # pylint: disable=line-too-long
+                you can use the same seed when you need to reproduce the model's generated results.  # pylint: disable=line-too-long
+                The seed parameter supports unsigned 64-bit integer types. Default value 1234
+            session_id (str, optional): Session if for multiple rounds call.
+            biz_params (dict, optional): The extra parameters for flow or plugin.
+            has_thoughts (bool, optional): Flag to return rag or plugin process details. Default value false.  # pylint: disable=line-too-long
+            doc_tag_codes (list[str], optional): Tag code list for doc retrival.
+            doc_reference_type (str, optional): The type of doc reference.
+                simple: simple format of doc retrival which not include index in response text but in doc reference list.  # pylint: disable=line-too-long
+                indexed: include both index in response text and doc reference list
+            memory_id (str, optional): Used to store long term context summary between end users and assistant.  # pylint: disable=line-too-long
+            image_list (list, optional): Used to pass image url list.
+            file_list (list, optional): Used to pass file url list.
+            rag_options (dict, optional): Rag options for retrieval augmented generation options.  # pylint: disable=line-too-long
+            incremental_output (bool, optional): In streaming mode, output only
+                new tokens (True) vs. cumulative output (False).
+            **kwargs: Additional parameters passed to the API.
 
-            **kwargs:
-                stream(bool, `optional`): Enable server-sent events
-                    (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501  # pylint: disable=line-too-long
-                    the result will back partially[qwen-turbo,bailian-v1].
-                temperature(float, `optional`): Used to control the degree
-                    of randomness and diversity. Specifically, the temperature
-                    value controls the degree to which the probability distribution
-                    of each candidate word is smoothed when generating text.
-                    A higher temperature value will reduce the peak value of
-                    the probability, allowing more low-probability words to be
-                    selected, and the generated results will be more diverse;
-                    while a lower temperature value will enhance the peak value
-                    of the probability, making it easier for high-probability
-                    words to be selected, the generated results are more
-                    deterministic, range(0, 2) .[qwen-turbo,qwen-plus].
-                top_p(float, `optional`): A sampling strategy, called nucleus
-                    sampling, where the model considers the results of the
-                    tokens with top_p probability mass. So 0.1 means only
-                    the tokens comprising the top 10% probability mass are
-                    considered[qwen-turbo,bailian-v1].
-                top_k(int, `optional`): The size of the sample candidate set when generated.  # noqa E501  # pylint: disable=line-too-long
-                    For example, when the value is 50, only the 50 highest-scoring tokens  # noqa E501  # pylint: disable=line-too-long
-                    in a single generation form a randomly sampled candidate set. # noqa E501
-                    The larger the value, the higher the randomness generated;  # noqa E501
-                    the smaller the value, the higher the certainty generated. # noqa E501
-                    The default value is 0, which means the top_k policy is  # noqa E501
-                    not enabled. At this time, only the top_p policy takes effect. # noqa E501
-                seed(
-                    int,
-                    `optional`
-                ): When generating, the seed of the random number is used to control the
-                    randomness of the model generation. If you use the same seed, each run will generate the same results;  # pylint: disable=line-too-long
-                    you can use the same seed when you need to reproduce the model's generated results.  # pylint: disable=line-too-long
-                    The seed parameter supports unsigned 64-bit integer types. Default value 1234
-                session_id(str, `optional`): Session if for multiple rounds call.
-                biz_params(dict, `optional`): The extra parameters for flow or plugin.
-                has_thoughts(bool, `optional`): Flag to return rag or plugin process details. Default value false.  # pylint: disable=line-too-long
-                doc_tag_codes(list[str], `optional`): Tag code list for doc retrival.
-                doc_reference_type(str, `optional`): The type of doc reference.
-                    simple: simple format of doc retrival which not include index in response text but in doc reference list.  # pylint: disable=line-too-long
-                    indexed: include both index in response text and doc reference list
-                memory_id(str, `optional`): Used to store long term context summary between end users and assistant.  # pylint: disable=line-too-long
-                image_list(list, `optional`): Used to pass image url list.
-                rag_options(dict, `optional`): Rag options for retrieval augmented generation options.  # pylint: disable=line-too-long
         Raises:
             InvalidInput: The history and auto_history are mutually exclusive.
 
@@ -145,27 +162,63 @@ class Application(BaseApi):
         ):
             raise InputRequired("prompt or messages is required!")
 
+        # Build kwargs from explicit parameters
+        explicit_kwargs = {}
         if workspace is not None and workspace:
             headers = kwargs.pop("headers", {})
             headers["X-DashScope-WorkSpace"] = workspace
-            kwargs["headers"] = headers
+            explicit_kwargs["headers"] = headers
+
+        if stream is not None:
+            explicit_kwargs["stream"] = stream
+        if temperature is not None:
+            explicit_kwargs["temperature"] = temperature
+        if top_p is not None:
+            explicit_kwargs["top_p"] = top_p
+        if top_k is not None:
+            explicit_kwargs["top_k"] = top_k
+        if seed is not None:
+            explicit_kwargs["seed"] = seed
+        if session_id is not None:
+            explicit_kwargs["session_id"] = session_id
+        if biz_params is not None:
+            explicit_kwargs["biz_params"] = biz_params
+        if has_thoughts is not None:
+            explicit_kwargs["has_thoughts"] = has_thoughts
+        if doc_tag_codes is not None:
+            explicit_kwargs["doc_tag_codes"] = doc_tag_codes
+        if doc_reference_type is not None:
+            explicit_kwargs["doc_reference_type"] = doc_reference_type
+        if memory_id is not None:
+            explicit_kwargs["memory_id"] = memory_id
+        if image_list is not None:
+            explicit_kwargs["image_list"] = image_list
+        if file_list is not None:
+            explicit_kwargs["file_list"] = file_list
+        if rag_options is not None:
+            explicit_kwargs["rag_options"] = rag_options
+        if incremental_output is not None:
+            explicit_kwargs["incremental_output"] = incremental_output
+
+        # Merge with remaining kwargs (user-provided extras)
+        merged_kwargs = {**kwargs, **explicit_kwargs}
 
         # Check if we need to merge incremental output (compute once)
-        is_stream = kwargs.get("stream", False)
-        is_incremental_output = kwargs.get("incremental_output", None)
+        is_stream = merged_kwargs.get("stream", False)
+        is_incremental_output = merged_kwargs.get("incremental_output", None)
         to_merge_incremental_output = (
             is_stream and is_incremental_output is False
         )
 
         if to_merge_incremental_output:
-            kwargs["incremental_output"] = True
+            merged_kwargs["incremental_output"] = True
 
         # Pass incremental_to_full flag via user_agent parameter to avoid
         # overwriting the default SDK user-agent
         flag = "1" if to_merge_incremental_output else "0"
-        existing_ua = kwargs.get("user_agent", "")
+        existing_ua = merged_kwargs.get("user_agent", "")
         new_ua = f"incremental_to_full/{flag}"
-        kwargs["user_agent"] = (
+        merged_kwargs["user_agent"] = (
             f"{existing_ua}; {new_ua}".strip() if existing_ua else new_ua
         )
 
@@ -176,7 +229,7 @@ class Application(BaseApi):
             prompt,
             history,
             messages,
-            **kwargs,
+            **merged_kwargs,
         )
         request = _build_api_request(
             model="",

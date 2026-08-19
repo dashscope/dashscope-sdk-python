@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+import warnings
 from typing import Dict, List, Optional
 
 from dashscope.assistants.assistant_types import (
@@ -20,6 +21,14 @@ from dashscope.common.error import ModelRequired
 
 __all__ = ["Assistants"]
 
+# Deprecation warning message
+_DEPRECATION_MSG = (
+    "The Assistants API (dashscope.assistants) is deprecated and will be "
+    "removed in a future release. Please migrate to the Responses API. "
+    "See https://help.aliyun.com/zh/model-studio/"
+    "synchronous-call-api-reference for migration details."
+)
+
 
 class Assistants(
     CreateMixin,
@@ -29,6 +38,14 @@ class Assistants(
     GetStatusMixin,
     UpdateMixin,
 ):
+    """
+    .. deprecated::
+        The Assistants API is deprecated and will be removed in a future
+        release. Please migrate to the Responses API.
+        See https://help.aliyun.com/zh/model-studio/
+        synchronous-call-api-reference for migration details.
+    """
+
     SUB_PATH = "assistants"
 
     @classmethod
@@ -114,6 +131,11 @@ class Assistants(
         Returns:
             Assistant: The `Assistant` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         return cls.create(
             model=model,
             name=name,
@@ -180,6 +202,11 @@ class Assistants(
         Returns:
             Assistant: The `Assistant` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not model:
             raise ModelRequired("Model is required!")
         data = cls._create_assistant_object(
@@ -223,6 +250,11 @@ class Assistants(
         Returns:
             Assistant: The `Assistant` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         return cls.get(
             assistant_id,
             workspace=workspace,
@@ -249,6 +281,11 @@ class Assistants(
         Returns:
             Assistant: The `Assistant` object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not assistant_id:
             raise ModelRequired("assistant_id is required!")
         response = super().get(
@@ -287,6 +324,11 @@ class Assistants(
         Returns:
             AssistantList: The list of assistants.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         response = super().list(
             limit=limit,
             order=order,
@@ -348,6 +390,11 @@ class Assistants(
         Returns:
             Assistant: The updated assistant.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not assistant_id:
             raise ModelRequired("assistant_id is required!")
         response = super().update(
@@ -392,6 +439,11 @@ class Assistants(
         Returns:
             AssistantsDeleteResponse: Delete result.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not assistant_id:
             raise ModelRequired("assistant_id is required!")
         response = super().delete(

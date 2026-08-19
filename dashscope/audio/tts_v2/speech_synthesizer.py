@@ -14,11 +14,19 @@ from typing import Dict, List, Optional
 import websocket
 
 import dashscope
-from dashscope.common.error import InputRequired, InvalidTask, ModelRequired
+from dashscope.common.constants import WEBSOCKET_ERROR_CODE
+from dashscope.common.error import (
+    InputRequired,
+    InvalidTask,
+    ModelRequired,
+    RequestFailure,
+)
 from dashscope.common.logging import logger
 from dashscope.common.utils import get_user_agent
 from dashscope.protocol.websocket import (
     ACTION_KEY,
+    ERROR_MESSAGE,
+    ERROR_NAME,
     EVENT_KEY,
     HEADER,
     TASK_ID,
@@ -356,6 +364,9 @@ class SpeechSynthesizer:
         self._first_package_timestamp = -1
         self._recv_audio_length = 0
         self.last_response = None
+        # Error reported by the websocket receiver thread, re-raised in the
+        # caller thread. See __raise_if_task_failed.
+        self._receiver_error: Optional[Exception] = None
         self._close_ws_after_use = True
         self.__update_params(
             model,
@@ -451,6 +462,7 @@ class SpeechSynthesizer:
         self._first_package_timestamp = -1
         self._recv_audio_length = 0
         self.last_response = None
+        self._receiver_error = None
 
     def __update_params(  # pylint: disable=redefined-builtin
         self,
@@ -546,6 +558,7 @@ class SpeechSynthesizer:
         self._stream_data = [""]
         self._worker = None
         self._audio_data: bytes = None
+        self._receiver_error = None
 
         if self._is_started:
             raise InvalidTask("task has already started.")
@@ -557,6 +570,12 @@ class SpeechSynthesizer:
         self.__send_str(request)
         if not self.start_event.wait(10):
             raise TimeoutError("start speech synthesizer failed within 5s.")
+        # task-failed also releases start_event, so the task may have failed
+        # instead of started. There is no running task to report through the
+        # callbacks, so the caller is told right away in both modes.
+        if self._receiver_error is not None:
+            self.__cleanup_task()
+            raise self._receiver_error
         self._is_started = True
         if self.callback:
             self.callback.on_open()
@@ -569,6 +588,38 @@ class SpeechSynthesizer:
             raise InvalidTask("speech synthesizer task has stopped.")
         request = self.request.get_continue_request(text)
         self.__send_str(request)
+
+    def __cleanup_task(self):
+        """Release the task resources, whatever the task result is."""
+        if self._close_ws_after_use:
+            self.close()
+        self._stopped.set()
+        self._is_started = False
+
+    @staticmethod
+    def __build_task_failed_error(json_data, message):
+        """Build the error carrying the server side task-failed details."""
+        header = json_data[HEADER]
+        return RequestFailure(
+            request_id=header.get(TASK_ID),
+            http_code=WEBSOCKET_ERROR_CODE,
+            name=header.get(ERROR_NAME),
+            message=header.get(ERROR_MESSAGE, message),
+        )
+
+    def __raise_if_task_failed(self):
+        """Re-raise, in the caller thread, the task-failed error received by
+        the websocket receiver thread.
+
+        Exceptions raised inside the websocket callbacks are caught and only
+        logged by websocket-client, so they never reach the caller. In callback
+        mode the error is already delivered through ResultCallback.on_error,
+        so it is not raised again here.
+        """
+        if self.async_call:
+            return
+        if self._receiver_error is not None:
+            raise self._receiver_error
 
     # pylint: disable=useless-return
     def streaming_call(self, text: str):
@@ -612,6 +663,12 @@ class SpeechSynthesizer:
             Throws TimeoutError exception if it times out. If the timeout is not None  # noqa: E501
             and greater than zero, it will wait for the corresponding number of
             milliseconds; otherwise, it will wait indefinitely.
+
+        Raises:
+        -----------
+        If the server reported a task-failed event, its error is raised here,
+        unless a callback is set, in which case the error has already been
+        delivered through ResultCallback.on_error.
         """
         if not self._is_started:
             raise InvalidTask("speech synthesizer has not been started.")
@@ -619,33 +676,39 @@ class SpeechSynthesizer:
             raise InvalidTask("speech synthesizer task has stopped.")
         request = self.request.get_finish_request()
         self.__send_str(request)
-        if complete_timeout_millis is not None and complete_timeout_millis > 0:
-            if not self.complete_event.wait(
-                timeout=complete_timeout_millis / 1000,
+        try:
+            if (
+                complete_timeout_millis is not None
+                and complete_timeout_millis > 0
             ):
-                raise TimeoutError(
-                    f"speech synthesizer wait for complete timeout "
-                    f"{complete_timeout_millis}ms",
-                )
-        else:
-            self.complete_event.wait()
-        if self._close_ws_after_use:
-            self.close()
-        self._stopped.set()
-        self._is_started = False
+                if not self.complete_event.wait(
+                    timeout=complete_timeout_millis / 1000,
+                ):
+                    raise TimeoutError(
+                        f"speech synthesizer wait for complete timeout "
+                        f"{complete_timeout_millis}ms",
+                    )
+            else:
+                self.complete_event.wait()
+        finally:
+            # Release resources even if the task failed or timed out.
+            self.__cleanup_task()
+        self.__raise_if_task_failed()
 
     def __waiting_for_complete(self, timeout):
-        if timeout is not None and timeout > 0:
-            if not self.complete_event.wait(timeout=timeout / 1000):
-                raise TimeoutError(
-                    f"speech synthesizer wait for complete timeout {timeout}ms",  # noqa: E501
-                )
-        else:
-            self.complete_event.wait()
-        if self._close_ws_after_use:
-            self.close()
-        self._stopped.set()
-        self._is_started = False
+        # Runs in its own thread for the callback mode: a task-failed error is
+        # delivered through ResultCallback.on_error, raising it here would only
+        # be swallowed.
+        try:
+            if timeout is not None and timeout > 0:
+                if not self.complete_event.wait(timeout=timeout / 1000):
+                    raise TimeoutError(
+                        f"speech synthesizer wait for complete timeout {timeout}ms",  # noqa: E501
+                    )
+            else:
+                self.complete_event.wait()
+        finally:
+            self.__cleanup_task()
 
     def async_streaming_complete(self, complete_timeout_millis=600000):
         """
@@ -740,15 +803,19 @@ class SpeechSynthesizer:
                         self.callback.on_complete()
                         self.callback.on_close()
                 elif EventType.FAILED == event:
+                    logger.error("TaskFailed: %s", message)
+                    # Save the error before releasing the waiters: raising it
+                    # here would only be logged by websocket-client and the
+                    # caller would silently get the partial audio.
+                    self._receiver_error = self.__build_task_failed_error(
+                        json_data,
+                        message,
+                    )
                     self.start_event.set()
                     self.complete_event.set()
                     if self.async_call:
                         self.callback.on_error(message)
                         self.callback.on_close()
-                    else:
-                        logger.error(f"TaskFailed: {message}")
-                        # pylint: disable=broad-exception-raised
-                        raise Exception(f"TaskFailed: {message}")
                 elif EventType.GENERATED == event:
                     if self.callback:
                         self.callback.on_event(message)
@@ -807,6 +874,8 @@ class SpeechSynthesizer:
             If the timeout is set to a value greater than zero and not None,
             it will wait for the corresponding number of milliseconds;
             otherwise, it will wait indefinitely.
+            If the server reported a task-failed event, its error is raised
+            instead of returning the partially synthesized audio.
         """
         # print('non-streaming TTS not yet supported for LLM calls,'
         #       ' using streaming simulation')
@@ -842,7 +911,8 @@ class SpeechSynthesizer:
 
     # Close WebSocket connection
     def close(self):
-        self.ws.close()
+        if self.ws is not None:
+            self.ws.close()
 
     # Get the taskId of the last task
     def get_last_request_id(self):

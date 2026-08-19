@@ -1,0 +1,13 @@
+# Runtime data
+.acli/*
+!.acli/config.toml
+!.acli/system-prompt.md
+!.acli/custom-extensions.toml
+!.acli/hooks.toml
+!.acli/skills/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store

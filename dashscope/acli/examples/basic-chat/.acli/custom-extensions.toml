@@ -1,0 +1,234 @@
+# acli custom extensions — basic-chat example
+# ============================================================================
+# Minimal working config: declares only one tongyi provider, demonstrating how
+# to write custom-extensions.toml. Add other providers (kimi / deepseek /
+# zhipu / ollama / ...) by adding [[providers]] blocks following the same
+# pattern.
+#
+# Load locations (either one; workspace takes precedence):
+#   ~/.acli/custom-extensions.toml      applies globally
+#   ./.acli/custom-extensions.toml      applies to the current workspace (overrides same-name global entries)
+#
+# Three ways to provide an API key (in order of recommendation):
+#   1. api_key_env = "DASHSCOPE_API_KEY"   ← stores only the env var name; export the value in the shell
+#   2. /provider key tongyi command (encrypted storage) ← writes api_key = "ENC:..." (machine-bound)
+#   3. Plaintext api_key = "sk-xxx"         ← rejected by the loader; placeholder illustration only
+# ============================================================================
+
+[[providers]]
+name = "tongyi"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key_env = "DASHSCOPE_API_KEY"
+default_model = "qwen3.7-max"
+models = [
+    "qwen3.7-max",
+    "qwen3.7-plus",
+    "qwen-turbo",
+    "qwen-vl-max",
+    "qwen-vl-plus",
+]
+vision_models = ["qwen-vl-max", "qwen-vl-plus"]
+protocol = "openai"
+
+# ============================================================================
+# More provider templates (kept in sync with the project .acli/custom-extensions.toml)
+# Uncomment the corresponding block and set the env var to use it.
+# ============================================================================
+
+# [[providers]]
+# name = "kimi"
+# base_url = "https://api.moonshot.cn/v1"
+# api_key_env = "MOONSHOT_API_KEY"
+# default_model = "kimi-k3"
+# models = ["kimi-k3", "moonshot-v1-128k", "moonshot-v1-32k"]
+
+# [[providers]]
+# name = "deepseek"
+# base_url = "https://api.deepseek.com"
+# api_key_env = "DEEPSEEK_API_KEY"
+# default_model = "deepseek-v4-pro"
+# models = ["deepseek-v4-pro", "deepseek-v4-flash"]
+# protocol = "openai"
+
+# [[providers]]
+# name = "zhipu"
+# base_url = "https://open.bigmodel.cn/api/paas/v4"
+# api_key_env = "ZHIPU_API_KEY"
+# default_model = "glm-5.2"
+# models = ["glm-5.2", "glm-4-plus", "glm-4", "glm-4v", "glm-4v-plus", "glm-4-flash"]
+# protocol = "openai"
+
+# [[providers]]
+# name = "ollama"
+# base_url = "http://localhost:11434/v1"
+# default_model = "llama3"
+# models = ["llama3", "mistral"]
+# protocol = "openai"
+# auth = false   # local service, no API key needed
+
+# ============================================================================
+# [[capabilities]] — HTTP tool capabilities (let the LLM call external APIs)
+# ============================================================================
+# Usage:
+#   1. Uncomment a [[capabilities]] block (including its [[capabilities.tools]])
+#   2. Set the corresponding env var (e.g. export ZHIPU_API_KEY=xxx)
+#   3. Run /capability enable <key> to activate it (e.g. /capability enable zhipu.image)
+#   4. Trigger it with natural language in chat ("draw a cat") or let the LLM call it autonomously
+#
+# Two tool types are supported:
+#   - type = "http" (default) — REST API call; requires endpoint + body_template
+#   - type = "vision"         — calls a vision LLM to read images; requires provider + model
+# ============================================================================
+
+# ---- Example 1: Zhipu GLM image generation (HTTP tool) ----
+# export ZHIPU_API_KEY="xxx"
+# /capability enable zhipu.image
+# Say in chat: "draw a bicycle parked by a lake"
+# [[capabilities]]
+# key = "zhipu.image"
+# display = "Zhipu GLM Image Generation"
+# auth = "apikey-header:Authorization:$ZHIPU_API_KEY"
+#
+# [[capabilities.tools]]
+# name = "generate_glm_image"
+# description = "Generate an image from a text description with the Zhipu GLM-Image model"
+# endpoint = "https://open.bigmodel.cn/api/paas/v4/images/generations"
+# http_method = "POST"
+# permission = "confirm"
+# params = [
+#   {name = "prompt", type = "string", required = true, description = "Image description, e.g. 'a mountain bike parked by a lake'"},
+#   {name = "model", type = "string", required = false, default = "glm-image-4v", description = "Image generation model name"},
+#   {name = "size", type = "string", required = false, default = "1024x1024", description = "Output image size"},
+# ]
+# body_template = '{"model": {{model}}, "prompt": {{prompt}}, "size": {{size}}}'
+
+# ---- Example 2: Tongyi Wanxiang image generation (HTTP tool, reuses DASHSCOPE_API_KEY) ----
+# export DASHSCOPE_API_KEY="xxx"
+# /capability enable dashscope.image
+# [[capabilities]]
+# key = "dashscope.image"
+# display = "Tongyi Wanxiang Image Generation"
+# api_key_env = "DASHSCOPE_API_KEY"
+#
+# [[capabilities.tools]]
+# name = "generate_wan_image"
+# description = "Generate an image from a text description with the Tongyi Wanxiang Wan2.6 / Wanx models"
+# endpoint = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis"
+# http_method = "POST"
+# permission = "confirm"
+# params = [
+#   {name = "prompt", type = "string", required = true, description = "Image description"},
+#   {name = "model", type = "string", required = false, default = "wanx2.1-t2i-turbo", description = "Image generation model name"},
+#   {name = "size", type = "string", required = false, default = "1024x1024", description = "Output image size"},
+# ]
+# body_template = '{"model": {{model}}, "input": {"prompt": {{prompt}}}, "parameters": {"size": {{size}}}}'
+
+# ---- Example 3: Tongyi vision understanding (vision tool, calls qwen-vl-max to read images) ----
+# Lets the text agent call a vision model on demand to understand images; no need to switch the main model.
+# Usage: /capability enable tongyi.vision, then say "look at this image @photo.png and describe it"
+# export DASHSCOPE_API_KEY="xxx"
+# [[capabilities]]
+# key = "tongyi.vision"
+# display = "Tongyi Vision Understanding (qwen-vl-max)"
+# api_key_env = "DASHSCOPE_API_KEY"
+#
+# [[capabilities.tools]]
+# name = "understand_image"
+# type = "vision"
+# provider = "tongyi"
+# model = "qwen-vl-max"
+# description = "Understand image content with a vision model and return a text description. No need to switch the main model."
+# permission = "auto"
+# params = [
+#   {name = "image_path", type = "string", required = true, description = "Image file path (png/jpg/jpeg/gif/webp/bmp)"},
+#   {name = "question", type = "string", required = false, default = "Describe the content of this image", description = "Question about the image"},
+# ]
+
+# ---- Example 4: Coze workflow (HTTP tool, calls a Coze cloud agent) ----
+# export COZE_API_KEY="xxx"
+# /capability enable coze.workflow
+# [[capabilities]]
+# key = "coze.workflow"
+# display = "Coze Workflow (cloud agent / sub-agent)"
+# auth = "bearer:$COZE_API_KEY"
+#
+# [[capabilities.tools]]
+# name = "run_coze_workflow"
+# description = "Run a Coze workflow to complete a specific task"
+# endpoint = "https://api.coze.cn/v1/workflow/run"
+# http_method = "POST"
+# permission = "confirm"
+# params = [
+#   {name = "workflow_id", type = "string", required = true, description = "Coze workflow ID"},
+#   {name = "parameters", type = "object", required = true, description = "Workflow input parameters (a JSON object matching the workflow definition)"},
+# ]
+# body_template = '{"workflow_id": {{workflow_id}}, "parameters": {{parameters}}}'
+
+# ============================================================================
+# [[skills]] — Skills declared in TOML (alternative to .md files; good for short templates)
+# ============================================================================
+# Usage: /skill write_poem spring   or a natural-language trigger: "write a poem about spring"
+# Choose either this or .acli/skills/*.md; md files support longer templates + frontmatter metadata.
+# Templates use {{var}} placeholders, replaced with actual values on invocation.
+# ============================================================================
+
+# [[skills]]
+# name = "write_poem"
+# description = "Write a Chinese seven-character quatrain on a given topic"
+# prompt_template = "Write a seven-character quatrain about {{topic}}, with rhyme and elegant imagery."
+# arguments = ["topic"]
+
+# [[skills]]
+# name = "commit_message"
+# description = "Generate a Conventional Commits format commit message from a git diff"
+# prompt_template = "Generate a commit message from the following git diff (Conventional Commits format, max 50 characters):\n\n{{diff}}"
+# arguments = ["diff"]
+
+# ============================================================================
+# [[shell_tools]] — Wrap local commands as LLM-callable tools
+# ============================================================================
+# Called automatically by the LLM, or explicitly triggered by the user via /skill <name>.
+# permission:
+#   auto      — run automatically (good for read-only commands)
+#   confirm   — confirm before each run (default; good for commands with side effects)
+#   dangerous — high risk, use sparingly (e.g. rm -rf)
+# Templates use {{var}} placeholders; parameter definitions are the same as [[capabilities.tools]].params.
+# ============================================================================
+
+# ---- Example 1: ripgrep file-content search (read-only, auto) ----
+# [[shell_tools]]
+# name = "search_file"
+# description = "Search file contents matching a regex under the given path with ripgrep"
+# command_template = "rg -n {{pattern}} {{path}}"
+# permission = "auto"
+# params = [
+#   {name = "pattern", type = "string", required = true, description = "Search regex"},
+#   {name = "path", type = "string", required = false, default = ".", description = "Search path"},
+# ]
+
+# ---- Example 2: Check port usage (read-only, auto) ----
+# [[shell_tools]]
+# name = "check_port"
+# description = "Check whether the given port is in use (macOS / Linux)"
+# command_template = "lsof -i :{{port}} || echo 'port is free'"
+# permission = "auto"
+# params = [
+#   {name = "port", type = "string", required = true, description = "Port number"},
+# ]
+
+# ---- Example 3: Get public IP (read-only, auto) ----
+# [[shell_tools]]
+# name = "public_ip"
+# description = "Get the current public IP address"
+# command_template = "curl -s ifconfig.me"
+# permission = "auto"
+
+# ---- Example 4: Git commit (side effects, confirm) ----
+# [[shell_tools]]
+# name = "git_commit"
+# description = "Run git commit (for staged changes)"
+# command_template = "git commit -m {{message}}"
+# permission = "confirm"
+# params = [
+#   {name = "message", type = "string", required = true, description = "commit message"},
+# ]

@@ -4,12 +4,15 @@ import datetime
 import json
 import threading
 from http import HTTPStatus
-from typing import Optional, Dict, Union
+from typing import Callable, Optional, Dict, Union
 
 import aiohttp
 import requests
 
-from dashscope.api_entities.aio_session import get_shared_aio_session
+from dashscope.api_entities.aio_session import (
+    get_shared_aio_session,
+    send_with_retry_async,
+)
 from dashscope.api_entities.base_request import AioBaseRequest
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.common.constants import (
@@ -45,6 +48,26 @@ def _get_shared_sync_session() -> requests.Session:
             if _shared_sync_session is None:
                 _shared_sync_session = requests.Session()
     return _shared_sync_session
+
+
+def _send_with_retry(
+    send: Callable[[], requests.Response],
+) -> requests.Response:
+    """Send a request, retrying once on a dropped pooled connection.
+
+    A keep-alive connection idle in the pool may have been closed by the
+    server or an intermediate LB; reusing it raises ConnectionError before
+    any response bytes arrive, so the request was not processed and is
+    safe to resend on a fresh connection.
+    """
+    try:
+        return send()
+    except requests.exceptions.ConnectionError as e:
+        logger.debug(
+            "Connection dropped before response, retrying once: %s",
+            e,
+        )
+        return send()
 
 
 class HttpRequest(AioBaseRequest):
@@ -215,12 +238,14 @@ class HttpRequest(AioBaseRequest):
                         body = json.dumps(obj, ensure_ascii=False).encode(
                             "utf-8",
                         )
-                        response = await session.request(
-                            "POST",
-                            url=self.url,
-                            data=body,
-                            headers=self.headers,
-                            timeout=request_timeout,
+                        response = await send_with_retry_async(
+                            lambda: session.request(
+                                "POST",
+                                url=self.url,
+                                data=body,
+                                headers=self.headers,
+                                timeout=request_timeout,
+                            ),
                         )
                 elif self.method == HTTPMethod.GET:
                     params = {}
@@ -228,11 +253,13 @@ class HttpRequest(AioBaseRequest):
                         params = getattr(self.data, "parameters", {})
                     if params:
                         params = self.__handle_parameters(params)
-                    response = await session.get(
-                        url=self.url,
-                        params=params,
-                        headers=self.headers,
-                        timeout=request_timeout,
+                    response = await send_with_retry_async(
+                        lambda: session.get(
+                            url=self.url,
+                            params=params,
+                            headers=self.headers,
+                            timeout=request_timeout,
+                        ),
                     )
                 else:
                     raise UnsupportedHTTPMethod(
@@ -245,11 +272,9 @@ class HttpRequest(AioBaseRequest):
             finally:
                 if should_close:
                     await session.close()
-        except Exception as e:
-            logger.error(f"Async request failed: {e}", exc_info=True)
-            from dashscope.common.error import DashScopeException
-
-            raise DashScopeException(str(e)) from e
+        except Exception:
+            logger.exception("Async request failed")
+            raise
 
     @staticmethod
     def __handle_parameters(params: dict) -> dict:
@@ -515,11 +540,14 @@ class HttpRequest(AioBaseRequest):
                     body = json.dumps(obj, ensure_ascii=False).encode(
                         "utf-8",
                     )
-                    response = session.post(
-                        url=self.url,
-                        data=body,
-                        headers=self.headers,
-                        timeout=self.timeout,
+                    response = _send_with_retry(
+                        lambda: session.post(
+                            url=self.url,
+                            stream=self.stream,
+                            data=body,
+                            headers={**self.headers},
+                            timeout=self.timeout,
+                        ),
                     )
                 for rsp in self._handle_response(response):
                     yield rsp
@@ -529,11 +557,13 @@ class HttpRequest(AioBaseRequest):
                     params = getattr(self.data, "parameters", {})
                 if params:
                     params = self.__handle_parameters(params)
-                response = session.get(
-                    url=self.url,
-                    params=params,
-                    headers=self.headers,
-                    timeout=self.timeout,
+                response = _send_with_retry(
+                    lambda: session.get(
+                        url=self.url,
+                        params=params,
+                        headers=self.headers,
+                        timeout=self.timeout,
+                    ),
                 )
                 for rsp in self._handle_response(response):
                     yield rsp
@@ -541,11 +571,9 @@ class HttpRequest(AioBaseRequest):
                 raise UnsupportedHTTPMethod(
                     f"Unsupported http method: {self.method}",
                 )
-        except Exception as e:
-            logger.error(f"Sync request failed: {e}", exc_info=True)
-            from dashscope.common.error import DashScopeException
-
-            raise DashScopeException(str(e)) from e
+        except Exception:
+            logger.exception("Sync request failed")
+            raise
         finally:
             # Note: We don't close the session here because:
             # - External sessions are managed by the caller
