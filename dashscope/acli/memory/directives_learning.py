@@ -65,6 +65,33 @@ def _save_patterns(patterns: dict[str, Any]) -> None:
     _patterns_cache = None
 
 
+# Recency decay: a pattern's influence fades over time so stale habits
+# stop generating proposals. Weight is 1.0 now, 0.5 after the half-life.
+_DECAY_HALF_LIFE_DAYS = 14.0
+# A pair is proposal-worthy when its recency-weighted frequency reaches this.
+_MIN_WEIGHTED_FREQUENCY = 3.0
+
+
+def _recency_weight(timestamp_iso: str) -> float:
+    """Exponential-decay weight for a recorded sequence timestamp.
+
+    Returns 1.0 for a just-recorded entry and halves every
+    ``_DECAY_HALF_LIFE_DAYS`` days. Missing or malformed timestamps
+    degrade to 1.0 (no decay) rather than discarding the data.
+    """
+    try:
+        ts = datetime.fromisoformat(timestamp_iso)
+    except (ValueError, TypeError):
+        return 1.0
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    age_days = max(
+        (datetime.now(timezone.utc) - ts).total_seconds() / 86400.0,
+        0.0,
+    )
+    return 0.5 ** (age_days / _DECAY_HALF_LIFE_DAYS)
+
+
 def record_tool_sequence(tools: list[str]) -> None:
     """Record a sequence of tools used in a successful turn."""
     if len(tools) < 2:
@@ -100,21 +127,29 @@ def analyze_patterns() -> list[dict[str, Any]]:
     if len(sequences) < 5:
         return []  # Not enough data
 
-    # Count tool sequence patterns
-    sequence_counter: Counter = Counter()
+    # Count tool sequence patterns. Two tallies are kept per adjacent
+    # pair: a raw occurrence count (reported as "frequency") and a
+    # recency-weighted score (recent repetitions count more, stale ones
+    # decay) used for the proposal threshold and confidence.
+    raw_counter: Counter = Counter()
+    weighted_counter: Counter = Counter()
     for seq in sequences:
         tools = tuple(seq.get("tools", []))
-        if len(tools) >= 2:
-            # Look for adjacent pairs
-            for i in range(len(tools) - 1):
-                pair = (tools[i], tools[i + 1])
-                sequence_counter[pair] += 1
+        if len(tools) < 2:
+            continue
+        weight = _recency_weight(seq.get("timestamp", ""))
+        # Look for adjacent pairs
+        for i in range(len(tools) - 1):
+            pair = (tools[i], tools[i + 1])
+            raw_counter[pair] += 1
+            weighted_counter[pair] += weight
 
-    # Find frequent patterns (>= 3 occurrences)
+    # Find frequent patterns (weighted frequency >= threshold)
     proposals = []
-    for (tool1, tool2), count in sequence_counter.most_common(10):
-        if count >= 3:
-            confidence = min(count / 10, 1.0)
+    for (tool1, tool2), weighted in weighted_counter.most_common(10):
+        if weighted >= _MIN_WEIGHTED_FREQUENCY:
+            confidence = min(weighted / 10, 1.0)
+            count = raw_counter[(tool1, tool2)]
             directive = _generate_directive(tool1, tool2, count)
             proposals.append(
                 {

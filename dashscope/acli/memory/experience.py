@@ -112,6 +112,9 @@ class ExperienceTracker:
             if score > 0:
                 if exp.get("lesson"):
                     score += 1
+                # Cautionary lessons are high-value recall targets.
+                if exp.get("outcome") == "failure":
+                    score += 1
                 scored.append((score, index, exp))
 
         # Highest score first; ties favor the most recently recorded entry.
