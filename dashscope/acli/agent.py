@@ -796,6 +796,32 @@ class Agent:
         # Store conversation history summary
         self._store_history()
 
+        # Record the completed turn as an event (session-as-event-log
+        # direction). Best-effort: subagents/SDK callers may run without a
+        # session manager, and event recording must never break the loop.
+        try:
+            from dashscope.acli.session import get_session_manager
+
+            turn_topic = (
+                self.session_path.parent.name if self.session_path else None
+            )
+            get_session_manager().record_turn_event(
+                user_text=text_of(user_input),
+                assistant_text=last_content,
+                tools_used=self._current_turn_tools,
+                outcome=(
+                    _classify_outcome(
+                        self._turn_tool_successes,
+                        self._turn_tool_failures,
+                    )
+                    if self._current_turn_tools
+                    else ""
+                ),
+                topic=turn_topic,
+            )
+        except Exception:
+            pass
+
         # Record experience for learning (only if tools were used)
         if self._current_turn_tools:
             task_summary = text_of(user_input)[:100]  # Truncate for storage

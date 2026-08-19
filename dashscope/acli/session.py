@@ -177,6 +177,37 @@ class SessionManager:
             self._events_file(topic or self.current_topic),
         )
 
+    def record_turn_event(
+        self,
+        user_text: str,
+        assistant_text: str,
+        tools_used: list[str] | None = None,
+        outcome: str = "",
+        topic: str | None = None,
+    ) -> None:
+        """Append a ``turn/end`` event to the topic's event sidecar.
+
+        Records a compact summary of one turn (truncated user/assistant
+        text, tools used, outcome). Best-effort: never raises, so event
+        recording can't break the agent loop. This is a step toward the
+        session-as-event-log direction (later: projection / fork /
+        resume built on the event stream).
+        """
+        try:
+            topic = topic or self.current_topic
+            self.event_log(topic).append(
+                "turn/end",
+                {
+                    "topic": topic,
+                    "user": (user_text or "")[:200],
+                    "assistant": (assistant_text or "")[:200],
+                    "tools": list(tools_used or []),
+                    "outcome": outcome,
+                },
+            )
+        except Exception:
+            pass
+
     def list_topics(self) -> list[SessionMeta]:
         """List all available topics with metadata."""
         topics = []
