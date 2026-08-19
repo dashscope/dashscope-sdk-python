@@ -7,3 +7,7 @@ typer>=0.9.0
 rich>=13.0.0
 httpx>=0.25.0
 httpx-sse>=0.4.0
+pydantic>=2
+typing_extensions>=4.0
+pyyaml
+tenacity
