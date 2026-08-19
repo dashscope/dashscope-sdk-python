@@ -10,7 +10,7 @@ import uuid
 from http import HTTPStatus
 from queue import Queue
 from threading import Timer
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from dashscope.api_entities.dashscope_response import RecognitionResponse
 from dashscope.client.base_api import BaseApi
@@ -25,6 +25,36 @@ from dashscope.common.error import (
 from dashscope.common.logging import logger
 from dashscope.common.utils import _get_task_group_and_task
 from dashscope.protocol.websocket import WebsocketStreamingMode
+
+
+def _merge_recognition_params(
+    kwargs: Dict[str, Any],
+    disfluency_removal_enabled: Optional[bool],
+    diarization_enabled: Optional[bool],
+    speaker_count: Optional[int],
+    timestamp_alignment_enabled: Optional[bool],
+    special_word_filter: Optional[str],
+    audio_event_detection_enabled: Optional[bool],
+) -> Dict[str, Any]:
+    """Merge explicit recognition parameters into ``kwargs`` in place.
+
+    Only parameters that are not None are written, so callers can pass
+    through values that the user did not set.
+
+    Returns:
+        The merged ``kwargs`` dict (the same object).
+    """
+    for key, value in (
+        ("disfluency_removal_enabled", disfluency_removal_enabled),
+        ("diarization_enabled", diarization_enabled),
+        ("speaker_count", speaker_count),
+        ("timestamp_alignment_enabled", timestamp_alignment_enabled),
+        ("special_word_filter", special_word_filter),
+        ("audio_event_detection_enabled", audio_event_detection_enabled),
+    ):
+        if value is not None:
+            kwargs[key] = value
+    return kwargs
 
 
 class RecognitionResult(RecognitionResponse):
@@ -165,6 +195,13 @@ class Recognition(BaseApi):
         format: str,  # pylint: disable=redefined-builtin
         sample_rate: int,
         workspace: str = None,
+        # Recognition parameters
+        disfluency_removal_enabled: Optional[bool] = None,
+        diarization_enabled: Optional[bool] = None,
+        speaker_count: Optional[int] = None,
+        timestamp_alignment_enabled: Optional[bool] = None,
+        special_word_filter: Optional[str] = None,
+        audio_event_detection_enabled: Optional[bool] = None,
         **kwargs,
     ):
         if model is None:
@@ -185,6 +222,16 @@ class Recognition(BaseApi):
         self._worker = None
         self._silence_timer = None
         self._kwargs = kwargs
+        # Store recognition parameters
+        _merge_recognition_params(
+            self._kwargs,
+            disfluency_removal_enabled,
+            diarization_enabled,
+            speaker_count,
+            timestamp_alignment_enabled,
+            special_word_filter,
+            audio_event_detection_enabled,
+        )
         self._workspace = workspace
         self._start_stream_timestamp = -1
         self._first_package_timestamp = -1
@@ -318,7 +365,18 @@ class Recognition(BaseApi):
         )
         return responses
 
-    def start(self, phrase_id: str = None, **kwargs):
+    def start(
+        self,
+        phrase_id: str = None,
+        # Recognition parameters
+        disfluency_removal_enabled: Optional[bool] = None,
+        diarization_enabled: Optional[bool] = None,
+        speaker_count: Optional[int] = None,
+        timestamp_alignment_enabled: Optional[bool] = None,
+        special_word_filter: Optional[str] = None,
+        audio_event_detection_enabled: Optional[bool] = None,
+        **kwargs,
+    ):
         """Real-time speech recognition in asynchronous mode.
            Please call 'stop()' after you have completed recognition.
 
@@ -354,6 +412,16 @@ class Recognition(BaseApi):
         self._stop_stream_timestamp = -1
         self._on_complete_timestamp = -1
         self._phrase = phrase_id
+        # Update recognition parameters
+        _merge_recognition_params(
+            self._kwargs,
+            disfluency_removal_enabled,
+            diarization_enabled,
+            speaker_count,
+            timestamp_alignment_enabled,
+            special_word_filter,
+            audio_event_detection_enabled,
+        )
         self._kwargs.update(**kwargs)
         self._recognition_once = False
         self._worker = threading.Thread(target=self.__receive_worker)
@@ -372,11 +440,18 @@ class Recognition(BaseApi):
             self._running = False
             raise InvalidTask("Invalid task, task create failed.")
 
-    # pylint: disable=R1702,too-many-branches,too-many-statements
+    # pylint: disable=W0237,R1702,too-many-branches,too-many-statements
     def call(  # type: ignore[override]  # noqa: E501
         self,
         file: str,
         phrase_id: str = None,
+        # Recognition parameters
+        disfluency_removal_enabled: Optional[bool] = None,
+        diarization_enabled: Optional[bool] = None,
+        speaker_count: Optional[int] = None,
+        timestamp_alignment_enabled: Optional[bool] = None,
+        special_word_filter: Optional[str] = None,
+        audio_event_detection_enabled: Optional[bool] = None,
         **kwargs,
     ) -> RecognitionResult:
         """Real-time speech recognition in synchronous mode.
@@ -418,6 +493,16 @@ class Recognition(BaseApi):
         self._recognition_once = True
         self._stream_data = Queue()
         self._phrase = phrase_id
+        # Update recognition parameters
+        _merge_recognition_params(
+            self._kwargs,
+            disfluency_removal_enabled,
+            diarization_enabled,
+            speaker_count,
+            timestamp_alignment_enabled,
+            special_word_filter,
+            audio_event_detection_enabled,
+        )
         self._kwargs.update(**kwargs)
         error_flag: bool = False
         sentences: List[Any] = []
