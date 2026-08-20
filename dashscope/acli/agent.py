@@ -819,6 +819,10 @@ class Agent:
                 ),
                 topic=turn_topic,
             )
+            get_session_manager().record_messages_snapshot(
+                self.messages,
+                topic=turn_topic,
+            )
         except Exception:
             pass
 

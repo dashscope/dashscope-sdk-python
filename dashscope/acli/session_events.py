@@ -119,5 +119,28 @@ class SessionEventLog:
             return []
         return self.read(event_type)[-n:]
 
+    def read_raw(self) -> list[dict[str, Any]]:
+        """Return every well-formed entry, any schema version.
+
+        Unlike :meth:`read` (which filters to the current schema), this
+        yields all parseable entries — used when projecting large events
+        such as ``messages/snapshot``.
+        """
+        if not self._file.exists():
+            return []
+        entries: list[dict[str, Any]] = []
+        with open(self._file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(entry, dict):
+                    entries.append(entry)
+        return entries
+
     def __len__(self) -> int:
         return len(self.read())

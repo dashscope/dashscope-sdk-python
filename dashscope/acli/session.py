@@ -208,6 +208,86 @@ class SessionManager:
         except Exception:
             pass
 
+    def record_messages_snapshot(
+        self,
+        messages: list[dict[str, Any]],
+        topic: str | None = None,
+    ) -> None:
+        """Append a full-fidelity ``messages/snapshot`` event.
+
+        Stores the complete current message list so the session can later
+        be reconstructed (resume/fork) from the event log alone. Best-
+        effort: never raises. Storage grows per turn; snapshot pruning is
+        a follow-up.
+        """
+        try:
+            topic = topic or self.current_topic
+            self.event_log(topic).append(
+                "messages/snapshot",
+                {"topic": topic, "messages": list(messages or [])},
+            )
+        except Exception:
+            pass
+
+    def resume_from_events(
+        self,
+        topic: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Rebuild the message list from the latest snapshot event.
+
+        Returns an empty list when the topic has no snapshot. This is the
+        projection side of the event-sourced session: combined with the
+        append-only log it enables resume / fork / crash recovery.
+        """
+        try:
+            events = self.event_log(topic).read_raw()
+        except Exception:
+            return []
+        for entry in reversed(events):
+            if entry.get("type") != "messages/snapshot":
+                continue
+            data = entry.get("data") or {}
+            msgs = data.get("messages")
+            if isinstance(msgs, list):
+                return msgs
+        return []
+
+    def fork_topic(self, src: str, dst: str) -> bool:
+        """Create topic *dst* seeded with a copy of *src*'s event log.
+
+        The forked topic resumes from the same state as the source. Both
+        names must be safe and the destination must not already exist.
+        Returns False otherwise.
+        """
+        src_dir = self._safe_topic_dir(src)
+        dst_dir = self._safe_topic_dir(dst)
+        if src_dir is None or dst_dir is None:
+            return False
+        if not src_dir.exists() or dst_dir.exists():
+            return False
+        try:
+            dst_dir.mkdir(parents=True)
+            self._save_meta(
+                dst,
+                SessionMeta(
+                    topic=dst,
+                    created=datetime.now().isoformat(),
+                    last_accessed=datetime.now().isoformat(),
+                ),
+            )
+            src_events = self._events_file(src)
+            if src_events.exists():
+                import shutil
+
+                shutil.copy2(src_events, self._events_file(dst))
+        except OSError:
+            return False
+        self.event_log(dst).append(
+            "topic/forked",
+            {"from": src, "to": dst},
+        )
+        return True
+
     def list_topics(self) -> list[SessionMeta]:
         """List all available topics with metadata."""
         topics = []
