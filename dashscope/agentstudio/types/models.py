@@ -558,7 +558,7 @@ class WebhookEventData(BaseModel):
 
 
 class WebhookDelivery(BaseModel):
-    """Delivery audit information attached to an endpoint event."""
+    """Delivery information attached to an endpoint event."""
 
     _fields = (
         "webhook_id",
@@ -571,7 +571,7 @@ class WebhookDelivery(BaseModel):
 
 
 class WebhookEvent(BaseModel):
-    """Webhook event envelope returned by test and endpoint audit APIs."""
+    """Webhook event envelope returned by test and endpoint event APIs."""
 
     _fields = (
         "type",

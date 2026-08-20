@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 from dashscope.agentstudio.pagination import (
     AsyncCursorPage,
@@ -94,11 +94,12 @@ class WebhookEndpoints:
         )
         return _coerce_webhook_endpoint(response.data)
 
-    def delete(self, webhook_id: str) -> None:
-        self._client.transport.request(
+    def delete(self, webhook_id: str) -> Dict[str, Any]:
+        response = self._client.transport.request(
             "DELETE",
             f"{_PATH_WEBHOOK_ENDPOINTS}/{webhook_id}",
         )
+        return response.data
 
     def enable(self, webhook_id: str) -> WebhookEndpoint:
         response = self._client.transport.request(
@@ -214,11 +215,12 @@ class AsyncWebhookEndpoints:
         )
         return _coerce_webhook_endpoint(response.data)
 
-    async def delete(self, webhook_id: str) -> None:
-        await self._client.transport.request(
+    async def delete(self, webhook_id: str) -> Dict[str, Any]:
+        response = await self._client.transport.request(
             "DELETE",
             f"{_PATH_WEBHOOK_ENDPOINTS}/{webhook_id}",
         )
+        return response.data
 
     async def enable(self, webhook_id: str) -> WebhookEndpoint:
         response = await self._client.transport.request(

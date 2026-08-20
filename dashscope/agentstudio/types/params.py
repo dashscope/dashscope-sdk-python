@@ -569,6 +569,6 @@ class WebhookEndpointUpdateParams(BaseModel):
 
 
 class WebhookEventListParams(BaseModel):
-    """Query params for endpoint-specific webhook event audit records."""
+    """Query parameters for endpoint-specific webhook events."""
 
     _fields = ("limit", "page")

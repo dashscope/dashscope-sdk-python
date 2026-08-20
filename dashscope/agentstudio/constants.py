@@ -120,7 +120,7 @@ class WebhookDisabledReason(StrEnum):
 
 
 class WebhookDeliveryStatus(StrEnum):
-    """Webhook delivery audit status."""
+    """Webhook delivery status."""
 
     # The delivery is waiting to start.
     PENDING = "PENDING"
