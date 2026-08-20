@@ -199,9 +199,9 @@ SDK_INVALID_API_KEY = InternalErrorDef(
     vars=[],
     cause="",
     solution=(
-        "Set the DASHSCOPE_API_KEY environment variable or pass a valid "
-        "api_key to AgenticRL(). You can obtain an API key at "
-        "https://dashscope.console.aliyun.com/apiKey."
+        "Set the DASHSCOPE_API_KEY environment variable or pass a "
+        "valid api_key to AgenticRL(). You can obtain an API key "
+        "through the DashScope console."
     ),
 )
 
@@ -552,9 +552,9 @@ SDK_AGENTIC_RL_ERROR = InternalErrorDef(
     vars=[],
     cause="",
     solution=(
-        "An unexpected AgenticRL error occurred. Check the error message and "
-        "logs for details. If the issue persists, submit a bug report at "
-        "https://github.com/dashscope/dashscope-sdk-python/issues."
+        "An unexpected AgenticRL error occurred. Check the error "
+        "message and logs for details. If the issue persists, "
+        "submit a bug report to the DashScope SDK team."
     ),
 )
 
@@ -566,9 +566,9 @@ SDK_AGENTIC_RL_RUNTIME_ERROR_WITH_CODE = InternalErrorDef(
     vars=[],
     cause="",
     solution=(
-        "An unexpected runtime error occurred. Check the error message and "
-        "traceback for details. If the issue persists, submit a bug report at "
-        "https://github.com/dashscope/dashscope-sdk-python/issues."
+        "An unexpected runtime error occurred. Check the error "
+        "message and traceback for details. If the issue persists, "
+        "submit a bug report to the DashScope SDK team."
     ),
 )
 
@@ -621,8 +621,8 @@ SDK_AGENTSTUDIO_STREAM_ERROR = InternalErrorDef(
     vars=[],
     cause="",
     solution=(
-        "Retry the streaming request. If the error persists, report it at "
-        "https://github.com/dashscope/dashscope-sdk-python/issues."
+        "Retry the streaming request. If the error persists, "
+        "report it to the DashScope SDK team."
     ),
 )
 
