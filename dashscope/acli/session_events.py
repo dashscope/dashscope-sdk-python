@@ -23,6 +23,7 @@ mirroring the checkpoint/history philosophy.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -36,10 +37,12 @@ EVENTS_FILENAME = "events.jsonl"
 class SessionEventLog:
     """Append-only JSONL event log bound to one file.
 
-    The log is strictly append-only: events are only ever added, never
-    rewritten or removed through this API. ``seq`` is a 1-based
-    monotonically increasing position derived from the current line
-    count, so it stays correct even if another process appends.
+    Events are appended, never edited in place — with one exception:
+    :meth:`compact_snapshots` atomically rewrites the file to drop
+    stale full-history snapshots (all other events are preserved).
+    ``seq`` is a 1-based monotonically increasing position derived
+    from the current line count, so it stays correct even if another
+    process appends.
     """
 
     def __init__(self, events_file: Path):
@@ -141,6 +144,49 @@ class SessionEventLog:
                 if isinstance(entry, dict):
                     entries.append(entry)
         return entries
+
+    def compact_snapshots(
+        self,
+        keep: int = 2,
+        snapshot_type: str = "messages/snapshot",
+    ) -> bool:
+        """Drop all but the newest ``keep`` snapshot events, atomically.
+
+        Snapshots carry a full copy of the message list, so retaining
+        every one grows the log quadratically in history length.
+        Compaction rewrites the file with all non-snapshot events plus
+        the newest ``keep`` snapshots, renumbering ``seq`` to stay
+        line-ordered. The rewrite goes through a tmp file and
+        ``os.replace``, so a crash mid-compaction leaves the original
+        log intact.
+
+        Best-effort: returns True only when the file was rewritten.
+        """
+        try:
+            entries = self.read_raw()
+        except OSError:
+            return False
+        snapshot_idx = [
+            i for i, e in enumerate(entries) if e.get("type") == snapshot_type
+        ]
+        if len(snapshot_idx) <= keep:
+            return False
+        drop = set(snapshot_idx[: len(snapshot_idx) - keep])
+        kept = [e for i, e in enumerate(entries) if i not in drop]
+        tmp = self._file.with_suffix(self._file.suffix + ".tmp")
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                for seq, entry in enumerate(kept, start=1):
+                    entry["seq"] = seq
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            os.replace(tmp, self._file)
+        except OSError:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return False
+        return True
 
     def __len__(self) -> int:
         return len(self.read())

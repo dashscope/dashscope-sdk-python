@@ -25,6 +25,13 @@ from dashscope.acli.session_events import EVENTS_FILENAME, SessionEventLog
 DEFAULT_TOPIC = "default"
 SCENE_FILENAME = "scene.md"
 
+# Snapshot pruning (event-log completeness Phase 2): snapshots carry a
+# full message copy, so unbounded retention grows the log quadratically.
+# Compact once the log holds more than _SNAPSHOT_COMPACT_AT snapshots,
+# keeping the newest _SNAPSHOT_KEEP.
+_SNAPSHOT_KEEP = 2
+_SNAPSHOT_COMPACT_AT = 8
+
 
 @dataclass
 class SessionMeta:
@@ -216,16 +223,20 @@ class SessionManager:
         """Append a full-fidelity ``messages/snapshot`` event.
 
         Stores the complete current message list so the session can later
-        be reconstructed (resume/fork) from the event log alone. Best-
-        effort: never raises. Storage grows per turn; snapshot pruning is
-        a follow-up.
+        be reconstructed (resume/fork) from the event log alone. Old
+        snapshots are pruned once more than ``_SNAPSHOT_COMPACT_AT``
+        accumulate, keeping the newest ``_SNAPSHOT_KEEP``. Best-effort:
+        never raises.
         """
         try:
             topic = topic or self.current_topic
-            self.event_log(topic).append(
+            log = self.event_log(topic)
+            log.append(
                 "messages/snapshot",
                 {"topic": topic, "messages": list(messages or [])},
             )
+            if len(log.read("messages/snapshot")) > _SNAPSHOT_COMPACT_AT:
+                log.compact_snapshots(keep=_SNAPSHOT_KEEP)
         except Exception:
             pass
 
