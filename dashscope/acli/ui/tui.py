@@ -42,6 +42,13 @@ _STREAM_FLUSH_LINES = 400 if _IS_JEDITERM else 20
 # Wheel batching window: full repaints are costly on JediTerm; trade
 # frame rate for stability
 _WHEEL_FLUSH_INTERVAL = 0.12 if _IS_JEDITERM else 0.03
+# Trackpad gestures decelerate: the tail of a wheel gesture arrives as
+# isolated arrows 20-200ms after the last burst key, indistinguishable
+# from real keypresses by timing alone. Within this window after the
+# last wheel-classified key, deferred arrows are absorbed as scrolls
+# instead of history/completion (which visibly raced the input box and
+# popup while scrolling).
+_WHEEL_TAIL_WINDOW = 0.35
 
 from rich.cells import cell_len  # noqa: E402
 from rich.console import Console  # noqa: E402
@@ -61,7 +68,10 @@ from textual.strip import Strip  # noqa: E402
 from textual.widgets import OptionList, RichLog, Static, TextArea  # noqa: E402
 from textual.widgets.option_list import Option  # noqa: E402
 
-from dashscope.acli.commands import handle_shell_escape, render_help_text  # noqa: E402
+from dashscope.acli.commands import (  # noqa: E402
+    handle_shell_escape,
+    render_help_text,
+)
 from dashscope.acli.utils import (  # noqa: E402
     UserAbortedTurn,
     UserSupplement,
@@ -171,6 +181,13 @@ class OutputLog(RichLog):
       widget-level select-all that copies nothing.
     """
 
+    # Set by wheel-up gestures (mouse events or the arrow-key wheel queue);
+    # cleared by wheel-down. While fresh, sticky follow is suppressed.
+    _last_wheel_up_ts: float = 0.0
+
+    # How long a wheel-up suppresses sticky follow (seconds).
+    _FOLLOW_SUPPRESS_WINDOW = 0.5
+
     def write(
         self,
         content,
@@ -181,8 +198,13 @@ class OutputLog(RichLog):
         animate: bool = False,
     ):
         if scroll_end is None and self.auto_scroll:
-            # Sticky follow: only scroll to the end when already at the bottom.
-            scroll_end = self.scroll_offset.y >= max(self.max_scroll_y - 1, 0)
+            # Sticky follow: only scroll to the end when already at the
+            # bottom — unless the user just wheeled up (their scroll
+            # intent beats the 1-line sticky band, e.g. turn-end writes
+            # landing mid-gesture).
+            scroll_end = (
+                self.scroll_offset.y >= max(self.max_scroll_y - 1, 0)
+            ) and not self._recent_wheel_up()
         return super().write(
             content,
             width=width,
@@ -190,6 +212,12 @@ class OutputLog(RichLog):
             shrink=shrink,
             scroll_end=scroll_end,
             animate=animate,
+        )
+
+    def _recent_wheel_up(self) -> bool:
+        ts = self._last_wheel_up_ts
+        return bool(ts) and (
+            time.monotonic() - ts < self._FOLLOW_SUPPRESS_WINDOW
         )
 
     def render_line(self, y: int) -> Strip:
@@ -274,10 +302,12 @@ class OutputLog(RichLog):
 
     def _on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
         super()._on_mouse_scroll_down(event)
+        self._last_wheel_up_ts = 0.0
         self._extend_selection_after_wheel(event)
 
     def _on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
         super()._on_mouse_scroll_up(event)
+        self._last_wheel_up_ts = time.monotonic()
         self._extend_selection_after_wheel(event)
 
     def _extend_selection_after_wheel(self, event: events.MouseEvent) -> None:
@@ -705,6 +735,7 @@ class CommandInput(TextArea):
         self._prev_arrow_ts: float = 0.0
         self._wheel_pending: int = 0
         self._wheel_flush_timer = None
+        self._last_wheel_ts: float = 0.0
         self._arrow_pending_key: str = ""
         self._arrow_timer = None
         # Password masking: real chars live in _password_real, the widget
@@ -901,6 +932,7 @@ class CommandInput(TextArea):
 
     def _queue_wheel_scroll(self, key: str) -> None:
         self._wheel_pending += 1 if key == "down" else -1
+        self._last_wheel_ts = time.monotonic()
         if self._wheel_flush_timer is None:
             self._wheel_flush_timer = self.set_timer(
                 _WHEEL_FLUSH_INTERVAL,
@@ -914,10 +946,16 @@ class CommandInput(TextArea):
         if not lines:
             return
         try:
-            output = self.app.query_one("#output")
+            output = self.app.query_one("#output", OutputLog)
             screen = self.app.screen
         except Exception:
             return
+        # Drive the same follow-suppression marker as the mouse path:
+        # wheel-up = user reading above (don't yank), wheel-down = follow.
+        if lines < 0:
+            output._last_wheel_up_ts = time.monotonic()
+        else:
+            output._last_wheel_up_ts = 0.0
         output.scroll_to(y=output.scroll_offset.y + lines, animate=False)
         # Wheel scrolling mid-drag (PyCharm wheel = arrow keys) must also
         # keep the selection following the pointer, or the selection cannot
@@ -935,6 +973,13 @@ class CommandInput(TextArea):
             self._arrow_timer.stop()
             self._arrow_timer = None
         if not key or self.password_mode:
+            return
+        # A decelerating trackpad gesture keeps emitting isolated arrows
+        # past the 20ms burst window; while a wheel gesture is (or was
+        # just) active, these stragglers are scrolls, not history/completion
+        # keys — routing them there visibly raced the input box and popup.
+        if time.monotonic() - self._last_wheel_ts < _WHEEL_TAIL_WINDOW:
+            self._queue_wheel_scroll(key)
             return
         popup = None
         try:
