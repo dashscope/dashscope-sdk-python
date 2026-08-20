@@ -34,6 +34,24 @@ SCHEMA_VERSION = 1
 EVENTS_FILENAME = "events.jsonl"
 
 
+def latest_snapshot_messages(
+    entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return the message list from the newest ``messages/snapshot``.
+
+    Scans *entries* (as produced by :meth:`SessionEventLog.read_raw`)
+    backwards; returns an empty list when no snapshot is present.
+    """
+    for entry in reversed(entries):
+        if entry.get("type") != "messages/snapshot":
+            continue
+        data = entry.get("data") or {}
+        msgs = data.get("messages")
+        if isinstance(msgs, list):
+            return msgs
+    return []
+
+
 class SessionEventLog:
     """Append-only JSONL event log bound to one file.
 

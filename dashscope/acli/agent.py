@@ -235,9 +235,32 @@ class Agent:
         self.messages = []
 
     def load_session(self) -> int:
-        """Restore self.messages from session_path. Returns the number of
-        messages loaded (0 if no file, file empty, or parse failed)."""
-        if not self.session_path or not self.session_path.exists():
+        """Restore self.messages. Returns the number of messages loaded
+        (0 if nothing could be restored).
+
+        The per-topic event stream is the source of truth: the latest
+        ``messages/snapshot`` wins when present (crash recovery via
+        append-only replay; torn trailing lines are skipped). The
+        ``history.json`` file remains as the compat fallback for
+        sessions written before snapshots existed.
+        """
+        if not self.session_path:
+            return 0
+        try:
+            from dashscope.acli.session_events import (
+                EVENTS_FILENAME,
+                SessionEventLog,
+                latest_snapshot_messages,
+            )
+
+            log = SessionEventLog(self.session_path.parent / EVENTS_FILENAME)
+            resumed = latest_snapshot_messages(log.read_raw())
+            if resumed:
+                self.messages = resumed
+                return len(resumed)
+        except Exception:
+            pass
+        if not self.session_path.exists():
             return 0
         try:
             data = json.loads(self.session_path.read_text())
@@ -779,26 +802,12 @@ class Agent:
             ),
         )
 
-        # Persist session before memory write so a memory exception can't
-        # cost us the conversation.
-        self.save_session()
-
-        # Store memory after conversation ends (whether normal or max_turns).
-        # Strip images from the user side — memory backends expect text.
-        if last_content:
-            await self._store_memory(
-                [
-                    {"role": "user", "content": text_of(user_input)},
-                    {"role": "assistant", "content": last_content},
-                ],
-            )
-
-        # Store conversation history summary
-        self._store_history()
-
-        # Record the completed turn as an event (session-as-event-log
-        # direction). Best-effort: subagents/SDK callers may run without a
-        # session manager, and event recording must never break the loop.
+        # Record the completed turn as events (session-as-event-log
+        # direction) BEFORE persisting history.json: the event stream is
+        # the source of truth, so it must never be older than the
+        # fallback store if we crash between the two writes. Best-effort:
+        # subagents/SDK callers may run without a session manager, and
+        # event recording must never break the loop.
         try:
             from dashscope.acli.session import get_session_manager
 
@@ -825,6 +834,23 @@ class Agent:
             )
         except Exception:
             pass
+
+        # Persist session before memory write so a memory exception can't
+        # cost us the conversation.
+        self.save_session()
+
+        # Store memory after conversation ends (whether normal or max_turns).
+        # Strip images from the user side — memory backends expect text.
+        if last_content:
+            await self._store_memory(
+                [
+                    {"role": "user", "content": text_of(user_input)},
+                    {"role": "assistant", "content": last_content},
+                ],
+            )
+
+        # Store conversation history summary
+        self._store_history()
 
         # Record experience for learning (only if tools were used)
         if self._current_turn_tools:

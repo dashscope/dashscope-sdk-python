@@ -20,7 +20,11 @@ from pathlib import Path
 from typing import Any
 
 from dashscope.acli.config import WORKSPACE_DIR
-from dashscope.acli.session_events import EVENTS_FILENAME, SessionEventLog
+from dashscope.acli.session_events import (
+    EVENTS_FILENAME,
+    SessionEventLog,
+    latest_snapshot_messages,
+)
 
 DEFAULT_TOPIC = "default"
 SCENE_FILENAME = "scene.md"
@@ -254,14 +258,7 @@ class SessionManager:
             events = self.event_log(topic).read_raw()
         except Exception:
             return []
-        for entry in reversed(events):
-            if entry.get("type") != "messages/snapshot":
-                continue
-            data = entry.get("data") or {}
-            msgs = data.get("messages")
-            if isinstance(msgs, list):
-                return msgs
-        return []
+        return latest_snapshot_messages(events)
 
     def fork_topic(self, src: str, dst: str) -> bool:
         """Create topic *dst* seeded with a copy of *src*'s event log.
