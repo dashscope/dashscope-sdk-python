@@ -30,6 +30,7 @@ from dashscope.common.error_registry import (
     SDK_AGENTSTUDIO_API_TIMEOUT_ERROR,
     SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR,
     SDK_AGENTSTUDIO_STREAM_ERROR,
+    INTERNAL_ERROR,
 )
 
 
@@ -185,7 +186,7 @@ def from_response(
 
     # Keep the server's code as-is; only fall back to api_error when missing.
     if not code:
-        code = "api_error"
+        code = INTERNAL_ERROR.anthropic_error_code
 
     if message is None:
         message = f"HTTP {status_code}"
