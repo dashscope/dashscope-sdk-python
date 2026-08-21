@@ -1556,12 +1556,23 @@ class StreamEventMixin:
         ):
             for is_error, status_code, data in cls._handle_stream(response):
                 if is_error:
+                    try:
+                        error_data = json.loads(data)
+                        code = error_data.get("code") or error_data.get(
+                            "error_code",
+                        )
+                        message = error_data.get("message") or error_data.get(
+                            "error_message",
+                        )
+                    except json.JSONDecodeError:
+                        code = None
+                        message = data
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=status_code,
                         output=None,
-                        code="",
-                        message="",
+                        code=code,
+                        message=message,
                     )  # noqa E501
                 else:
                     yield DashScopeAPIResponse(

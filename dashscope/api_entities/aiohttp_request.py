@@ -18,9 +18,13 @@ from dashscope.common.constants import (
     SSE_CONTENT_TYPE,
     HTTPMethod,
 )
-from dashscope.common.error import UnsupportedHTTPMethod
 from dashscope.common.logging import logger
-from dashscope.common.utils import async_to_sync
+from dashscope.common.error import UnsupportedHTTPMethod
+from dashscope.common.error_registry import INTERNAL_ERROR
+from dashscope.common.utils import (
+    async_to_sync,
+    _handle_aiohttp_failed_response,
+)
 
 
 class AioHttpRequest(AioBaseRequest):
@@ -88,7 +92,7 @@ class AioHttpRequest(AioBaseRequest):
         else:
             self.timeout = timeout  # type: ignore[has-type]
 
-    def add_header(self, key, value):
+    def add_header(self, key: str, value: str) -> None:
         self.headers[key] = value
 
     def add_headers(self, headers):
@@ -100,9 +104,8 @@ class AioHttpRequest(AioBaseRequest):
             return (item for item in response)
         else:
             output = next(response)
-            try:
-                next(response)
-            except StopIteration:
+            # Consume remaining items to ensure generator completes
+            for _ in response:
                 pass
             return output
 
@@ -112,9 +115,8 @@ class AioHttpRequest(AioBaseRequest):
             return (item async for item in response)
         else:
             result = await response.__anext__()
-            try:
-                await response.__anext__()
-            except StopAsyncIteration:
+            # Consume remaining items to ensure generator completes
+            async for _ in response:
                 pass
             return result
 
@@ -166,20 +168,28 @@ class AioHttpRequest(AioBaseRequest):
                     if "request_id" in msg:
                         request_id = msg["request_id"]
                 except json.JSONDecodeError:
+                    logger.error(
+                        "Failed to parse SSE stream data: %s",
+                        data[:200] if len(data) > 200 else data,
+                    )
                     yield DashScopeAPIResponse(
                         request_id=request_id,
-                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                        code="Unknown",
-                        message=data,
+                        status_code=INTERNAL_ERROR.status_code,
+                        code=INTERNAL_ERROR.error_code,
+                        message=INTERNAL_ERROR.error_msg,
                         headers=headers,
                     )
                     continue
-                if is_error:
+                if is_error and msg is not None:
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=status_code,
-                        code=msg["code"],
-                        message=msg["message"],
+                        code=msg.get("code")
+                        or msg.get("error_code")
+                        or f"http_{status_code}",
+                        message=msg.get("message")
+                        or msg.get("error_message")
+                        or f"HTTP {status_code} error",
                         headers=headers,
                     )
                 else:
@@ -228,45 +238,15 @@ class AioHttpRequest(AioBaseRequest):
                 headers=headers,
             )
         else:
-            if "application/json" in response.content_type:
-                error = await response.json()
-                if "request_id" in error:
-                    request_id = error["request_id"]
-                if "message" not in error:
-                    message = ""
-                    logger.error(
-                        "Request: %s failed, status: %s",
-                        self.url,
-                        response.status,
-                    )
-                else:
-                    message = error["message"]
-                    logger.error(
-                        "Request: %s failed, status: %s, message: %s",
-                        self.url,
-                        response.status,
-                        error["message"],
-                    )
-                yield DashScopeAPIResponse(
-                    request_id=request_id,
-                    status_code=response.status,
-                    code=error["code"],
-                    message=message,
-                    headers=headers,
-                )
-            else:
-                msg = await response.read()
-                yield DashScopeAPIResponse(
-                    request_id=request_id,
-                    status_code=response.status,
-                    code="Unknown",
-                    message=msg.decode("utf-8"),
-                    headers=headers,
-                )
+            yield _handle_aiohttp_failed_response(response)
 
     # pylint: disable=too-many-branches
     async def _handle_request(self):
         try:
+            # Session management:
+            # - External session: managed by caller, we never close it
+            # - Shared session: managed by get_shared_aio_session(),
+            #   uses connection pooling and is closed when no longer needed
             if self._external_aio_session is not None:
                 session = self._external_aio_session
             else:

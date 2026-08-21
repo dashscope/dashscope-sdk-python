@@ -13,3 +13,4 @@ tenacity
 tomli>=2.0; python_version < '3.11'
 PyYAML>=6.0
 textual>=0.50
+typing_extensions>=4.0

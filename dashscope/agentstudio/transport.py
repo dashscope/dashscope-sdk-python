@@ -111,7 +111,7 @@ def unwrap(payload: Any) -> Tuple[Dict[str, Any], Optional[str]]:
 
 
 def is_error_payload(payload: Any) -> bool:
-    """Identify error bodies for both documented and pre-release shapes."""
+    """Identify error bodies (``type == "error"`` or an ``error`` object)."""
 
     if not isinstance(payload, dict):
         return False
@@ -119,15 +119,7 @@ def is_error_payload(payload: Any) -> bool:
         return True
     err = payload.get("error")
     if isinstance(err, dict):
-        return any(
-            k in err
-            for k in (
-                "code",
-                "message",
-                "error_code",
-                "error_message",
-            )
-        )
+        return any(k in err for k in ("code", "message"))
     return False
 
 
@@ -219,7 +211,7 @@ def build_headers(
     """Compose the canonical AgentStudio request headers."""
 
     if not api_key:
-        raise exceptions.AuthenticationError(
+        raise exceptions.APIStatusError(
             "api_key is required. Pass it via Client(api_key=...) or "
             "the DASHSCOPE_API_KEY environment variable.",
             code="authentication_error",

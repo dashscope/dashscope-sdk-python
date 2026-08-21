@@ -21,6 +21,7 @@ from dashscope.common.constants import (
     HTTPMethod,
 )
 from dashscope.common.error import UnsupportedHTTPMethod
+from dashscope.common.error_registry import MISSING_PARAMETER, INVALID_REQUEST
 from dashscope.common.logging import logger
 from dashscope.common.utils import (
     _handle_aio_stream,
@@ -172,7 +173,7 @@ class HttpRequest(AioBaseRequest):
         else:
             self.timeout = timeout  # type: ignore[has-type]
 
-    def add_header(self, key, value):
+    def add_header(self, key: str, value: str) -> None:
         self.headers[key] = value
 
     def add_headers(self, headers):
@@ -184,9 +185,8 @@ class HttpRequest(AioBaseRequest):
             return (item for item in response)
         else:
             output = next(response)
-            try:
-                next(response)
-            except StopIteration:
+            # Consume remaining items to ensure generator completes
+            for _ in response:
                 pass
             return output
 
@@ -196,9 +196,8 @@ class HttpRequest(AioBaseRequest):
             return (item async for item in response)
         else:
             result = await response.__anext__()
-            try:
-                await response.__anext__()
-            except StopAsyncIteration:
+            # Consume remaining items to ensure generator completes
+            async for _ in response:
                 pass
             return result
 
@@ -274,7 +273,7 @@ class HttpRequest(AioBaseRequest):
                 if should_close:
                     await session.close()
         except Exception:
-            logger.exception("Request failed")
+            logger.exception("Async request failed")
             raise
 
     @staticmethod
@@ -336,9 +335,11 @@ class HttpRequest(AioBaseRequest):
                 except json.JSONDecodeError:
                     yield DashScopeAPIResponse(
                         request_id=request_id,
-                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                        code="Unknown",
-                        message=data,
+                        status_code=MISSING_PARAMETER.status_code,
+                        code=MISSING_PARAMETER.error_code,
+                        message=MISSING_PARAMETER.format_msg(
+                            {"parameter": "response data"},
+                        ),
                         headers=headers,
                     )
                     continue
@@ -346,8 +347,12 @@ class HttpRequest(AioBaseRequest):
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=status_code,
-                        code=msg["code"],
-                        message=msg["message"],
+                        code=msg.get("code")
+                        or msg.get("error_code")
+                        or f"http_{status_code}",
+                        message=msg.get("message")
+                        or msg.get("error_message")
+                        or f"HTTP {status_code} error",
                         headers=headers,
                     )
                 else:
@@ -445,10 +450,10 @@ class HttpRequest(AioBaseRequest):
                 except json.JSONDecodeError:
                     yield DashScopeAPIResponse(
                         request_id=request_id,
-                        status_code=HTTPStatus.BAD_REQUEST,
+                        status_code=INVALID_REQUEST.status_code,
                         output=None,
-                        code="Unknown",
-                        message=data,
+                        code=INVALID_REQUEST.error_code,
+                        message=INVALID_REQUEST.error_msg,
                         headers=headers,
                     )
                     continue
@@ -457,10 +462,12 @@ class HttpRequest(AioBaseRequest):
                         request_id=request_id,
                         status_code=status_code,
                         output=None,
-                        code=msg["code"]
-                        if "code" in msg
-                        else None,  # noqa E501
-                        message=msg["message"] if "message" in msg else None,
+                        code=msg.get("code")
+                        or msg.get("error_code")
+                        or f"http_{status_code}",
+                        message=msg.get("message")
+                        or msg.get("error_message")
+                        or f"HTTP {status_code} error",
                         headers=headers,
                     )  # noqa E501
                 else:
@@ -505,6 +512,7 @@ class HttpRequest(AioBaseRequest):
             yield _handle_http_failed_response(response)
 
     def _handle_request(self):  # pylint: disable=too-many-branches
+        session = None
         try:
             # Use external session if provided,
             # otherwise use shared session with connection pooling
@@ -541,10 +549,14 @@ class HttpRequest(AioBaseRequest):
                             timeout=self.timeout,
                         ),
                     )
+                for rsp in self._handle_response(response):
+                    yield rsp
             elif self.method == HTTPMethod.GET:
                 params = {}
                 if hasattr(self, "data") and self.data is not None:
                     params = getattr(self.data, "parameters", {})
+                if params:
+                    params = self.__handle_parameters(params)
                 response = _send_with_retry(
                     lambda: session.get(
                         url=self.url,
@@ -553,12 +565,18 @@ class HttpRequest(AioBaseRequest):
                         timeout=self.timeout,
                     ),
                 )
+                for rsp in self._handle_response(response):
+                    yield rsp
             else:
                 raise UnsupportedHTTPMethod(
                     f"Unsupported http method: {self.method}",
                 )
-            for rsp in self._handle_response(response):
-                yield rsp
         except Exception:
-            logger.exception("Request failed")
+            logger.exception("Sync request failed")
             raise
+        finally:
+            # Note: We don't close the session here because:
+            # - External sessions are managed by the caller
+            # - Shared sessions use connection pooling and are
+            #   managed centrally by _get_shared_sync_session()
+            pass

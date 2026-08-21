@@ -13,13 +13,17 @@ from dashscope.api_entities.base_request import AioBaseRequest
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.common.constants import (
     DEFAULT_REQUEST_TIMEOUT_SECONDS,
-    SERVICE_503_MESSAGE,
     WEBSOCKET_ERROR_CODE,
 )
 from dashscope.common.error import (
     RequestFailure,
     UnexpectedMessageReceived,
     UnknownMessageReceived,
+)
+from dashscope.common.error_registry import (
+    SERVICE_UNAVAILABLE,
+    AUTH_FAILED,
+    INTERNAL_ERROR,
 )
 from dashscope.common.logging import logger
 from dashscope.common.utils import async_to_sync
@@ -215,34 +219,67 @@ class WebSocketRequest(AioBaseRequest):
             )
         except aiohttp.ClientConnectorError as e:
             logger.exception(e)
+            # Check if the error message indicates service unavailability
+            error_str = str(e).lower()
+            if "service unavailable" in error_str or "503" in error_str:
+                yield DashScopeAPIResponse(
+                    request_id=task_id if task_id else "",
+                    status_code=SERVICE_UNAVAILABLE.status_code,
+                    code=SERVICE_UNAVAILABLE.error_code,
+                    message=SERVICE_UNAVAILABLE.error_msg,
+                )
+                return
+
             yield DashScopeAPIResponse(
-                request_id="",
-                status_code=-1,
-                code="ClientConnectorError",
-                message=str(e),
+                request_id=task_id if task_id else "",
+                status_code=INTERNAL_ERROR.status_code,
+                code=INTERNAL_ERROR.error_code,
+                message=INTERNAL_ERROR.error_msg,
             )
         except aiohttp.WSServerHandshakeError as e:
-            code = e.status
-            msg = e.message
+            original_msg = e.message or ""
+
             if e.status in [HTTPStatus.FORBIDDEN, HTTPStatus.UNAUTHORIZED]:
-                msg = "Unauthorized, your api-key is invalid!"
+                yield DashScopeAPIResponse(
+                    request_id=task_id if task_id else "",
+                    status_code=AUTH_FAILED.status_code,
+                    code=AUTH_FAILED.error_code,
+                    message=AUTH_FAILED.error_msg,
+                )
             elif e.status == HTTPStatus.SERVICE_UNAVAILABLE:
-                msg = SERVICE_503_MESSAGE
+                yield DashScopeAPIResponse(
+                    request_id=task_id if task_id else "",
+                    status_code=SERVICE_UNAVAILABLE.status_code,
+                    code=SERVICE_UNAVAILABLE.error_code,
+                    message=SERVICE_UNAVAILABLE.error_msg,
+                )
             else:
-                pass
-            yield DashScopeAPIResponse(
-                request_id=task_id,
-                status_code=code,
-                code=code,
-                message=msg,
-            )
+                if e.status == HTTPStatus.INTERNAL_SERVER_ERROR:
+                    yield DashScopeAPIResponse(
+                        request_id=task_id if task_id else "",
+                        status_code=INTERNAL_ERROR.status_code,
+                        code=INTERNAL_ERROR.error_code,
+                        message=INTERNAL_ERROR.error_msg,
+                    )
+                else:
+                    # Log unexpected status codes for debugging
+                    logger.warning(
+                        "WebSocket handshake failed with unexpected "
+                        "status %s: %s",
+                        e.status,
+                        original_msg,
+                    )
+                    raise e
         except Exception as e:
             logger.exception(e)
             yield DashScopeAPIResponse(
-                request_id="",
-                status_code=-1,
-                code="Unknown",
-                message=f"Error type: {type(e)}, message: {e}",
+                request_id=task_id if task_id else "",
+                status_code=INTERNAL_ERROR.status_code,
+                code=INTERNAL_ERROR.error_code,
+                message=(
+                    f"{INTERNAL_ERROR.error_msg} "
+                    f"(SDK Internal Error: {type(e).__name__}: {e})"
+                ),
             )
 
     def _to_DashScopeAPIResponse(self, task_id, is_binary, result):

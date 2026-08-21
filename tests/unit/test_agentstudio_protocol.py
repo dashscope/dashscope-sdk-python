@@ -4,8 +4,7 @@
 These three contracts were agreed on with the backend team:
 
 1. Error envelope uses ``error.code`` / ``error.message`` (the
-   documented shape). Legacy ``error_code`` / ``error_message`` is
-   still tolerated for compatibility.
+   documented shape).
 2. Wire format is snake_case throughout — both request bodies emitted
    by the SDK and response bodies returned by the server. The only
    defensive translation is ``requestId`` → ``request_id`` because
@@ -40,29 +39,68 @@ def test_error_uses_nested_code_and_message():
         "request_id": "req_001",
     }
     err = exceptions.from_response(status_code=400, body=body)
-    assert isinstance(err, exceptions.InvalidRequestError)
+    assert isinstance(err, exceptions.APIStatusError)
     assert err.code == "invalid_request_error"
     assert err.message == "bad arg"
     assert err.request_id == "req_001"
 
 
-def test_error_legacy_underscored_fields_still_parsed():
-    body = {
-        "type": "error",
-        "error": {"error_code": "rate_limit_error", "error_message": "slow"},
-    }
-    err = exceptions.from_response(status_code=429, body=body)
-    assert isinstance(err, exceptions.RateLimitError)
-    assert err.code == "rate_limit_error"
+def test_permission_error_code_classifies():
+    """The unified ``permission_error`` code classifies correctly."""
+    body = {"type": "error", "error": {"code": "permission_error"}}
+    err = exceptions.from_response(status_code=403, body=body)
+    assert isinstance(err, exceptions.APIStatusError)
+    assert err.code == "permission_error"
 
 
-def test_is_error_payload_detects_both_shapes():
+def test_missing_code_falls_back_to_api_error():
+    """A HTTP response without a recognizable code resolves to the generic
+    ``api_error`` — we no longer guess a public code from the status number."""
+    err = exceptions.from_response(status_code=404, body=None)
+    assert isinstance(err, exceptions.APIStatusError)
+    assert err.code == "api_error"
+    assert err.message == "HTTP 404"
+
+
+def test_missing_code_never_guesses_from_status():
+    """Regardless of the status number, an omitted server code yields the same
+    generic ``api_error`` with a bare HTTP status message."""
+    for status in (400, 401, 403, 404, 429, 500, 503, 504):
+        err = exceptions.from_response(status_code=status, body=None)
+        assert err.code == "api_error"
+        assert err.message == f"HTTP {status}"
+
+
+def test_flat_top_level_code_is_classified():
+    """The classic flat DashScope envelope carries ``code``/``message`` at the
+    top level (no ``error`` wrapper); a recognized code still classifies."""
+    body = {"code": "not_found_error", "message": "gone", "request_id": "r_1"}
+    err = exceptions.from_response(status_code=404, body=body)
+    assert isinstance(err, exceptions.APIStatusError)
+    assert err.code == "not_found_error"
+    assert err.message == "gone"
+    assert err.request_id == "r_1"
+
+
+def test_flat_top_level_unknown_code_is_preserved():
+    """A flat code (e.g. ``InvalidParameter``) is preserved as-is from the
+    server response, along with the server message."""
+    body = {"code": "InvalidParameter", "message": "Model not exist."}
+    err = exceptions.from_response(status_code=400, body=body)
+    assert isinstance(err, exceptions.APIStatusError)
+    assert err.code == "InvalidParameter"
+    assert err.message == "Model not exist."
+
+
+def test_is_error_payload_detects_error_shapes():
+    # Explicit type flag.
     assert is_error_payload(
         {"type": "error", "error": {"code": "x", "message": "y"}},
     )
-    assert is_error_payload(
-        {"type": "error", "error": {"error_code": "x", "error_message": "y"}},
-    )
+    # An error object with code/message, no explicit type flag.
+    assert is_error_payload({"error": {"code": "x", "message": "y"}})
+    # A normal resource payload is not an error.
+    assert not is_error_payload({"id": "agt_1", "request_id": "r"})
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +304,9 @@ def test_session_stats_and_usage_fields():
 
 
 def test_from_response_spring_default():
-    """Spring Boot default error page is coerced to the right error type."""
+    """A Spring Boot default error page carries no machine code, so it falls
+    back to the generic ``api_error`` (its ``error`` text becomes the message).
+    """
     body = {
         "timestamp": "...",
         "status": 404,
@@ -274,7 +314,9 @@ def test_from_response_spring_default():
         "path": "/api/v1/agentstudio/agents",
     }
     err = exceptions.from_response(status_code=404, body=body)
-    assert isinstance(err, exceptions.NotFoundError)
+    assert isinstance(err, exceptions.APIStatusError)
+    assert err.code == "api_error"
+    assert err.message == "Not Found"
 
 
 # ---------------------------------------------------------------------------

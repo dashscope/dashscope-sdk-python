@@ -100,7 +100,24 @@ def _print_deployments(output):
     ):
         console.print("There is no deployed model!")
         return
-    for dep in output.deployments:
+
+    # Support both dictionary and object formats
+    if isinstance(output, dict):
+        raw_deps = output.get("deployments", [])
+        from types import SimpleNamespace
+
+        deployments = [
+            SimpleNamespace(**d) if isinstance(d, dict) else d
+            for d in raw_deps
+        ]
+    else:
+        deployments = getattr(output, "deployments", [])
+
+    if not deployments:
+        console.print("There is no deployed model!")
+        return
+
+    for dep in deployments:
         console.print(
             f"Deployed_model: {dep.deployed_model}, "
             f"model: {dep.model_name}, "

@@ -24,7 +24,11 @@ from dashscope.finetune.reinforcement import (
 )
 from dashscope.finetune.reinforcement.common.errors import OutputError
 from dashscope.finetune.customize_types import FineTune
-from dashscope.cli.common import error, normalize_local_path_or_url
+from dashscope.cli.common import (
+    error,
+    normalize_local_path_or_url,
+    _handle_exception,
+)
 
 
 app = typer.Typer(
@@ -215,9 +219,8 @@ async def _register_fc_async(
         }
 
     except Exception as e:
-        root = _root_cause(e)
-        err_console.print(f"[red]❌ FC registration failed: {root}[/red]")
-        raise typer.Exit(1)
+        _handle_exception(e, "FC registration failed", err_console)
+        raise  # pragma: no cover
 
 
 @app.command("register-functions", hidden=True)
@@ -292,9 +295,8 @@ async def _test_fc_async(
         return result
 
     except Exception as e:
-        root = _root_cause(e)
-        err_console.print(f"[red]❌ Function test failed: {root}[/red]")
-        raise typer.Exit(1)
+        _handle_exception(e, "Function test failed", err_console)
+        raise  # pragma: no cover
 
 
 @app.command("test-functions", hidden=True)
@@ -370,9 +372,7 @@ async def _upload_data_async(
         }
 
     except Exception as e:
-        root = _root_cause(e)
-        err_console.print(f"[red]❌ Dataset upload failed: {root}[/red]")
-        raise typer.Exit(1)
+        _handle_exception(e, "Dataset upload failed", err_console)
 
 
 @app.command("upload-data", hidden=True)
@@ -536,8 +536,16 @@ def run(
             # Handle API response errors
             if result.status_code != 200:
                 raise OutputError(
-                    f"API returned status {result.status_code}:"
-                    f" {result.message}",
+                    (
+                        f"API error [status={result.status_code}, "
+                        f"code={result.code}]: {result.message}"
+                    ),
+                    response={
+                        "status_code": result.status_code,
+                        "code": result.code,
+                        "message": result.message,
+                        "request_id": result.request_id,
+                    },
                 )
 
             progress.update(
@@ -559,24 +567,22 @@ def run(
         )
 
     except Exception as e:
-        root = _root_cause(e)
         label = (
             "Validation error"
             if isinstance(e, ValueError)
             else "Workflow execution failed"
         )
-        err_console.print(f"[red]❌ {label}: {root}[/red]")
+        _handle_exception(e, label, err_console)
         if _cli_verbose:
             err_console.print(
                 "".join(
                     tb_module.format_exception(
-                        type(root),
-                        root,
-                        root.__traceback__,
+                        type(e),
+                        e,
+                        e.__traceback__,
                     ),
                 ),
             )
-        raise typer.Exit(1)
 
 
 @app.command()
@@ -598,7 +604,16 @@ def get(
         # Handle API response errors
         if result.status_code != 200:
             raise OutputError(
-                f"API returned status {result.status_code}: {result.message}",
+                (
+                    f"API error [status={result.status_code}, "
+                    f"code={result.code}]: {result.message}"
+                ),
+                response={
+                    "status_code": result.status_code,
+                    "code": result.code,
+                    "message": result.message,
+                    "request_id": result.request_id,
+                },
             )
 
         # Validate output is not None before accessing attributes
@@ -614,9 +629,7 @@ def get(
             fmt=output_format,
         )
     except Exception as e:
-        root = _root_cause(e)
-        err_console.print(f"[red]❌ Query failed: {root}[/red]")
-        raise typer.Exit(1)
+        _handle_exception(e, "Query failed", err_console)
 
 
 @app.command()
@@ -636,16 +649,23 @@ def cancel(
         # Handle API response errors
         if result.status_code != 200:
             raise OutputError(
-                f"API returned status {result.status_code}: {result.message}",
+                (
+                    f"API error [status={result.status_code}, "
+                    f"code={result.code}]: {result.message}"
+                ),
+                response={
+                    "status_code": result.status_code,
+                    "code": result.code,
+                    "message": result.message,
+                    "request_id": result.request_id,
+                },
             )
 
         err_console.print(
             f"[green]✅ Job {job_id} canceled successfully[/green]",
         )
     except Exception as e:
-        root = _root_cause(e)
-        err_console.print(f"[red]❌ Cancellation failed: {root}[/red]")
-        raise typer.Exit(1)
+        _handle_exception(e, "Cancellation failed", err_console)
 
 
 @app.command()
@@ -674,22 +694,32 @@ def logs(
         # Handle API response errors
         if result.status_code != 200:
             raise OutputError(
-                f"API returned status {result.status_code}: {result.message}",
+                (
+                    f"API error [status={result.status_code}, "
+                    f"code={result.code}]: {result.message}"
+                ),
+                response={
+                    "status_code": result.status_code,
+                    "code": result.code,
+                    "message": result.message,
+                    "request_id": result.request_id,
+                },
             )
 
         # Validate output is not None before accessing attributes
         logs_data = ""
-        if result.output is not None and isinstance(result.output, dict):
-            logs_data = result.output.get("logs", "")
+        if result.output is not None:
+            if isinstance(result.output, dict):
+                logs_data = result.output.get("logs", "")
+            else:
+                logs_data = getattr(result.output, "logs", "")
 
         format_output(
             {"job_id": job_id, "logs": logs_data},
             fmt=output_format,
         )
     except Exception as e:
-        root = _root_cause(e)
-        err_console.print(f"[red]❌ Log retrieval failed: {root}[/red]")
-        raise typer.Exit(1)
+        _handle_exception(e, "Log retrieval failed", err_console)
 
 
 @app.command("list")
@@ -716,7 +746,16 @@ def list_jobs(
         # Handle API response errors
         if result.status_code != 200:
             raise OutputError(
-                f"API returned status {result.status_code}: {result.message}",
+                (
+                    f"API error [status={result.status_code}, "
+                    f"code={result.code}]: {result.message}"
+                ),
+                response={
+                    "status_code": result.status_code,
+                    "code": result.code,
+                    "message": result.message,
+                    "request_id": result.request_id,
+                },
             )
 
         output_data = serialize_for_output(
@@ -724,9 +763,7 @@ def list_jobs(
         )
         format_output(output_data, fmt=output_format)
     except Exception as e:
-        root = _root_cause(e)
-        err_console.print(f"[red]❌ List query failed: {root}[/red]")
-        raise typer.Exit(1)
+        _handle_exception(e, "List query failed", err_console)
 
 
 # if __name__ == "__main__":
