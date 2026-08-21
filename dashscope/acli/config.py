@@ -165,6 +165,10 @@ def _valid_models_for_provider(
 class MCPServerConfig:
     service: str
     url: str = ""
+    # "sse" (remote, default) or "stdio" (local subprocess).
+    transport: str = "sse"
+    command: str = ""
+    args: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -281,6 +285,9 @@ class Config:
     )
     debug: bool = (
         False  # When True, log final LLM prompts to .acli/logs/llm.log
+    )
+    sandbox: bool = (
+        False  # When True, run shell commands in an OS sandbox if available
     )
     skill_registry: str = (
         ""  # Optional registry index URL/path for /skill search/install
@@ -550,6 +557,9 @@ class Config:
         if "debug" in data:
             val = str(data["debug"]).lower()
             self.debug = val not in ("false", "0", "no")
+        if "sandbox" in data:
+            val = str(data["sandbox"]).lower()
+            self.sandbox = val not in ("false", "0", "no")
         if "voice_silence_duration" in data:
             try:
                 self.voice_silence_duration = float(
@@ -659,7 +669,18 @@ class Config:
         if "mcp_servers" in data:
             for mcp_data in data["mcp_servers"]:
                 if isinstance(mcp_data, dict) and "service" in mcp_data:
-                    self.mcp_servers.append(MCPServerConfig(**mcp_data))
+                    kwargs = {
+                        k: v
+                        for k, v in mcp_data.items()
+                        if k
+                        in ("service", "url", "transport", "command", "args")
+                    }
+                    raw_args = kwargs.get("args")
+                    if isinstance(raw_args, list):
+                        kwargs["args"] = [str(a) for a in raw_args]
+                    else:
+                        kwargs.pop("args", None)
+                    self.mcp_servers.append(MCPServerConfig(**kwargs))
         if "examples_repo" in data:
             self.examples_repo = str(data["examples_repo"])
         if "examples_branch" in data:
@@ -798,6 +819,8 @@ class Config:
             lines.append("privacy_mode = true")
         if self.debug:
             lines.append("debug = true")
+        if self.sandbox:
+            lines.append("sandbox = true")
         lines.append(f"tts_enabled = {str(self.tts_enabled).lower()}")
         if self.tts_model and self.tts_model != "cosyvoice-v2":
             lines.append(f"tts_model = {toml_str(self.tts_model)}")
@@ -846,4 +869,11 @@ class Config:
             lines.append(f"service = {toml_str(mcp.service)}")
             if mcp.url:
                 lines.append(f"url = {toml_str(mcp.url)}")
+            if mcp.transport and mcp.transport != "sse":
+                lines.append(f"transport = {toml_str(mcp.transport)}")
+            if mcp.command:
+                lines.append(f"command = {toml_str(mcp.command)}")
+            if mcp.args:
+                arg_list = ", ".join(toml_str(a) for a in mcp.args)
+                lines.append(f"args = [{arg_list}]")
         return lines

@@ -21,6 +21,10 @@ BLOCKED_PATTERNS = [
     "dd if=",
     "> /dev/sd",
     "chmod -R 777 /",
+    "shred",
+    "wipefs",
+    # rm with this flag always targets `/` — no benign use exists
+    "--no-preserve-root",
     # Windows
     "rd /s /q",
     "del /f /q /s",
@@ -34,6 +38,73 @@ BLOCKED_PATTERNS = [
 #   `clang-format`, `terraform`, or the word "information"
 _RM_ROOT_RE = re.compile(r"\brm\s+-\w*[rf]\w*\s+/(?:\s*\*?\s*(?:$|[;&|]))")
 _FORMAT_CMD_RE = re.compile(r"(?:^|[;&|]\s*)format(?:\s|$)")
+
+# Home / cwd wipes: `rm -rf ~`, `rm -rf .`, but NOT `rm -rf ./build`.
+_RM_HOME_RE = re.compile(
+    r"\brm\s+(?:-\w+\s+)*-\w*[rf]\w*\s+(?:--\s+)?(?:~|\.\.?)/?"
+    r"(?=\s|$|[;&|])",
+)
+# Fork bombs: a function that pipes itself into itself in the background,
+# e.g. `:(){ :|:& };:` or `bomb(){ bomb|bomb& };bomb`.
+_FORK_BOMB_RE = re.compile(
+    r"(\S+)\s*\(\)\s*\{\s*\1\s*\|\s*\1\s*&\s*\}\s*;",
+)
+# Redirects writing to raw block devices (`> /dev/sda`, `>>/dev/nvme0n1`).
+_DEV_WRITE_RE = re.compile(
+    r">\s*/dev/(?:sd|hd|vd|xvd|nvme|mmcblk|disk)\w*",
+)
+# Recursive chown of whole system trees (`chown -R u:g /etc`, `/`, ...).
+# `/home` & co only match bare: `chown -R u /home/lzs` is everyday work.
+_CHOWN_SYSTEM_RE = re.compile(
+    r"\bchown\s+(?:-\w+\s+)*-R\s+\S+\s+"
+    r"(?:/(?:etc|usr|bin|sbin|lib64|lib|boot|dev|sys)(?:[/\s;&|]|$)"
+    r"|/(?:home|var|opt|srv|root)?(?:[\s;&|]|$))",
+)
+# Power-state commands as actual command tokens (incl. `sudo reboot`).
+_SYSTEM_STATE_RE = re.compile(
+    r"(?:^|[;&|]\s*)(?:sudo\s+)?"
+    r"(?:shutdown|reboot|halt|poweroff)(?:\s|$|[;&|])",
+)
+_INIT_HALT_RE = re.compile(
+    r"(?:^|[;&|]\s*)(?:sudo\s+)?init\s+[06](?:\s|$|[;&|])",
+)
+_SYSTEMCTL_HALT_RE = re.compile(
+    r"\bsystemctl\s+(?:-\S+\s+)*(?:poweroff|reboot|halt)(?:\s|$|[;&|])",
+)
+# Killing PID 1 drags the whole system down with it.
+_KILL_PID1_RE = re.compile(r"\bkill\s+(?:-\S+\s+)*1(?:\s|$|[;&|])")
+# Shell-history destruction (`history -c`, `history -cw`).
+_HISTORY_CLEAR_RE = re.compile(r"\bhistory\s+-\w*c")
+# Remote-exec pipes: `curl ... | sh`, `wget ... | bash`, with any flags
+# between the downloader and the pipe.
+_PIPE_TO_SHELL_RE = re.compile(
+    r"\b(?:curl|wget)\b[^\n]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash|ksh)\b",
+)
+# Partition-table editors as actual command tokens.
+_PARTITION_CMD_RE = re.compile(
+    r"(?:^|[;&|]\s*)(?:sudo\s+)?(?:fdisk|parted)(?:\s|$)",
+)
+# macOS: whole-disk erase and Secure Boot bypass.
+_DISKUTIL_ERASE_RE = re.compile(r"\bdiskutil\s+eraseDisk\b")
+_CSRUTIL_DISABLE_RE = re.compile(r"\bcsrutil\s+disable\b")
+
+# (label, regex) pairs checked by run_command after BLOCKED_PATTERNS;
+# the label is quoted in the block error message.
+_BLOCKED_REGEXES: list[tuple[str, re.Pattern[str]]] = [
+    ("rm -rf ~", _RM_HOME_RE),
+    ("fork bomb", _FORK_BOMB_RE),
+    ("> /dev/<block device>", _DEV_WRITE_RE),
+    ("chown -R on system paths", _CHOWN_SYSTEM_RE),
+    ("shutdown/reboot/halt/poweroff", _SYSTEM_STATE_RE),
+    ("init 0/init 6", _INIT_HALT_RE),
+    ("systemctl poweroff/reboot/halt", _SYSTEMCTL_HALT_RE),
+    ("kill PID 1", _KILL_PID1_RE),
+    ("history -c", _HISTORY_CLEAR_RE),
+    ("curl/wget piped into a shell", _PIPE_TO_SHELL_RE),
+    ("fdisk/parted", _PARTITION_CMD_RE),
+    ("diskutil eraseDisk", _DISKUTIL_ERASE_RE),
+    ("csrutil disable", _CSRUTIL_DISABLE_RE),
+]
 
 # ----- Read-only command classifier ---------------------------------------
 # Used by the executor to auto-approve obvious inspection commands so the
@@ -439,6 +510,12 @@ async def run_command(command: str, timeout: int | None = None) -> str:
         return "Error: command blocked (contains dangerous pattern: rm -rf /)"
     if _FORMAT_CMD_RE.search(command):
         return "Error: command blocked (contains dangerous pattern: format)"
+    for name, regex in _BLOCKED_REGEXES:
+        if regex.search(command):
+            return (
+                f"Error: command blocked "
+                f"(contains dangerous pattern: {name})"
+            )
 
     # Belt-and-suspenders on top of utils.validation.coerce_types: if the model
     # still managed to slip something un-castable through (e.g. "auto"),
@@ -461,12 +538,27 @@ async def run_command(command: str, timeout: int | None = None) -> str:
                 cwd=os.getcwd(),
             )
         else:
-            proc = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=os.getcwd(),
-            )
+            # Optional OS sandbox (opt-in; degrades to normal execution
+            # when disabled or when no backend is available).
+            from dashscope.acli import sandbox
+
+            sandbox_argv = None
+            if sandbox.is_enabled():
+                sandbox_argv = sandbox.build_argv(command, os.getcwd())
+            if sandbox_argv is not None:
+                proc = await asyncio.create_subprocess_exec(
+                    *sandbox_argv,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=os.getcwd(),
+                )
+            else:
+                proc = await asyncio.create_subprocess_shell(
+                    command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=os.getcwd(),
+                )
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(),
             timeout=timeout,

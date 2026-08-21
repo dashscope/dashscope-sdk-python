@@ -74,6 +74,21 @@ def analyze_trajectory(
     if any(kw in last_assistant.lower() for kw in error_keywords):
         return None  # Failed trajectory, not skill-worthy
 
+    # Tool-outcome check: the final tool call must have succeeded. Earlier
+    # tool errors are tolerated (a workflow that fails then recovers — e.g.
+    # edit-and-test — is still a valuable skill), but a trajectory whose
+    # last tool call errored did not complete cleanly, so distilling it
+    # would produce a low-quality skill.
+    for msg in reversed(messages):
+        if msg.get("role") != "tool":
+            continue
+        content = msg.get("content", "")
+        if isinstance(content, str) and content.startswith(
+            ("Error", "错误"),
+        ):
+            return None
+        break  # only the final tool outcome matters
+
     # Identify common patterns
     pattern_name = _identify_pattern(tool_sequence)
     if not pattern_name:

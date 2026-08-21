@@ -52,9 +52,7 @@ from dashscope.acli.cli.dispatch import (  # noqa: F401,E402
     _handle_slash_command,
     dispatch_async_command,
 )
-from dashscope.acli.cli.examples import (  # noqa: E402
-    _handle_example_command,
-)
+from dashscope.acli.cli.examples import _handle_example_command  # noqa: E402
 from dashscope.acli.cli.handlers_capability import (  # noqa: F401,E402
     _cap_enabled,
     sync_extensions_into_catalog,
@@ -62,9 +60,7 @@ from dashscope.acli.cli.handlers_capability import (  # noqa: F401,E402
 from dashscope.acli.cli.handlers_misc import (  # noqa: F401,E402
     _handle_report_command,
 )
-from dashscope.acli.cli.handlers_setup import (  # noqa: F401,E402
-    _handle_setup,
-)
+from dashscope.acli.cli.handlers_setup import _handle_setup  # noqa: F401,E402
 
 # Import MCP management from submodule
 from dashscope.acli.cli.mcp import (  # noqa: F401,E402

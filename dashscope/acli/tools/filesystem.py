@@ -91,6 +91,12 @@ def write_file(path: str, content: str) -> str:
         except (OSError, UnicodeDecodeError):
             existed = False  # treat as new for diff purposes
 
+    # Checkpoint the current state so /undo can reverse this write.
+    # Lazy import to avoid tool-module import cycles.
+    from dashscope.acli.tools import checkpoint
+
+    checkpoint.snapshot(path, "overwrite" if existed else "create")
+
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
@@ -187,6 +193,10 @@ def delete_file(path: str) -> str:
         return f"Error: {e}"
     if not os.path.isfile(path):
         return f"Error: file not found - {path}"
+    # Checkpoint so /undo can restore the deleted file.
+    from dashscope.acli.tools import checkpoint
+
+    checkpoint.snapshot(path, "delete")
     os.remove(path)
     return f"Deleted file: {path}"
 

@@ -33,6 +33,7 @@ class PromptContext:
     experience_tracker: Any = None
     disabled_caps_provider: Callable[[], str] | None = None
     directives_provider: Callable[[], list[str]] | None = None
+    scene_provider: Callable[[], str] | None = None
     current_turn_tools: list[str] = field(default_factory=list)
     connected_mcp_services: Callable[[], list[str]] | None = None
 
@@ -122,6 +123,26 @@ class DirectivesSection:
         for i, r in enumerate(rules, 1):
             lines.append(f"{i}. {r}")
         return "\n".join(lines)
+
+
+class SceneSection:
+    """Persistent per-topic scene memory (see SessionManager.get_scene)."""
+
+    name = "scene"
+
+    def render(self, ctx: PromptContext) -> str:
+        if not ctx.scene_provider:
+            return ""
+        try:
+            text = (ctx.scene_provider() or "").strip()
+        except Exception:
+            return ""
+        if not text:
+            return ""
+        return (
+            "\n\n## Scene memory (persistent notes for the current "
+            "session topic; treat as standing context)\n" + text
+        )
 
 
 class PlanSection:
@@ -273,6 +294,7 @@ def default_pipeline(
         .add_ephemeral(SkillPackagesSection(active_prompts_fn))
         .add_ephemeral(DisabledCapsSection())
         .add_ephemeral(DirectivesSection())
+        .add_ephemeral(SceneSection())
         .add_ephemeral(PlanSection())
         .add_ephemeral(ExperienceSection())
         .add_ephemeral(ToolChainsSection())

@@ -403,6 +403,11 @@ def _handle_slash_command(
     elif cmd.startswith("/history"):
         _handle_history_command(cmd)
         return True
+    elif cmd == "/undo":
+        from dashscope.acli.tools.checkpoint import handle_undo_command
+
+        handle_undo_command()
+        return True
     elif cmd.startswith("/privacy"):
         _handle_privacy_command(cmd, config)
         return True

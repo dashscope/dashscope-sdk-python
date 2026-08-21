@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.status import Status
 
 from dashscope.acli.config import Config, MCPServerConfig
+from dashscope.acli.mcp_stdio import StdioMCPClient
 from dashscope.acli.platforms.bailian import MCPClient, MCPError
 from dashscope.acli.skills import list_known_services
 from dashscope.acli.tools.registry import registry
@@ -14,22 +15,34 @@ from dashscope.acli.tools.registry import registry
 console = Console()
 
 # Active MCP clients - shared state
-_mcp_clients: dict[str, MCPClient] = {}
+_mcp_clients: dict[str, MCPClient | StdioMCPClient] = {}
 
 
-async def _connect_mcp(service: str, config: Config, url: str = "") -> str:
+async def _connect_mcp(
+    service: str,
+    config: Config,
+    url: str = "",
+    server: MCPServerConfig | None = None,
+) -> str:
     """Connect to an MCP service and register its tools.
 
     Returns empty string on success, error message on failure."""
     if service in _mcp_clients:
         return ""
 
+    use_stdio = bool(server) and (
+        (server.transport or "").lower() == "stdio" or bool(server.command)
+    )
     try:
-        client = MCPClient(
-            service=service,
-            api_key=config.tongyi_api_key,
-            url=url,
-        )
+        client: MCPClient | StdioMCPClient
+        if use_stdio:
+            client = StdioMCPClient(server.command, server.args)
+        else:
+            client = MCPClient(
+                service=service,
+                api_key=config.tongyi_api_key,
+                url=url,
+            )
     except MCPError as e:
         return str(e)
 
@@ -143,7 +156,12 @@ async def _handle_mcp_command(cmd: str, config: Config):
 async def _init_mcp_servers(config: Config):
     """Connect to configured MCP servers on startup."""
     for mcp_cfg in config.mcp_servers:
-        error = await _connect_mcp(mcp_cfg.service, config, url=mcp_cfg.url)
+        error = await _connect_mcp(
+            mcp_cfg.service,
+            config,
+            url=mcp_cfg.url,
+            server=mcp_cfg,
+        )
         if not error:
             client = _mcp_clients[mcp_cfg.service]
             summary = f"{len(client.tools)} tools"

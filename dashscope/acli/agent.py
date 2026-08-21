@@ -235,9 +235,32 @@ class Agent:
         self.messages = []
 
     def load_session(self) -> int:
-        """Restore self.messages from session_path. Returns the number of
-        messages loaded (0 if no file, file empty, or parse failed)."""
-        if not self.session_path or not self.session_path.exists():
+        """Restore self.messages. Returns the number of messages loaded
+        (0 if nothing could be restored).
+
+        The per-topic event stream is the source of truth: the latest
+        ``messages/snapshot`` wins when present (crash recovery via
+        append-only replay; torn trailing lines are skipped). The
+        ``history.json`` file remains as the compat fallback for
+        sessions written before snapshots existed.
+        """
+        if not self.session_path:
+            return 0
+        try:
+            from dashscope.acli.session_events import (
+                EVENTS_FILENAME,
+                SessionEventLog,
+                latest_snapshot_messages,
+            )
+
+            log = SessionEventLog(self.session_path.parent / EVENTS_FILENAME)
+            resumed = latest_snapshot_messages(log.read_raw())
+            if resumed:
+                self.messages = resumed
+                return len(resumed)
+        except Exception:
+            pass
+        if not self.session_path.exists():
             return 0
         try:
             data = json.loads(self.session_path.read_text())
@@ -326,10 +349,24 @@ class Agent:
             experience_tracker=self.experience_tracker,
             disabled_caps_provider=self.disabled_caps_provider,
             directives_provider=self.directives_provider,
+            scene_provider=self._scene_section,
             current_turn_tools=self._current_turn_tools,
             connected_mcp_services=self._connected_mcp_services,
         )
         return self._prompt_pipeline.render(ctx)
+
+    def _scene_section(self) -> str:
+        """Scene memory of the current session topic (best-effort).
+
+        Subagents and SDK callers may run without a session manager;
+        any failure simply yields no scene section.
+        """
+        try:
+            from dashscope.acli.session import get_session_manager
+
+            return get_session_manager().get_scene()
+        except Exception:
+            return ""
 
     def _reflection_section(self) -> str:
         """Inject reflection hints when repeated failures detected."""
@@ -524,9 +561,9 @@ class Agent:
             async for chunk in self.provider.chat_stream(
                 normalize_for_model(messages_with_system, self.model_name),
                 tools_schema,
-                response_format={"type": "json_object"}
-                if self.json_mode
-                else None,
+                response_format=(
+                    {"type": "json_object"} if self.json_mode else None
+                ),
             ):
                 if chunk.delta_content:
                     full_content += chunk.delta_content
@@ -764,6 +801,39 @@ class Agent:
                 arguments={"input": user_input, "content": last_content},
             ),
         )
+
+        # Record the completed turn as events (session-as-event-log
+        # direction) BEFORE persisting history.json: the event stream is
+        # the source of truth, so it must never be older than the
+        # fallback store if we crash between the two writes. Best-effort:
+        # subagents/SDK callers may run without a session manager, and
+        # event recording must never break the loop.
+        try:
+            from dashscope.acli.session import get_session_manager
+
+            turn_topic = (
+                self.session_path.parent.name if self.session_path else None
+            )
+            get_session_manager().record_turn_event(
+                user_text=text_of(user_input),
+                assistant_text=last_content,
+                tools_used=self._current_turn_tools,
+                outcome=(
+                    _classify_outcome(
+                        self._turn_tool_successes,
+                        self._turn_tool_failures,
+                    )
+                    if self._current_turn_tools
+                    else ""
+                ),
+                topic=turn_topic,
+            )
+            get_session_manager().record_messages_snapshot(
+                self.messages,
+                topic=turn_topic,
+            )
+        except Exception:
+            pass
 
         # Persist session before memory write so a memory exception can't
         # cost us the conversation.

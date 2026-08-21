@@ -99,9 +99,11 @@ def _build_variables(ctx: HookContext) -> dict[str, str]:
         "filename_stem": p.stem if p else "",
         "exit_code": "",
         "content": "",
-        "args": json.dumps(ctx.arguments, ensure_ascii=False)
-        if ctx.arguments
-        else "",
+        "args": (
+            json.dumps(ctx.arguments, ensure_ascii=False)
+            if ctx.arguments
+            else ""
+        ),
         "result": (ctx.result or "")[:1000],
         "error": (ctx.result or "")[:1000] if ctx.success is False else "",
     }

@@ -148,9 +148,11 @@ class OpenAIProvider:
                 "output_tokens": getattr(resp_usage, "completion_tokens", 0)
                 or 0,
                 "total_tokens": getattr(resp_usage, "total_tokens", 0) or 0,
-                "cached_tokens": (getattr(details, "cached_tokens", 0) or 0)
-                if details
-                else 0,
+                "cached_tokens": (
+                    (getattr(details, "cached_tokens", 0) or 0)
+                    if details
+                    else 0
+                ),
             }
 
         return LLMResponse(
@@ -208,10 +210,10 @@ class OpenAIProvider:
                         or 0,
                         "total_tokens": getattr(usage, "total_tokens", 0) or 0,
                         "cached_tokens": (
-                            getattr(details, "cached_tokens", 0) or 0
-                        )
-                        if details
-                        else 0,
+                            (getattr(details, "cached_tokens", 0) or 0)
+                            if details
+                            else 0
+                        ),
                     }
                 continue
 

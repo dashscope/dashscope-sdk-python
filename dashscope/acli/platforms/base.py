@@ -206,7 +206,11 @@ class DataProvider(Protocol):
     ) -> list[FileInfo]:
         ...
 
-    def delete_file(self, file_id: str, category_id: str = "default") -> bool:
+    def delete_file(
+        self,
+        file_id: str,
+        category_id: str = "default",
+    ) -> bool:
         ...
 
     def list_categories(
