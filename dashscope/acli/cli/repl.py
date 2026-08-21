@@ -15,7 +15,11 @@ from rich.console import Console
 from rich.panel import Panel
 
 from dashscope.acli.agent import Agent
-from dashscope.acli.cli.completer import AcliCompleter, SafeFileHistory, _HintProcessor
+from dashscope.acli.cli.completer import (
+    AcliCompleter,
+    SafeFileHistory,
+    _HintProcessor,
+)
 from dashscope.acli.cli.dispatch import (
     _handle_skill_continue,
     _handle_slash_command,
@@ -31,13 +35,20 @@ from dashscope.acli.cli.mcp import (
     _init_mcp_servers,
     _mcp_clients,
 )
-from dashscope.acli.cli.multimodal import _expand_at_references, _to_multimodal_content
+from dashscope.acli.cli.multimodal import (
+    _expand_at_references,
+    _to_multimodal_content,
+)
 from dashscope.acli.cli.startup import (
     _compose_system_prompt,
     _load_system_prompt,
     _print_banner,
 )
-from dashscope.acli.cli.streaming import _do_compress, _do_summarize, _stream_response
+from dashscope.acli.cli.streaming import (
+    _do_compress,
+    _do_summarize,
+    _stream_response,
+)
 from dashscope.acli.config import (
     PROVIDER_MODELS,
     WORKSPACE_CONFIG_FILE,
@@ -137,10 +148,18 @@ async def _run_loop(config: Config):
 
     # Pin parent agent ref for local.subagent / local.delegate BEFORE platform
     # tool registration so register_one_capability finds a parent to attach to.
-    from dashscope.acli.agents.delegate import set_config as set_delegate_config
-    from dashscope.acli.agents.delegate import set_parent_agent as set_delegate_parent
-    from dashscope.acli.agents.subagent import set_config as set_subagent_config
-    from dashscope.acli.agents.subagent import set_parent_agent as set_subagent_parent
+    from dashscope.acli.agents.delegate import (
+        set_config as set_delegate_config,
+    )
+    from dashscope.acli.agents.delegate import (
+        set_parent_agent as set_delegate_parent,
+    )
+    from dashscope.acli.agents.subagent import (
+        set_config as set_subagent_config,
+    )
+    from dashscope.acli.agents.subagent import (
+        set_parent_agent as set_subagent_parent,
+    )
 
     set_subagent_parent(agent)
     set_subagent_config(config)

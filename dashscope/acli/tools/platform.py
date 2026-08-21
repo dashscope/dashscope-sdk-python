@@ -5,7 +5,11 @@ from typing import Callable
 
 from dashscope.acli.config import Config
 from dashscope.acli.platforms import get_cli_provider
-from dashscope.acli.tools.registry import PermissionLevel, ToolDefinition, registry
+from dashscope.acli.tools.registry import (
+    PermissionLevel,
+    ToolDefinition,
+    registry,
+)
 
 # Track which tool names each capability registered, so /capability disable
 # can unregister them mid-session (the prior "takes effect on restart"
@@ -127,7 +131,10 @@ def register_one_capability(
         if cli_client := get_cli_provider(config):
             _register_bailian_cli_tools(cli_client)
     elif cap_key == "local.subagent":
-        from dashscope.acli.agents.subagent import _has_parent, register_subagent_tool
+        from dashscope.acli.agents.subagent import (
+            _has_parent,
+            register_subagent_tool,
+        )
 
         if _has_parent():
             register_subagent_tool()
@@ -135,7 +142,10 @@ def register_one_capability(
         # was called too early — cli.py wires _set_parent_agent + a final
         # re-register pass after Agent construction.
     elif cap_key == "local.delegate":
-        from dashscope.acli.agents.delegate import _has_parent, register_delegate_tools
+        from dashscope.acli.agents.delegate import (
+            _has_parent,
+            register_delegate_tools,
+        )
 
         if _has_parent():
             register_delegate_tools()

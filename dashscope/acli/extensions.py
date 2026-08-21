@@ -1237,7 +1237,11 @@ def _register_custom_shell_tools(ext: CustomExtensions) -> None:
     registry."""
     import subprocess as sp
 
-    from dashscope.acli.tools.registry import PermissionLevel, ToolDefinition, registry
+    from dashscope.acli.tools.registry import (
+        PermissionLevel,
+        ToolDefinition,
+        registry,
+    )
 
     for t in ext.shell_tools:
         perm = getattr(

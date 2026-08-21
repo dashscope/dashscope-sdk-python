@@ -353,7 +353,9 @@ def _handle_slash_command(
         console.print(render_help_text())
         return True
     elif cmd.startswith("/provider"):
-        from dashscope.acli.cli.handlers_provider import handle_provider_command
+        from dashscope.acli.cli.handlers_provider import (
+            handle_provider_command,
+        )
 
         handle_provider_command(cmd, agent, config)
         return True

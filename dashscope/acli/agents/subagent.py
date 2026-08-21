@@ -73,7 +73,9 @@ async def _subagent_invoke(
             "(missing parent agent reference)"
         )
 
-    from dashscope.acli.agent import Agent  # local import to avoid module-load cycle
+    from dashscope.acli.agent import (
+        Agent,
+    )  # local import to avoid module-load cycle
     from dashscope.acli.memory.manager import MemoryManager
 
     # Look up per-agent config overrides (max_turns, model, temperature)

@@ -154,7 +154,10 @@ def _subagents_list(config: Config) -> None:
 def _subagents_reload(config: Config) -> None:
     # pylint: disable=unused-argument
     """Re-scan custom_extensions.toml and refresh subagent registry."""
-    from dashscope.acli.cli import PROVIDER_MODELS, sync_extensions_into_catalog
+    from dashscope.acli.cli import (
+        PROVIDER_MODELS,
+        sync_extensions_into_catalog,
+    )
     from dashscope.acli.extensions import apply_extensions
 
     ext = apply_extensions(PROVIDER_MODELS)

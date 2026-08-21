@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dashscope.acli.utils.keywords import expand_scoring_terms, extract_keywords
+from dashscope.acli.utils.keywords import (
+    expand_scoring_terms,
+    extract_keywords,
+)
 
 # Common tool chain patterns with examples
 TOOL_CHAINS = {

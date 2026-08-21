@@ -8,7 +8,11 @@ from pathlib import Path
 
 from dashscope.acli.utils.crypto import decrypt_value, encrypt_value
 from dashscope.acli.utils.paths import atomic_write_text
-from dashscope.acli.utils.toml import load_toml, parse_toml_inline_table, toml_str
+from dashscope.acli.utils.toml import (
+    load_toml,
+    parse_toml_inline_table,
+    toml_str,
+)
 
 CONFIG_DIR = Path.home() / ".acli"
 CONFIG_FILE = CONFIG_DIR / "config.toml"

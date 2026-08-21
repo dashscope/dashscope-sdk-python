@@ -21,9 +21,16 @@ from dashscope.acli.utils.paths import (
     validate_path,
     validate_write_path,
 )
-from dashscope.acli.utils.sanitizer import is_secret_field, sanitize, sanitize_text
+from dashscope.acli.utils.sanitizer import (
+    is_secret_field,
+    sanitize,
+    sanitize_text,
+)
 from dashscope.acli.utils.spinner import AsyncSpinner, StderrSpinner
-from dashscope.acli.utils.template import render_brace_template, render_mustache_template
+from dashscope.acli.utils.template import (
+    render_brace_template,
+    render_mustache_template,
+)
 from dashscope.acli.utils.text import (
     mask_secret,
     strip_frontmatter,

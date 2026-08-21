@@ -245,7 +245,9 @@ class AcliCompleter(Completer):
             return []
 
         if cmd == "/subagents":
-            from dashscope.acli.agents.subagents import SUBAGENT_CAPABILITY_KEYS
+            from dashscope.acli.agents.subagents import (
+                SUBAGENT_CAPABILITY_KEYS,
+            )
 
             if arg_index == 1:
                 return _SUBCOMMANDS["/subagents"]

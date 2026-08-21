@@ -112,8 +112,7 @@ HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
             ("/memory", "Chat history (list/search/remove <id|num>/clear)"),
             (
                 "/session",
-                "Session management "
-                "(new/list/switch/rename/remove/scene)",
+                "Session management (new/list/switch/rename/remove/scene)",
             ),
             (
                 "/summarize",

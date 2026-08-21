@@ -162,7 +162,7 @@ def _handle_session_command(cmd: str, config, agent) -> None:
             session_mgr.set_scene("")
             console.print(f"[green]Scene memory cleared ({topic})[/green]")
         elif rest.startswith("set "):
-            text = rest[len("set "):].strip()
+            text = rest[len("set ") :].strip()
             if session_mgr.set_scene(text):
                 console.print(
                     f"[green]Scene memory replaced ({topic})[/green]",
