@@ -35,6 +35,18 @@ _IS_JEDITERM = (
     os.environ.get("TERMINAL_EMULATOR", "").startswith("JetBrains")
     or "jediterm" in os.environ.get("TERM_PROGRAM", "").lower()
 )
+
+# Temporary instrumentation for the iTerm2 drag auto-scroll investigation.
+_ACLI_DEBUG_SELECT = bool(os.environ.get("ACLI_DEBUG_SELECT"))
+
+
+def _select_debug(message: str) -> None:
+    if not _ACLI_DEBUG_SELECT:
+        return
+    with open("/tmp/acli_select_debug.log", "a", encoding="utf-8") as log_file:
+        log_file.write(f"{time.monotonic():.3f} {message}\n")
+
+
 # Stream flush: time window + line-count threshold (the threshold only
 # guards against over-frequent flushes on bursty bulk output)
 _STREAM_FLUSH_INTERVAL = 0.8 if _IS_JEDITERM else 0.3
@@ -181,12 +193,23 @@ class OutputLog(RichLog):
       widget-level select-all that copies nothing.
     """
 
-    # Set by wheel-up gestures (mouse events or the arrow-key wheel queue);
-    # cleared by wheel-down. While fresh, sticky follow is suppressed.
-    _last_wheel_up_ts: float = 0.0
+    # Explicit follow state: writes keep the view pinned to the bottom only
+    # while following. An upward scroll (mouse wheel, PyCharm's arrow-key
+    # wheel queue, page keys) stops following; a downward scroll re-engages
+    # it once it lands back at the bottom; scroll_end() (command submit,
+    # confirmation prompts) always re-engages. A position band or a
+    # time-based suppression both misbehave at the bottom while streaming:
+    # the band yanks the view on fine 1-line adjustments and a timeout
+    # re-arms follow while the user is still reading.
+    _follow_output: bool = True
 
-    # How long a wheel-up suppresses sticky follow (seconds).
-    _FOLLOW_SUPPRESS_WINDOW = 0.5
+    # A read-only view must never take keyboard focus: on PyCharm the
+    # trackpad wheel arrives as arrow keys, and a focused OutputLog would
+    # route them to ScrollView's *animated* key-scroll bindings — bypassing
+    # CommandInput's burst classifier and tearing on JediTerm. Keyboard
+    # scrolling is handled globally by CommandInput (pageup/shift+arrows);
+    # mouse wheel and drag selection need no focus.
+    can_focus = False
 
     def write(
         self,
@@ -198,27 +221,38 @@ class OutputLog(RichLog):
         animate: bool = False,
     ):
         if scroll_end is None and self.auto_scroll:
-            # Sticky follow: only scroll to the end when already at the
-            # bottom — unless the user just wheeled up (their scroll
-            # intent beats the 1-line sticky band, e.g. turn-end writes
-            # landing mid-gesture).
-            scroll_end = (
-                self.scroll_offset.y >= max(self.max_scroll_y - 1, 0)
-            ) and not self._recent_wheel_up()
-        return super().write(
+            scroll_end = self._follow_output
+        if not self._size_known:
+            return super().write(
+                content,
+                width=width,
+                expand=expand,
+                shrink=shrink,
+                scroll_end=scroll_end,
+                animate=animate,
+            )
+        result = super().write(
             content,
             width=width,
             expand=expand,
             shrink=shrink,
-            scroll_end=scroll_end,
+            scroll_end=False,
             animate=animate,
         )
+        if scroll_end:
+            # Follow with a fire-time check rather than RichLog's queued
+            # scroll_end: a wheel-up landing between the write and the
+            # refresh must win over the write's queued scroll.
+            self.call_after_refresh(self._scroll_to_follow)
+        return result
 
-    def _recent_wheel_up(self) -> bool:
-        ts = self._last_wheel_up_ts
-        return bool(ts) and (
-            time.monotonic() - ts < self._FOLLOW_SUPPRESS_WINDOW
-        )
+    def _scroll_to_follow(self) -> None:
+        if self._follow_output:
+            self.scroll_to(y=self.max_scroll_y, animate=False)
+
+    def scroll_end(self, *args, **kwargs):
+        self._follow_output = True
+        return super().scroll_end(*args, **kwargs)
 
     def render_line(self, y: int) -> Strip:
         scroll_x, scroll_y = self.scroll_offset
@@ -301,13 +335,29 @@ class OutputLog(RichLog):
             return None
 
     def _on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        _select_debug(
+            f"wheel down scroll_y={self.scroll_offset.y}/{self.max_scroll_y}",
+        )
+        # The pump dispatches this event to every MRO class defining the
+        # handler; stop() doesn't suppress that, only prevent_default()
+        # does — without it each wheel notch scrolls twice.
+        event.prevent_default()
         super()._on_mouse_scroll_down(event)
-        self._last_wheel_up_ts = 0.0
+        # Pointer scrolls apply synchronously (animate=False), so the
+        # landed position is readable here: re-engage follow only when the
+        # scroll actually reached the bottom.
+        if self.scroll_offset.y >= self.max_scroll_y:
+            self._follow_output = True
         self._extend_selection_after_wheel(event)
 
     def _on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        _select_debug(
+            f"wheel up scroll_y={self.scroll_offset.y}/{self.max_scroll_y}",
+        )
+        event.prevent_default()
         super()._on_mouse_scroll_up(event)
-        self._last_wheel_up_ts = time.monotonic()
+        if self.scroll_offset.y < self.max_scroll_y:
+            self._follow_output = False
         self._extend_selection_after_wheel(event)
 
     def _extend_selection_after_wheel(self, event: events.MouseEvent) -> None:
@@ -353,39 +403,121 @@ class AcliScreen(Screen):
     """
 
     _auto_scroll_pointer: Offset | None = None
+    _auto_scroll_target: Any = None  # widget our auto-scroll timer scrolls
     _select_state: Any  # textual Screen internal
 
+    def _start_auto_scroll(
+        self,
+        widget,
+        direction,
+        speed: float = 1.0,
+    ) -> None:
+        # super() calls _stop_auto_scroll() first (clearing the target), so
+        # record the target afterwards.
+        super()._start_auto_scroll(widget, direction, speed)
+        self._auto_scroll_target = widget
+        _select_debug(
+            f"arm target={getattr(widget, 'id', widget)} "
+            f"direction={direction} speed={speed:.2f}",
+        )
+
+    def _stop_auto_scroll(self) -> None:
+        if self._auto_select_scroll_timer is not None:
+            target = self._auto_scroll_target
+            _select_debug(
+                f"stop (was target={getattr(target, 'id', target)})",
+            )
+        self._auto_scroll_target = None
+        super()._stop_auto_scroll()
+
     def _forward_event(self, event) -> None:
+        if (
+            isinstance(event, events.MouseDown)
+            and self.app.mouse_captured is not None
+        ):
+            # A MouseUp that never reaches the captor (released outside the
+            # window, intercepted by a modal, ...) leaks the capture: every
+            # later MouseDown skips selection setup and routes to the stale
+            # captor, so a drag can never start a new selection and copy
+            # keeps serving the old one. A fresh MouseDown always begins a
+            # new gesture — drop the stale capture.
+            _select_debug(
+                f"down: dropping stale capture {self.app.mouse_captured}",
+            )
+            self.app.capture_mouse(None)
         super()._forward_event(event)
+        if isinstance(event, events.MouseDown):
+            _select_debug(
+                f"down y={event.pointer_screen_y} "
+                f"selecting={self._selecting} "
+                f"state={self._select_state is not None}",
+            )
+            # Anchor the pointer stash to the new drag: a wheel flush firing
+            # before this drag's first MouseMove must not extend the
+            # selection toward the previous drag's parked position.
+            self._auto_scroll_pointer = Offset(
+                int(event.pointer_screen_x),
+                int(event.pointer_screen_y),
+            )
+            return
+        if isinstance(event, events.MouseUp):
+            _select_debug(f"up y={event.pointer_screen_y}")
+            self._auto_scroll_pointer = None
+            return
         if not (isinstance(event, events.MouseMove) and self._selecting):
             return
         self._auto_scroll_pointer = Offset(
             int(event.pointer_screen_x),
             int(event.pointer_screen_y),
         )
-        # When dragging to the top/bottom screen edge, the pointer may land
-        # on a non-scrollable widget (the fixed input box below) or a no-hit
-        # area (hit-test on the output area's padding rows returns None) —
-        # Textual then stops the auto-scroll timer and the selection freezes
-        # within one screen (always reproducible in iTerm2 when a drag past
-        # the window edge is clamped to the first/last row). Fall back to
-        # scrolling #output directly here.
-        if self._auto_select_scroll_timer is not None:
+        # Edge auto-scroll must scroll the widget being selected, not the
+        # widget under the pointer. Below the output area (spinner, input
+        # box, hint rows) Textual's ancestor walk either finds no scrollable
+        # widget and stops the timer, or arms it for that widget — the
+        # CommandInput is a TextArea, so it is *always* scrollable from
+        # Textual's viewpoint even when the draft fits on one line, and the
+        # timer then ticks against an input whose scroll offset is clamped
+        # at 0 while the output never moves (this is exactly what a drag
+        # into the prompt area hits in iTerm2). Whenever the drag started
+        # in #output and the pointer sits in an edge zone, make sure the
+        # armed auto-scroll targets #output.
+        state = self._select_state
+        if state is None:
             return
         try:
             output = self.query_one("#output")
         except Exception:
             return
+        start_widget = state.start.content_widget or state.start.container
+        if start_widget is not output:
+            # Selecting inside another widget (e.g. the input draft) —
+            # leave Textual's native auto-scroll alone.
+            return
         lines = self.app.SELECT_AUTO_SCROLL_LINES
         y = event.pointer_screen_y
-        if y < lines and output.scroll_y > 0:
-            self._start_auto_scroll(output, -1, (lines - y) / lines)
-        elif (
-            y >= self.size.height - lines
-            and output.scroll_y < output.max_scroll_y
-        ):
-            speed = (y - (self.size.height - lines) + 1) / lines
-            self._start_auto_scroll(output, +1, speed)
+        if y < output.region.y + lines:
+            direction = -1
+            speed = min((output.region.y + lines - y) / lines, 1.0)
+            can_scroll = output.scroll_y > 0
+        elif y >= output.region.bottom:
+            direction = +1
+            speed = min((y - output.region.bottom + 1) / lines, 1.0)
+            can_scroll = output.scroll_y < output.max_scroll_y
+        else:
+            return
+        target = self._auto_scroll_target
+        _select_debug(
+            f"move y={y} dy={event.delta_y} "
+            f"zone={'up' if direction < 0 else 'down'} "
+            f"target={getattr(target, 'id', target)} "
+            f"scroll_y={output.scroll_y:.0f}/{output.max_scroll_y}",
+        )
+        if self._auto_scroll_target is output:
+            # Already scrolling the right widget (armed here or natively).
+            return
+        self._stop_auto_scroll()
+        if can_scroll:
+            self._start_auto_scroll(output, direction, speed)
 
     def extend_selection_to(self, pointer: Offset) -> None:
         """Move an in-progress selection's end to the content under pointer."""
@@ -811,6 +943,20 @@ class CommandInput(TextArea):
             if output is not None:
                 event.prevent_default()
                 event.stop()
+                if isinstance(output, OutputLog):
+                    # The scroll below is deferred, so decide follow from
+                    # the computed landing position, not the live offset.
+                    if event.key in ("pageup", "shift+up"):
+                        output._follow_output = False
+                    else:
+                        delta = (
+                            output.scrollable_content_region.height
+                            if event.key == "pagedown"
+                            else 1
+                        )
+                        landed = output.scroll_offset.y + delta
+                        if landed >= output.max_scroll_y:
+                            output._follow_output = True
                 if event.key == "pageup":
                     output.scroll_page_up(animate=False)
                 elif event.key == "pagedown":
@@ -950,13 +1096,11 @@ class CommandInput(TextArea):
             screen = self.app.screen
         except Exception:
             return
-        # Drive the same follow-suppression marker as the mouse path:
-        # wheel-up = user reading above (don't yank), wheel-down = follow.
         if lines < 0:
-            output._last_wheel_up_ts = time.monotonic()
-        else:
-            output._last_wheel_up_ts = 0.0
+            output._follow_output = False
         output.scroll_to(y=output.scroll_offset.y + lines, animate=False)
+        if lines > 0 and output.scroll_offset.y >= output.max_scroll_y:
+            output._follow_output = True
         # Wheel scrolling mid-drag (PyCharm wheel = arrow keys) must also
         # keep the selection following the pointer, or the selection cannot
         # grow past one screen
@@ -1619,6 +1763,17 @@ class AgenticCLIApp(App):
         if not text or not text.strip():
             return
         n_lines = len(text.splitlines())
+        if _IS_JEDITERM:
+            # JediTerm handles Cmd+C itself and copies only the visible
+            # screen; the app never sees that keypress. Ctrl+C always
+            # reaches the app and copies the full (multi-screen) selection.
+            self.notify(
+                f"Selected {n_lines} lines: Ctrl+C copies all "
+                "(Cmd+C here copies only the visible screen); "
+                "Ctrl+Q to quote into input box",
+                timeout=4,
+            )
+            return
         self.notify(
             f"Selected {n_lines} lines: Cmd+C to copy (Ctrl+C on "
             "PyCharm-style terminals); Ctrl+Q to quote into input box",
@@ -2859,4 +3014,6 @@ def run_tui(config, agent, input_history_path: Path | None = None):
     # screen (including the input line) appears to move. Set tui_mouse =
     # false for terminal-native selection; bypass capture with Alt/Option
     # drag to copy.
-    app.run(mouse=getattr(config, "tui_mouse", True))
+    mouse = getattr(config, "tui_mouse", True)
+    _select_debug(f"run_tui start mouse={mouse} pid={os.getpid()}")
+    app.run(mouse=mouse)
