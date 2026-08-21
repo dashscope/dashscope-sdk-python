@@ -1508,6 +1508,13 @@ class AgenticCLIApp(App):
 
         tool = copy_to_clipboard(text)
         n_lines = len(text.splitlines())
+        # Clear the selection highlight BEFORE notify: a failing toast must
+        # never leave the highlight stuck (clearing also prevents the
+        # terminal from overwriting the clipboard with visible-screen
+        # content on Cmd+C). The explicit refresh forces the cleared frame
+        # out immediately instead of relying on the async selections watcher.
+        self.screen.clear_selection()
+        self.screen.refresh()
         if tool:
             self.notify(f"Copied {n_lines} lines to clipboard", timeout=2)
         else:
@@ -1520,9 +1527,6 @@ class AgenticCLIApp(App):
                 "does not support it)",
                 timeout=3,
             )
-        # Clear the selection highlight: prevents the terminal from
-        # overwriting the clipboard with visible-screen content on Cmd+C
-        self.screen.clear_selection()
         return True
 
     def action_smart_quit(self) -> None:
@@ -1756,27 +1760,16 @@ class AgenticCLIApp(App):
 
     def on_text_selected(self, event: events.TextSelected) -> None:
         # Do not write the clipboard automatically on mouse-up — that would
-        # clobber the user's clipboard content. Only hint at Cmd+C for an
-        # explicit copy (the super+c binding writes the full selection,
+        # clobber the user's clipboard content. Only hint at Ctrl+C for an
+        # explicit copy (the smart_quit binding writes the full selection,
         # including the scrolled-off part, to the clipboard).
         text = self.screen.get_selected_text()
         if not text or not text.strip():
             return
         n_lines = len(text.splitlines())
-        if _IS_JEDITERM:
-            # JediTerm handles Cmd+C itself and copies only the visible
-            # screen; the app never sees that keypress. Ctrl+C always
-            # reaches the app and copies the full (multi-screen) selection.
-            self.notify(
-                f"Selected {n_lines} lines: Ctrl+C copies all "
-                "(Cmd+C here copies only the visible screen); "
-                "Ctrl+Q to quote into input box",
-                timeout=4,
-            )
-            return
         self.notify(
-            f"Selected {n_lines} lines: Cmd+C to copy (Ctrl+C on "
-            "PyCharm-style terminals); Ctrl+Q to quote into input box",
+            f"Selected {n_lines} lines: Ctrl+C to copy; "
+            "Ctrl+Q to quote into input box",
             timeout=3,
         )
 
@@ -1985,9 +1978,9 @@ class AgenticCLIApp(App):
             "Ctrl+C cancel/quit [/dim]",
         )
         info_lines.append(
-            "[dim]Output: wheel to scroll; drag to select, then Cmd+C "
-            "to copy (Ctrl+C on PyCharm-style terminals); Ctrl+Q to "
-            "quote the selection into the input box[/dim]",
+            "[dim]Output: wheel to scroll; drag to select, then Ctrl+C "
+            "to copy; Ctrl+Q to quote the selection into the input box"
+            "[/dim]",
         )
 
         panel_border = (
