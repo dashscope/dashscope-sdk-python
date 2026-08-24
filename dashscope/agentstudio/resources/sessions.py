@@ -43,6 +43,7 @@ class Sessions:
         environment_id: Optional[str] = None,
         title: Optional[str] = None,
         resources: Optional[Sequence[Mapping[str, Any]]] = None,
+        vault_ids: Optional[Sequence[str]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> Session:
         body = SessionCreateParams(
@@ -50,6 +51,7 @@ class Sessions:
             environment_id=environment_id,
             title=title,
             resources=resources,
+            vault_ids=vault_ids,
             metadata=metadata,
         ).to_dict()
         resp = self._client.transport.request(
@@ -166,6 +168,7 @@ class AsyncSessions:
         environment_id: Optional[str] = None,
         title: Optional[str] = None,
         resources: Optional[Sequence[Mapping[str, Any]]] = None,
+        vault_ids: Optional[Sequence[str]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> Session:
         body = SessionCreateParams(
@@ -173,6 +176,7 @@ class AsyncSessions:
             environment_id=environment_id,
             title=title,
             resources=resources,
+            vault_ids=vault_ids,
             metadata=metadata,
         ).to_dict()
         resp = await self._client.transport.request(

@@ -28,6 +28,8 @@ from dashscope.agentstudio.types.models import (  # noqa: F401
     parse_content_blocks,
     Agent,
     AgentVersion,
+    MultiAgentConfig,
+    MultiAgentRosterEntry,
     Credential,
     CredentialAuth,
     Deployment,

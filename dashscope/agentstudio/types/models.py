@@ -333,6 +333,39 @@ def parse_content_blocks(
 # ===========================================================================
 
 
+class MultiAgentRosterEntry(BaseModel):
+    """One entry in a coordinator agent's multiagent roster.
+
+    ``type`` is ``"agent"`` (reference another agent by ``id`` + optional
+    ``version``) or ``"self"`` (a copy of the coordinator; at most one).
+    """
+
+    _fields = ("type", "id", "version")
+
+
+class MultiAgentConfig(BaseModel):
+    """Multi-agent coordinator config (the ``multiagent`` field).
+
+    ``type`` is currently always ``"coordinator"``; ``agents`` is the
+    roster of 1-20 entries. An empty list clears the roster.
+    """
+
+    _fields = ("type", "agents")
+
+    def __init__(self, **kwargs: Any) -> None:
+        agents = kwargs.get("agents")
+        if isinstance(agents, list):
+            kwargs["agents"] = [
+                (
+                    MultiAgentRosterEntry(**dict(a))
+                    if isinstance(a, Mapping)
+                    else a
+                )
+                for a in agents
+            ]
+        super().__init__(**kwargs)
+
+
 class Agent(BaseModel):
     _fields = (
         "id",
@@ -345,6 +378,7 @@ class Agent(BaseModel):
         "tools",
         "mcp_servers",
         "skills",
+        "multiagent",
         "metadata",
         "workspace_id",
         "archived_at",
@@ -352,6 +386,12 @@ class Agent(BaseModel):
         "updated_at",
         "request_id",
     )
+
+    def __init__(self, **kwargs: Any) -> None:
+        multiagent = kwargs.get("multiagent")
+        if isinstance(multiagent, Mapping):
+            kwargs["multiagent"] = MultiAgentConfig(**dict(multiagent))
+        super().__init__(**kwargs)
 
     @property
     def system_prompt(self) -> Optional[str]:
@@ -653,6 +693,7 @@ class Message(BaseModel):
         "created_at",
         "sequence_number",
         "session_thread_id",
+        "thread_id",
         "code",
         "message",
     )
