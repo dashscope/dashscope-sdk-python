@@ -41,6 +41,38 @@ def print_failed_message(rsp):
     )
 
 
+def _exit_code_for(rsp) -> int:
+    """Map an API response to a structured CLI exit code.
+
+    0  success (never returned here)
+    1  server error  — HTTP 5xx
+    2  auth error    — HTTP 401/403 or auth-related business code
+    3  param error   — HTTP 400/422 or invalid-param business code
+    4  rate limited  — HTTP 429
+    """
+    _HTTP_MAP = {429: 4, 401: 2, 403: 2, 400: 3, 422: 3}
+    _BIZ_AUTH = ("Unauthorized", "Auth", "Forbidden", "AccessDenied")
+    _BIZ_PARAM = ("Invalid", "Parameter", "BadRequest", "MissingParam")
+
+    try:
+        sc = int(rsp.status_code)
+    except (TypeError, ValueError):
+        return 1
+
+    if sc in _HTTP_MAP:
+        return _HTTP_MAP[sc]
+    if sc >= 500:
+        return 1
+
+    # HTTP 200 with business-level error code
+    code = str(getattr(rsp, "code", "") or "")
+    if any(k in code for k in _BIZ_AUTH):
+        return 2
+    if any(k in code for k in _BIZ_PARAM):
+        return 3
+    return 1
+
+
 def ensure_ok(rsp, check_business_error: bool = True):
     """Return *rsp.output* when the response is OK; otherwise print the error
     and exit with code 1.
@@ -61,13 +93,13 @@ def ensure_ok(rsp, check_business_error: bool = True):
     """
     if rsp.status_code != HTTPStatus.OK:
         print_failed_message(rsp)
-        raise typer.Exit(1)
+        raise typer.Exit(_exit_code_for(rsp))
 
     # Check for business-level errors even when HTTP status is 200
     output = rsp.output
     if output is None:
         print_failed_message(rsp)
-        raise typer.Exit(1)
+        raise typer.Exit(_exit_code_for(rsp))
 
     # Only check business-level errors if explicitly requested
     if check_business_error:
@@ -86,9 +118,28 @@ def ensure_ok(rsp, check_business_error: bool = True):
                 f"code: {error_code}, "
                 f"message: {message}",
             )
-            raise typer.Exit(1)
+
+            # reuse rsp with the business code for exit-code mapping
+            class _BizRsp:
+                status_code = rsp.status_code
+                code = error_code
+
+            raise typer.Exit(_exit_code_for(_BizRsp()))
 
     return output
+
+
+def extract_text(output) -> str:
+    """Extract plain text from a GenerationOutput chunk.
+
+    Handles both result_format='message' (choices[].message.content)
+    and result_format='text' (output.text).
+    """
+    choices = getattr(output, "choices", None)
+    if choices:
+        msg = getattr(choices[0], "message", None)
+        return (getattr(msg, "content", None) or "") if msg else ""
+    return getattr(output, "text", None) or ""
 
 
 def success(message: str):
