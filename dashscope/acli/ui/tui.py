@@ -36,17 +36,6 @@ _IS_JEDITERM = (
     or "jediterm" in os.environ.get("TERM_PROGRAM", "").lower()
 )
 
-# Temporary instrumentation for the iTerm2 drag auto-scroll investigation.
-_ACLI_DEBUG_SELECT = bool(os.environ.get("ACLI_DEBUG_SELECT"))
-
-
-def _select_debug(message: str) -> None:
-    if not _ACLI_DEBUG_SELECT:
-        return
-    with open("/tmp/acli_select_debug.log", "a", encoding="utf-8") as log_file:
-        log_file.write(f"{time.monotonic():.3f} {message}\n")
-
-
 # Stream flush: time window + line-count threshold (the threshold only
 # guards against over-frequent flushes on bursty bulk output)
 _STREAM_FLUSH_INTERVAL = 0.8 if _IS_JEDITERM else 0.3
@@ -335,9 +324,6 @@ class OutputLog(RichLog):
             return None
 
     def _on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
-        _select_debug(
-            f"wheel down scroll_y={self.scroll_offset.y}/{self.max_scroll_y}",
-        )
         # The pump dispatches this event to every MRO class defining the
         # handler; stop() doesn't suppress that, only prevent_default()
         # does — without it each wheel notch scrolls twice.
@@ -351,9 +337,6 @@ class OutputLog(RichLog):
         self._extend_selection_after_wheel(event)
 
     def _on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
-        _select_debug(
-            f"wheel up scroll_y={self.scroll_offset.y}/{self.max_scroll_y}",
-        )
         event.prevent_default()
         super()._on_mouse_scroll_up(event)
         if self.scroll_offset.y < self.max_scroll_y:
@@ -416,17 +399,8 @@ class AcliScreen(Screen):
         # record the target afterwards.
         super()._start_auto_scroll(widget, direction, speed)
         self._auto_scroll_target = widget
-        _select_debug(
-            f"arm target={getattr(widget, 'id', widget)} "
-            f"direction={direction} speed={speed:.2f}",
-        )
 
     def _stop_auto_scroll(self) -> None:
-        if self._auto_select_scroll_timer is not None:
-            target = self._auto_scroll_target
-            _select_debug(
-                f"stop (was target={getattr(target, 'id', target)})",
-            )
         self._auto_scroll_target = None
         super()._stop_auto_scroll()
 
@@ -441,17 +415,9 @@ class AcliScreen(Screen):
             # captor, so a drag can never start a new selection and copy
             # keeps serving the old one. A fresh MouseDown always begins a
             # new gesture — drop the stale capture.
-            _select_debug(
-                f"down: dropping stale capture {self.app.mouse_captured}",
-            )
             self.app.capture_mouse(None)
         super()._forward_event(event)
         if isinstance(event, events.MouseDown):
-            _select_debug(
-                f"down y={event.pointer_screen_y} "
-                f"selecting={self._selecting} "
-                f"state={self._select_state is not None}",
-            )
             # Anchor the pointer stash to the new drag: a wheel flush firing
             # before this drag's first MouseMove must not extend the
             # selection toward the previous drag's parked position.
@@ -461,7 +427,6 @@ class AcliScreen(Screen):
             )
             return
         if isinstance(event, events.MouseUp):
-            _select_debug(f"up y={event.pointer_screen_y}")
             self._auto_scroll_pointer = None
             return
         if not (isinstance(event, events.MouseMove) and self._selecting):
@@ -505,13 +470,6 @@ class AcliScreen(Screen):
             can_scroll = output.scroll_y < output.max_scroll_y
         else:
             return
-        target = self._auto_scroll_target
-        _select_debug(
-            f"move y={y} dy={event.delta_y} "
-            f"zone={'up' if direction < 0 else 'down'} "
-            f"target={getattr(target, 'id', target)} "
-            f"scroll_y={output.scroll_y:.0f}/{output.max_scroll_y}",
-        )
         if self._auto_scroll_target is output:
             # Already scrolling the right widget (armed here or natively).
             return
@@ -1489,8 +1447,8 @@ class AgenticCLIApp(App):
             asyncio.create_task(self._handle_voice_input())
 
     def action_copy_selection(self) -> bool:
-        """Cmd+C / super+c: user-initiated copy — write the output-area
-        selection to the system clipboard.
+        """Ctrl+C (with a selection) / super+c: user-initiated copy — write
+        the output-area selection to the system clipboard.
 
         A terminal on the alternate screen only copies the visible screen,
         so a multi-screen selection loses off-screen content. Explicitly
@@ -3007,6 +2965,4 @@ def run_tui(config, agent, input_history_path: Path | None = None):
     # screen (including the input line) appears to move. Set tui_mouse =
     # false for terminal-native selection; bypass capture with Alt/Option
     # drag to copy.
-    mouse = getattr(config, "tui_mouse", True)
-    _select_debug(f"run_tui start mouse={mouse} pid={os.getpid()}")
-    app.run(mouse=mouse)
+    app.run(mouse=getattr(config, "tui_mouse", True))

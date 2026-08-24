@@ -130,16 +130,6 @@ class SessionEventLog:
                 events.append(entry)
         return events
 
-    def tail(
-        self,
-        n: int,
-        event_type: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """Return the most recent ``n`` events (optionally by type)."""
-        if n <= 0:
-            return []
-        return self.read(event_type)[-n:]
-
     def read_raw(self) -> list[dict[str, Any]]:
         """Return every well-formed entry, any schema version.
 
