@@ -36,6 +36,28 @@ _PATH_FILES = "/files"
 ProgressCallback = Callable[[int, int], None]
 
 
+class FileContent(bytes):
+    """Binary content of a downloaded file.
+
+    A ``bytes`` subclass so it drops into any code expecting raw bytes,
+    with a :meth:`write_to_file` helper that mirrors the Anthropic SDK
+    (``client.beta.files.download(...).write_to_file(path)``).
+    """
+
+    def write_to_file(
+        self,
+        path: Union[str, "os.PathLike[str]"],
+    ) -> Path:
+        """Write the content to ``path`` and return it.
+
+        Missing parent directories are created.
+        """
+        dest = Path(os.fspath(path))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(self)
+        return dest
+
+
 def _open_file(
     file: Union[str, "os.PathLike[str]", BinaryIO, Tuple[str, BinaryIO]],
 ) -> Tuple[str, BinaryIO, bool]:
@@ -110,7 +132,7 @@ def _file_size(fileobj: IO[bytes]) -> int:
 
 
 class Files:
-    """File upload / list / delete."""
+    """File upload / download / list / delete."""
 
     def __init__(self, client) -> None:
         self._client = client
@@ -165,6 +187,38 @@ class Files:
     # Alias: get() delegates to retrieve()
     get = retrieve  # type: ignore[assignment]
 
+    def _open_content(self, file_id: str, timeout: Optional[float]):
+        """GET the content endpoint and return the streaming response."""
+        return self._client.transport.request(
+            "GET",
+            f"{_PATH_FILES}/{file_id}/content",
+            extra_headers={"Accept": "*/*"},
+            stream=True,
+            timeout=timeout,
+        )
+
+    def download(
+        self,
+        file_id: str,
+        *,
+        timeout: Optional[float] = None,
+    ) -> FileContent:
+        """Return the file content as a :class:`FileContent`.
+
+        Only files whose ``downloadable`` flag is true can be fetched; the
+        service answers 403 otherwise. Use :meth:`FileContent.write_to_file`
+        to persist the bytes to disk.
+
+            content = client.files.download("file_xxx")
+            content.write_to_file("output.txt")
+        """
+        resp = self._open_content(file_id, timeout)
+        try:
+            resp.read()
+            return FileContent(resp.content)
+        finally:
+            resp.close()
+
     def list(
         self,
         *,
@@ -207,7 +261,7 @@ class Files:
 
 
 class AsyncFiles:
-    """Async file upload / list / delete."""
+    """Async file upload / download / list / delete."""
 
     def __init__(self, client) -> None:
         self._client = client
@@ -261,6 +315,38 @@ class AsyncFiles:
 
     # Alias: get() delegates to retrieve()
     get = retrieve  # type: ignore[assignment]
+
+    async def _open_content(self, file_id: str, timeout: Optional[float]):
+        """GET the content endpoint and return the streaming response."""
+        return await self._client.transport.request(
+            "GET",
+            f"{_PATH_FILES}/{file_id}/content",
+            extra_headers={"Accept": "*/*"},
+            stream=True,
+            timeout=timeout,
+        )
+
+    async def download(
+        self,
+        file_id: str,
+        *,
+        timeout: Optional[float] = None,
+    ) -> FileContent:
+        """Return the file content as a :class:`FileContent`.
+
+        Only files whose ``downloadable`` flag is true can be fetched; the
+        service answers 403 otherwise. Use :meth:`FileContent.write_to_file`
+        to persist the bytes to disk.
+
+            content = await client.files.download("file_xxx")
+            content.write_to_file("output.txt")
+        """
+        resp = await self._open_content(file_id, timeout)
+        try:
+            await resp.aread()
+            return FileContent(resp.content)
+        finally:
+            await resp.aclose()
 
     async def list(
         self,

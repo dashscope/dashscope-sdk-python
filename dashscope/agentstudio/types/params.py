@@ -52,6 +52,7 @@ class AgentCreateParams(BaseModel):
         "tools",
         "mcp_servers",
         "skills",
+        "multiagent",
         "metadata",
     )
 
@@ -65,6 +66,7 @@ class AgentCreateParams(BaseModel):
         tools: Optional[Sequence[Mapping[str, Any]]] = None,
         mcp_servers: Optional[Sequence[Mapping[str, Any]]] = None,
         skills: Optional[Sequence[Mapping[str, Any]]] = None,
+        multiagent: Optional[Mapping[str, Any]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> None:
         super().__init__(
@@ -79,6 +81,9 @@ class AgentCreateParams(BaseModel):
                 else None
             ),
             skills=([dict(s) for s in skills] if skills is not None else None),
+            multiagent=(
+                _to_mapping(multiagent) if multiagent is not None else None
+            ),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
@@ -95,6 +100,7 @@ class AgentUpdateParams(BaseModel):
         "tools",
         "mcp_servers",
         "skills",
+        "multiagent",
         "metadata",
     )
 
@@ -109,6 +115,7 @@ class AgentUpdateParams(BaseModel):
         tools: Optional[Sequence[Mapping[str, Any]]] = None,
         mcp_servers: Optional[Sequence[Mapping[str, Any]]] = None,
         skills: Optional[Sequence[Mapping[str, Any]]] = None,
+        multiagent: Optional[Mapping[str, Any]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> None:
         super().__init__(
@@ -124,6 +131,9 @@ class AgentUpdateParams(BaseModel):
                 else None
             ),
             skills=([dict(s) for s in skills] if skills is not None else None),
+            multiagent=(
+                _to_mapping(multiagent) if multiagent is not None else None
+            ),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
@@ -252,9 +262,19 @@ class SessionCreateParams(BaseModel):
     ``agent`` is the agent ID string (not the full agent object).
     ``resources`` is an optional list of file mounts; each item is a
     mapping with ``type``, ``file_id`` and ``mount_path`` keys.
+    ``vault_ids`` is create-only — attach vaults (``vlt_*``) whose
+    credentials are substituted at egress; the session update path does
+    not accept it.
     """
 
-    _fields = ("agent", "environment_id", "title", "resources", "metadata")
+    _fields = (
+        "agent",
+        "environment_id",
+        "title",
+        "resources",
+        "vault_ids",
+        "metadata",
+    )
 
     def __init__(  # pylint: disable=useless-parent-delegation
         self,
@@ -263,6 +283,7 @@ class SessionCreateParams(BaseModel):
         environment_id: Optional[str] = None,
         title: Optional[str] = None,
         resources: Optional[Sequence[Mapping[str, Any]]] = None,
+        vault_ids: Optional[Sequence[str]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> None:
         super().__init__(
@@ -272,6 +293,7 @@ class SessionCreateParams(BaseModel):
             resources=(
                 [dict(r) for r in resources] if resources is not None else None
             ),
+            vault_ids=(list(vault_ids) if vault_ids is not None else None),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
