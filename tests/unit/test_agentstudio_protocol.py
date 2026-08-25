@@ -414,6 +414,24 @@ def test_agent_update_body_includes_multiagent():
     ).to_dict()
     assert cleared["multiagent"] == {"type": "coordinator", "agents": []}
 
+    # A MultiAgentConfig read off a response must be accepted back as-is,
+    # so read-modify-write round trips work.
+    from dashscope.agentstudio.types import Agent
+
+    hydrated = Agent(
+        id="agent_1",
+        multiagent={"type": "coordinator", "agents": [{"type": "self"}]},
+    ).multiagent
+    round_tripped = AgentUpdateParams(
+        name="coordinator",
+        version=4,
+        multiagent=hydrated,
+    ).to_dict()
+    assert round_tripped["multiagent"] == {
+        "type": "coordinator",
+        "agents": [{"type": "self"}],
+    }
+
 
 def test_agent_model_hydrates_multiagent():
     """Agent response hydrates the multiagent dict into typed models."""

@@ -317,11 +317,7 @@ class AsyncFiles:
     get = retrieve  # type: ignore[assignment]
 
     async def _open_content(self, file_id: str, timeout: Optional[float]):
-        """GET the content endpoint and return the streaming response.
-
-        The service either streams the bytes back or answers 302 with a
-        pre-signed storage URL, so redirects are followed.
-        """
+        """GET the content endpoint and return the streaming response."""
         return await self._client.transport.request(
             "GET",
             f"{_PATH_FILES}/{file_id}/content",

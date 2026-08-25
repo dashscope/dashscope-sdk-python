@@ -81,7 +81,9 @@ class AgentCreateParams(BaseModel):
                 else None
             ),
             skills=([dict(s) for s in skills] if skills is not None else None),
-            multiagent=(dict(multiagent) if multiagent is not None else None),
+            multiagent=(
+                _to_mapping(multiagent) if multiagent is not None else None
+            ),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
@@ -129,7 +131,9 @@ class AgentUpdateParams(BaseModel):
                 else None
             ),
             skills=([dict(s) for s in skills] if skills is not None else None),
-            multiagent=(dict(multiagent) if multiagent is not None else None),
+            multiagent=(
+                _to_mapping(multiagent) if multiagent is not None else None
+            ),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
