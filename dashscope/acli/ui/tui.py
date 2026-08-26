@@ -943,8 +943,6 @@ class CommandInput(TextArea):
         if not self.history_path:
             return
         try:
-            import re
-
             # Redact API keys
             sanitized = re.sub(r"(/provider\s+\w+\s+)\S+", r"\1***", text)
             self.history_path.parent.mkdir(parents=True, exist_ok=True)
