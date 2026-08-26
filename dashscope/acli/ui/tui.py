@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import io
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -323,6 +324,67 @@ class OutputLog(RichLog):
         except (IndexError, TypeError):
             return None
 
+    async def _on_click(self, event: events.Click) -> None:
+        if event.chain >= 2 and event.button == 1:
+            # Textual's default double-click is a widget-wide select-all —
+            # on a long output log that selects the entire scrollback. Do
+            # word (double) / line (triple) selection at the pointer
+            # instead. prevent_default() is required: the pump dispatches
+            # the handler of every MRO class that defines one, so
+            # Widget._on_click (the select-all) runs anyway unless the
+            # default is suppressed.
+            event.prevent_default()
+            event.stop()
+            self._select_at_pointer(event)
+            return
+        # chain == 1: the pump dispatches Widget._on_click on its own —
+        # do not call super() here or it would run twice.
+
+    def _select_at_pointer(self, event: events.Click) -> None:
+        try:
+            widget, offset = self.screen.get_widget_and_offset_at(
+                event.screen_x,
+                event.screen_y,
+            )
+        except Exception:
+            return
+        if widget is not self or offset is None or not self.lines:
+            return
+        # render_line anchors segments in content coordinates, so the
+        # hit-test offset is (character, content-line).
+        line_idx = min(max(offset.y, 0), len(self.lines) - 1)
+        text = self.lines[line_idx].text
+        if event.chain >= 3:
+            start_x, end_x = 0, len(text)
+        else:
+            span = self._word_span(text, offset.x)
+            if span is None:
+                return
+            start_x, end_x = span
+        self.screen.selections = {
+            self: Selection(
+                Offset(start_x, line_idx),
+                Offset(end_x, line_idx),
+            ),
+        }
+
+    @staticmethod
+    def _word_span(text: str, x: int) -> tuple[int, int] | None:
+        """Character span of the word under ``x`` in ``text``, or None."""
+        if not text:
+            return None
+        x = min(max(x, 0), len(text) - 1)
+        char = text[x]
+        if ord(char) > 0x2E7F:
+            # CJK has no whitespace word boundaries: select the character
+            return x, x + 1
+        if not char.isalnum() and char != "_":
+            return None
+        for match in re.finditer(r"\w+", text):
+            if match.start() <= x < match.end():
+                return match.start(), match.end()
+        return None
+
     def _on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
         # The pump dispatches this event to every MRO class defining the
         # handler; stop() doesn't suppress that, only prevent_default()
@@ -388,6 +450,10 @@ class AcliScreen(Screen):
     _auto_scroll_pointer: Offset | None = None
     _auto_scroll_target: Any = None  # widget our auto-scroll timer scrolls
     _select_state: Any  # textual Screen internal
+    # True once any mouse event arrived: guards the pointer-position
+    # heuristics against terminals that never report the pointer (the
+    # stale 0,0 position would otherwise sit inside the output area).
+    _mouse_seen: bool = False
 
     def _start_auto_scroll(
         self,
@@ -405,6 +471,8 @@ class AcliScreen(Screen):
         super()._stop_auto_scroll()
 
     def _forward_event(self, event) -> None:
+        if isinstance(event, events.MouseEvent):
+            self._mouse_seen = True
         if (
             isinstance(event, events.MouseDown)
             and self.app.mouse_captured is not None
@@ -933,6 +1001,19 @@ class CommandInput(TextArea):
         # as wheel input, batched into a single scroll (per-key scrolling =
         # per-key full-area repaint, which flickers badly on PyCharm).
         if event.key in ("up", "down"):
+            if self._pointer_over_output():
+                # JediTerm turns the wheel into arrow keys no matter where
+                # the pointer is; the pointer position is the only hint of
+                # where the gesture is aimed. Over the output area these
+                # keys are scrolls — routing isolated (non-burst) keys to
+                # history made the input box visibly change while the
+                # output scrolled.
+                event.prevent_default()
+                event.stop()
+                self._prev_arrow_key = event.key
+                self._prev_arrow_ts = time.monotonic()
+                self._queue_wheel_scroll(event.key)
+                return
             now = time.monotonic()
             is_burst = (
                 self._prev_arrow_key == event.key
@@ -1034,6 +1115,34 @@ class CommandInput(TextArea):
             self._update_completions,
         )
 
+    def _pointer_over_output(self) -> bool:
+        """Whether the last known pointer position is inside the output area.
+
+        Only meaningful on JediTerm, which is the terminal that translates
+        the wheel into arrow keys; elsewhere arrows are real key presses.
+        Requires a mouse event to have been seen (a never-reported pointer
+        stays at 0,0, which sits inside the output area), and yields while
+        the completion popup is open so arrows keep navigating it.
+        """
+        if not _IS_JEDITERM:
+            return False
+        screen = self.app.screen
+        if not getattr(screen, "_mouse_seen", False):
+            return False
+        try:
+            popup = self.app.query_one("#completion-popup", CompletionPopup)
+        except Exception:
+            popup = None
+        if popup is not None and popup.is_visible:
+            return False
+        try:
+            output = self.app.query_one("#output")
+        except Exception:
+            return False
+        x, y = self.app.mouse_position
+        region = output.region
+        return region.x <= x < region.right and region.y <= y < region.bottom
+
     def _queue_wheel_scroll(self, key: str) -> None:
         self._wheel_pending += 1 if key == "down" else -1
         self._last_wheel_ts = time.monotonic()
@@ -1075,6 +1184,9 @@ class CommandInput(TextArea):
             self._arrow_timer.stop()
             self._arrow_timer = None
         if not key or self.password_mode:
+            return
+        if self._pointer_over_output():
+            self._queue_wheel_scroll(key)
             return
         # A decelerating trackpad gesture keeps emitting isolated arrows
         # past the 20ms burst window; while a wheel gesture is (or was
