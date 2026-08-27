@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Session management command handlers."""
 # pylint: disable=too-many-branches,too-many-statements,unused-argument
+# pylint: disable=too-many-return-statements
 
 from __future__ import annotations
 
@@ -15,6 +16,8 @@ _SESSION_USAGE = (
     "  /session list         — list all sessions\n"
     "  /session switch <n>   — switch to a topic\n"
     "  /session rename <old> <new> — rename\n"
+    "  /session fork <new> [src] — fork a session (default src: "
+    "current)\n"
     "  /session remove <n>   — remove session "
     "(default cannot be removed)\n"
     "  /session scene        — show scene memory of the current topic\n"
@@ -126,6 +129,35 @@ def _handle_session_command(cmd: str, config, agent) -> None:
             console.print(
                 f"[red]Rename failed: '{old_name}' does not exist "
                 f"or '{new_name}' already exists[/red]",
+            )
+
+    elif subcmd == "fork":
+        if len(parts) < 3:
+            console.print(
+                "[dim]Usage: /session fork <new> [src][/dim]",
+            )
+            return
+        fork_args = parts[2].split(maxsplit=1)
+        dst = fork_args[0]
+        src = (
+            fork_args[1]
+            if len(fork_args) > 1
+            else (session_mgr.get_current_topic())
+        )
+        # Flush the live conversation when forking the active topic so
+        # the fork carries the latest messages.
+        if src == session_mgr.get_current_topic():
+            if agent.session_path and agent.messages:
+                agent.save_session()
+        if session_mgr.fork_topic(src, dst):
+            console.print(
+                f"[green]Forked session: {src} → {dst}[/green]\n"
+                f"  [dim]Switch with: /session switch {dst}[/dim]",
+            )
+        else:
+            console.print(
+                f"[red]Fork failed: '{src}' does not exist "
+                f"or '{dst}' already exists[/red]",
             )
 
     elif subcmd == "remove":

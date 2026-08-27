@@ -107,6 +107,21 @@ The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built 
 
 For the latest model list, visit [Bailian Model Plaza](https://bailian.console.aliyun.com/).
 
+## Shell Completion
+
+Run the appropriate command once, then restart your shell (or re-source your config file):
+
+| Shell | Install command |
+|-------|-----------------|
+| **bash** | `dashscope --install-completion bash` |
+| **zsh** | `dashscope --install-completion zsh` |
+| **fish** | `dashscope --install-completion fish` |
+
+To preview the completion script without installing:
+```shell
+dashscope --show-completion bash
+```
+
 ## Logging
 To output Dashscope logs, you need to configure the logger.
 ```shell

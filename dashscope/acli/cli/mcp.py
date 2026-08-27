@@ -149,7 +149,9 @@ async def _handle_mcp_command(cmd: str, config: Config):
             "  /mcp              — list connected services\n"
             "  /mcp list         — show Bailian available services\n"
             "  /mcp add <svc>    — add an MCP service\n"
-            "  /mcp remove <svc> — remove an MCP service[/dim]",
+            "  /mcp remove <svc> — remove an MCP service\n"
+            "Stdio servers: add [[mcp_servers]] in config.toml with "
+            'transport = "stdio", command and args[/dim]',
         )
 
 

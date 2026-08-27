@@ -225,7 +225,7 @@ _SUBCOMMANDS: dict[str, list[str]] = {
     "/rule": ["list", "add", "remove", "edit", "clear"],
     "/profile": ["list", "search", "add", "remove", "clear"],
     "/memory": ["list", "search", "remove", "clear"],
-    "/session": ["new", "list", "switch", "rename", "remove"],
+    "/session": ["new", "list", "switch", "rename", "fork", "remove"],
     "/mcp": ["list", "add", "remove"],
     "/cron": ["add", "list", "remove", "pause", "resume"],
     "/feedback": ["good", "bad"],

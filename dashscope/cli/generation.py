@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """``generation`` sub-command group."""
+import json
+import sys
 from http import HTTPStatus
 from typing import Any, Dict, Optional
 
@@ -8,6 +10,7 @@ import typer
 from dashscope.aigc import Generation
 from dashscope.cli.common import (
     error,
+    extract_text,
     handle_sdk_error,
     print_failed_message,
 )
@@ -35,8 +38,6 @@ def _build_generation_kwargs(
     result_format: Optional[str],
 ) -> Dict[str, Any]:
     """Build kwargs dictionary for Generation.call from CLI options."""
-    import json
-
     kwargs: Dict[str, Any] = {}
 
     if messages is not None:
@@ -70,6 +71,49 @@ def _build_generation_kwargs(
             kwargs["stop"] = stop_list if len(stop_list) > 1 else stop_list[0]
 
     return kwargs
+
+
+def _output_stream(response):
+    """Handle streaming response output.
+
+    TTY: plain text; non-TTY: JSON lines.
+    """
+    is_tty = sys.stdout.isatty()
+    last_usage = None
+    for rsp in response:
+        if rsp.status_code != HTTPStatus.OK:
+            print_failed_message(rsp)
+            raise typer.Exit(1)
+        last_usage = getattr(rsp, "usage", None)
+        if is_tty:
+            typer.echo(extract_text(rsp.output), nl=False)
+        else:
+            row = {"output": dict(rsp.output)}
+            if last_usage:
+                row["usage"] = dict(last_usage)
+            typer.echo(json.dumps(row, ensure_ascii=False))
+    if is_tty:
+        typer.echo("")
+        if last_usage:
+            typer.echo(json.dumps(dict(last_usage), ensure_ascii=False))
+
+
+def _output_single(response):
+    """Handle non-streaming response output.
+
+    TTY: plain text; non-TTY: JSON.
+    """
+    if response.status_code != HTTPStatus.OK:
+        print_failed_message(response)
+        raise typer.Exit(1)
+    if sys.stdout.isatty():
+        typer.echo(extract_text(response.output))
+    else:
+        row = {"output": dict(response.output)}
+        usage = getattr(response, "usage", None)
+        if usage:
+            row["usage"] = dict(usage)
+        typer.echo(json.dumps(row, ensure_ascii=False))
 
 
 @app.callback()
@@ -170,23 +214,9 @@ def create(
     response = Generation.call(model, prompt, stream=stream, **kwargs)
 
     if stream:
-        for rsp in response:
-            if rsp.status_code == HTTPStatus.OK:
-                typer.echo(rsp.output)
-                usage = getattr(rsp, "usage", None)
-                if usage:
-                    typer.echo(usage)
-            else:
-                print_failed_message(rsp)
+        _output_stream(response)
     else:
-        if response.status_code == HTTPStatus.OK:
-            typer.echo(response.output)
-            usage = getattr(response, "usage", None)
-            if usage:
-                typer.echo(usage)
-        else:
-            print_failed_message(response)
-            raise typer.Exit(1)
+        _output_single(response)
 
 
 # Backward compatibility alias

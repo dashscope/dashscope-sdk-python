@@ -274,6 +274,8 @@ class SessionManager:
         if not src_dir.exists() or dst_dir.exists():
             return False
         try:
+            import shutil
+
             dst_dir.mkdir(parents=True)
             self._save_meta(
                 dst,
@@ -285,9 +287,12 @@ class SessionManager:
             )
             src_events = self._events_file(src)
             if src_events.exists():
-                import shutil
-
                 shutil.copy2(src_events, self._events_file(dst))
+            # Pre-snapshot sessions keep their messages only in
+            # history.json; copy it too so the fork restores them.
+            src_history = self._history_file(src)
+            if src_history.exists():
+                shutil.copy2(src_history, self._history_file(dst))
         except OSError:
             return False
         self.event_log(dst).append(
