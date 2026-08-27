@@ -358,6 +358,10 @@ def _run_tui_mode(config: Config):
         get_mcp_clients_fn=lambda: _mcp_clients,
     )
 
+    from dashscope.acli.tools.vision import register_vision_tools
+
+    register_vision_tools(config, get_provider_fn=get_provider)
+
     from dashscope.acli.tools.evolution import register_evolution_tools
 
     register_evolution_tools(get_agent=lambda: agent)
