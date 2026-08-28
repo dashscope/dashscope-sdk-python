@@ -138,7 +138,7 @@ class TestViewImage:
 
         result = await registry.get("view_image").func(
             image_path=str(path),
-            slice="never",
+            slice_mode="never",
         )
 
         assert provider.calls == 1

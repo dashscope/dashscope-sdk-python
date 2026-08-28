@@ -143,7 +143,7 @@ def register_vision_tools(config: Config, *, get_provider_fn: Callable):
             "Describe this image in detail. If it contains text or "
             "tables, transcribe them verbatim."
         ),
-        slice: str = "auto",
+        slice_mode: str = "auto",
     ) -> str:
         from dashscope.acli.utils.paths import validate_path
 
@@ -162,7 +162,7 @@ def register_vision_tools(config: Config, *, get_provider_fn: Callable):
 
         boxes = None
         image = None
-        if slice != "never":
+        if slice_mode != "never":
             try:
                 from PIL import Image
 
@@ -198,7 +198,7 @@ def register_vision_tools(config: Config, *, get_provider_fn: Callable):
             results = await asyncio.gather(*tasks, return_exceptions=True)
             parts = [
                 f"(Image auto-split into {total} slices {axis}; "
-                "results per slice below.)"
+                "results per slice below.)",
             ]
             for i, r in enumerate(results, start=1):
                 if isinstance(r, BaseException):
@@ -247,7 +247,7 @@ def register_vision_tools(config: Config, *, get_provider_fn: Callable):
                             "to a full description + verbatim OCR"
                         ),
                     },
-                    "slice": {
+                    "slice_mode": {
                         "type": "string",
                         "enum": ["auto", "never"],
                         "description": (
