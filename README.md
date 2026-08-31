@@ -14,14 +14,19 @@ To install the DashScope Python SDK, simply run:
 pip install dashscope
 ```
 
+The base install covers SDK API calls only. Optional feature groups are
+available as extras:
+
+| Extra | Provides | Install |
+|-------|----------|---------|
+| `cli` | `dashscope` command subcommands (generation, files, ...) | `pip install "dashscope[cli]"` |
+| `acli` | Interactive AI assistant (DashScope SDK Expert) | `pip install "dashscope[acli]"` |
+| `rl` | Agentic RL fine-tuning | `pip install "dashscope[rl]"` |
+| `tokenizer` | Local tokenizer without downloads | `pip install "dashscope[tokenizer]"` |
+
 If you clone the code from github, you can install from  source by running:
 ```shell
 pip install -e .
-```
-
-To use tokenizer in local mode without downloading any files, run:
-```shell
-pip install dashscope[tokenizer]
 ```
 
 

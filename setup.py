@@ -67,16 +67,42 @@ setuptools.setup(
     include_package_data=True,
     extras_require={
         "tokenizer": ["tiktoken"],
+        # Classic `dashscope` CLI subcommands (generation, files, ...)
+        "cli": [
+            "typer>=0.9.0",
+            "rich>=13.0.0",
+        ],
+        # Interactive AI assistant (dashscope.acli), includes the cli extra
+        "acli": [
+            "typer>=0.9.0",
+            "rich>=13.0.0",
+            "prompt-toolkit>=3.0",
+            "textual>=0.50",
+            "PyYAML>=6.0",
+            "tomli>=2.0; python_version < '3.11'",
+        ],
         "acli-anthropic": ["anthropic>=0.40"],
         "acli-openai": ["openai>=1.30"],
         "acli-voice": ["sounddevice>=0.4", "numpy>=1.20"],
         "acli-camera": ["opencv-python>=4.5"],
         "acli-all": [
+            "typer>=0.9.0",
+            "rich>=13.0.0",
+            "prompt-toolkit>=3.0",
+            "textual>=0.50",
+            "PyYAML>=6.0",
+            "tomli>=2.0; python_version < '3.11'",
             "anthropic>=0.40",
             "openai>=1.30",
             "sounddevice>=0.4",
             "numpy>=1.20",
             "opencv-python>=4.5",
+        ],
+        # Agentic RL fine-tuning (dashscope.finetune.reinforcement)
+        "rl": [
+            "pydantic>=2.0",
+            "tenacity",
+            "PyYAML>=6.0",
         ],
     },
     zip_safe=False,

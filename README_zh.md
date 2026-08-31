@@ -15,14 +15,18 @@ DashScope Python SDK 提供了访问[阿里云百炼（Model Studio）](https://
 pip install dashscope
 ```
 
+基础安装仅包含 SDK API 调用。可选功能组通过 extras 安装：
+
+| Extra | 提供的能力 | 安装命令 |
+|-------|----------|---------|
+| `cli` | `dashscope` 命令子命令（generation、files 等） | `pip install "dashscope[cli]"` |
+| `acli` | 交互式 AI 助手（DashScope SDK Expert） | `pip install "dashscope[acli]"` |
+| `rl` | Agentic RL 微调 | `pip install "dashscope[rl]"` |
+| `tokenizer` | 本地 tokenizer（无需下载） | `pip install "dashscope[tokenizer]"` |
+
 如果从 GitHub 克隆了源码，可以通过源码安装：
 ```shell
 pip install -e .
-```
-
-如需在本地模式下使用 tokenizer 且不下载任何文件，运行：
-```shell
-pip install dashscope[tokenizer]
 ```
 
 ## 快速开始
