@@ -26,19 +26,17 @@ class PublicError:
 
 
 @dataclass(frozen=True)
-class InternalErrorDef:
+class SdkErrorDef:
     name: str
-    external: PublicError
     message: str
+    solution: str
     allow_retry: bool = False
     vars: List[str] = field(default_factory=list)
-    cause: str = ""
-    solution: str = ""
 
-    def format_message(self, substitutions: Dict[str, str] = None) -> str:
+    def format_message(self, variables: Dict[str, str] = None) -> str:
         msg = self.message
-        if substitutions:
-            for k, v in substitutions.items():
+        if variables:
+            for k, v in variables.items():
                 msg = msg.replace("{" + k + "}", v)
         return msg
 
@@ -189,461 +187,405 @@ REQUEST_TIMEOUT = PublicError(
 )
 
 
-# -- Internal Errors -------------------------------------------------
+# -- SDK Errors -------------------------------------------------
 
-SDK_INVALID_API_KEY = InternalErrorDef(
+SDK_INVALID_API_KEY = SdkErrorDef(
     name="sdk.InvalidApiKey",
-    external=AUTH_FAILED,
     message="Invalid API key configuration for client.",
-    allow_retry=False,
-    vars=[],
-    cause="",
     solution=(
         "Set the DASHSCOPE_API_KEY environment variable or pass a "
         "valid api_key to AgenticRL(). You can obtain an API key at "
         "https://modelstudio.console.alibabacloud.com/cn-beijing"
         "?tab=api."
     ),
+    allow_retry=False,
+    vars=[],
 )
 
-SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED = InternalErrorDef(
+SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED = SdkErrorDef(
     name="sdk.agentic_rl.FunctionRegistrationFailed",
-    external=INTERNAL_ERROR,
-    message="Function component registration failed: [{inner_code}].",
+    message="Function component registration failed: {inner_code}.",
+    solution=(
+        "Check the inner error code for details. Ensure the function "
+        "code package is valid and the deployment service is "
+        "reachable. Retry the register_functions() call."
+    ),
     allow_retry=True,
     vars=["inner_code"],
-    cause="",
-    solution=(
-        "Check the inner error code for details. Ensure the function code "
-        "package is valid and the deployment service is reachable. Retry the "
-        "register_functions() call."
-    ),
 )
 
-SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED = InternalErrorDef(
+SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED = SdkErrorDef(
     name="sdk.agentic_rl.DatasetsUploadFailed",
-    external=INTERNAL_ERROR,
-    message="Datasets upload failed: [{inner_code}].",
-    allow_retry=True,
-    vars=["inner_code"],
-    cause="",
+    message="Datasets upload failed: {inner_code}.",
     solution=(
         "Verify your dataset files exist and are readable. Check OSS "
-        "credentials and network connectivity. Retry the upload_datasets() "
-        "call."
+        "credentials and network connectivity. Retry the "
+        "upload_datasets() call."
     ),
+    allow_retry=True,
+    vars=["inner_code"],
 )
 
-SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES = InternalErrorDef(
+SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES = SdkErrorDef(
     name="sdk.agentic_rl.DuplicateFunctionNames",
-    external=INVALID_REQUEST,
     message="Duplicate function names detected: {names}.",
+    solution=(
+        "Each registered function must have a unique name. Review "
+        "your RolloutFunctionComponent and "
+        "RewardFunctionComponent definitions and remove any "
+        "duplicate names before calling submit_job()."
+    ),
     allow_retry=False,
     vars=["names"],
-    cause="",
-    solution=(
-        "Each registered function must have a unique name. Review your "
-        "RolloutFunctionComponent and RewardFunctionComponent definitions and "
-        "remove any duplicate names before calling submit_job()."
-    ),
 )
 
-SDK_AGENTIC_RL_JOB_SUBMISSION_FAILED = InternalErrorDef(
+SDK_AGENTIC_RL_JOB_SUBMISSION_FAILED = SdkErrorDef(
     name="sdk.agentic_rl.JobSubmissionFailed",
-    external=INTERNAL_ERROR,
-    message="Job submission failed: [{inner_code}].",
+    message="Job submission failed: {inner_code}.",
+    solution=(
+        "Check the inner error code for details. Ensure the model "
+        "name is valid and your account has sufficient quota. Retry "
+        "submit_job() after fixing the underlying issue."
+    ),
     allow_retry=True,
     vars=["inner_code"],
-    cause="",
-    solution=(
-        "Check the inner error code for details. Ensure the model name is "
-        "valid and your account has sufficient quota. Retry submit_job() "
-        "after fixing the underlying issue."
-    ),
 )
 
-SDK_AGENTIC_RL_WORKFLOW_FAILED = InternalErrorDef(
+SDK_AGENTIC_RL_WORKFLOW_FAILED = SdkErrorDef(
     name="sdk.agentic_rl.WorkflowFailed",
-    external=INTERNAL_ERROR,
-    message="RL tuning workflow failed: [{inner_code}].",
+    message="RL tuning workflow failed: {inner_code}.",
+    solution=(
+        "This error wraps a failure in the run() workflow. Inspect "
+        "the inner error code to identify which step failed "
+        "(registration, upload, or submission), fix that issue, "
+        "and retry run()."
+    ),
     allow_retry=True,
     vars=["inner_code"],
-    cause="",
-    solution=(
-        "This error wraps a failure in the run() workflow. Inspect the inner "
-        "error code to identify which step failed (registration, upload, or "
-        "submission), fix that issue, and retry run()."
-    ),
 )
 
-SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE = InternalErrorDef(
+SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE = SdkErrorDef(
     name="sdk.agentic_rl.UnsupportedFunctionType",
-    external=INVALID_REQUEST,
     message="Unsupported function type: {functype}.",
+    solution=(
+        "Only ROLLOUT, REWARD, and GROUP_REWARD function types are "
+        "supported. Pass a valid FunctionType enum value to "
+        "test_functions()."
+    ),
     allow_retry=False,
     vars=["functype"],
-    cause="",
-    solution=(
-        "Only ROLLOUT, REWARD, and GROUP_REWARD function types are supported. "
-        "Pass a valid FunctionType enum value to test_functions()."
-    ),
 )
 
-SDK_AGENTIC_RL_FUNCTION_TEST_FAILED = InternalErrorDef(
+SDK_AGENTIC_RL_FUNCTION_TEST_FAILED = SdkErrorDef(
     name="sdk.agentic_rl.FunctionTestFailed",
-    external=INTERNAL_ERROR,
-    message="Function test failed: [{inner_code}].",
+    message="Function test failed: {inner_code}.",
+    solution=(
+        "Check the inner error code and the function logs for "
+        "details. Verify that the function code runs correctly with "
+        "the provided input_data. Fix the function and retry "
+        "test_functions()."
+    ),
     allow_retry=True,
     vars=["inner_code"],
-    cause="",
-    solution=(
-        "Check the inner error code and the function logs for details. Verify "
-        "that the function code runs correctly with the provided input_data. "
-        "Fix the function and retry test_functions()."
-    ),
 )
 
-SDK_AGENTIC_RL_FUNCTION_TEST_TIMEOUT = InternalErrorDef(
+SDK_AGENTIC_RL_FUNCTION_TEST_TIMEOUT = SdkErrorDef(
     name="sdk.agentic_rl.FunctionTestTimeout",
-    external=REQUEST_TIMEOUT,
     message="Function test timed out after {timeout} seconds.",
+    solution=(
+        "The function did not return within the timeout period. "
+        "Profile your function for slow operations (e.g. large "
+        "model inference, network calls) and optimize it. Consider "
+        "increasing the timeout if the function legitimately takes "
+        "longer."
+    ),
     allow_retry=True,
     vars=["timeout"],
-    cause="",
-    solution=(
-        "The function did not return within the timeout period. Profile your "
-        "function for slow operations (e.g. large model inference, network "
-        "calls) and optimize it. Consider increasing the timeout if the "
-        "function legitimately takes longer."
-    ),
 )
 
-
-SDK_AGENTIC_RL_INPUT_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_INPUT_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.InputError",
-    external=INVALID_REQUEST,
     message="Invalid input data detected during validation.",
+    solution=(
+        "Check the input data passed to the function. Ensure all "
+        "required fields are present and have valid types. Refer to "
+        "the RolloutInput / RewardInput / GroupRewardInput schema "
+        "documentation."
+    ),
     allow_retry=False,
     vars=[],
-    cause="",
-    solution=(
-        "Check the input data passed to the function. Ensure all required "
-        "fields are present and have valid types. Refer to the RolloutInput / "
-        "RewardInput / GroupRewardInput schema documentation."
-    ),
 )
 
-SDK_AGENTIC_RL_OUTPUT_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_OUTPUT_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.OutputError",
-    external=INTERNAL_ERROR,
     message="Service response failed output validation checks.",
+    solution=(
+        "The function output did not pass validation. Ensure your "
+        "function returns a valid RolloutOutput / RewardOutput / "
+        "GroupRewardOutput object with all required fields "
+        "populated."
+    ),
     allow_retry=False,
     vars=[],
-    cause="",
-    solution=(
-        "The function output did not pass validation. Ensure your function "
-        "returns a valid RolloutOutput / RewardOutput / GroupRewardOutput "
-        "object with all required fields populated."
-    ),
 )
 
-SDK_AGENTIC_RL_BASE_CONNECTION_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_BASE_CONNECTION_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.BaseConnectionError",
-    external=INTERNAL_ERROR,
     message="Connection-related error occurred.",
+    solution=(
+        "Check your network connectivity and ensure the target "
+        "service endpoint is reachable. Verify firewall rules and "
+        "proxy settings."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "Check your network connectivity and ensure the target service "
-        "endpoint is reachable. Verify firewall rules and proxy settings."
-    ),
 )
 
-SDK_AGENTIC_RL_OSS_CONNECTION_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_OSS_CONNECTION_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.OSSConnectionError",
-    external=INTERNAL_ERROR,
     message="Connecting to OSS storage service failed.",
+    solution=(
+        "Verify that the OSS endpoint URL is correct and the OSS "
+        "service is accessible. Check your API key permissions for "
+        "OSS access. Ensure you are in a region that supports OSS "
+        "connectivity."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "Verify that the OSS endpoint URL is correct and the OSS service is "
-        "accessible. Check your API key permissions for OSS access. Ensure "
-        "you are in a region that supports OSS connectivity."
-    ),
 )
 
-SDK_AGENTIC_RL_OSS_UPLOAD_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_OSS_UPLOAD_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.OSSUploadError",
-    external=INTERNAL_ERROR,
     message="File upload operation to OSS failed.",
+    solution=(
+        "Check that the file exists, is readable, and does not "
+        "exceed the upload size limit. Verify your OSS bucket "
+        "permissions allow write operations."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "Check that the file exists, is readable, and does not exceed the "
-        "upload size limit. Verify your OSS bucket permissions allow write "
-        "operations."
-    ),
 )
 
-SDK_AGENTIC_RL_DEPLOYMENT_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_DEPLOYMENT_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.DeploymentError",
-    external=INTERNAL_ERROR,
     message="Deployment-related error occurred.",
+    solution=(
+        "Check the deployment service status and logs. Ensure the "
+        "function code package and dependencies are valid. Retry "
+        "after the deployment service recovers."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "Check the deployment service status and logs. Ensure the function "
-        "code package and dependencies are valid. Retry after the deployment "
-        "service recovers."
-    ),
 )
 
-SDK_AGENTIC_RL_REGISTRATION_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_REGISTRATION_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.RegistrationError",
-    external=INTERNAL_ERROR,
     message="Function registration failed in the deployment system.",
+    solution=(
+        "The function could not be registered in the deployment "
+        "system. Verify the function name is unique and the code "
+        "package is valid. Check the inner error for "
+        "deployment-specific details."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "The function could not be registered in the deployment system. "
-        "Verify the function name is unique and the code package is valid. "
-        "Check the inner error for deployment-specific details."
-    ),
 )
 
-SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.FunctionLoadError",
-    external=INTERNAL_ERROR,
     message="Loading a registered function into runtime failed.",
-    allow_retry=True,
-    vars=[],
-    cause="",
     solution=(
         "The function could not be loaded into the runtime after "
-        "registration. Check the error logs for import errors or missing "
-        "dependencies in the function layer."
+        "registration. Check the error logs for import errors or "
+        "missing dependencies in the function layer."
     ),
+    allow_retry=True,
+    vars=[],
 )
 
-SDK_AGENTIC_RL_INSTANCE_WARMUP_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_INSTANCE_WARMUP_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.InstanceWarmupError",
-    external=INTERNAL_ERROR,
     message="Function instance health check failed after deployment.",
+    solution=(
+        "The function instance health check failed after deployment. "
+        "Check the instance logs for startup errors. Ensure the "
+        "function initializes correctly and the health endpoint "
+        "responds within the timeout."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "The function instance health check failed after deployment. Check "
-        "the instance logs for startup errors. Ensure the function "
-        "initializes correctly and the health endpoint responds within the "
-        "timeout."
-    ),
 )
 
-SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.InstanceQueryError",
-    external=INTERNAL_ERROR,
     message="Querying function instance status failed.",
+    solution=(
+        "Could not query the function instance status. The instance "
+        "may not be ready yet. Wait and retry, or check the "
+        "deployment logs for errors."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "Could not query the function instance status. The instance may not "
-        "be ready yet. Wait and retry, or check the deployment logs for "
-        "errors."
-    ),
 )
 
-SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.FunctionLayerError",
-    external=INTERNAL_ERROR,
     message="Creating a layer of function failed.",
+    solution=(
+        "Failed to create the function dependency layer. Check that "
+        "the requirements.txt or setup.py is valid and all "
+        "dependencies are installable. Review the layer build logs "
+        "for details."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "Failed to create the function dependency layer. Check that the "
-        "requirements.txt or setup.py is valid and all dependencies are "
-        "installable. Review the layer build logs for details."
-    ),
 )
 
-SDK_AGENTIC_RL_DATASETS_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_DATASETS_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.DatasetsError",
-    external=INTERNAL_ERROR,
     message="Update datasets failed in the deployment system.",
+    solution=(
+        "Failed to update datasets in the deployment system. Verify "
+        "the dataset IDs are valid and the dataset files are "
+        "accessible. Retry after fixing the underlying issue."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "Failed to update datasets in the deployment system. Verify the "
-        "dataset IDs are valid and the dataset files are accessible. Retry "
-        "after fixing the underlying issue."
-    ),
 )
 
-SDK_AGENTIC_RL_VALIDATION_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_VALIDATION_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.ValidationError",
-    external=INVALID_REQUEST,
     message="Data validation failed.",
+    solution=(
+        "One or more data fields failed validation. Check the error "
+        "message for the specific field and fix the value according "
+        "to the schema documentation."
+    ),
     allow_retry=False,
     vars=[],
-    cause="",
-    solution=(
-        "One or more data fields failed validation. Check the error message "
-        "for the specific field and fix the value according to the schema "
-        "documentation."
-    ),
 )
 
-SDK_AGENTIC_RL_CONFIGURATION_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_CONFIGURATION_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.ConfigurationError",
-    external=INVALID_REQUEST,
     message="Invalid system configuration detected.",
+    solution=(
+        "Check your YAML configuration file or initialization "
+        "parameters. Ensure all required fields (model, functions, "
+        "datasets) are correctly specified. Refer to the AgenticRL "
+        "configuration documentation."
+    ),
     allow_retry=False,
     vars=[],
-    cause="",
-    solution=(
-        "Check your YAML configuration file or initialization parameters. "
-        "Ensure all required fields (model, functions, datasets) are "
-        "correctly specified. Refer to the AgenticRL configuration "
-        "documentation."
-    ),
 )
 
-SDK_AGENTIC_RL_BASE_PERMISSION_ERROR = InternalErrorDef(
+SDK_AGENTIC_RL_BASE_PERMISSION_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.BasePermissionError",
-    external=PERMISSION_DENIED,
     message="Operation lacks required permissions.",
+    solution=(
+        "Your API key does not have the required permissions. "
+        "Ensure your account has access to AgenticRL, OSS, and "
+        "Function Compute services. Contact your administrator to "
+        "grant the necessary permissions."
+    ),
     allow_retry=False,
     vars=[],
-    cause="",
-    solution=(
-        "Your API key does not have the required permissions. Ensure your "
-        "account has access to AgenticRL, OSS, and Function Compute services. "
-        "Contact your administrator to grant the necessary permissions."
-    ),
 )
 
-SDK_AGENTIC_RL_IO_ERROR_WITH_CODE = InternalErrorDef(
+SDK_AGENTIC_RL_IO_ERROR_WITH_CODE = SdkErrorDef(
     name="sdk.agentic_rl.IOErrorWithCode",
-    external=INTERNAL_ERROR,
     message="General I/O operation failure.",
-    allow_retry=True,
-    vars=[],
-    cause="",
     solution=(
         "A file or network I/O operation failed. Check file paths, "
-        "permissions, and network connectivity. Review the error message for "
-        "the specific operation that failed."
+        "permissions, and network connectivity. Review the error "
+        "message for the specific operation that failed."
     ),
-)
-
-
-SDK_AGENTIC_RL_ERROR = InternalErrorDef(
-    name="sdk.agentic_rl.Error",
-    external=INTERNAL_ERROR,
-    message="Base client error occurred.",
     allow_retry=True,
     vars=[],
-    cause="",
+)
+
+SDK_AGENTIC_RL_ERROR = SdkErrorDef(
+    name="sdk.agentic_rl.Error",
+    message="Base client error occurred.",
     solution=(
         "An unexpected AgenticRL error occurred. Check the error "
         "message and logs for details. If the issue persists, "
         "submit a bug report at "
-        "https://github.com/dashscope/"
-        "dashscope-sdk-python/issues."
+        "https://github.com/dashscope/dashscope-sdk-python/issues."
     ),
-)
-
-SDK_AGENTIC_RL_RUNTIME_ERROR_WITH_CODE = InternalErrorDef(
-    name="sdk.agentic_rl.RuntimeErrorWithCode",
-    external=INTERNAL_ERROR,
-    message="Runtime error occurred in client.",
     allow_retry=True,
     vars=[],
-    cause="",
+)
+
+SDK_AGENTIC_RL_RUNTIME_ERROR_WITH_CODE = SdkErrorDef(
+    name="sdk.agentic_rl.RuntimeErrorWithCode",
+    message="Runtime error occurred in client.",
     solution=(
         "An unexpected runtime error occurred. Check the error "
         "message and traceback for details. If the issue persists, "
         "submit a bug report at "
-        "https://github.com/dashscope/"
-        "dashscope-sdk-python/issues."
+        "https://github.com/dashscope/dashscope-sdk-python/issues."
     ),
+    allow_retry=True,
+    vars=[],
 )
 
-SDK_AGENTIC_RL_VALUE_ERROR_WITH_CODE = InternalErrorDef(
+SDK_AGENTIC_RL_VALUE_ERROR_WITH_CODE = SdkErrorDef(
     name="sdk.agentic_rl.ValueErrorWithCode",
-    external=INVALID_REQUEST,
     message="Invalid value encountered in client.",
+    solution=(
+        "An invalid value was encountered. Check the function "
+        "parameters and input data. Ensure all values conform to "
+        "the expected types and ranges."
+    ),
     allow_retry=False,
     vars=[],
-    cause="",
-    solution=(
-        "An invalid value was encountered. Check the function parameters and "
-        "input data. Ensure all values conform to the expected types and "
-        "ranges."
-    ),
 )
 
-SDK_AGENTSTUDIO_API_CONNECTION_ERROR = InternalErrorDef(
+SDK_AGENTSTUDIO_API_CONNECTION_ERROR = SdkErrorDef(
     name="sdk.agentstudio.APIConnectionError",
-    external=INTERNAL_ERROR,
     message="Failed to connect to the AgentStudio service.",
+    solution=(
+        "Check your network connectivity and ensure the "
+        "AgentStudio endpoint (base_url / region) is reachable. "
+        "Verify firewall and proxy settings."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "Check your network connectivity and ensure the AgentStudio endpoint "
-        "(base_url / region) is reachable. Verify firewall and proxy "
-        "settings."
-    ),
 )
 
-SDK_AGENTSTUDIO_API_TIMEOUT_ERROR = InternalErrorDef(
+SDK_AGENTSTUDIO_API_TIMEOUT_ERROR = SdkErrorDef(
     name="sdk.agentstudio.APITimeoutError",
-    external=REQUEST_TIMEOUT,
     message="The request to the AgentStudio service timed out.",
+    solution=(
+        "The request did not complete within the timeout period. "
+        "Increase the client timeout or retry the request."
+    ),
     allow_retry=True,
     vars=[],
-    cause="",
-    solution=(
-        "The request did not complete within the timeout period. Increase the "
-        "client timeout or retry the request."
-    ),
 )
 
-SDK_AGENTSTUDIO_STREAM_ERROR = InternalErrorDef(
+SDK_AGENTSTUDIO_STREAM_ERROR = SdkErrorDef(
     name="sdk.agentstudio.StreamError",
-    external=INTERNAL_ERROR,
     message="The SSE stream encountered a fatal protocol error.",
-    allow_retry=True,
-    vars=[],
-    cause="",
     solution=(
         "Retry the streaming request. If the error persists, "
         "report it at "
-        "https://github.com/dashscope/"
-        "dashscope-sdk-python/issues."
+        "https://github.com/dashscope/dashscope-sdk-python/issues."
     ),
+    allow_retry=True,
+    vars=[],
 )
 
-SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR = InternalErrorDef(
+SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR = SdkErrorDef(
     name="sdk.agentstudio.StreamClosedError",
-    external=INVALID_REQUEST,
     message="Attempted I/O on an already-closed stream.",
+    solution=(
+        "Do not read from a stream after it has been closed. "
+        "Consume the stream within its context manager or before "
+        "calling close()."
+    ),
     allow_retry=False,
     vars=[],
-    cause="",
-    solution=(
-        "Do not read from a stream after it has been closed. Consume the "
-        "stream within its context manager or before calling close()."
-    ),
 )
 
 
