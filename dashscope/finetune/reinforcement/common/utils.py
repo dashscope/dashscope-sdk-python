@@ -520,11 +520,20 @@ def _sync_upload_to_oss(signed_url: str, zip_path: str) -> int:
         file_size = os.path.getsize(zip_path)
         size_mb = file_size / (1024 * 1024)
         if file_size > FC_OSS_FILE_SIZE_WARNING:
-            logger.warning(
-                f"Uploading large file: {zip_path} ({size_mb:.2f}MB) to OSS",
+            max_mb = FC_OSS_FILE_SIZE_WARNING / (1024 * 1024)
+            reason = (
+                f"Package too large: {zip_path} ({size_mb:.2f}MB) "
+                f"exceeds the maximum allowed size of {max_mb:.0f}MB "
+                f"for OSS upload. The upload was not attempted. "
+                f"Reduce the package size (e.g. exclude large files via "
+                f"env var FC_ZIP_EXCLUDE_PATTERNS) or raise the limit via "
+                f"env var FC_OSS_FILE_SIZE_WARNING (current: "
+                f"{FC_OSS_FILE_SIZE_WARNING} bytes)."
             )
+            logger.error(reason)
             raise OSSUploadError(
-                f"Uploading large file: {zip_path} ({size_mb:.2f}MB) to OSS",
+                reason,
+                file_size=file_size,
             )
 
         logger.debug(
@@ -541,11 +550,18 @@ def _sync_upload_to_oss(signed_url: str, zip_path: str) -> int:
 
             if response.status_code != 200:
                 error_msg = response.text
+                logger.error(
+                    f"OSS upload failed | File: {zip_path} "
+                    f"({size_mb:.2f}MB), Status: {response.status_code}, "
+                    f"Response: {error_msg}",
+                )
                 raise OSError(
                     f"OSS upload failed ({response.status_code}): {error_msg}",
                 )
 
             return response.status_code
+    except OSSUploadError:
+        raise
     except Exception as e:
         raise RuntimeErrorWithCode(
             "OSS upload error",

@@ -55,6 +55,10 @@ class RewardOutput(BaseModel):
         default=None,
         description="Error details if the reward computation failed.",
     )
+    error_code: Optional[str] = Field(
+        default=None,
+        description="Error code if the reward computation failed.",
+    )
 
     class Config:
         extra = "allow"

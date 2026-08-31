@@ -40,6 +40,10 @@ class RolloutOutput(BaseModel):
         default=None,
         description="Error details (when failed).",
     )
+    error_code: Optional[str] = Field(
+        default=None,
+        description="Error code (when failed).",
+    )
 
     class Config:
         extra = "allow"
