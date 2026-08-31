@@ -2651,6 +2651,11 @@ class AgenticCLIApp(App):
             except Exception as e:
                 output.write(Text(f"Error: {e}", style="red"))
 
+        # Commands like /model switch the model inside the executor
+        # thread, after the post-submission hint refresh already ran;
+        # re-read agent.model_name so the status line is current.
+        self._refresh_hint_label()
+
         try:
             input_widget = self.query_one("#command-input", CommandInput)
             input_widget.focus()
