@@ -67,15 +67,8 @@ setuptools.setup(
     include_package_data=True,
     extras_require={
         "tokenizer": ["tiktoken"],
-        # Classic `dashscope` CLI subcommands (generation, files, ...)
-        "cli": [
-            "typer>=0.9.0",
-            "rich>=13.0.0",
-        ],
-        # Interactive AI assistant (dashscope.acli), includes the cli extra
+        # Interactive AI assistant (dashscope.acli); typer/rich are core deps
         "acli": [
-            "typer>=0.9.0",
-            "rich>=13.0.0",
             "prompt-toolkit>=3.0",
             "textual>=0.50",
             "PyYAML>=6.0",
@@ -86,8 +79,6 @@ setuptools.setup(
         "acli-voice": ["sounddevice>=0.4", "numpy>=1.20"],
         "acli-camera": ["opencv-python>=4.5"],
         "acli-all": [
-            "typer>=0.9.0",
-            "rich>=13.0.0",
             "prompt-toolkit>=3.0",
             "textual>=0.50",
             "PyYAML>=6.0",

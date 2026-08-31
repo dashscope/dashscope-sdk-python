@@ -3,5 +3,7 @@ requests
 websocket-client
 cryptography
 certifi
+typer>=0.9.0
+rich>=13.0.0
 httpx>=0.25.0
 httpx-sse>=0.4.0

@@ -17,14 +17,7 @@ warnings.filterwarnings(
     category=Warning,
 )
 
-try:
-    import typer  # noqa: E402
-except ImportError as _cli_dep_err:  # noqa: E402
-    raise ImportError(
-        "The `dashscope` command needs optional dependencies. "
-        "Install them with: pip install 'dashscope[cli]' "
-        "(or 'dashscope[acli]' for the interactive assistant)",
-    ) from _cli_dep_err
+import typer  # noqa: E402
 
 import dashscope  # noqa: E402
 from dashscope.cli.common import err_console  # noqa: E402
