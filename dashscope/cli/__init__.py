@@ -436,7 +436,9 @@ def _register_rl_app():
     except ImportError as exception:
         err_console.print(
             "[yellow]Warning:[/yellow] Failed to register rl command: "
-            f"{exception}",
+            f"{exception}. "
+            "Install the optional dependencies with: "
+            "[bold]pip install 'dashscope[rl]'[/bold]",
         )
     except Exception as exception:
         err_console.print(

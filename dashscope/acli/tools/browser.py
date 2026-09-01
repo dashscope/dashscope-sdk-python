@@ -488,6 +488,7 @@ async def scrape_web_screenshot(
         return f"Error: screenshot failed — {e}"
 
     return (
-        f"Screenshot saved to {output_path}. Reference it with @path "
-        f"to send the image to a vision model for analysis."
+        f"Screenshot saved to {output_path}. Call the view_image tool "
+        f"with this path to analyze it (the user can also attach it "
+        f"via @path)."
     )

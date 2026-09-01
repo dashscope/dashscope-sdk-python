@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import AsyncIterator
 
 import httpx
 
+from dashscope.acli import SDK_SESSION_ID, __version__
 from dashscope.acli.providers.base import LLMChunk, LLMResponse, ToolCall
 
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -123,6 +125,10 @@ class TongyiProvider:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        if not os.environ.get("DASHSCOPE_DISABLE_SDK_HEADERS"):
+            headers["x-dashscope-sdk-client"] = "acli"
+            headers["x-dashscope-sdk-version"] = __version__
+            headers["x-dashscope-sdk-session-id"] = SDK_SESSION_ID
         return headers
 
     async def chat(

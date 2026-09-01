@@ -11,8 +11,8 @@ from dashscope.acli.tools.registry import PermissionLevel, tool
     name="camera_capture",
     description=(
         "Take a photo with the webcam and save it to the given path. "
-        "The user can then reference it via @path to send it to a "
-        "vision model for analysis."
+        "The photo can then be analyzed with the view_image tool (the "
+        "user can also attach it via @path)."
     ),
     permission=PermissionLevel.CONFIRM,
 )

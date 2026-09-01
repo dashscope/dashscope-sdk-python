@@ -1,7 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import uuid
+
 __version__ = "0.6.2"
+
+# Per-process identifier sent as x-dashscope-sdk-session-id so the
+# backend can group multi-turn requests from one CLI run.
+SDK_SESSION_ID = uuid.uuid4().hex
 
 # Expose the lightweight programmatic SDK at the package root.
 try:

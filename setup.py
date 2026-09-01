@@ -67,16 +67,36 @@ setuptools.setup(
     include_package_data=True,
     extras_require={
         "tokenizer": ["tiktoken"],
+        # Interactive AI assistant (dashscope.acli); typer/rich are core deps
+        "acli": [
+            "prompt-toolkit>=3.0",
+            "textual>=0.50",
+            "PyYAML>=6.0",
+            "tomli>=2.0; python_version < '3.11'",
+        ],
         "acli-anthropic": ["anthropic>=0.40"],
         "acli-openai": ["openai>=1.30"],
         "acli-voice": ["sounddevice>=0.4", "numpy>=1.20"],
         "acli-camera": ["opencv-python>=4.5"],
         "acli-all": [
+            "prompt-toolkit>=3.0",
+            "textual>=0.50",
+            "PyYAML>=6.0",
+            "tomli>=2.0; python_version < '3.11'",
             "anthropic>=0.40",
             "openai>=1.30",
             "sounddevice>=0.4",
             "numpy>=1.20",
             "opencv-python>=4.5",
+        ],
+        # Agentic RL fine-tuning (dashscope.finetune.reinforcement)
+        "rl": [
+            "pydantic>=2.0",
+            "tenacity",
+            "PyYAML>=6.0",
+            "fastapi>=0.100",
+            "uvicorn>=0.20",
+            "opentelemetry-sdk>=1.20",
         ],
     },
     zip_safe=False,

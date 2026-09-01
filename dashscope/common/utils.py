@@ -7,6 +7,7 @@ import os
 import platform
 import queue
 import threading
+import uuid
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Dict
@@ -20,6 +21,8 @@ from dashscope.common.api_key import get_default_api_key
 from dashscope.common.constants import SSE_CONTENT_TYPE
 from dashscope.common.logging import logger
 from dashscope.version import __version__
+
+_SDK_SESSION_ID = uuid.uuid4().hex
 
 
 def is_validate_fine_tune_file(file_path):
@@ -160,9 +163,24 @@ def get_user_agent():
     return ua
 
 
+def get_sdk_headers() -> Dict[str, str]:
+    """Structured SDK identification headers for backend statistics.
+
+    Set DASHSCOPE_DISABLE_SDK_HEADERS=1 to omit them.
+    """
+    if os.environ.get("DASHSCOPE_DISABLE_SDK_HEADERS"):
+        return {}
+    return {
+        "x-dashscope-sdk-client": "python-sdk",
+        "x-dashscope-sdk-version": __version__,
+        "x-dashscope-sdk-session-id": _SDK_SESSION_ID,
+    }
+
+
 def default_headers(api_key: str = None) -> Dict[str, str]:
     ua = get_user_agent()
     headers = {"user-agent": ua}
+    headers.update(get_sdk_headers())
     if api_key is None:
         api_key = get_default_api_key()
     headers["Authorization"] = f"Bearer {api_key}"

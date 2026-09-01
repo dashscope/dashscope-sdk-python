@@ -1,5 +1,7 @@
 # DashScope Python SDK
 
+> **English** | [中文](README_zh.md)
+
 The DashScope Python SDK provides a comprehensive interface to [Alibaba Cloud Model Studio (Bailian)](https://www.alibabacloud.com/help/en/model-studio/) APIs, covering text generation, multi-modal understanding, embeddings, reranking, image/video generation, speech synthesis & recognition, and more.
 
 ## What is New
@@ -12,14 +14,18 @@ To install the DashScope Python SDK, simply run:
 pip install dashscope
 ```
 
+The base install covers SDK API calls and the `dashscope` CLI command.
+Optional feature groups are available as extras:
+
+| Extra | Provides | Install |
+|-------|----------|---------|
+| `acli` | Interactive AI assistant (DashScope SDK Expert) | `pip install "dashscope[acli]"` |
+| `rl` | Agentic RL fine-tuning | `pip install "dashscope[rl]"` |
+| `tokenizer` | Local tokenizer without downloads | `pip install "dashscope[tokenizer]"` |
+
 If you clone the code from github, you can install from  source by running:
 ```shell
 pip install -e .
-```
-
-To use tokenizer in local mode without downloading any files, run:
-```shell
-pip install dashscope[tokenizer]
 ```
 
 
