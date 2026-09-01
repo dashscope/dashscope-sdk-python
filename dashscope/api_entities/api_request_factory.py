@@ -18,6 +18,7 @@ from dashscope.common.constants import (
 )
 from dashscope.common.error import InputDataRequired, UnsupportedApiProtocol
 from dashscope.common.logging import logger
+from dashscope.common.utils import get_sdk_headers
 from dashscope.protocol.websocket import WebsocketStreamingMode
 
 
@@ -191,8 +192,11 @@ def _build_api_request(  # pylint: disable=too-many-branches
             "websocket]",
         )
 
+    merged_headers = dict(get_sdk_headers())
     if headers is not None:
-        request.add_headers(headers=headers)
+        merged_headers.update(headers)
+    if merged_headers:
+        request.add_headers(headers=merged_headers)
 
     if input is None and form is None:
         raise InputDataRequired("There is no input data and form data")
