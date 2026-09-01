@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 from typing import AsyncIterator
@@ -21,6 +22,7 @@ from dashscope.acli.config import WORKSPACE_DIR, context_window_for_model
 from dashscope.acli.executor import EXEC_ERROR_PREFIX, Executor
 from dashscope.acli.hooks import HookBus, HookContext, create_hook_bus
 from dashscope.acli.memory.manager import MemoryManager
+from dashscope.acli.memory.reflection import is_readonly_tool_call
 from dashscope.acli.platforms.base import MemoryProvider
 from dashscope.acli.prompt_pipeline import PromptContext, default_pipeline
 from dashscope.acli.providers.base import LLMProvider, LLMResponse, ToolCall
@@ -146,6 +148,7 @@ class Agent:
         hook_bus: HookBus | None = None,
         memory_manager: MemoryManager | None = None,
         json_mode: bool = False,
+        oneshot: bool = False,
     ):
         self.provider = provider
         self.executor = executor
@@ -155,6 +158,15 @@ class Agent:
         self.allowed_tools = allowed_tools
         self.hook_bus = hook_bus or create_hook_bus()
         self.json_mode = json_mode
+        self.oneshot = oneshot
+        # Hard stop for read-only stalls in oneshot (benchmark/script) mode.
+        # Env override: ACLI_READONLY_HARD_CAP (0 disables).
+        try:
+            self.readonly_hard_cap = int(
+                os.environ.get("ACLI_READONLY_HARD_CAP", "40"),
+            )
+        except ValueError:
+            self.readonly_hard_cap = 40
         # Load custom system prompt: workspace .acli/system-prompt.md first,
         # then global ~/.acli/system-prompt.md, then built-in default.
         # runners.py pre-populates system_prompt via _load_system_prompt();
@@ -390,6 +402,14 @@ class Agent:
             return tracker.get_reflection_hint()
         return ""
 
+    def _stagnation_section(self) -> str:
+        """Inject a convergence nudge on long read-only streaks."""
+        tracker = self.memory_manager.session.stagnation
+        if not tracker.needs_nudge():
+            return ""
+        cap = self.readonly_hard_cap if self.oneshot else None
+        return tracker.get_stagnation_hint(hard_cap=cap)
+
     async def _recall_memory(self, user_input) -> str:
         """Search for relevant profile info and format as context.
 
@@ -486,6 +506,7 @@ class Agent:
 
         # Reset reflection tracker for new turn
         self.memory_manager.session.reflection.reset()
+        self.memory_manager.session.stagnation.reset()
 
         # Recall relevant memories
         memory_context = await self._recall_memory(user_input_text)
@@ -548,8 +569,25 @@ class Agent:
             # The hint is appended, keeping the cache-friendly prefix stable.
             reflection_hint = self._reflection_section()
             messages_with_system[0]["content"] = (
-                system_prompt + reflection_hint
+                system_prompt + reflection_hint + self._stagnation_section()
             )
+
+            # Hard stop for read-only stalls in oneshot mode: finish with
+            # whatever is on hand instead of inspecting forever.
+            if (
+                self.oneshot
+                and self.readonly_hard_cap
+                and self.memory_manager.session.stagnation.readonly_streak
+                >= self.readonly_hard_cap
+            ):
+                stop_msg = (
+                    f"\n[Stopped: {self.readonly_hard_cap} consecutive "
+                    "read-only tool calls with no progress. Ending the run "
+                    "to avoid an infinite verification loop.]\n"
+                )
+                yield stop_msg
+                last_content = stop_msg
+                break
 
             full_content = ""
             full_reasoning = ""
@@ -1018,6 +1056,9 @@ class Agent:
         # is neutral and must not feed the consecutive-failure counter.
         if not result.startswith(_TOOL_CANCEL_PREFIXES):
             self.memory_manager.record_tool_execution(tool_call.name, success)
+            self.memory_manager.session.stagnation.record(
+                is_readonly_tool_call(tool_call.name, tool_call.arguments),
+            )
             if success:
                 self._turn_tool_successes += 1
             else:

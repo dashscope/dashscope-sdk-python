@@ -67,13 +67,14 @@ async def _run_oneshot(config: Config, prompt: str):
         sys.exit(1)
 
     provider = get_provider_chain(config)
-    executor = Executor()
+    executor = Executor(auto_approve=config.auto_approve)
     agent = Agent(
         provider=provider,
         executor=executor,
         max_turns=config.max_turns,
         provider_name=config.provider,
         model_name=config.model,
+        oneshot=True,
     )
 
     # Pin parent agent ref for local.subagent / local.delegate BEFORE platform

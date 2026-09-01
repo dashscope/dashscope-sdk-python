@@ -542,6 +542,16 @@ class Config:
                 self.max_turns = int(data["max_turns"])
             except (ValueError, TypeError):
                 pass
+        if "auto_approve" in data:
+            val = str(data["auto_approve"]).lower()
+            self.auto_approve = val in ("true", "1", "yes")
+        # Env override for headless/benchmark use
+        if os.environ.get("ACLI_AUTO_APPROVE", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
+            self.auto_approve = True
         if "session_persist" in data:
             val = str(data["session_persist"]).lower()
             self.session_persist = val not in ("false", "0", "no")
