@@ -124,7 +124,7 @@ class TongyiProvider:
     def _get_headers(self) -> dict:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
-            headepu srs["Authorization"] = f"Bearer {self.api_key}"
+            headers["Authorization"] = f"Bearer {self.api_key}"
         if not os.environ.get("DASHSCOPE_DISABLE_SDK_HEADERS"):
             headers["x-dashscope-sdk-client"] = "acli"
             headers["x-dashscope-sdk-version"] = __version__
