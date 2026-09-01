@@ -679,6 +679,7 @@ async def to_bailian_data(files: List[FileSpec]) -> List[str]:
             timeout=BAILIAN_FILE_TIMEOUT,
             retry_times=1,
         )
+        logger.info(f"File upload result: {result}")
 
         # Handle errors
         if result.get("status", {}).get("code", 200) != 200:
@@ -690,7 +691,7 @@ async def to_bailian_data(files: List[FileSpec]) -> List[str]:
         data = result.get("data", {})
         if "failed_uploads" in data and data["failed_uploads"]:
             failed_files = ", ".join(
-                [f["name"] for f in data["failed_uploads"]],
+                [f"{f.get('name')}: {f}" for f in data["failed_uploads"]],
             )
             raise OutputError(
                 f"Partial upload failed: {failed_files}",

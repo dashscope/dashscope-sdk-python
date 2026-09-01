@@ -83,6 +83,10 @@ FC_REGISTER_GROUP_REWARD_API = os.environ.get(
 )
 FC_LOAD_API = os.environ.get("FC_LOAD_API", f"{FC_BASE_ENDPOINT}/online/faas")
 FC_QUERY_API = os.environ.get("FC_QUERY_API", f"{FC_BASE_ENDPOINT}/query/faas")
+FC_QUERY_LOG_API = os.environ.get(
+    "FC_QUERY_LOG_API",
+    f"{FC_BASE_ENDPOINT}/query/faas/log",
+)
 FC_LAYER_CREATE_API = os.environ.get(  # POST
     "FC_LAYER_CREATE_API",
     f"{FC_BASE_ENDPOINT}/create/faas/layer",
