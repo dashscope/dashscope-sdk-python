@@ -20,6 +20,16 @@ from typing import Any, Mapping, Optional, Sequence
 
 from dashscope.agentstudio.types.models import BaseModel
 
+_NOT_GIVEN = object()
+
+
+def _to_mapping(value: Any) -> Any:
+    if hasattr(value, "to_dict"):
+        return value.to_dict()
+    if isinstance(value, Mapping):
+        return dict(value)
+    return value
+
 
 # ===========================================================================
 # Agents
@@ -42,6 +52,7 @@ class AgentCreateParams(BaseModel):
         "tools",
         "mcp_servers",
         "skills",
+        "multiagent",
         "metadata",
     )
 
@@ -55,6 +66,7 @@ class AgentCreateParams(BaseModel):
         tools: Optional[Sequence[Mapping[str, Any]]] = None,
         mcp_servers: Optional[Sequence[Mapping[str, Any]]] = None,
         skills: Optional[Sequence[Mapping[str, Any]]] = None,
+        multiagent: Optional[Mapping[str, Any]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> None:
         super().__init__(
@@ -69,6 +81,9 @@ class AgentCreateParams(BaseModel):
                 else None
             ),
             skills=([dict(s) for s in skills] if skills is not None else None),
+            multiagent=(
+                _to_mapping(multiagent) if multiagent is not None else None
+            ),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
@@ -85,6 +100,7 @@ class AgentUpdateParams(BaseModel):
         "tools",
         "mcp_servers",
         "skills",
+        "multiagent",
         "metadata",
     )
 
@@ -99,6 +115,7 @@ class AgentUpdateParams(BaseModel):
         tools: Optional[Sequence[Mapping[str, Any]]] = None,
         mcp_servers: Optional[Sequence[Mapping[str, Any]]] = None,
         skills: Optional[Sequence[Mapping[str, Any]]] = None,
+        multiagent: Optional[Mapping[str, Any]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> None:
         super().__init__(
@@ -114,6 +131,9 @@ class AgentUpdateParams(BaseModel):
                 else None
             ),
             skills=([dict(s) for s in skills] if skills is not None else None),
+            multiagent=(
+                _to_mapping(multiagent) if multiagent is not None else None
+            ),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
@@ -242,9 +262,19 @@ class SessionCreateParams(BaseModel):
     ``agent`` is the agent ID string (not the full agent object).
     ``resources`` is an optional list of file mounts; each item is a
     mapping with ``type``, ``file_id`` and ``mount_path`` keys.
+    ``vault_ids`` is create-only — attach vaults (``vlt_*``) whose
+    credentials are substituted at egress; the session update path does
+    not accept it.
     """
 
-    _fields = ("agent", "environment_id", "title", "resources", "metadata")
+    _fields = (
+        "agent",
+        "environment_id",
+        "title",
+        "resources",
+        "vault_ids",
+        "metadata",
+    )
 
     def __init__(  # pylint: disable=useless-parent-delegation
         self,
@@ -253,6 +283,7 @@ class SessionCreateParams(BaseModel):
         environment_id: Optional[str] = None,
         title: Optional[str] = None,
         resources: Optional[Sequence[Mapping[str, Any]]] = None,
+        vault_ids: Optional[Sequence[str]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> None:
         super().__init__(
@@ -262,6 +293,7 @@ class SessionCreateParams(BaseModel):
             resources=(
                 [dict(r) for r in resources] if resources is not None else None
             ),
+            vault_ids=(list(vault_ids) if vault_ids is not None else None),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
@@ -405,6 +437,177 @@ class SessionEventListParams(BaseModel):
         kwargs["order"] = order
         kwargs["page"] = page
         super().__init__(**kwargs)
+
+
+# ===========================================================================
+# Deployments
+# ===========================================================================
+
+
+class DeploymentCreateParams(BaseModel):
+    """Request body for ``POST /deployments``."""
+
+    _fields = (
+        "name",
+        "description",
+        "agent",
+        "environment_id",
+        "schedule",
+        "initial_events",
+        "resources",
+        "vault_ids",
+        "metadata",
+    )
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        agent: Any,
+        initial_events: Sequence[Mapping[str, Any]],
+        description: Optional[str] = None,
+        environment_id: Optional[str] = None,
+        schedule: Any = None,
+        resources: Optional[Sequence[Any]] = None,
+        vault_ids: Optional[Sequence[str]] = None,
+        metadata: Optional[Mapping[str, str]] = None,
+    ) -> None:
+        BaseModel.__init__(
+            self,
+            name=name,
+            description=description,
+            agent=_to_mapping(agent),
+            environment_id=environment_id,
+            schedule=(_to_mapping(schedule) if schedule is not None else None),
+            initial_events=[dict(event) for event in initial_events],
+            resources=(
+                [_to_mapping(resource) for resource in resources]
+                if resources is not None
+                else None
+            ),
+            vault_ids=(list(vault_ids) if vault_ids is not None else None),
+            metadata=(dict(metadata) if metadata is not None else None),
+        )
+
+
+class DeploymentUpdateParams(BaseModel):
+    """Request body for ``POST /deployments/{deployment_id}``.
+
+    ``environment_id`` and ``schedule`` preserve the distinction between an
+    omitted argument and an explicit ``None``. Explicit ``None`` is emitted as
+    JSON ``null`` to clear the field.
+    """
+
+    _fields = (
+        "name",
+        "description",
+        "agent",
+        "environment_id",
+        "schedule",
+        "initial_events",
+        "resources",
+        "vault_ids",
+        "metadata",
+    )
+
+    def __init__(
+        self,
+        *,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        agent: Any = None,
+        environment_id: Any = _NOT_GIVEN,
+        schedule: Any = _NOT_GIVEN,
+        initial_events: Optional[Sequence[Mapping[str, Any]]] = None,
+        resources: Optional[Sequence[Any]] = None,
+        vault_ids: Optional[Sequence[str]] = None,
+        metadata: Optional[Mapping[str, str]] = None,
+    ) -> None:
+        self._environment_id_given = environment_id is not _NOT_GIVEN
+        self._schedule_given = schedule is not _NOT_GIVEN
+        super().__init__(
+            name=name,
+            description=description,
+            agent=(_to_mapping(agent) if agent is not None else None),
+            environment_id=(
+                environment_id if self._environment_id_given else None
+            ),
+            schedule=(
+                _to_mapping(schedule)
+                if self._schedule_given and schedule is not None
+                else None
+            ),
+            initial_events=(
+                [dict(event) for event in initial_events]
+                if initial_events is not None
+                else None
+            ),
+            resources=(
+                [_to_mapping(resource) for resource in resources]
+                if resources is not None
+                else None
+            ),
+            vault_ids=(list(vault_ids) if vault_ids is not None else None),
+            metadata=(dict(metadata) if metadata is not None else None),
+        )
+
+    def to_dict(self) -> dict:
+        body = super().to_dict()
+        if self._environment_id_given and self.environment_id is None:
+            body["environment_id"] = None
+        if self._schedule_given and self.schedule is None:
+            body["schedule"] = None
+        return body
+
+
+class DeploymentListParams(BaseModel):
+    """Query params for ``GET /deployments``."""
+
+    _fields = (
+        "agent_id",
+        "keyword",
+        "status",
+        "include_archived",
+        "limit",
+        "page",
+        "created_at[gte]",
+        "created_at[lte]",
+    )
+
+    def __init__(
+        self,
+        *,
+        agent_id: Optional[str] = None,
+        keyword: Optional[str] = None,
+        status: Optional[str] = None,
+        include_archived: Optional[bool] = None,
+        limit: Optional[int] = None,
+        page: Optional[str] = None,
+        created_at_gte: Optional[str] = None,
+        created_at_lte: Optional[str] = None,
+    ) -> None:
+        super().__init__(
+            agent_id=agent_id,
+            keyword=keyword,
+            status=status,
+            include_archived=(
+                str(include_archived).lower()
+                if include_archived is not None
+                else None
+            ),
+            limit=limit,
+            page=page,
+            **{
+                "created_at[gte]": created_at_gte,
+                "created_at[lte]": created_at_lte,
+            },
+        )
+
+
+class DeploymentRunListParams(BaseModel):
+    """Query params for deployment run list endpoints."""
+
+    _fields = ("limit", "page")
 
 
 # ===========================================================================

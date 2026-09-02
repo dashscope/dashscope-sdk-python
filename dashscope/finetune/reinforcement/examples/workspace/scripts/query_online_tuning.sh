@@ -1,9 +1,7 @@
 #!/bin/sh
 #****************************************************************#
 # ScriptName: 1.sh
-# Author: @alibaba-inc.com
 # Create Date: 2026-03-16 11:30
-# Modify Author: @alibaba-inc.com
 # Modify Date: 2026-03-16 11:30
 # Function:
 #***************************************************************#

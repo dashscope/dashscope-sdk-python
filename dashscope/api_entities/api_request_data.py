@@ -2,6 +2,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import json
+from typing import Optional
 from urllib.parse import urlencode
 
 import aiohttp
@@ -50,10 +51,10 @@ class ApiRequestData:
     def add_resources(self, resources):
         self.resources = resources
 
-    def to_request_object(self) -> str:
-        """Convert data to json, called from http request.
+    def to_request_object(self) -> dict:
+        """Convert data to request dict, called from http request.
         Returns:
-            str: Json string.
+            dict: Request payload.
         """
         self.input = next(self._input_resolver)
         o = {
@@ -61,8 +62,7 @@ class ApiRequestData:
             for k, v in self.__dict__.items()
             if not (
                 k.startswith("_")
-                or k.startswith("task")
-                or k.startswith("function")
+                or k in ("task_group", "task", "function")
                 or v is None
             )
         }
@@ -92,15 +92,6 @@ class ApiRequestData:
                 json.dumps(data["parameters"], ensure_ascii=False),
             )
             return True, form()
-            # pylint: disable=unreachable,pointless-string-statement
-            """
-            mp_writer = aiohttp.MultipartWriter('mixed')
-            mp_writer.append('model=%s'%self.model)
-            mp_writer.append('input=%s' % json.dumps(self._input))
-            mp_writer.append('parameters=%s'%json.dumps(self.parameters))
-            mp_writer.append(form())
-            return True, mp_writer
-            """
         else:
             return False, data
 
@@ -143,15 +134,7 @@ class ApiRequestData:
         for content in self._input_resolver:
             yield content
 
-    def _to_json_only_data(self) -> str:
-        o = {
-            k: v
-            for k, v in self.__dict__.items()
-            if not (k.startswith("_") or k.startswith("param"))
-        }
-        return json.dumps(o, default=lambda o: o.__dict__)
-
-    def get_batch_binary_data(self) -> bytes:  # type: ignore[return]
+    def get_batch_binary_data(self) -> Optional[bytes]:
         """Get binary data. used in streaming mode none and
            out (input is not streaming), we send data in one package.
            In this case only has one field input.
@@ -161,12 +144,14 @@ class ApiRequestData:
         """
         for content in self._input_resolver:
             return content
+        return None
 
-    def _only_parameters(self) -> str:
+    def _only_parameters(self) -> dict:
         temp_input = None
-        if "raw_input" in self.parameters:
-            temp_input = self.parameters.pop("raw_input")
-        obj = {"model": self.model, "parameters": self.parameters, "input": {}}
+        params = dict(self.parameters)
+        if "raw_input" in params:
+            temp_input = params.pop("raw_input")
+        obj = {"model": self.model, "parameters": params, "input": {}}
         if temp_input is not None:
             obj["input"] = temp_input
         if self.task is not None:

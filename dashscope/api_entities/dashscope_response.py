@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Dict, List, Union
 
+_MISSING = object()
+
 
 @dataclass(init=False)
 class DictMixin(dict):
@@ -13,9 +15,6 @@ class DictMixin(dict):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-    def __getitem__(self, key):
-        return super().__getitem__(key)
 
     def __copy__(self):
         return type(self)(**self)
@@ -28,26 +27,13 @@ class DictMixin(dict):
             memo[id_self] = _copy
         return _copy
 
-    def __setitem__(self, key, value):
-        return super().__setitem__(key, value)
-
-    def __delitem__(self, key):
-        return super().__delitem__(key)
-
-    def get(self, key, default=None):
-        return super().get(key, default)
-
-    def setdefault(self, key, default=None):
-        return super().setdefault(key, default)
-
-    def pop(self, key, default: Any):  # type: ignore[override]
+    def pop(self, key, default: Any = _MISSING):
+        if default is _MISSING:
+            return super().pop(key)
         return super().pop(key, default)
 
     def update(self, **kwargs):
         super().update(**kwargs)
-
-    def __contains__(self, key):
-        return super().__contains__(key)
 
     def copy(self):
         return type(self)(self)
@@ -164,7 +150,10 @@ class Message(DictMixin):
             content = response.output["text"]
             return Message(role=Role.ASSISTANT, content=content)
         else:
-            return response.output.choices[0]["message"]
+            choices = response.output.get("choices", [])
+            if not choices:
+                return None
+            return choices[0].get("message")
 
     @classmethod
     def from_conversation_response(cls, response: DictMixin):

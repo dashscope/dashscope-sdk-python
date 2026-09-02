@@ -5,7 +5,7 @@ import os
 from abc import ABC, abstractmethod
 
 from dashscope.common.constants import DASHSCOPE_DISABLE_DATA_INSPECTION_ENV
-from dashscope.common.utils import get_user_agent
+from dashscope.common.utils import get_sdk_headers, get_user_agent
 
 
 class BaseRequest(ABC):
@@ -17,6 +17,7 @@ class BaseRequest(ABC):
             ua += "; " + user_agent
 
         self.headers = {"user-agent": ua}
+        self.headers.update(get_sdk_headers())
         disable_data_inspection = os.environ.get(
             DASHSCOPE_DISABLE_DATA_INSPECTION_ENV,
             "true",

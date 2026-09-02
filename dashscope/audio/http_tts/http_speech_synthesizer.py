@@ -266,6 +266,12 @@ class HttpSpeechSynthesizer(BaseApi):
         response,
     ) -> HttpSpeechSynthesisResult:
         """Handle non-streaming response."""
+        if (
+            isinstance(response, DashScopeAPIResponse)
+            and response.status_code != HTTPStatus.OK
+        ):
+            return HttpSpeechSynthesisResult(response=response)
+
         output = cls._extract_output(response)
         audio_info = output.get("audio", {})
 
@@ -273,6 +279,7 @@ class HttpSpeechSynthesizer(BaseApi):
             audio_url=audio_info.get("url"),
             audio_id=audio_info.get("id"),
             expires_at=audio_info.get("expires_at"),
+            response=response,
         )
 
     @classmethod
@@ -302,6 +309,7 @@ class HttpSpeechSynthesizer(BaseApi):
                     yield HttpSpeechSynthesisResult(
                         audio_data=audio_bytes,
                         sentences=sentences.copy(),
+                        response=part,
                     )
 
             elif output.get("finish_reason") == "stop":
@@ -318,6 +326,7 @@ class HttpSpeechSynthesizer(BaseApi):
                         "expires_at",
                     ),
                     sentences=sentences.copy(),
+                    response=part,
                 )
 
 

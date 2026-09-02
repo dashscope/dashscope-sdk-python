@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+import warnings
 from typing import Dict, List, Optional
 
 from dashscope.assistants.assistant_types import DeleteResponse
@@ -15,8 +16,23 @@ from dashscope.threads.thread_types import Run, Thread
 
 __all__ = ["Threads"]
 
+_DEPRECATION_MSG = (
+    "The Assistants API (dashscope.threads) is deprecated and will be "
+    "removed in a future release. Please migrate to the Responses API. "
+    "See https://help.aliyun.com/zh/model-studio/"
+    "synchronous-call-api-reference for migration details."
+)
+
 
 class Threads(CreateMixin, DeleteMixin, GetStatusMixin, UpdateMixin):
+    """
+    .. deprecated::
+        The Threads API is deprecated and will be removed in a future release.
+        Please migrate to the Responses API.
+        See https://help.aliyun.com/zh/model-studio/
+        synchronous-call-api-reference for migration details.
+    """
+
     SUB_PATH = "threads"
 
     @classmethod
@@ -77,6 +93,11 @@ class Threads(CreateMixin, DeleteMixin, GetStatusMixin, UpdateMixin):
         Returns:
             Thread: The thread object.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         data = {}
         if messages:
             data["messages"] = messages
@@ -138,6 +159,11 @@ class Threads(CreateMixin, DeleteMixin, GetStatusMixin, UpdateMixin):
         Returns:
             Thread: The `Thread` information.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not thread_id:
             raise InputRequired("thread_id is required!")
         response = super().get(
@@ -172,6 +198,11 @@ class Threads(CreateMixin, DeleteMixin, GetStatusMixin, UpdateMixin):
         Returns:
             Thread: The `Thread` information.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not thread_id:
             raise InputRequired("thread_id is required!")
         response = super().update(
@@ -205,6 +236,11 @@ class Threads(CreateMixin, DeleteMixin, GetStatusMixin, UpdateMixin):
         Returns:
             AssistantsDeleteResponse: The deleted information.
         """
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not thread_id:
             raise InputRequired("thread_id is required!")
         response = super().delete(
@@ -231,6 +267,11 @@ class Threads(CreateMixin, DeleteMixin, GetStatusMixin, UpdateMixin):
         api_key: str = None,
         **kwargs,
     ) -> Run:
+        warnings.warn(
+            _DEPRECATION_MSG,
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
         if not assistant_id:
             raise InputRequired("assistant_id is required")
         data = {"assistant_id": assistant_id}

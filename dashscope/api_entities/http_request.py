@@ -2,13 +2,17 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import datetime
 import json
+import threading
 from http import HTTPStatus
-from typing import Optional, Dict, Union
+from typing import Callable, Optional, Dict, Union
 
 import aiohttp
 import requests
 
-from dashscope.api_entities.aio_session import get_shared_aio_session
+from dashscope.api_entities.aio_session import (
+    get_shared_aio_session,
+    send_with_retry_async,
+)
 from dashscope.api_entities.base_request import AioBaseRequest
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.common.constants import (
@@ -25,6 +29,44 @@ from dashscope.common.utils import (
     _handle_stream,
 )
 from dashscope.api_entities.encryption import Encryption
+
+# Shared synchronous session for connection pooling
+_shared_sync_session: Optional[requests.Session] = None
+_shared_sync_session_lock = threading.Lock()
+
+
+def _get_shared_sync_session() -> requests.Session:
+    """Return a shared requests.Session for connection pooling.
+
+    The session is created lazily and reused for the process lifetime;
+    it is never closed explicitly.
+    """
+    global _shared_sync_session
+    if _shared_sync_session is None:
+        with _shared_sync_session_lock:
+            if _shared_sync_session is None:
+                _shared_sync_session = requests.Session()
+    return _shared_sync_session
+
+
+def _send_with_retry(
+    send: Callable[[], requests.Response],
+) -> requests.Response:
+    """Send a request, retrying once on a dropped pooled connection.
+
+    A keep-alive connection idle in the pool may have been closed by the
+    server or an intermediate LB; reusing it raises ConnectionError before
+    any response bytes arrive, so the request was not processed and is
+    safe to resend on a fresh connection.
+    """
+    try:
+        return send()
+    except requests.exceptions.ConnectionError as e:
+        logger.debug(
+            "Connection dropped before response, retrying once: %s",
+            e,
+        )
+        return send()
 
 
 class HttpRequest(AioBaseRequest):
@@ -123,7 +165,7 @@ class HttpRequest(AioBaseRequest):
             self.headers["X-Accel-Buffering"] = "no"
             self.headers["X-DashScope-SSE"] = "enable"
         if self.query:
-            self.url = self.url.replace("api", "api-task")
+            self.url = self.url.replace("/api/", "/api-task/", 1)
             self.url += f"{task_id}"
         if timeout is None:
             self.timeout = DEFAULT_REQUEST_TIMEOUT_SECONDS
@@ -134,7 +176,7 @@ class HttpRequest(AioBaseRequest):
         self.headers[key] = value
 
     def add_headers(self, headers):
-        self.headers = {**self.headers, **headers}
+        self.headers.update(headers)
 
     def call(self):
         response = self._handle_request()
@@ -197,12 +239,14 @@ class HttpRequest(AioBaseRequest):
                         body = json.dumps(obj, ensure_ascii=False).encode(
                             "utf-8",
                         )
-                        response = await session.request(
-                            "POST",
-                            url=self.url,
-                            data=body,
-                            headers=self.headers,
-                            timeout=request_timeout,
+                        response = await send_with_retry_async(
+                            lambda: session.request(
+                                "POST",
+                                url=self.url,
+                                data=body,
+                                headers=self.headers,
+                                timeout=request_timeout,
+                            ),
                         )
                 elif self.method == HTTPMethod.GET:
                     params = {}
@@ -210,11 +254,13 @@ class HttpRequest(AioBaseRequest):
                         params = getattr(self.data, "parameters", {})
                     if params:
                         params = self.__handle_parameters(params)
-                    response = await session.get(
-                        url=self.url,
-                        params=params,
-                        headers=self.headers,
-                        timeout=request_timeout,
+                    response = await send_with_retry_async(
+                        lambda: session.get(
+                            url=self.url,
+                            params=params,
+                            headers=self.headers,
+                            timeout=request_timeout,
+                        ),
                     )
                 else:
                     raise UnsupportedHTTPMethod(
@@ -227,9 +273,9 @@ class HttpRequest(AioBaseRequest):
             finally:
                 if should_close:
                     await session.close()
-        except Exception as e:
-            logger.debug(e)
-            raise e
+        except Exception:
+            logger.exception("Request failed")
+            raise
 
     @staticmethod
     def __handle_parameters(params: dict) -> dict:
@@ -435,10 +481,10 @@ class HttpRequest(AioBaseRequest):
             logger.debug("Response: %s", json_content)
             output = None
             usage = None
-            if "task_id" in json_content:
-                output = {"task_id": json_content["task_id"]}
             if "output" in json_content:
                 output = json_content["output"]
+            elif "task_id" in json_content:
+                output = {"task_id": json_content["task_id"]}
             if "usage" in json_content:
                 usage = json_content["usage"]
             if "request_id" in json_content:
@@ -461,61 +507,58 @@ class HttpRequest(AioBaseRequest):
     def _handle_request(self):  # pylint: disable=too-many-branches
         try:
             # Use external session if provided,
-            # otherwise create temporary session
+            # otherwise use shared session with connection pooling
             if self._external_session is not None:
                 session = self._external_session
-                should_close = False
             else:
-                session = requests.Session()
-                should_close = True
+                session = _get_shared_sync_session()
 
-            try:
-                if self.method == HTTPMethod.POST:
-                    is_form, form, obj = False, None, {}
-                    if hasattr(self, "data") and self.data is not None:
-                        is_form, form, obj = self.data.get_http_payload()
-                    if is_form:
-                        headers = {**self.headers}
-                        headers.pop("Content-Type")
-                        response = session.post(
-                            url=self.url,
-                            data=obj,
-                            files=form,
-                            headers=headers,
-                            timeout=self.timeout,
-                        )
-                    else:
-                        logger.debug("Request body: %s", obj)
-                        body = json.dumps(obj, ensure_ascii=False).encode(
-                            "utf-8",
-                        )
-                        response = session.post(
+            if self.method == HTTPMethod.POST:
+                is_form, form, obj = False, None, {}
+                if hasattr(self, "data") and self.data is not None:
+                    is_form, form, obj = self.data.get_http_payload()
+                if is_form:
+                    headers = {**self.headers}
+                    headers.pop("Content-Type")
+                    response = session.post(
+                        url=self.url,
+                        data=obj,
+                        files=form,
+                        headers=headers,
+                        timeout=self.timeout,
+                    )
+                else:
+                    logger.debug("Request body: %s", obj)
+                    body = json.dumps(obj, ensure_ascii=False).encode(
+                        "utf-8",
+                    )
+                    response = _send_with_retry(
+                        lambda: session.post(
                             url=self.url,
                             stream=self.stream,
                             data=body,
                             headers={**self.headers},
                             timeout=self.timeout,
-                        )
-                elif self.method == HTTPMethod.GET:
-                    params = {}
-                    if hasattr(self, "data") and self.data is not None:
-                        params = getattr(self.data, "parameters", {})
-                    response = session.get(
+                        ),
+                    )
+            elif self.method == HTTPMethod.GET:
+                params = {}
+                if hasattr(self, "data") and self.data is not None:
+                    params = getattr(self.data, "parameters", {})
+                response = _send_with_retry(
+                    lambda: session.get(
                         url=self.url,
                         params=params,
                         headers=self.headers,
                         timeout=self.timeout,
-                    )
-                else:
-                    raise UnsupportedHTTPMethod(
-                        f"Unsupported http method: {self.method}",
-                    )
-                for rsp in self._handle_response(response):
-                    yield rsp
-            finally:
-                # Only close if we created the session
-                if should_close:
-                    session.close()
-        except Exception as e:
-            logger.debug(e)
-            raise e
+                    ),
+                )
+            else:
+                raise UnsupportedHTTPMethod(
+                    f"Unsupported http method: {self.method}",
+                )
+            for rsp in self._handle_response(response):
+                yield rsp
+        except Exception:
+            logger.exception("Request failed")
+            raise

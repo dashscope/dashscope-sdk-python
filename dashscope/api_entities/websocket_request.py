@@ -72,7 +72,7 @@ class WebSocketRequest(AioBaseRequest):
         self.is_binary_input = is_binary_input
 
         self.headers = {
-            "Authorization": f"bearer {api_key}",
+            "Authorization": f"Bearer {api_key}",
             **self.headers,  # type: ignore[has-type]
         }
 
@@ -80,9 +80,10 @@ class WebSocketRequest(AioBaseRequest):
             "streaming": self.ws_stream_mode,
         }
         self.pre_task_id = pre_task_id
+        self.ws = None
 
     def add_headers(self, headers):
-        self.headers = {**self.headers, **headers}
+        self.headers.update(headers)
 
     def call(self):
         response = async_to_sync(self.connection_handler())
@@ -97,8 +98,9 @@ class WebSocketRequest(AioBaseRequest):
             return output
 
     async def close(self):
-        if self.ws is not None and not self.ws.closed:
-            await self.ws.close()
+        ws = getattr(self, "ws", None)
+        if ws is not None and not ws.closed:
+            await ws.close()
 
     async def aio_call(self):
         response = self.connection_handler()
@@ -112,7 +114,9 @@ class WebSocketRequest(AioBaseRequest):
                 pass
             return result
 
-    async def connection_handler(self):  # pylint: disable=too-many-branches
+    async def connection_handler(
+        self,
+    ):  # pylint: disable=too-many-branches,too-many-statements
         try:
             task_id = None
             async with aiohttp.ClientSession(
@@ -124,8 +128,9 @@ class WebSocketRequest(AioBaseRequest):
                 async with session.ws_connect(
                     self.url,
                     headers=self.headers,
-                    heartbeat=6000,
+                    heartbeat=30,
                 ) as ws:
+                    self.ws = ws  # Store ws reference for close() method
                     await self._start_task(ws)  # send start task action.
                     task_id = self.task_headers["task_id"]
                     await self._wait_for_task_started(
@@ -176,15 +181,30 @@ class WebSocketRequest(AioBaseRequest):
                                 message,
                             )
                     else:  # duplex mode
-                        asyncio.create_task(self._send_continue_task_data(ws))
-                        async for is_binary, message in self._receive_streaming_data_task(  # noqa E501  # pylint: disable=line-too-long
-                            ws,
-                        ):
-                            yield self._to_DashScopeAPIResponse(
-                                task_id,
-                                is_binary,
-                                message,
+                        bg_task = asyncio.create_task(
+                            self._send_continue_task_data(ws),
+                        )
+                        try:
+                            async for is_binary, message in self._receive_streaming_data_task(  # noqa E501  # pylint: disable=line-too-long
+                                ws,
+                            ):
+                                yield self._to_DashScopeAPIResponse(
+                                    task_id,
+                                    is_binary,
+                                    message,
+                                )
+                            # Normal completion: wait for the send task.
+                            await bg_task
+                        except BaseException:
+                            # Abnormal exit (error or consumer closed the
+                            # stream early): cancel to avoid leaking it.
+                            if not bg_task.done():
+                                bg_task.cancel()
+                            await asyncio.gather(
+                                bg_task,
+                                return_exceptions=True,
                             )
+                            raise
         except RequestFailure as e:
             yield DashScopeAPIResponse(
                 request_id=e.request_id,
@@ -216,7 +236,7 @@ class WebSocketRequest(AioBaseRequest):
                 code=code,
                 message=msg,
             )
-        except BaseException as e:
+        except Exception as e:
             logger.exception(e)
             yield DashScopeAPIResponse(
                 request_id="",

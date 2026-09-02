@@ -7,13 +7,16 @@ its own ClientSession (aiohttp sessions are loop-bound). The SSL context
 is created once and shared across all sessions.
 """
 import asyncio
+import atexit
 import ssl
 import threading
 import weakref
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 import aiohttp
 import certifi
+
+from dashscope.common.logging import logger
 
 _shared_ssl_context: Optional[ssl.SSLContext] = None
 _aio_sessions: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
@@ -47,43 +50,53 @@ async def get_shared_aio_session() -> aiohttp.ClientSession:
         connector = aiohttp.TCPConnector(ssl=get_ssl_context())
         session = aiohttp.ClientSession(connector=connector, trust_env=True)
 
-        # Register finalizer to close session when it's garbage collected.
-        # This prevents resource leaks even if
-        # close_shared_aio_session() is not called.
-        weakref.finalize(session, _sync_close_session, id(session))
-
         _aio_sessions[loop] = session
+        # Register GC-safe finalizer to close session when loop is collected
+        weakref.finalize(session, _sync_close_session, id(session))
     return session
 
 
 def _sync_close_session(session_id: int) -> None:
-    """Synchronous callback when session is garbage collected.
-
-    Note: This runs during GC, so we cannot await. We try to close
-    synchronously if possible, otherwise log a warning.
-    """
+    """GC callback to safely close a session outside async context."""
     try:
         loop = asyncio.get_event_loop()
-        if not loop.is_closed() and not loop.is_running():
-            # Loop exists and is not running, we can use it
-            # Find the session in our cache
-            with _lock:
-                for stored_session in _aio_sessions.values():
-                    if (
-                        id(stored_session) == session_id
-                        and not stored_session.closed
-                    ):
-                        try:
-                            loop.run_until_complete(stored_session.close())
-                        except Exception:
-                            pass
-                        break
+        if loop.is_closed():
+            return
+        if loop.is_running():
+            asyncio.ensure_future(_async_close_by_id(session_id))
+        else:
+            loop.run_until_complete(_async_close_by_id(session_id))
     except RuntimeError:
-        # No event loop available, can't close asynchronously
         pass
-    except Exception:
-        # Ignore errors during cleanup
-        pass
+
+
+async def _async_close_by_id(session_id: int) -> None:
+    """Close session by ID, safe against already-collected sessions."""
+    with _lock:
+        for loop, session in list(_aio_sessions.items()):
+            if id(session) == session_id and not session.closed:
+                await session.close()
+                _aio_sessions.pop(loop, None)
+                return
+
+
+def _atexit_cleanup() -> None:
+    """Cleanup all sessions at interpreter exit."""
+    with _lock:
+        sessions = list(_aio_sessions.items())
+        _aio_sessions.clear()
+
+    for loop, session in sessions:
+        if not session.closed:
+            try:
+                if not loop.is_closed() and not loop.is_running():
+                    loop.run_until_complete(session.close())
+            except Exception:
+                pass
+
+
+# Register atexit handler
+atexit.register(_atexit_cleanup)
 
 
 async def close_shared_aio_session() -> None:
@@ -93,3 +106,24 @@ async def close_shared_aio_session() -> None:
         session = _aio_sessions.pop(loop, None)
     if session is not None and not session.closed:
         await session.close()
+
+
+async def send_with_retry_async(
+    send: Callable[[], Awaitable[aiohttp.ClientResponse]],
+) -> aiohttp.ClientResponse:
+    """Send an async request, retrying once on a dropped pooled connection.
+
+    A keep-alive connection idle in the connector pool may have been
+    closed by the server or an intermediate LB; reusing it raises
+    ClientConnectionError before any response bytes arrive, so the
+    request was not processed and is safe to resend on a fresh
+    connection.
+    """
+    try:
+        return await send()
+    except aiohttp.ClientConnectionError as e:
+        logger.debug(
+            "Connection dropped before response, retrying once: %s",
+            e,
+        )
+        return await send()

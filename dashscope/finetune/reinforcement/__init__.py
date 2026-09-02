@@ -1,4 +1,14 @@
 # -*- coding: utf-8 -*-
+try:
+    import pydantic  # noqa: F401
+    import tenacity  # noqa: F401
+    import yaml  # noqa: F401
+except ImportError as _rl_dep_err:
+    raise ImportError(
+        "Agentic RL fine-tuning needs optional dependencies. "
+        "Install them with: pip install 'dashscope[rl]'",
+    ) from _rl_dep_err
+
 from dashscope.finetune.reinforcement.common.constants import (
     BAILIAN_FILE_API,
     BAILIAN_FILE_TIMEOUT,

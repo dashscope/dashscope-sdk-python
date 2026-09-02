@@ -114,25 +114,22 @@ class Assistant(BaseObjectMixin):
     """ID of the assistant.
     """
     model: str
-    name: Optional[str] = None
     created_at: int  # type: ignore[misc]
     """The Unix timestamp (in seconds) for when the assistant was created.
     """
-    description: Optional[str] = None
-
     file_ids: List[str]  # type: ignore[misc]
-
-    instructions: Optional[str] = None
-    metadata: Optional[object] = None
     tools: List[Tool]  # type: ignore[misc]
 
+    name: Optional[str] = None
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    metadata: Optional[object] = None
     object: Optional[str] = None
 
     top_p: Optional[float] = None
     top_k: Optional[int] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
-
     request_id: Optional[str] = None
 
     def __init__(self, **kwargs):

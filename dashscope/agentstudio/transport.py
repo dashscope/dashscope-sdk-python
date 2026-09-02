@@ -32,6 +32,7 @@ from dashscope.agentstudio.constants import (
     AGENTSTUDIO_DEFAULT_TIMEOUT,
     AGENTSTUDIO_MAX_RETRIES,
 )
+from dashscope.common.utils import get_sdk_headers
 
 logger = logging.getLogger("dashscope.agentstudio")
 
@@ -229,6 +230,7 @@ def build_headers(
         HEADER_AUTHORIZATION: f"Bearer {api_key}",
         HEADER_USER_AGENT: user_agent,
     }
+    headers.update(get_sdk_headers())
     if json_body:
         headers["Content-Type"] = "application/json"
         headers["Accept"] = "application/json"

@@ -1,3 +1,7 @@
 include dashscope/resources/qwen.tiktoken
+include dashscope/py.typed
+include dashscope/__init__.pyi
 include NOTICE
 include LICENSE.certifi
+recursive-include dashscope/acli/examples *.md *.toml *.py
+include requirements.txt

@@ -10,6 +10,8 @@ from dashscope.agentstudio.types import (
     Agent,
     AgentVersion,
     Credential,
+    Deployment,
+    DeploymentRun,
     Environment,
     File,
     ServerEvent,
@@ -81,6 +83,12 @@ def _coerce_webhook_secret_reset(
     payload: Mapping[str, Any],
 ) -> WebhookSecretReset:
     return WebhookSecretReset(**dict(payload))
+def _coerce_deployment(payload: Mapping[str, Any]) -> Deployment:
+    return Deployment(**dict(payload))
+
+
+def _coerce_deployment_run(payload: Mapping[str, Any]) -> DeploymentRun:
+    return DeploymentRun(**dict(payload))
 
 
 # ---------------------------------------------------------------------------

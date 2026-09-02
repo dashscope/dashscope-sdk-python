@@ -344,3 +344,113 @@ def test_agents_update_does_not_auto_retrieve():
     )
     assert len(client.transport.calls) == 1
     assert client.transport.calls[0]["method"] == "POST"
+
+
+def test_thread_event_exposes_thread_id():
+    """thread_* events carry a top-level thread_id; it must be a real field."""
+    from dashscope.agentstudio.types import Message
+
+    ev = Message(
+        object="message",
+        type="thread_status",
+        id="sevt_1",
+        thread_id="sthr_01M0SG9KZ4TMW0QPEKHHM43QRK",
+        content=[
+            {
+                "type": "data",
+                "data": {"agent_name": "worker", "thread_status": "running"},
+            },
+        ],
+    )
+    assert ev.thread_id == "sthr_01M0SG9KZ4TMW0QPEKHHM43QRK"
+    # not swallowed into extra
+    assert "thread_id" not in ev.extra
+    # thread_status value stays readable from the data block
+    assert ev.content[0].data["thread_status"] == "running"
+
+
+def test_agent_create_body_includes_multiagent():
+    """multiagent roster is forwarded verbatim on create."""
+    from dashscope.agentstudio.types.params import AgentCreateParams
+
+    body = AgentCreateParams(
+        name="coordinator",
+        model="qwen-max",
+        multiagent={
+            "type": "coordinator",
+            "agents": [
+                {"type": "self"},
+                {"type": "agent", "id": "agent_worker", "version": 1},
+            ],
+        },
+    ).to_dict()
+    assert body["multiagent"]["type"] == "coordinator"
+    assert body["multiagent"]["agents"][0] == {"type": "self"}
+    assert body["multiagent"]["agents"][1]["id"] == "agent_worker"
+    assert body["multiagent"]["agents"][1]["version"] == 1
+
+    # omitted -> not emitted
+    plain = AgentCreateParams(name="plain", model="qwen-max").to_dict()
+    assert "multiagent" not in plain
+
+
+def test_agent_update_body_includes_multiagent():
+    """multiagent is forwarded on update alongside the required version."""
+    from dashscope.agentstudio.types.params import AgentUpdateParams
+
+    body = AgentUpdateParams(
+        name="coordinator",
+        version=2,
+        multiagent={"type": "coordinator", "agents": [{"type": "self"}]},
+    ).to_dict()
+    assert body["version"] == 2
+    assert body["multiagent"]["agents"] == [{"type": "self"}]
+
+    # An empty list must not be dropped — it clears the roster server-side.
+    cleared = AgentUpdateParams(
+        name="coordinator",
+        version=3,
+        multiagent={"type": "coordinator", "agents": []},
+    ).to_dict()
+    assert cleared["multiagent"] == {"type": "coordinator", "agents": []}
+
+    # A MultiAgentConfig read off a response must be accepted back as-is,
+    # so read-modify-write round trips work.
+    from dashscope.agentstudio.types import Agent
+
+    hydrated = Agent(
+        id="agent_1",
+        multiagent={"type": "coordinator", "agents": [{"type": "self"}]},
+    ).multiagent
+    round_tripped = AgentUpdateParams(
+        name="coordinator",
+        version=4,
+        multiagent=hydrated,
+    ).to_dict()
+    assert round_tripped["multiagent"] == {
+        "type": "coordinator",
+        "agents": [{"type": "self"}],
+    }
+
+
+def test_agent_model_hydrates_multiagent():
+    """Agent response hydrates the multiagent dict into typed models."""
+    from dashscope.agentstudio.types import (
+        Agent,
+        MultiAgentConfig,
+        MultiAgentRosterEntry,
+    )
+
+    agent = Agent(
+        id="agent_1",
+        version=1,
+        multiagent={
+            "type": "coordinator",
+            "agents": [{"type": "self"}, {"type": "agent", "id": "agent_2"}],
+        },
+    )
+    assert isinstance(agent.multiagent, MultiAgentConfig)
+    assert agent.multiagent.type == "coordinator"
+    assert isinstance(agent.multiagent.agents[0], MultiAgentRosterEntry)
+    assert agent.multiagent.agents[0].type == "self"
+    assert agent.multiagent.agents[1].id == "agent_2"

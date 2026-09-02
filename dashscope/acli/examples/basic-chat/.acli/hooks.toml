@@ -1,0 +1,101 @@
+# acli hooks — basic-chat example
+# ============================================================================
+# Insert custom behavior at key lifecycle points of the agent run: intercept
+# dangerous tools, print warnings, call external audit scripts, ask the user
+# for confirmation. Workspace level only (~/.acli/hooks.toml is not read).
+#
+# Load location: ./.acli/hooks.toml (current workspace)
+# Skill-package hooks: .acli/skills/<name>/hooks.toml (applies only to that skill)
+#
+# Supported events (in lifecycle order):
+#   before_tool_call  — just before a tool executes
+#   after_tool_call   — after a tool finishes
+#   on_error          — when a tool throws or a sub-agent fails
+#   on_message        — when a user message is received
+#   on_response       — when an LLM response is received
+#
+# Supported actions (action field):
+#   run      — run a shell command (with the run = "..." field)
+#   block    — block the current operation, returning message to the agent
+#   confirm  — continue only after user confirmation
+#   warn     — print a yellow warning
+#   alert    — print a red alert
+#   log      — write to the log (not printed to the terminal)
+#
+# Field reference:
+#   match            — tool-name glob (e.g. "write_file" / "run_command" / "*")
+#   condition        — file-path glob (e.g. "*.py"); the path is extracted from tool arguments, then matched
+#   content_pattern  — content glob (on_error/on_response check result; tool calls check arguments)
+#   action           — see the action list above
+#   run              — shell command template (only for action = "run")
+#   message          — message template (for block/confirm/warn/alert/log)
+#   on_fail          — policy when the run command fails: warn / alert / block
+#   silent           — when true, run's stdout is not printed to the terminal
+#
+# Template variables ({var} placeholders):
+#   {tool_name}      — tool name
+#   {path}           — path from the tool arguments (path/file_path/file/src/dst/target)
+#   {filename}       — filename part of the path
+#   {filename_stem}  — filename without extension
+#   {timestamp}      — current time (YYYY-MM-DDTHH:MM:SS)
+#   {exit_code}      — exit code of the run_command tool
+#   {content}        — content of the write_file tool (first 500 chars)
+# ============================================================================
+
+# ---- Example 1: Auto syntax-check after writing a .py file (action = "run") ----
+# [[hooks.after_tool_call]]
+# match = "write_file"
+# condition = "*.py"
+# action = "run"
+# run = "python -m py_compile {path}"
+# on_fail = "warn"   # print a warning on compile failure (does not block)
+# silent = true       # don't print stdout to the terminal
+
+# ---- Example 2: Block deletion of protected files (action = "block") ----
+# [[hooks.before_tool_call]]
+# match = "delete_file"
+# condition = "*.acli/skills/*"
+# action = "block"
+# message = "Deleting files under the skills directory is not allowed; edit them directly or use /skill rm"
+
+# ---- Example 3: Confirm before pip install (action = "confirm") ----
+# [[hooks.before_tool_call]]
+# match = "run_command"
+# content_pattern = "*pip*install*"
+# action = "confirm"
+# message = "About to run a pip install. Continue?"
+
+# ---- Example 4: Log after writing a .py file (action = "log") ----
+# [[hooks.after_tool_call]]
+# match = "write_file"
+# condition = "*.py"
+# action = "log"
+# message = "{timestamp} | wrote {filename}"
+
+# ---- Example 5: Warn when a missing module is detected (action = "warn") ----
+# [[hooks.on_error]]
+# match = "*"
+# content_pattern = "*ModuleNotFoundError*"
+# action = "warn"
+# message = "Missing module detected. Check the dependency first: pip show <package>"
+
+# ---- Example 6: Auto gofmt after writing a .go file (action = "run") ----
+# [[hooks.after_tool_call]]
+# match = "write_file"
+# condition = "*.go"
+# action = "run"
+# run = "gofmt -w {path}"
+# on_fail = "warn"
+
+# ---- Example 7: Append to a log file on each LLM response (action = "run") ----
+# [[hooks.on_response]]
+# match = "*"
+# action = "run"
+# run = "echo '{timestamp} | response received' >> .acli/response.log"
+# silent = true
+
+# ---- Example 8: Log a timestamp on each user message (action = "log") ----
+# [[hooks.on_message]]
+# match = "*"
+# action = "log"
+# message = "{timestamp} | user message received"

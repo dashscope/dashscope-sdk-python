@@ -333,6 +333,39 @@ def parse_content_blocks(
 # ===========================================================================
 
 
+class MultiAgentRosterEntry(BaseModel):
+    """One entry in a coordinator agent's multiagent roster.
+
+    ``type`` is ``"agent"`` (reference another agent by ``id`` + optional
+    ``version``) or ``"self"`` (a copy of the coordinator; at most one).
+    """
+
+    _fields = ("type", "id", "version")
+
+
+class MultiAgentConfig(BaseModel):
+    """Multi-agent coordinator config (the ``multiagent`` field).
+
+    ``type`` is currently always ``"coordinator"``; ``agents`` is the
+    roster of 1-20 entries. An empty list clears the roster.
+    """
+
+    _fields = ("type", "agents")
+
+    def __init__(self, **kwargs: Any) -> None:
+        agents = kwargs.get("agents")
+        if isinstance(agents, list):
+            kwargs["agents"] = [
+                (
+                    MultiAgentRosterEntry(**dict(a))
+                    if isinstance(a, Mapping)
+                    else a
+                )
+                for a in agents
+            ]
+        super().__init__(**kwargs)
+
+
 class Agent(BaseModel):
     _fields = (
         "id",
@@ -345,6 +378,7 @@ class Agent(BaseModel):
         "tools",
         "mcp_servers",
         "skills",
+        "multiagent",
         "metadata",
         "workspace_id",
         "archived_at",
@@ -352,6 +386,12 @@ class Agent(BaseModel):
         "updated_at",
         "request_id",
     )
+
+    def __init__(self, **kwargs: Any) -> None:
+        multiagent = kwargs.get("multiagent")
+        if isinstance(multiagent, Mapping):
+            kwargs["multiagent"] = MultiAgentConfig(**dict(multiagent))
+        super().__init__(**kwargs)
 
     @property
     def system_prompt(self) -> Optional[str]:
@@ -579,6 +619,110 @@ class WebhookEvent(BaseModel):
         "created_at",
         "data",
         "delivery",
+class DeploymentAgentReference(BaseModel):
+    """Agent version reference stored on a deployment run."""
+
+    _fields = ("id", "version")
+
+
+class DeploymentSchedule(BaseModel):
+    """Cron schedule returned with a deployment."""
+
+    _fields = (
+        "type",
+        "expression",
+        "timezone",
+        "last_run_at",
+        "next_run_at",
+    )
+
+
+class DeploymentResource(BaseModel):
+    """Resource mounted into sessions created by a deployment."""
+
+    _fields = ("type", "file_id", "mount_path")
+
+
+class DeploymentError(BaseModel):
+    """Error information attached to a failed run or automatic pause."""
+
+    _fields = ("code", "message")
+
+
+class DeploymentPausedReason(BaseModel):
+    """Why a deployment is paused (``manual`` or ``error``)."""
+
+    _fields = ("type", "error")
+
+    def __init__(self, **kwargs: Any) -> None:
+        error = kwargs.get("error")
+        if isinstance(error, Mapping):
+            kwargs["error"] = DeploymentError(**dict(error))
+        super().__init__(**kwargs)
+
+
+class Deployment(BaseModel):
+    """Managed Agent deployment."""
+
+    metadata: Optional[Dict[str, str]]
+
+    _fields = (
+        "id",
+        "type",
+        "name",
+        "description",
+        "agent",
+        "environment_id",
+        "schedule",
+        "initial_events",
+        "resources",
+        "vault_ids",
+        "metadata",
+        "status",
+        "paused_reason",
+        "archived_at",
+        "created_at",
+        "updated_at",
+        "request_id",
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        agent = kwargs.get("agent")
+        if isinstance(agent, Mapping):
+            kwargs["agent"] = Agent(**dict(agent))
+        schedule = kwargs.get("schedule")
+        if isinstance(schedule, Mapping):
+            kwargs["schedule"] = DeploymentSchedule(**dict(schedule))
+        resources = kwargs.get("resources")
+        if isinstance(resources, list):
+            kwargs["resources"] = [
+                DeploymentResource(**dict(resource))
+                if isinstance(resource, Mapping)
+                else resource
+                for resource in resources
+            ]
+        paused_reason = kwargs.get("paused_reason")
+        if isinstance(paused_reason, Mapping):
+            kwargs["paused_reason"] = DeploymentPausedReason(
+                **dict(paused_reason),
+            )
+        super().__init__(**kwargs)
+
+
+class DeploymentRun(BaseModel):
+    """A single manual or scheduled deployment execution."""
+
+    _fields = (
+        "id",
+        "type",
+        "deployment_id",
+        "agent",
+        "session_id",
+        "trigger_source",
+        "status",
+        "error",
+        "started_at",
+        "finished_at",
         "request_id",
     )
 
@@ -589,6 +733,12 @@ class WebhookEvent(BaseModel):
         delivery = kwargs.get("delivery")
         if isinstance(delivery, Mapping):
             kwargs["delivery"] = WebhookDelivery(**dict(delivery))
+        agent = kwargs.get("agent")
+        if isinstance(agent, Mapping):
+            kwargs["agent"] = DeploymentAgentReference(**dict(agent))
+        error = kwargs.get("error")
+        if isinstance(error, Mapping):
+            kwargs["error"] = DeploymentError(**dict(error))
         super().__init__(**kwargs)
 
 
@@ -627,6 +777,7 @@ class Message(BaseModel):
         "created_at",
         "sequence_number",
         "session_thread_id",
+        "thread_id",
         "code",
         "message",
     )
