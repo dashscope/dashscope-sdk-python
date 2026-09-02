@@ -123,12 +123,23 @@ class HardenedProvider:
     def __init__(
         self,
         provider: LLMProvider,
-        max_retries: int = 2,
-        retry_delay: float = 0.5,
+        max_retries: int = 3,
+        retry_delay: float = 4.0,
+        max_backoff: float = 16.0,
     ):
         self.provider = provider
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.max_backoff = max_backoff
+
+    def _backoff(self, attempt: int) -> float:
+        """Capped exponential backoff: retry_delay * 2**attempt, ≤ max_backoff.
+
+        With defaults (retry_delay=4, max_backoff=16, max_retries=3) the three
+        retry sleeps total ~28s — enough to ride out a transient model-API
+        blip without blocking long on a real outage.
+        """
+        return min(self.retry_delay * (2**attempt), self.max_backoff)
 
     async def chat(
         self,
@@ -149,7 +160,7 @@ class HardenedProvider:
             except Exception as e:
                 last_error = e
                 if attempt < self.max_retries and is_retryable_error(e):
-                    await asyncio.sleep(self.retry_delay * (attempt + 1))
+                    await asyncio.sleep(self._backoff(attempt))
                     continue
                 raise
 
@@ -157,7 +168,7 @@ class HardenedProvider:
                 if attempt < self.max_retries:
                     # Retry once with a recovery hint appended.
                     attempt_messages = list(messages) + [_EMPTY_RECOVERY_HINT]
-                    await asyncio.sleep(self.retry_delay * (attempt + 1))
+                    await asyncio.sleep(self._backoff(attempt))
                     continue
             return resp
 
@@ -185,7 +196,7 @@ class HardenedProvider:
                 if not emitted_anything and attempt < self.max_retries:
                     # No chunks at all; treat like empty response.
                     attempt_messages = list(messages) + [_EMPTY_RECOVERY_HINT]
-                    await asyncio.sleep(self.retry_delay * (attempt + 1))
+                    await asyncio.sleep(self._backoff(attempt))
                     continue
                 return
             except Exception as e:
@@ -198,6 +209,6 @@ class HardenedProvider:
                 ):
                     # Retry with same messages for transient failures.
                     attempt_messages = messages
-                    await asyncio.sleep(self.retry_delay * (attempt + 1))
+                    await asyncio.sleep(self._backoff(attempt))
                     continue
                 raise

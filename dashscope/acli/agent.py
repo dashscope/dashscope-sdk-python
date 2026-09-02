@@ -22,10 +22,14 @@ from dashscope.acli.config import WORKSPACE_DIR, context_window_for_model
 from dashscope.acli.executor import EXEC_ERROR_PREFIX, Executor
 from dashscope.acli.hooks import HookBus, HookContext, create_hook_bus
 from dashscope.acli.memory.manager import MemoryManager
-from dashscope.acli.memory.reflection import is_readonly_tool_call
+from dashscope.acli.memory.reflection import (
+    convergence_hint,
+    is_readonly_tool_call,
+)
 from dashscope.acli.platforms.base import MemoryProvider
 from dashscope.acli.prompt_pipeline import PromptContext, default_pipeline
 from dashscope.acli.providers.base import LLMProvider, LLMResponse, ToolCall
+from dashscope.acli.providers.hardening import is_retryable_error
 from dashscope.acli.skills import get_skill_manager, skills_summary_for_llm
 from dashscope.acli.tools.registry import PermissionLevel, registry
 from dashscope.acli.utils import (
@@ -167,6 +171,37 @@ class Agent:
             )
         except ValueError:
             self.readonly_hard_cap = 40
+        # Turn-level retry: a transient model-API failure that exhausts the
+        # provider's own retries must not kill a long run. Re-run the current
+        # turn (only when nothing was streamed yet, to avoid duplicate output)
+        # up to turn_retry_max times with capped exponential backoff.
+        # Env override: ACLI_TURN_RETRY_MAX (0 disables).
+        try:
+            self.turn_retry_max = int(
+                os.environ.get("ACLI_TURN_RETRY_MAX", "2"),
+            )
+        except ValueError:
+            self.turn_retry_max = 2
+        self.turn_retry_delay = 5.0
+        self.turn_retry_backoff_cap = 30.0
+        # Budget-aware convergence nudge (oneshot only): as the turn budget is
+        # consumed, tell the agent to switch approach if plateaued, lock in an
+        # already-passing result, then finalize. Covers productive-but-stuck
+        # iteration that ReflectionTracker (failures) and StagnationTracker
+        # (read-only stalls) both miss. Env: ACLI_CONVERGE_SOFT/_HARD (ratios;
+        # soft >= 1.0 disables).
+        try:
+            self.converge_soft_ratio = float(
+                os.environ.get("ACLI_CONVERGE_SOFT", "0.6"),
+            )
+        except ValueError:
+            self.converge_soft_ratio = 0.6
+        try:
+            self.converge_hard_ratio = float(
+                os.environ.get("ACLI_CONVERGE_HARD", "0.85"),
+            )
+        except ValueError:
+            self.converge_hard_ratio = 0.85
         # Load custom system prompt: workspace .acli/system-prompt.md first,
         # then global ~/.acli/system-prompt.md, then built-in default.
         # runners.py pre-populates system_prompt via _load_system_prompt();
@@ -179,6 +214,26 @@ class Agent:
             )
 
             self.system_prompt = _compose_system_prompt(_load_system_prompt())
+        if self.oneshot:
+            self.system_prompt = (self.system_prompt or SYSTEM_PROMPT) + (
+                "\n\nTask execution policy (autonomous mode):\n"
+                "- If the request has a measurable acceptance criterion "
+                "(numeric threshold, size/time limit, test suite, "
+                "similarity/accuracy target), iterate until it is met: "
+                "implement -> measure against the criterion -> refine. Do "
+                "not stop at the first version that merely runs; optimize "
+                "toward the target — but once the criterion is met, lock it "
+                "in and finish rather than risk regressing a passing result. "
+                "Heed any budget-check hint: it tells you when to converge "
+                "or switch to a different approach.\n"
+                "- Before reporting completion, self-verify with the same "
+                "check the requester will apply (run the tests, recompute "
+                "the metric, validate the format). Fix what fails instead "
+                "of handing back a near miss.\n"
+                "- When a check fails close to the target, treat it as "
+                "actionable feedback: change the approach based on what "
+                "the measurement shows, then re-measure."
+            )
         # Discover project instructions from CWD (rules.jsonl,
         # .cursorrules, etc.)
         from dashscope.acli.prompt import discover_project_instructions
@@ -410,6 +465,21 @@ class Agent:
         cap = self.readonly_hard_cap if self.oneshot else None
         return tracker.get_stagnation_hint(hard_cap=cap)
 
+    def _convergence_section(self, loop_index: int) -> str:
+        """Inject a budget-aware converge/switch nudge in oneshot runs.
+
+        Fires on the fraction of the turn budget consumed, covering the
+        productive-but-plateaued loop that failure/read-only trackers miss.
+        """
+        if not self.oneshot:
+            return ""
+        return convergence_hint(
+            loop_index,
+            self.max_turns,
+            self.converge_soft_ratio,
+            self.converge_hard_ratio,
+        )
+
     async def _recall_memory(self, user_input) -> str:
         """Search for relevant profile info and format as context.
 
@@ -569,7 +639,10 @@ class Agent:
             # The hint is appended, keeping the cache-friendly prefix stable.
             reflection_hint = self._reflection_section()
             messages_with_system[0]["content"] = (
-                system_prompt + reflection_hint + self._stagnation_section()
+                system_prompt
+                + reflection_hint
+                + self._stagnation_section()
+                + self._convergence_section(_loop_i)
             )
 
             # Hard stop for read-only stalls in oneshot mode: finish with
@@ -596,41 +669,79 @@ class Agent:
             last_chunk = None
             llm_start = time.monotonic()
 
-            async for chunk in self.provider.chat_stream(
-                normalize_for_model(messages_with_system, self.model_name),
-                tools_schema,
-                response_format=(
-                    {"type": "json_object"} if self.json_mode else None
-                ),
-            ):
-                if chunk.delta_content:
-                    full_content += chunk.delta_content
+            # Turn-level retry around the streaming call. A transient
+            # model-API failure that survives the provider's own retries is
+            # re-attempted here so a single network blip cannot abort a long
+            # run. We only retry when nothing has been streamed yet; once
+            # content is yielded, a retry would duplicate output, so we let
+            # the error propagate.
+            turn_attempt = 0
+            while True:
+                full_content = ""
+                full_reasoning = ""
+                tool_calls = []
+                seen_tool_calls = set()
+                last_chunk = None
+                emitted = False
+                try:
+                    async for chunk in self.provider.chat_stream(
+                        normalize_for_model(
+                            messages_with_system,
+                            self.model_name,
+                        ),
+                        tools_schema,
+                        response_format=(
+                            {"type": "json_object"} if self.json_mode else None
+                        ),
+                    ):
+                        if chunk.delta_content:
+                            emitted = True
+                            full_content += chunk.delta_content
 
-                    yield chunk.delta_content
+                            yield chunk.delta_content
 
-                if chunk.delta_reasoning_content:
-                    full_reasoning += chunk.delta_reasoning_content
+                        if chunk.delta_reasoning_content:
+                            emitted = True
+                            full_reasoning += chunk.delta_reasoning_content
 
-                if chunk.tool_calls:
-                    for tc in chunk.tool_calls:
-                        key = (
-                            tc.name,
-                            json.dumps(
-                                tc.arguments,
-                                sort_keys=True,
-                                ensure_ascii=False,
+                        if chunk.tool_calls:
+                            emitted = True
+                            for tc in chunk.tool_calls:
+                                key = (
+                                    tc.name,
+                                    json.dumps(
+                                        tc.arguments,
+                                        sort_keys=True,
+                                        ensure_ascii=False,
+                                    ),
+                                )
+                                if key in seen_tool_calls:
+                                    continue
+                                seen_tool_calls.add(key)
+                                tool_calls.append(tc)
+
+                        # Record token usage from the last chunk
+
+                        if chunk.usage:
+                            self.executor.record_api_call(chunk.usage)
+                            last_chunk = chunk
+                    break
+                except Exception as e:
+                    if (
+                        not emitted
+                        and is_retryable_error(e)
+                        and turn_attempt < self.turn_retry_max
+                    ):
+                        turn_attempt += 1
+                        await asyncio.sleep(
+                            min(
+                                self.turn_retry_delay
+                                * (2 ** (turn_attempt - 1)),
+                                self.turn_retry_backoff_cap,
                             ),
                         )
-                        if key in seen_tool_calls:
-                            continue
-                        seen_tool_calls.add(key)
-                        tool_calls.append(tc)
-
-                # Record token usage from the last chunk
-
-                if chunk.usage:
-                    self.executor.record_api_call(chunk.usage)
-                    last_chunk = chunk
+                        continue
+                    raise
 
             # Log LLM call trace
             self.executor.record_prompt_composition(

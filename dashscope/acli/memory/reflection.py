@@ -279,3 +279,59 @@ class StagnationTracker:
 
     def reset(self) -> None:
         self.readonly_streak = 0
+
+
+def convergence_hint(
+    loop_index: int,
+    max_turns: int,
+    soft_ratio: float = 0.6,
+    hard_ratio: float = 0.85,
+) -> str:
+    """Budget-aware converge/switch nudge for autonomous (oneshot) runs.
+
+    Third non-convergence detector. ReflectionTracker fires on *failures*,
+    StagnationTracker on *read-only stalls*; this covers the case where the
+    agent does productive, successful, mutating work that nonetheless
+    plateaus and burns the whole turn budget without reaching the goal
+    (e.g. a renderer stuck just under a similarity threshold). Keyed on the
+    fraction of the turn budget consumed, so it needs no task metric.
+
+    Returns "" below ``soft_ratio``; a switch-approach-or-lock-in nudge in
+    the soft band; a finalize-now nudge at/after ``hard_ratio``. A
+    ``soft_ratio >= 1.0`` disables it; ``max_turns <= 0`` is a safe no-op.
+    """
+    if max_turns <= 0 or soft_ratio >= 1.0:
+        return ""
+    used = loop_index + 1
+    frac = used / max_turns
+    remaining = max(0, max_turns - used)
+    if frac >= hard_ratio:
+        return (
+            "\n\n## ⏳ Budget nearly exhausted — converge now\n"
+            f"You have used {used}/{max_turns} iterations "
+            f"({remaining} left).\n"
+            "Stop refining. With your remaining turns:\n"
+            "1. Keep the best version you have produced so far.\n"
+            "2. Run ONE final verification against the acceptance "
+            "criterion.\n"
+            "3. Write the final result and finish.\n"
+            "Do NOT start a new approach now — there is no budget left to "
+            "debug it."
+        )
+    if frac >= soft_ratio:
+        return (
+            "\n\n## ⏳ Budget check — converge or switch approach\n"
+            f"You have used {used}/{max_turns} iterations "
+            f"({remaining} left).\n"
+            "Assess progress honestly: is your result measurably closer to "
+            "the goal than it was several iterations ago?\n"
+            "- If NO (plateaued): this approach is not working. Switch to a "
+            "structurally different strategy now instead of tweaking the "
+            "same one.\n"
+            "- If YES (improving): continue, but reserve the last ~15% of "
+            "your budget to finalize and self-verify.\n"
+            "- If the criterion is ALREADY met: stop optimizing, do one "
+            "final self-verify, and finish — do not risk regressing a "
+            "passing result."
+        )
+    return ""
