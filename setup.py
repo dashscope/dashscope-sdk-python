@@ -48,7 +48,7 @@ setuptools.setup(
     license="Apache 2.0",
     url=url,
     packages=setuptools.find_packages(
-        exclude=("tests"),
+        exclude=("tests", "tests.*"),
     ),  # pylint: disable=superfluous-parens
     classifiers=[
         "Development Status :: 4 - Beta",
