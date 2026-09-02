@@ -19,6 +19,9 @@ from dashscope.agentstudio.types import (
     Skill,
     SkillVersion,
     Vault,
+    WebhookEndpoint,
+    WebhookEvent,
+    WebhookSecretReset,
     parse_server_event,
 )
 
@@ -66,6 +69,20 @@ def _coerce_vault(payload: Mapping[str, Any]) -> Vault:
 
 def _coerce_credential(payload: Mapping[str, Any]) -> Credential:
     return Credential(**dict(payload))
+
+
+def _coerce_webhook_endpoint(payload: Mapping[str, Any]) -> WebhookEndpoint:
+    return WebhookEndpoint(**dict(payload))
+
+
+def _coerce_webhook_event(payload: Mapping[str, Any]) -> WebhookEvent:
+    return WebhookEvent(**dict(payload))
+
+
+def _coerce_webhook_secret_reset(
+    payload: Mapping[str, Any],
+) -> WebhookSecretReset:
+    return WebhookSecretReset(**dict(payload))
 
 
 def _coerce_deployment(payload: Mapping[str, Any]) -> Deployment:

@@ -752,3 +752,26 @@ class CredentialListParams(BaseModel):
                 include_archived,
             ).lower()
         super().__init__(**kwargs)
+
+
+# ===========================================================================
+# Webhook endpoints
+# ===========================================================================
+
+
+class WebhookEndpointCreateParams(BaseModel):
+    """Request body for ``POST /webhook_endpoints``."""
+
+    _fields = ("description", "url", "events")
+
+
+class WebhookEndpointUpdateParams(BaseModel):
+    """Request body for ``PUT /webhook_endpoints/{id}``."""
+
+    _fields = ("description", "url", "events")
+
+
+class WebhookEventListParams(BaseModel):
+    """Query parameters for endpoint-specific webhook events."""
+
+    _fields = ("limit", "page")

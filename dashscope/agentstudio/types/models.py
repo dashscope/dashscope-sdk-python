@@ -541,6 +541,97 @@ class DeleteResponse(BaseModel):
     _fields = ("id", "type", "request_id")
 
 
+class WebhookEndpoint(BaseModel):
+    """Managed Agent webhook endpoint."""
+
+    _fields = (
+        "id",
+        "description",
+        "url",
+        "events",
+        "status",
+        "disabled_reason",
+        "consecutive_fail",
+        "last_success_at",
+        "last_failure_at",
+        "signing_secret",
+        "created_at",
+        "updated_at",
+        "request_id",
+    )
+
+
+class WebhookEndpointList(BaseModel):
+    """Non-paginated list of webhook endpoints in the current workspace."""
+
+    _fields = ("data", "request_id")
+
+    def __init__(self, **kwargs: Any) -> None:
+        data = kwargs.get("data")
+        if isinstance(data, list):
+            kwargs["data"] = [
+                WebhookEndpoint(**dict(item))
+                if isinstance(item, Mapping)
+                else item
+                for item in data
+            ]
+        super().__init__(**kwargs)
+
+
+class WebhookSecretReset(BaseModel):
+    """Result returned after resetting a webhook signing secret."""
+
+    _fields = ("id", "signing_secret", "updated_at", "request_id")
+
+
+class WebhookEventData(BaseModel):
+    """Resource data carried by a webhook event envelope."""
+
+    _fields = (
+        "id",
+        "type",
+        "workspace_id",
+        "session_thread_id",
+        "vault_id",
+        "extensions",
+    )
+
+
+class WebhookDelivery(BaseModel):
+    """Delivery information attached to an endpoint event."""
+
+    _fields = (
+        "webhook_id",
+        "status",
+        "attempt_count",
+        "delivery_at",
+        "finish_at",
+        "failure_reason",
+    )
+
+
+class WebhookEvent(BaseModel):
+    """Webhook event envelope returned by test and endpoint event APIs."""
+
+    _fields = (
+        "type",
+        "id",
+        "created_at",
+        "data",
+        "delivery",
+        "request_id",
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        data = kwargs.get("data")
+        if isinstance(data, Mapping):
+            kwargs["data"] = WebhookEventData(**dict(data))
+        delivery = kwargs.get("delivery")
+        if isinstance(delivery, Mapping):
+            kwargs["delivery"] = WebhookDelivery(**dict(delivery))
+        super().__init__(**kwargs)
+
+
 class DeploymentAgentReference(BaseModel):
     """Agent version reference stored on a deployment run."""
 
