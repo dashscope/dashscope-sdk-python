@@ -83,6 +83,8 @@ def _coerce_webhook_secret_reset(
     payload: Mapping[str, Any],
 ) -> WebhookSecretReset:
     return WebhookSecretReset(**dict(payload))
+
+
 def _coerce_deployment(payload: Mapping[str, Any]) -> Deployment:
     return Deployment(**dict(payload))
 

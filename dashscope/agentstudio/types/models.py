@@ -619,6 +619,19 @@ class WebhookEvent(BaseModel):
         "created_at",
         "data",
         "delivery",
+        "request_id",
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        data = kwargs.get("data")
+        if isinstance(data, Mapping):
+            kwargs["data"] = WebhookEventData(**dict(data))
+        delivery = kwargs.get("delivery")
+        if isinstance(delivery, Mapping):
+            kwargs["delivery"] = WebhookDelivery(**dict(delivery))
+        super().__init__(**kwargs)
+
+
 class DeploymentAgentReference(BaseModel):
     """Agent version reference stored on a deployment run."""
 
@@ -727,12 +740,6 @@ class DeploymentRun(BaseModel):
     )
 
     def __init__(self, **kwargs: Any) -> None:
-        data = kwargs.get("data")
-        if isinstance(data, Mapping):
-            kwargs["data"] = WebhookEventData(**dict(data))
-        delivery = kwargs.get("delivery")
-        if isinstance(delivery, Mapping):
-            kwargs["delivery"] = WebhookDelivery(**dict(delivery))
         agent = kwargs.get("agent")
         if isinstance(agent, Mapping):
             kwargs["agent"] = DeploymentAgentReference(**dict(agent))
