@@ -35,8 +35,15 @@ EXEC_ERROR_PREFIX = "Error"
 
 
 class Executor:
-    def __init__(self, auto_approve: bool = False):
+    def __init__(
+        self,
+        auto_approve: bool = False,
+        confirm_mode: str = "dangerous",
+    ):
         self.auto_approve = auto_approve
+        # "all": CONFIRM and DANGEROUS both prompt; "dangerous": only
+        # DANGEROUS prompts (CONFIRM-level tools auto-pass).
+        self.confirm_mode = confirm_mode
         # Trust cache scoped to ONE conversation turn (a single user prompt
         # plus the agent loop that answers it). Agent.run / run_stream clear
         # these in a finally block on completion or abort. DANGEROUS tools
@@ -214,6 +221,14 @@ class Executor:
                     and policy.check_command(cmd) == "deny"
                 ):
                     return False
+            # confirm_mode="dangerous": only risky (DANGEROUS) operations
+            # prompt; CONFIRM-level tools auto-pass. Policy deny rules
+            # above have already been honored.
+            if (
+                self.confirm_mode == "dangerous"
+                and tool_def.permission == PermissionLevel.CONFIRM
+            ):
+                return True
             # Auto-pass read-only shell commands
             if tool_def.name == "run_command":
                 cmd = arguments.get("command", "")
@@ -283,6 +298,15 @@ class Executor:
             if isinstance(cmd, str) and policy.check_command(cmd) == "deny":
                 console.print("[dim red]✗ command denied by policy[/dim red]")
                 return False
+
+        # confirm_mode="dangerous": only risky (DANGEROUS) operations
+        # prompt; CONFIRM-level tools auto-pass. Policy deny rules
+        # above have already been honored.
+        if (
+            self.confirm_mode == "dangerous"
+            and tool_def.permission == PermissionLevel.CONFIRM
+        ):
+            return True
 
         # Auto-pass read-only shell commands (grep, ls, find, git status, …).
         # The classifier lives in shell.py since it owns the shell semantics;

@@ -102,7 +102,10 @@ async def _run_loop(config: Config):
     sync_extensions_into_catalog(_ext)
     # _load_plugins() — deprecated; plugins load via the hooks mechanism
     provider = get_provider_chain(config)
-    executor = Executor(auto_approve=config.auto_approve)
+    executor = Executor(
+        auto_approve=config.auto_approve,
+        confirm_mode=config.confirm_mode,
+    )
 
     # Initialize memory
     # Memory client managed by handlers_profile

@@ -241,6 +241,10 @@ class Config:
     openai_api_key: str = ""
     base_url: str = ""
     auto_approve: bool = False
+    # Which tool executions prompt for confirmation:
+    #   "all"       - CONFIRM and DANGEROUS both prompt (classic)
+    #   "dangerous" - only DANGEROUS prompts; CONFIRM auto-passes
+    confirm_mode: str = "dangerous"
     max_turns: int = 50
     timeout: int = 30
     mcp_servers: list[MCPServerConfig] = field(default_factory=list)
@@ -545,6 +549,10 @@ class Config:
         if "auto_approve" in data:
             val = str(data["auto_approve"]).lower()
             self.auto_approve = val in ("true", "1", "yes")
+        if "confirm_mode" in data:
+            val = str(data["confirm_mode"]).lower()
+            if val in ("all", "dangerous"):
+                self.confirm_mode = val
         # Env override for headless/benchmark use
         if os.environ.get("ACLI_AUTO_APPROVE", "").lower() in (
             "1",
