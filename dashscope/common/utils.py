@@ -163,16 +163,21 @@ def get_user_agent():
     return ua
 
 
-def get_sdk_headers() -> Dict[str, str]:
+def get_sdk_headers(module: str = "") -> Dict[str, str]:
     """Structured SDK identification headers for backend statistics.
 
     Set DASHSCOPE_DISABLE_SDK_HEADERS=1 to omit them.
+
+    Args:
+        module: Optional module name (e.g. agentstudio, rl, app).
     """
     if os.environ.get("DASHSCOPE_DISABLE_SDK_HEADERS"):
         return {}
+    parts = ["python-sdk", __version__]
+    if module:
+        parts.append(module)
     return {
-        "x-dashscope-sdk-client": "python-sdk",
-        "x-dashscope-sdk-version": __version__,
+        "x-dashscope-sdk-client": "/".join(parts),
         "x-dashscope-sdk-session-id": _SDK_SESSION_ID,
     }
 

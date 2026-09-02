@@ -48,12 +48,14 @@ class TongyiProvider:
         request_timeout: int = 60,
         protocol: str = "openai",
         base_url: str | None = None,
+        module: str = "",
     ):
         self.model = model
         self.api_key = api_key
         self.request_timeout = request_timeout
         self.protocol = protocol
         self.base_url = (base_url or DASHSCOPE_BASE_URL).rstrip("/")
+        self.module = module
 
     def _convert_tools(self, tools: list[dict] | None) -> list[dict] | None:
         if not tools:
@@ -126,8 +128,10 @@ class TongyiProvider:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         if not os.environ.get("DASHSCOPE_DISABLE_SDK_HEADERS"):
-            headers["x-dashscope-sdk-client"] = "acli"
-            headers["x-dashscope-sdk-version"] = __version__
+            parts = ["acli", __version__]
+            if self.module:
+                parts.append(self.module)
+            headers["x-dashscope-sdk-client"] = "/".join(parts)
             headers["x-dashscope-sdk-session-id"] = SDK_SESSION_ID
         return headers
 
