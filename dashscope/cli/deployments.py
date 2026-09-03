@@ -129,10 +129,11 @@ def create(
         "--capacity",
         help="The target capacity",
     ),
-    plan: Optional[str] = typer.Option(
-        None,
+    plan: str = typer.Option(
+        ...,
         "--plan",
-        help="Deployment plan or template ID",
+        help="Required. Deployment plan: ptu (PTU reserved), "
+        "mu (model unit), or Lora (LoRA deployment).",
     ),
     template_id: Optional[str] = typer.Option(
         None,
@@ -145,9 +146,8 @@ def create(
         "model": model,
         "capacity": capacity,
         "suffix": suffix,
+        "plan": plan,
     }
-    if plan is not None:
-        kwargs["plan"] = plan
     if template_id is not None:
         kwargs["template_id"] = template_id
 
@@ -194,12 +194,19 @@ def call(
         "--capacity",
         help="The target capacity",
     ),
+    plan: str = typer.Option(
+        ...,
+        "--plan",
+        help="Required. Deployment plan: ptu (PTU reserved), "
+        "mu (model unit), or Lora (LoRA deployment).",
+    ),
 ):
     """(Deprecated: use 'create' instead) Create a model deployment."""
     create(
         model=model,
         suffix=suffix,
         capacity=capacity,
+        plan=plan,
     )
 
 

@@ -22,6 +22,7 @@ import typer  # noqa: E402
 import dashscope  # noqa: E402
 from dashscope.cli.common import err_console  # noqa: E402
 from dashscope.common.error import AuthenticationError  # noqa: E402
+from dashscope.common.utils import set_sdk_client  # noqa: E402
 from dashscope.cli import (  # noqa: E402
     application,
     auth,
@@ -42,6 +43,8 @@ from dashscope.cli import (  # noqa: E402
     transcription,
     video_synthesis,
 )
+
+set_sdk_client("python-cli")
 
 
 # ---------------------------------------------------------------------------

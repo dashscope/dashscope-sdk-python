@@ -163,6 +163,20 @@ def get_user_agent():
     return ua
 
 
+_SDK_CLIENT = "python-sdk"
+
+
+def set_sdk_client(client: str) -> None:
+    """Override the client identifier in the x-dashscope-sdk-client header.
+
+    Process-wide, used by entry points that embed the SDK (e.g. the
+    ``dashscope`` CLI marks itself as ``python-cli``).
+    """
+    global _SDK_CLIENT  # pylint: disable=global-statement
+    if client:
+        _SDK_CLIENT = client
+
+
 def get_sdk_headers(module: str = "") -> Dict[str, str]:
     """Structured SDK identification headers for backend statistics.
 
@@ -173,7 +187,7 @@ def get_sdk_headers(module: str = "") -> Dict[str, str]:
     """
     if os.environ.get("DASHSCOPE_DISABLE_SDK_HEADERS"):
         return {}
-    parts = ["python-sdk", __version__]
+    parts = [_SDK_CLIENT, __version__]
     if module:
         parts.append(module)
     return {
