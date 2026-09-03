@@ -165,6 +165,26 @@ def get_user_agent():
 
 _SDK_CLIENT = "python-sdk"
 
+# Package name -> sdk module tag, for packages whose directory name does
+# not match the module segment (threads/messages/runs/steps belong to the
+# assistants module).
+_SDK_MODULE_PACKAGE_OVERRIDES = {
+    "threads": "assistants",
+}
+
+
+def get_api_module(module_name: str) -> str:
+    """Derive the sdk module tag from an API class's __module__.
+
+    e.g. "dashscope.aigc.generation" -> "aigc",
+    "dashscope.threads.runs.runs" -> "assistants".
+    """
+    parts = module_name.split(".")
+    if len(parts) < 2 or parts[0] != "dashscope":
+        return ""
+    pkg = parts[1]
+    return _SDK_MODULE_PACKAGE_OVERRIDES.get(pkg, pkg)
+
 
 def set_sdk_client(client: str) -> None:
     """Override the client identifier in the x-dashscope-sdk-client header.
@@ -196,10 +216,10 @@ def get_sdk_headers(module: str = "") -> Dict[str, str]:
     }
 
 
-def default_headers(api_key: str = None) -> Dict[str, str]:
+def default_headers(api_key: str = None, module: str = "") -> Dict[str, str]:
     ua = get_user_agent()
     headers = {"user-agent": ua}
-    headers.update(get_sdk_headers())
+    headers.update(get_sdk_headers(module=module))
     if api_key is None:
         api_key = get_default_api_key()
     headers["Authorization"] = f"Bearer {api_key}"

@@ -3,7 +3,7 @@
 
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.client.base_api import GetMixin, ListMixin, _get
-from dashscope.common.utils import join_url
+from dashscope.common.utils import get_api_module, join_url
 import dashscope
 
 
@@ -38,6 +38,7 @@ class Models(ListMixin, GetMixin):
             url,
             params=params,
             api_key=api_key,
+            module=get_api_module(cls.__module__),
             **kwargs,
         )
 

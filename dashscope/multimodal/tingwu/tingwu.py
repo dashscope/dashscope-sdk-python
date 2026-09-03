@@ -59,6 +59,7 @@ class TingWu(BaseApi):
             task=TingWu.task,  # type: ignore[arg-type]
             function=TingWu.function,  # type: ignore[arg-type]
             is_service=False,
+            sdk_module="multimodal",
             **parameters,
         )
         response = request.call()

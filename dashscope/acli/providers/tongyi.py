@@ -48,7 +48,7 @@ class TongyiProvider:
         request_timeout: int = 60,
         protocol: str = "openai",
         base_url: str | None = None,
-        module: str = "",
+        module: str = "app",
     ):
         self.model = model
         self.api_key = api_key

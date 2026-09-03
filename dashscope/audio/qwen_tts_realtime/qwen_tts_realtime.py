@@ -12,7 +12,7 @@ import websocket  # pylint: disable=wrong-import-order
 import dashscope
 from dashscope.common.error import ModelRequired
 from dashscope.common.logging import logger
-from dashscope.common.utils import get_user_agent
+from dashscope.common.utils import get_sdk_headers, get_user_agent
 
 
 class QwenTtsRealtimeCallback:
@@ -117,6 +117,7 @@ class QwenTtsRealtime:
         headers = {
             "user-agent": ua,
             "Authorization": "Bearer " + self.apikey,
+            **get_sdk_headers(module="audio"),
         }
         if self.user_headers:
             headers = {**self.user_headers, **headers}
