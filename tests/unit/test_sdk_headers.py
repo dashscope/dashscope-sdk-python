@@ -172,6 +172,7 @@ class _CapturedRequest(Exception):
 @pytest.fixture
 def capture_headers(monkeypatch):
     """Patch all transport boundaries to capture headers without network."""
+    # pylint: disable=unused-argument
     import aiohttp
     import requests
 
@@ -206,7 +207,6 @@ def capture_headers(monkeypatch):
     monkeypatch.setattr(aiohttp.ClientSession, "get", aio_get)
 
     monkeypatch.setattr("dashscope.api_key", "sk-test")
-    return None
 
 
 def _capture(fn):
@@ -226,7 +226,7 @@ def _check_module(headers, module, label):
 
 
 def test_service_api_modules(capture_headers, tmp_path):
-    # pylint: disable=unused-argument,import-outside-toplevel
+    # pylint: disable=unused-argument,import-outside-toplevel,redefined-outer-name
     import asyncio
 
     from dashscope import (
@@ -272,92 +272,176 @@ def test_service_api_modules(capture_headers, tmp_path):
 
     cases = [
         # aigc/
-        ("aigc: Generation.call",
-         lambda: Generation.call(model="m", prompt="hi"), "aigc"),
-        ("aigc: AioGeneration.call",
-         lambda: asyncio.run(AioGeneration.call(model="m", prompt="hi")),
-         "aigc"),
-        ("aigc: Conversation.call",
-         lambda: Conversation().call(model="m", prompt="hi"), "aigc"),
-        ("aigc: CodeGeneration.call",
-         lambda: CodeGeneration.call(
-             model="m",
-             scene="custom",
-             message=[{"role": "user", "content": "hi"}],
-         ), "aigc"),
-        ("aigc: ImageSynthesis.async_call",
-         lambda: ImageSynthesis.async_call(model="m", prompt="a cat"),
-         "aigc"),
-        ("aigc: MultiModalConversation.call",
-         lambda: MultiModalConversation.call(
-             model="m",
-             messages=[{"role": "user", "content": [{"text": "hi"}]}],
-         ), "aigc"),
-        ("aigc: AioMultiModalConversation.call",
-         lambda: asyncio.run(AioMultiModalConversation.call(
-             model="m",
-             messages=[{"role": "user", "content": [{"text": "hi"}]}],
-         )), "aigc"),
-        ("aigc: VideoSynthesis.async_call",
-         lambda: VideoSynthesis.async_call(model="m", prompt="a cat"),
-         "aigc"),
+        (
+            "aigc: Generation.call",
+            lambda: Generation.call(model="m", prompt="hi"),
+            "aigc",
+        ),
+        (
+            "aigc: AioGeneration.call",
+            lambda: asyncio.run(AioGeneration.call(model="m", prompt="hi")),
+            "aigc",
+        ),
+        (
+            "aigc: Conversation.call",
+            lambda: Conversation().call(model="m", prompt="hi"),
+            "aigc",
+        ),
+        (
+            "aigc: CodeGeneration.call",
+            lambda: CodeGeneration.call(
+                model="m",
+                scene="custom",
+                message=[{"role": "user", "content": "hi"}],
+            ),
+            "aigc",
+        ),
+        (
+            "aigc: ImageSynthesis.async_call",
+            lambda: ImageSynthesis.async_call(model="m", prompt="a cat"),
+            "aigc",
+        ),
+        (
+            "aigc: MultiModalConversation.call",
+            lambda: MultiModalConversation.call(
+                model="m",
+                messages=[{"role": "user", "content": [{"text": "hi"}]}],
+            ),
+            "aigc",
+        ),
+        (
+            "aigc: AioMultiModalConversation.call",
+            lambda: asyncio.run(
+                AioMultiModalConversation.call(
+                    model="m",
+                    messages=[{"role": "user", "content": [{"text": "hi"}]}],
+                ),
+            ),
+            "aigc",
+        ),
+        (
+            "aigc: VideoSynthesis.async_call",
+            lambda: VideoSynthesis.async_call(model="m", prompt="a cat"),
+            "aigc",
+        ),
         # audio/
-        ("audio: SpeechSynthesizer.call (ws)",
-         lambda: SpeechSynthesizer.call(model="m", text="hi"), "audio"),
-        ("audio: HttpSpeechSynthesizer.call",
-         lambda: HttpSpeechSynthesizer.call(model="m", text="hi", voice="v"),
-         "audio"),
-        ("audio: Transcription.async_call",
-         lambda: Transcription.async_call(
-             model="m", file_urls=["https://example.com/a.wav"],
-         ), "audio"),
-        ("audio: Recognition.call (ws)",
-         lambda: Recognition(
-             model="m", format="wav", sample_rate=16000,
-             callback=RecognitionCallback(),
-         ).call(file=str(audio_file)), "audio"),
-        ("audio: TranslationRecognizerRealtime.call (ws)",
-         lambda: TranslationRecognizerRealtime(
-             model="m", format="wav", sample_rate=16000,
-             callback=TranslationRecognizerCallback(),
-         ).call(file=str(audio_file)), "audio"),
-        ("audio: QwenTranscription.async_call",
-         lambda: QwenTranscription.async_call(
-             model="m", file_url="https://example.com/a.wav",
-         ), "audio"),
+        (
+            "audio: SpeechSynthesizer.call (ws)",
+            lambda: SpeechSynthesizer.call(model="m", text="hi"),
+            "audio",
+        ),
+        (
+            "audio: HttpSpeechSynthesizer.call",
+            lambda: HttpSpeechSynthesizer.call(
+                model="m",
+                text="hi",
+                voice="v",
+            ),
+            "audio",
+        ),
+        (
+            "audio: Transcription.async_call",
+            lambda: Transcription.async_call(
+                model="m",
+                file_urls=["https://example.com/a.wav"],
+            ),
+            "audio",
+        ),
+        (
+            "audio: Recognition.call (ws)",
+            lambda: Recognition(
+                model="m",
+                format="wav",
+                sample_rate=16000,
+                callback=RecognitionCallback(),
+            ).call(file=str(audio_file)),
+            "audio",
+        ),
+        (
+            "audio: TranslationRecognizerRealtime.call (ws)",
+            lambda: TranslationRecognizerRealtime(
+                model="m",
+                format="wav",
+                sample_rate=16000,
+                callback=TranslationRecognizerCallback(),
+            ).call(file=str(audio_file)),
+            "audio",
+        ),
+        (
+            "audio: QwenTranscription.async_call",
+            lambda: QwenTranscription.async_call(
+                model="m",
+                file_url="https://example.com/a.wav",
+            ),
+            "audio",
+        ),
         # embeddings/
-        ("embeddings: TextEmbedding.call",
-         lambda: TextEmbedding.call(model="m", input="hi"), "embeddings"),
-        ("embeddings: BatchTextEmbedding.call",
-         lambda: BatchTextEmbedding.call(
-             model="m", url="https://example.com/input.txt",
-         ), "embeddings"),
-        ("embeddings: MultiModalEmbedding.call",
-         lambda: MultiModalEmbedding.call(
-             model="m", input=[{"text": "hi"}],
-         ), "embeddings"),
-        ("embeddings: AioMultiModalEmbedding.call",
-         lambda: asyncio.run(AioMultiModalEmbedding.call(
-             model="m", input=[{"text": "hi"}],
-         )), "embeddings"),
+        (
+            "embeddings: TextEmbedding.call",
+            lambda: TextEmbedding.call(model="m", input="hi"),
+            "embeddings",
+        ),
+        (
+            "embeddings: BatchTextEmbedding.call",
+            lambda: BatchTextEmbedding.call(
+                model="m",
+                url="https://example.com/input.txt",
+            ),
+            "embeddings",
+        ),
+        (
+            "embeddings: MultiModalEmbedding.call",
+            lambda: MultiModalEmbedding.call(
+                model="m",
+                input=[{"text": "hi"}],
+            ),
+            "embeddings",
+        ),
+        (
+            "embeddings: AioMultiModalEmbedding.call",
+            lambda: asyncio.run(
+                AioMultiModalEmbedding.call(
+                    model="m",
+                    input=[{"text": "hi"}],
+                ),
+            ),
+            "embeddings",
+        ),
         # nlp/
-        ("nlp: Understanding.call",
-         lambda: Understanding.call(model="m", sentence="hi", labels="lbl"),
-         "nlp"),
+        (
+            "nlp: Understanding.call",
+            lambda: Understanding.call(model="m", sentence="hi", labels="lbl"),
+            "nlp",
+        ),
         # rerank/
-        ("rerank: TextReRank.call",
-         lambda: TextReRank.call(model="m", query="q", documents=["d"]),
-         "rerank"),
-        ("rerank: AioTextReRank.call",
-         lambda: asyncio.run(AioTextReRank.call(
-             model="m", query="q", documents=["d"],
-         )), "rerank"),
+        (
+            "rerank: TextReRank.call",
+            lambda: TextReRank.call(model="m", query="q", documents=["d"]),
+            "rerank",
+        ),
+        (
+            "rerank: AioTextReRank.call",
+            lambda: asyncio.run(
+                AioTextReRank.call(
+                    model="m",
+                    query="q",
+                    documents=["d"],
+                ),
+            ),
+            "rerank",
+        ),
         # app/
-        ("app: Application.call",
-         lambda: Application.call(app_id="app1", prompt="hi"), "app"),
+        (
+            "app: Application.call",
+            lambda: Application.call(app_id="app1", prompt="hi"),
+            "app",
+        ),
         # tokenizers/
-        ("tokenizers: Tokenization.call",
-         lambda: Tokenization.call(model="m", prompt="hi"), "tokenizers"),
+        (
+            "tokenizers: Tokenization.call",
+            lambda: Tokenization.call(model="m", prompt="hi"),
+            "tokenizers",
+        ),
     ]
     print("\n=== service calls: python-sdk/<version>/<module> ===")
     for label, fn, module in cases:
@@ -365,7 +449,7 @@ def test_service_api_modules(capture_headers, tmp_path):
 
 
 def test_tasks_module(capture_headers):
-    # pylint: disable=unused-argument,import-outside-toplevel
+    # pylint: disable=unused-argument,import-outside-toplevel,redefined-outer-name
     import asyncio
 
     from dashscope import ImageSynthesis
@@ -373,17 +457,27 @@ def test_tasks_module(capture_headers):
     from dashscope.aigc.video_synthesis import VideoSynthesis
 
     cases = [
-        ("tasks: ImageSynthesis.fetch",
-         lambda: ImageSynthesis.fetch("task-1")),
-        ("tasks: ImageSynthesis.cancel",
-         lambda: ImageSynthesis.cancel("task-1")),
-        ("tasks: ImageSynthesis.list", lambda: ImageSynthesis.list()),
-        ("tasks: VideoSynthesis.fetch",
-         lambda: VideoSynthesis.fetch("task-1")),
-        ("tasks: AioImageSynthesis.fetch",
-         lambda: asyncio.run(AioImageSynthesis.fetch("task-1"))),
-        ("tasks: AioImageSynthesis.list",
-         lambda: asyncio.run(AioImageSynthesis.list())),
+        (
+            "tasks: ImageSynthesis.fetch",
+            lambda: ImageSynthesis.fetch("task-1"),
+        ),
+        (
+            "tasks: ImageSynthesis.cancel",
+            lambda: ImageSynthesis.cancel("task-1"),
+        ),
+        ("tasks: ImageSynthesis.list", ImageSynthesis.list),
+        (
+            "tasks: VideoSynthesis.fetch",
+            lambda: VideoSynthesis.fetch("task-1"),
+        ),
+        (
+            "tasks: AioImageSynthesis.fetch",
+            lambda: asyncio.run(AioImageSynthesis.fetch("task-1")),
+        ),
+        (
+            "tasks: AioImageSynthesis.list",
+            lambda: asyncio.run(AioImageSynthesis.list()),
+        ),
     ]
     print("\n=== task management (/tasks/*): module=tasks ===")
     for label, fn in cases:
@@ -391,7 +485,7 @@ def test_tasks_module(capture_headers):
 
 
 def test_resource_api_modules(capture_headers):
-    # pylint: disable=unused-argument,import-outside-toplevel
+    # pylint: disable=unused-argument,import-outside-toplevel,redefined-outer-name
     from dashscope import (
         Assistants,
         Deployments,
@@ -405,23 +499,41 @@ def test_resource_api_modules(capture_headers):
     )
 
     cases = [
-        ("models: Models.list", lambda: Models.list(), "models"),
+        ("models: Models.list", Models.list, "models"),
         ("models: Models.get", lambda: Models.get("m"), "models"),
-        ("files: Files.list", lambda: Files.list(), "files"),
-        ("finetune: FineTunes.list", lambda: FineTunes.list(), "finetune"),
-        ("finetune: FineTunes.cancel",
-         lambda: FineTunes.cancel("job-1"), "finetune"),
-        ("finetune: Deployments.list", lambda: Deployments.list(), "finetune"),
-        ("assistants: Assistants.list", lambda: Assistants.list(),
-         "assistants"),
-        ("assistants: Threads.create", lambda: Threads.create(),
-         "assistants"),
-        ("assistants: Messages.list",
-         lambda: Messages.list(thread_id="t1"), "assistants"),
-        ("assistants: Runs.list", lambda: Runs.list(thread_id="t1"),
-         "assistants"),
-        ("assistants: Steps.list",
-         lambda: Steps.list(thread_id="t1", run_id="r1"), "assistants"),
+        ("files: Files.list", Files.list, "files"),
+        ("finetune: FineTunes.list", FineTunes.list, "finetune"),
+        (
+            "finetune: FineTunes.cancel",
+            lambda: FineTunes.cancel("job-1"),
+            "finetune",
+        ),
+        ("finetune: Deployments.list", Deployments.list, "finetune"),
+        (
+            "assistants: Assistants.list",
+            Assistants.list,
+            "assistants",
+        ),
+        (
+            "assistants: Threads.create",
+            Threads.create,
+            "assistants",
+        ),
+        (
+            "assistants: Messages.list",
+            lambda: Messages.list(thread_id="t1"),
+            "assistants",
+        ),
+        (
+            "assistants: Runs.list",
+            lambda: Runs.list(thread_id="t1"),
+            "assistants",
+        ),
+        (
+            "assistants: Steps.list",
+            lambda: Steps.list(thread_id="t1", run_id="r1"),
+            "assistants",
+        ),
     ]
     print("\n=== resource management APIs ===")
     for label, fn, module in cases:
@@ -429,7 +541,7 @@ def test_resource_api_modules(capture_headers):
 
 
 def test_realtime_websocket_modules():
-    # pylint: disable=import-outside-toplevel
+    # pylint: disable=import-outside-toplevel,protected-access
     import dashscope
     from dashscope.audio.qwen_omni.omni_realtime import (
         OmniRealtimeCallback,
@@ -452,19 +564,39 @@ def test_realtime_websocket_modules():
         pass
 
     cases = [
-        ("audio: tts_v2 SpeechSynthesizer",
-         TtsV2Req(apikey="sk-test", model="m", voice="v")
-         .get_websocket_headers(None, None), "audio"),
-        ("audio: OmniRealtimeConversation",
-         OmniRealtimeConversation(model="m", callback=_Cb())
-         ._get_websocket_header(), "audio"),
-        ("audio: QwenTtsRealtime",
-         QwenTtsRealtime(model="m")._get_websocket_header(), "audio"),
+        (
+            "audio: tts_v2 SpeechSynthesizer",
+            TtsV2Req(
+                apikey="sk-test",
+                model="m",
+                voice="v",
+            ).get_websocket_headers(None, None),
+            "audio",
+        ),
+        (
+            "audio: OmniRealtimeConversation",
+            OmniRealtimeConversation(
+                model="m",
+                callback=_Cb(),
+            )._get_websocket_header(),
+            "audio",
+        ),
+        (
+            "audio: QwenTtsRealtime",
+            QwenTtsRealtime(model="m")._get_websocket_header(),
+            "audio",
+        ),
         # MultiModalDialog is grouped into aigc per the mapping table
-        ("aigc: MultiModalDialog",
-         DialogRequest().get_websocket_header("sk-test"), "aigc"),
-        ("multimodal: TingWuRealtime",
-         TingwuRequest().get_websocket_header("sk-test"), "multimodal"),
+        (
+            "aigc: MultiModalDialog",
+            DialogRequest().get_websocket_header("sk-test"),
+            "aigc",
+        ),
+        (
+            "multimodal: TingWuRealtime",
+            TingwuRequest().get_websocket_header("sk-test"),
+            "multimodal",
+        ),
     ]
     print("\n=== realtime/dialog WebSocket ===")
     for label, headers, module in cases:
@@ -478,8 +610,10 @@ def test_encryption_module(monkeypatch):
     def fake_get(url, headers=None, timeout=None):
         raise _CapturedRequest(headers)
 
-    monkeypatch.setattr("dashscope.api_entities.encryption.requests.get",
-                        fake_get)
+    monkeypatch.setattr(
+        "dashscope.api_entities.encryption.requests.get",
+        fake_get,
+    )
     print("\n=== misc ===")
     try:
         Encryption._get_public_keys()  # pylint: disable=protected-access
@@ -501,13 +635,19 @@ def test_finetune_rl_module(monkeypatch):
         captured.update(kwargs)
         return {}
 
-    monkeypatch.setattr(rl_utils, "async_http_request",
-                        fake_async_http_request)
-    asyncio.run(
-        rl_utils.client_fc(api_key="sk-test", url="http://x", request_data={})
+    monkeypatch.setattr(
+        rl_utils,
+        "async_http_request",
+        fake_async_http_request,
     )
-    _check_module(captured.get("headers"), "finetune",
-                  "finetune: rl client_fc")
+    asyncio.run(
+        rl_utils.client_fc(api_key="sk-test", url="http://x", request_data={}),
+    )
+    _check_module(
+        captured.get("headers"),
+        "finetune",
+        "finetune: rl client_fc",
+    )
 
 
 if __name__ == "__main__":

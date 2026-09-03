@@ -1236,7 +1236,10 @@ class DeleteMixin:
                 url,
                 headers={
                     **_workspace_header(workspace),
-                    **default_headers(api_key, module=get_api_module(cls.__module__)),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 timeout=timeout,
@@ -1286,7 +1289,10 @@ class CreateMixin:
                 headers={
                     "Content-Type": "application/json; charset=utf-8",
                     **_workspace_header(workspace),
-                    **default_headers(api_key, module=get_api_module(cls.__module__)),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 timeout=timeout,
@@ -1421,7 +1427,10 @@ class PutMixin:
                 headers={
                     "Content-Type": "application/json; charset=utf-8",
                     **_workspace_header(workspace),
-                    **default_headers(api_key, module=get_api_module(cls.__module__)),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 timeout=timeout,
@@ -1473,7 +1482,10 @@ class FileUploadMixin:
                 data=js,
                 headers={
                     **_workspace_header(workspace),
-                    **default_headers(api_key, module=get_api_module(cls.__module__)),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 files=files,
@@ -1523,7 +1535,10 @@ class CancelMixin:
                 url,
                 headers={
                     **_workspace_header(workspace),
-                    **default_headers(api_key, module=get_api_module(cls.__module__)),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 timeout=timeout,
@@ -1630,7 +1645,10 @@ class StreamEventMixin:
                 url,
                 headers={
                     **_workspace_header(workspace),
-                    **default_headers(api_key, module=get_api_module(cls.__module__)),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 stream=True,
