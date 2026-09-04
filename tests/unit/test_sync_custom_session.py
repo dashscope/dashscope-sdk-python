@@ -17,12 +17,14 @@
 # pylint: disable=protected-access,unused-argument,unused-variable
 # pylint: disable=broad-exception-raised
 
+import socket
 from unittest.mock import Mock, patch
 
 import pytest
 import requests
 from requests.adapters import HTTPAdapter
 
+from dashscope.api_entities import http_request as http_request_module
 from dashscope.api_entities.http_request import HttpRequest
 from dashscope.api_entities.api_request_data import ApiRequestData
 from dashscope.common.constants import ApiProtocol, HTTPMethod
@@ -599,3 +601,60 @@ class TestSyncConnectionRetry:
             _ = http_request.call()
 
         assert mock_session.post.call_count == 1
+
+
+class TestSharedSyncSessionPool:
+    """测试共享同步 session 的连接保活配置与生命周期管理"""
+
+    def teardown_method(self):
+        """每个测试后重置全局共享 session，避免用例间相互影响"""
+        http_request_module.close_shared_sync_session()
+
+    def test_shared_session_enables_tcp_keepalive(self):
+        """共享 session 的连接池应启用 TCP keepalive"""
+        session = http_request_module._get_shared_sync_session()
+        assert isinstance(session, requests.Session)
+
+        adapter = session.get_adapter("https://dashscope.aliyuncs.com")
+        socket_options = adapter.poolmanager.connection_pool_kw[
+            "socket_options"
+        ]
+
+        assert (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1) in socket_options
+        # 不能丢失 urllib3 默认的 TCP_NODELAY
+        assert (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1) in socket_options
+
+    def test_keepalive_options_platform_fallback(self):
+        """所有平台都至少启用 SO_KEEPALIVE 与 TCP_NODELAY"""
+        options = http_request_module._tcp_keepalive_socket_options()
+        assert (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1) in options
+        assert (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1) in options
+
+    def test_shared_session_reused_across_calls(self):
+        """共享 session 在多次调用间复用"""
+        session1 = http_request_module._get_shared_sync_session()
+        session2 = http_request_module._get_shared_sync_session()
+        assert session1 is session2
+
+    def test_close_shared_sync_session_resets_pool(self):
+        """关闭共享 session 后，下次请求创建新 session"""
+        session1 = http_request_module._get_shared_sync_session()
+        http_request_module.close_shared_sync_session()
+        assert http_request_module._shared_sync_session is None
+
+        session2 = http_request_module._get_shared_sync_session()
+        assert session2 is not session1
+
+    def test_close_shared_sync_session_closes_session(self):
+        """关闭共享 session 会释放其连接池"""
+        mock_session = Mock()
+        http_request_module._shared_sync_session = mock_session
+        http_request_module.close_shared_sync_session()
+        mock_session.close.assert_called_once()
+        assert http_request_module._shared_sync_session is None
+
+    def test_close_shared_sync_session_without_session(self):
+        """未创建共享 session 时关闭操作是安全的"""
+        http_request_module._shared_sync_session = None
+        http_request_module.close_shared_sync_session()
+        assert http_request_module._shared_sync_session is None
