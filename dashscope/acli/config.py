@@ -282,9 +282,11 @@ class Config:
     protocol: str = "openai"  # "openai" | "anthropic"
     tui: bool = True
     # False = let the terminal handle the mouse (native selection).
-    # Default off on Windows: Textual's mouse-capture path is crash-prone
-    # in PowerShell/conhost; native terminal mouse still allows selection.
-    tui_mouse: bool = field(default_factory=lambda: os.name != "nt")
+    # Capture is on everywhere, including Windows: without it the wheel goes
+    # to the console host, which scrolls the whole alternate screen — the
+    # input box moves with the output and repaints slowly. Set false only if
+    # your terminal mishandles Textual's mouse reporting.
+    tui_mouse: bool = True
     privacy_mode: bool = (
         False  # When True, all data stays local, no cloud capabilities
     )
