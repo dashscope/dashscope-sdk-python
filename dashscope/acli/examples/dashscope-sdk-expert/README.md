@@ -86,7 +86,7 @@ Before generating code, first verify the user's installed SDK version and API si
 ```toml
 user_name = "dashscope"
 provider = "tongyi"
-model = "qwen3.7-plus"
+model = "qwen3.8-max"
 memory_user_id = "acli-dashscope"
 ```
 

@@ -51,8 +51,8 @@ Declares which LLM providers acli can use. A minimal config needs just one `[[pr
 name = "tongyi"
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 api_key_env = "DASHSCOPE_API_KEY"      # ← stores only the env var name; the shell provides sk-xxx
-default_model = "qwen3.7-max"
-models = ["qwen3.7-max", "qwen3.7-plus", "qwen-turbo", "qwen-vl-max"]
+default_model = "qwen3.8-max"
+models = ["qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen-turbo", "qwen-vl-max"]
 vision_models = ["qwen-vl-max"]        # ← tells acli these models accept image input
 protocol = "openai"                     # ← openai / anthropic / dashscope
 ```
@@ -95,7 +95,7 @@ How to invoke:
 ```toml
 user_name = "dashscope"
 provider = "tongyi"
-model = "qwen3.7-max"
+model = "qwen3.8-max"
 memory_user_id = "acli-basic"
 ```
 

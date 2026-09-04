@@ -251,7 +251,7 @@ async def _run_loop(config: Config):
     if not WORKSPACE_CONFIG_FILE.exists():
         has_api_key = bool(config.api_key)
         using_defaults = (
-            config.provider == "tongyi" and config.model == "qwen3.7-plus"
+            config.provider == "tongyi" and config.model == "qwen3.8-max"
         )
         if not has_api_key or using_defaults:
             await _handle_setup(config, agent)

@@ -23,6 +23,7 @@ WORKSPACE_SYSTEM_PROMPT_FILE = WORKSPACE_DIR / "system-prompt.md"
 
 PROVIDER_MODELS = {
     "tongyi": [
+        "qwen3.8-max",
         "qwen3.7-max",
         "qwen3.7-plus",
         "qwen3.5-plus",
@@ -226,7 +227,7 @@ class DelegationConfig:
 @dataclass
 class Config:
     provider: str = "tongyi"
-    model: str = "qwen3.7-plus"
+    model: str = "qwen3.8-max"
     # Dual-LLM: when thinking_model is set, Plan/Thinking loop phases route to
     # the thinking model; Execute uses the execution model (provider/model
     # above).
@@ -318,7 +319,7 @@ class Config:
     def load(
         cls,
         default_provider: str = "tongyi",
-        default_model: str = "qwen3.7-plus",
+        default_model: str = "qwen3.8-max",
     ) -> Config:
         config = cls()
         # Caller's defaults become the initial values; config files and env
