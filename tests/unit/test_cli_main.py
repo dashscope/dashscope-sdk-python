@@ -648,7 +648,7 @@ class TestCliMain:
 
         result = CliRunner().invoke(
             cli_app,
-            ["deployments", "create", "--model", "qwen"],
+            ["deployments", "create", "--model", "qwen", "--plan", "ptu"],
         )
 
         assert result.exit_code == 1

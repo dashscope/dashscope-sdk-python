@@ -28,6 +28,7 @@ from dashscope.common.utils import (
     _handle_http_response,
     _handle_http_stream_response,
     default_headers,
+    get_api_module,
     join_url,
 )
 
@@ -69,7 +70,7 @@ class AsyncAioTaskGetMixin:
         custom_headers = kwargs.pop("headers", None)
         headers = {
             **_workspace_header(workspace),
-            **default_headers(api_key),
+            **default_headers(api_key, module="tasks"),
         }
         if custom_headers:
             headers = {
@@ -133,6 +134,7 @@ class BaseAsyncAioApi(AsyncAioTaskGetMixin):
             task=task,
             function=function,
             api_key=api_key,
+            sdk_module=get_api_module(cls.__module__),
             **kwargs,
         )
         # call request service.
@@ -373,7 +375,7 @@ class BaseAsyncAioApi(AsyncAioTaskGetMixin):
             api_key = get_default_api_key()
         headers = {
             **_workspace_header(workspace),
-            **default_headers(api_key),
+            **default_headers(api_key, module="tasks"),
         }
         async with aiohttp.ClientSession(trust_env=True) as session:
             response = await session.get(
@@ -486,6 +488,7 @@ class BaseAioApi:
             task=task,
             function=function,
             api_key=api_key,
+            sdk_module=get_api_module(cls.__module__),
             **kwargs,
         )
         # call request service.
@@ -552,6 +555,7 @@ class BaseApi:
             task=task,
             function=function,
             api_key=api_key,
+            sdk_module=get_api_module(cls.__module__),
             **kwargs,
         )
         # call request service.
@@ -588,7 +592,7 @@ class AsyncTaskGetMixin:
         custom_headers = kwargs.pop("headers", None)
         headers = {
             **_workspace_header(workspace),
-            **default_headers(api_key),
+            **default_headers(api_key, module="tasks"),
         }
         if custom_headers:
             headers = {
@@ -687,7 +691,7 @@ class BaseAsyncApi(AsyncTaskGetMixin):
                 url,
                 headers={
                     **_workspace_header(workspace),
-                    **default_headers(api_key),
+                    **default_headers(api_key, module="tasks"),
                 },
             )
             return _handle_http_response(response)
@@ -751,7 +755,7 @@ class BaseAsyncApi(AsyncTaskGetMixin):
                 params=params,
                 headers={
                     **_workspace_header(workspace),
-                    **default_headers(api_key),
+                    **default_headers(api_key, module="tasks"),
                 },
             )
             if response.status_code == HTTPStatus.OK:
@@ -934,6 +938,7 @@ class BaseAsyncApi(AsyncTaskGetMixin):
             api_key=api_key,
             async_request=True,
             query=False,
+            sdk_module=get_api_module(cls.__module__),
             **kwargs,
         )
         return request.call()
@@ -946,6 +951,7 @@ def _get(
     api_key=None,
     flattened_output=False,
     workspace: str = None,
+    module: str = "",
     **kwargs,
 ) -> Union[DashScopeAPIResponse, Dict]:
     timeout = kwargs.pop(
@@ -958,7 +964,7 @@ def _get(
             url,
             headers={
                 **_workspace_header(workspace),
-                **default_headers(api_key),
+                **default_headers(api_key, module=module),
                 **kwargs.pop("headers", {}),
             },
             params=params,
@@ -1025,6 +1031,7 @@ class ListObjectMixin:
             params=params,
             api_key=api_key,
             workspace=workspace,
+            module=get_api_module(cls.__module__),
             **kwargs,
         )
 
@@ -1060,6 +1067,7 @@ class ListMixin:
             params=params,
             api_key=api_key,
             workspace=workspace,
+            module=get_api_module(cls.__module__),
             **kwargs,
         )
 
@@ -1099,6 +1107,7 @@ class LogMixin:
             params=params,
             api_key=api_key,
             workspace=workspace,
+            module=get_api_module(cls.__module__),
             **kwargs,
         )
 
@@ -1142,6 +1151,7 @@ class GetMixin:
             params=params,
             flattened_output=flattened_output,
             workspace=workspace,
+            module=get_api_module(cls.__module__),
             **kwargs,
         )
 
@@ -1181,6 +1191,7 @@ class GetStatusMixin:
             api_key=api_key,
             flattened_output=flattened_output,
             workspace=workspace,
+            module=get_api_module(cls.__module__),
             **kwargs,
         )
 
@@ -1225,7 +1236,10 @@ class DeleteMixin:
                 url,
                 headers={
                     **_workspace_header(workspace),
-                    **default_headers(api_key),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 timeout=timeout,
@@ -1275,7 +1289,10 @@ class CreateMixin:
                 headers={
                     "Content-Type": "application/json; charset=utf-8",
                     **_workspace_header(workspace),
-                    **default_headers(api_key),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 timeout=timeout,
@@ -1332,6 +1349,7 @@ class UpdateMixin:
         flattened_output = kwargs.pop("flattened_output", False)
         import json as _json  # pylint: disable=reimported
 
+        module = get_api_module(cls.__module__)
         with requests.Session() as session:
             logger.debug("Starting request: %s", url)
             body = _json.dumps(json, ensure_ascii=False).encode("utf-8")
@@ -1342,7 +1360,7 @@ class UpdateMixin:
                     headers={
                         "Content-Type": "application/json; charset=utf-8",
                         **_workspace_header(workspace),
-                        **default_headers(api_key),
+                        **default_headers(api_key, module=module),
                         **kwargs.pop("headers", {}),
                     },
                     timeout=timeout,
@@ -1354,7 +1372,7 @@ class UpdateMixin:
                     headers={
                         "Content-Type": "application/json; charset=utf-8",
                         **_workspace_header(workspace),
-                        **default_headers(api_key),
+                        **default_headers(api_key, module=module),
                         **kwargs.pop("headers", {}),
                     },
                     timeout=timeout,
@@ -1409,7 +1427,10 @@ class PutMixin:
                 headers={
                     "Content-Type": "application/json; charset=utf-8",
                     **_workspace_header(workspace),
-                    **default_headers(api_key),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 timeout=timeout,
@@ -1461,7 +1482,10 @@ class FileUploadMixin:
                 data=js,
                 headers={
                     **_workspace_header(workspace),
-                    **default_headers(api_key),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 files=files,
@@ -1511,7 +1535,10 @@ class CancelMixin:
                 url,
                 headers={
                     **_workspace_header(workspace),
-                    **default_headers(api_key),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 timeout=timeout,
@@ -1618,7 +1645,10 @@ class StreamEventMixin:
                 url,
                 headers={
                     **_workspace_header(workspace),
-                    **default_headers(api_key),
+                    **default_headers(
+                        api_key,
+                        module=get_api_module(cls.__module__),
+                    ),
                     **kwargs.pop("headers", {}),
                 },
                 stream=True,

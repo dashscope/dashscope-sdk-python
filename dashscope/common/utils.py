@@ -163,24 +163,63 @@ def get_user_agent():
     return ua
 
 
-def get_sdk_headers() -> Dict[str, str]:
+_SDK_CLIENT = "python-sdk"
+
+# Package name -> sdk module tag, for packages whose directory name does
+# not match the module segment (threads/messages/runs/steps belong to the
+# assistants module).
+_SDK_MODULE_PACKAGE_OVERRIDES = {
+    "threads": "assistants",
+}
+
+
+def get_api_module(module_name: str) -> str:
+    """Derive the sdk module tag from an API class's __module__.
+
+    e.g. "dashscope.aigc.generation" -> "aigc",
+    "dashscope.threads.runs.runs" -> "assistants".
+    """
+    parts = module_name.split(".")
+    if len(parts) < 2 or parts[0] != "dashscope":
+        return ""
+    pkg = parts[1]
+    return _SDK_MODULE_PACKAGE_OVERRIDES.get(pkg, pkg)
+
+
+def set_sdk_client(client: str) -> None:
+    """Override the client identifier in the x-dashscope-sdk-client header.
+
+    Process-wide, used by entry points that embed the SDK (e.g. the
+    ``dashscope`` CLI marks itself as ``python-cli``).
+    """
+    global _SDK_CLIENT  # pylint: disable=global-statement
+    if client:
+        _SDK_CLIENT = client
+
+
+def get_sdk_headers(module: str = "") -> Dict[str, str]:
     """Structured SDK identification headers for backend statistics.
 
     Set DASHSCOPE_DISABLE_SDK_HEADERS=1 to omit them.
+
+    Args:
+        module: Optional module name (e.g. agentstudio, rl, app).
     """
     if os.environ.get("DASHSCOPE_DISABLE_SDK_HEADERS"):
         return {}
+    parts = [_SDK_CLIENT, __version__]
+    if module:
+        parts.append(module)
     return {
-        "x-dashscope-sdk-client": "python-sdk",
-        "x-dashscope-sdk-version": __version__,
+        "x-dashscope-sdk-client": "/".join(parts),
         "x-dashscope-sdk-session-id": _SDK_SESSION_ID,
     }
 
 
-def default_headers(api_key: str = None) -> Dict[str, str]:
+def default_headers(api_key: str = None, module: str = "") -> Dict[str, str]:
     ua = get_user_agent()
     headers = {"user-agent": ua}
-    headers.update(get_sdk_headers())
+    headers.update(get_sdk_headers(module=module))
     if api_key is None:
         api_key = get_default_api_key()
     headers["Authorization"] = f"Bearer {api_key}"

@@ -53,6 +53,8 @@ def _build_api_request(  # pylint: disable=too-many-branches
     task_id: Optional[str] = None,
     enable_encryption: bool = False,
     pre_task_id: Optional[str] = None,
+    # SDK module tag for the x-dashscope-sdk-client header
+    sdk_module: str = "",
     # Additional parameters for API request data
     **kwargs,
 ):
@@ -192,7 +194,7 @@ def _build_api_request(  # pylint: disable=too-many-branches
             "websocket]",
         )
 
-    merged_headers = dict(get_sdk_headers())
+    merged_headers = dict(get_sdk_headers(module=sdk_module))
     if headers is not None:
         merged_headers.update(headers)
     if merged_headers:

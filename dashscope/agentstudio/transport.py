@@ -230,7 +230,7 @@ def build_headers(
         HEADER_AUTHORIZATION: f"Bearer {api_key}",
         HEADER_USER_AGENT: user_agent,
     }
-    headers.update(get_sdk_headers())
+    headers.update(get_sdk_headers(module="agentstudio"))
     if json_body:
         headers["Content-Type"] = "application/json"
         headers["Accept"] = "application/json"

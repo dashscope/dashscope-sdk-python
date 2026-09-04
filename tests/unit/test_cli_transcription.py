@@ -79,3 +79,152 @@ class TestCliTranscription:
         }
         assert "task-1234" in result.output
         assert "audio_count" in result.output
+
+    def test_fetch(self, monkeypatch):
+        captured_request = {}
+
+        def mock_fetch(task_id, workspace=None):
+            captured_request["task_id"] = task_id
+            captured_request["workspace"] = workspace
+            return SimpleNamespace(
+                status_code=200,
+                output={"task_id": task_id, "task_status": "RUNNING"},
+            )
+
+        monkeypatch.setattr(
+            transcription.dashscope.Transcription,
+            "fetch",
+            mock_fetch,
+        )
+
+        result = CliRunner().invoke(
+            transcription.app,
+            ["fetch", "task-1234", "--workspace", "workspace-id"],
+        )
+
+        assert result.exit_code == 0
+        assert captured_request == {
+            "task_id": "task-1234",
+            "workspace": "workspace-id",
+        }
+        assert "RUNNING" in result.output
+
+    def test_wait(self, monkeypatch):
+        captured_request = {}
+
+        def mock_wait(task_id, workspace=None):
+            captured_request["task_id"] = task_id
+            captured_request["workspace"] = workspace
+            return SimpleNamespace(
+                status_code=200,
+                output={
+                    "task_id": task_id,
+                    "task_status": "SUCCEEDED",
+                    "results": [
+                        {
+                            "transcription_url": (
+                                "https://example.com/result.json"
+                            ),
+                        },
+                    ],
+                },
+            )
+
+        monkeypatch.setattr(
+            transcription.dashscope.Transcription,
+            "wait",
+            mock_wait,
+        )
+
+        result = CliRunner().invoke(
+            transcription.app,
+            ["wait", "task-1234", "--workspace", "workspace-id"],
+        )
+
+        assert result.exit_code == 0
+        assert captured_request == {
+            "task_id": "task-1234",
+            "workspace": "workspace-id",
+        }
+        assert "SUCCEEDED" in result.output
+
+    def test_cancel(self, monkeypatch):
+        captured_request = {}
+
+        def mock_cancel(task_id, workspace=None):
+            captured_request["task_id"] = task_id
+            captured_request["workspace"] = workspace
+            return SimpleNamespace(status_code=200, output={"deleted": True})
+
+        monkeypatch.setattr(
+            transcription.dashscope.Transcription,
+            "cancel",
+            mock_cancel,
+        )
+
+        result = CliRunner().invoke(
+            transcription.app,
+            ["cancel", "task-1234", "--workspace", "workspace-id"],
+        )
+
+        assert result.exit_code == 0
+        assert captured_request == {
+            "task_id": "task-1234",
+            "workspace": "workspace-id",
+        }
+        assert "success" in result.output
+
+    def test_list(self, monkeypatch):
+        captured_request = {}
+
+        def mock_list(**kwargs):
+            captured_request.update(kwargs)
+            return SimpleNamespace(
+                status_code=200,
+                output={"tasks": [{"task_id": "task-1234"}]},
+            )
+
+        monkeypatch.setattr(
+            transcription.dashscope.Transcription,
+            "list",
+            mock_list,
+        )
+
+        result = CliRunner().invoke(
+            transcription.app,
+            [
+                "list",
+                "--start-time",
+                "20240101000000",
+                "--end-time",
+                "20240102000000",
+                "--model-name",
+                "paraformer-v1",
+                "--api-key-id",
+                "ak-id",
+                "--region",
+                "cn-beijing",
+                "--status",
+                "SUCCEEDED",
+                "--page",
+                "2",
+                "--size",
+                "20",
+                "--workspace",
+                "workspace-id",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert captured_request == {
+            "start_time": "20240101000000",
+            "end_time": "20240102000000",
+            "model_name": "paraformer-v1",
+            "api_key_id": "ak-id",
+            "region": "cn-beijing",
+            "status": "SUCCEEDED",
+            "page_no": 2,
+            "page_size": 20,
+            "workspace": "workspace-id",
+        }
+        assert "task-1234" in result.output

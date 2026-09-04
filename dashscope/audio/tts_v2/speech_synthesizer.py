@@ -22,7 +22,7 @@ from dashscope.common.error import (
     RequestFailure,
 )
 from dashscope.common.logging import logger
-from dashscope.common.utils import get_user_agent
+from dashscope.common.utils import get_sdk_headers, get_user_agent
 from dashscope.protocol.websocket import (
     ACTION_KEY,
     ERROR_MESSAGE,
@@ -183,6 +183,7 @@ class Request:
         self.headers = {
             "user-agent": ua,
             "Authorization": "Bearer " + self.apikey,
+            **get_sdk_headers(module="audio"),
         }
         if headers:
             self.headers = {**self.headers, **headers}

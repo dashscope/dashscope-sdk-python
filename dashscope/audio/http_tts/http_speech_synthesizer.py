@@ -203,7 +203,7 @@ class HttpSpeechSynthesizer(BaseApi):
 
         # Get base URL
         import dashscope
-        from dashscope.common.utils import join_url
+        from dashscope.common.utils import get_sdk_headers, join_url
 
         if url:
             base_url = url
@@ -232,6 +232,9 @@ class HttpSpeechSynthesizer(BaseApi):
             http_method=method,
             stream=stream,
         )
+
+        # Tag sdk module (custom headers below may still override)
+        request.add_headers(get_sdk_headers(module="audio"))
 
         # Add custom headers
         if headers:

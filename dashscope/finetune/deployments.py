@@ -37,6 +37,8 @@ class Deployments(
         capacity: int,
         version: str = None,
         suffix: Optional[str] = None,
+        plan: Optional[str] = None,
+        template_id: Optional[str] = None,
         api_key: str = None,
         workspace: str = None,
         **kwargs,
@@ -51,6 +53,11 @@ class Deployments(
                 If specified, the final model name will be model_suffix.
                 Defaults to None.
             capacity (int, optional): The model service capacity.
+            plan (str, optional): The deployment plan required by the
+                service: "ptu" (PTU reserved), "mu" (model unit) or
+                "Lora" (LoRA deployment). Defaults to None.
+            template_id (str, optional): Template ID for deployment
+                configuration. Defaults to None.
             api_key (str, optional): The api-key. Defaults to None.
             workspace (str): The dashscope workspace id.
 
@@ -63,6 +70,10 @@ class Deployments(
             req["model_version"] = version
         if suffix is not None:
             req["suffix"] = suffix
+        if plan is not None:
+            req["plan"] = plan
+        if template_id is not None:
+            req["template_id"] = template_id
         response = super().call(
             req,
             api_key=api_key,

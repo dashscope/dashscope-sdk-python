@@ -14,7 +14,7 @@ import websocket  # pylint: disable=wrong-import-order
 
 # pylint: disable=ungrouped-imports
 from dashscope.common.logging import logger
-from dashscope.common.utils import get_user_agent
+from dashscope.common.utils import get_sdk_headers, get_user_agent
 from dashscope.protocol.websocket import ActionType
 
 
@@ -343,6 +343,7 @@ class _Request:
             "User-Agent": ua,
             "Authorization": f"Bearer {api_key}",
             "Accept": "application/json",
+            **get_sdk_headers(module="multimodal"),
         }
         log_headers = self.ws_headers.copy()
         log_headers["Authorization"] = "REDACTED"

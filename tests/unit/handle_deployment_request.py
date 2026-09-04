@@ -21,6 +21,8 @@ async def create_deployment_handler(request: aiohttp.request):
             "deployed_model": "deploy123456",
             "status": "PENDING",
             "model_name": "qwen-turbo-ft-202307121513-5dde",
+            "plan": body.get("plan"),
+            "template_id": body.get("template_id"),
         },
     }
 

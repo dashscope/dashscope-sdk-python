@@ -1,4 +1,4 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
-__version__ = "1.27.3"
+__version__ = "1.27.4"
