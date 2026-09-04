@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
+import atexit
 import datetime
 import json
+import socket
 import threading
 from http import HTTPStatus
-from typing import Callable, Optional, Dict, Union
+from typing import Callable, List, Optional, Dict, Tuple, Union
 
 import aiohttp
 import requests
+from requests.adapters import HTTPAdapter
 
 from dashscope.api_entities.aio_session import (
     get_shared_aio_session,
@@ -34,19 +37,111 @@ from dashscope.api_entities.encryption import Encryption
 _shared_sync_session: Optional[requests.Session] = None
 _shared_sync_session_lock = threading.Lock()
 
+# TCP keepalive tuning for the shared synchronous session's connection
+# pool. A pooled keep-alive connection that has been silently dropped by
+# a NAT gateway or load balancer (no FIN/RST received) is detected by the
+# kernel once it stays idle for roughly
+# _TCP_KEEPIDLE_SECONDS + _TCP_KEEPCNT * _TCP_KEEPINTVL_SECONDS, so the
+# next reuse fails fast with ConnectionError (which is retried once)
+# instead of stalling until the full read timeout expires.
+_TCP_KEEPIDLE_SECONDS = 60
+_TCP_KEEPINTVL_SECONDS = 30
+_TCP_KEEPCNT = 3
+
+
+def _tcp_keepalive_socket_options() -> List[Tuple[int, int, int]]:
+    """Socket options enabling TCP keepalive on pooled connections.
+
+    urllib3 replaces its default socket options (TCP_NODELAY) as soon as
+    custom options are supplied, so TCP_NODELAY is repeated here. The
+    keepalive timer options are best-effort: TCP_KEEPIDLE is Linux,
+    TCP_KEEPALIVE is the macOS equivalent, and on other platforms only
+    SO_KEEPALIVE is applied with the system default timers.
+    """
+    options = [
+        (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1),
+        (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
+    ]
+    keepidle = getattr(socket, "TCP_KEEPIDLE", None)
+    if keepidle is None:
+        keepidle = getattr(socket, "TCP_KEEPALIVE", None)  # macOS
+    if keepidle is not None:
+        options.append(
+            (socket.IPPROTO_TCP, keepidle, _TCP_KEEPIDLE_SECONDS),
+        )
+    keepintvl = getattr(socket, "TCP_KEEPINTVL", None)
+    if keepintvl is not None:
+        options.append(
+            (socket.IPPROTO_TCP, keepintvl, _TCP_KEEPINTVL_SECONDS),
+        )
+    keepcnt = getattr(socket, "TCP_KEEPCNT", None)
+    if keepcnt is not None:
+        options.append((socket.IPPROTO_TCP, keepcnt, _TCP_KEEPCNT))
+    return options
+
+
+class _KeepAliveHTTPAdapter(HTTPAdapter):
+    """HTTPAdapter whose pooled connections enable TCP keepalive."""
+
+    def init_poolmanager(self, connections, maxsize, block=False, **kwargs):
+        kwargs.setdefault(
+            "socket_options",
+            _tcp_keepalive_socket_options(),
+        )
+        super().init_poolmanager(
+            connections,
+            maxsize,
+            block=block,
+            **kwargs,
+        )
+
+    def proxy_manager_for(self, proxy, **kwargs):
+        kwargs.setdefault(
+            "socket_options",
+            _tcp_keepalive_socket_options(),
+        )
+        return super().proxy_manager_for(proxy, **kwargs)
+
+
+def _create_shared_sync_session() -> requests.Session:
+    session = requests.Session()
+    adapter = _KeepAliveHTTPAdapter()
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
 
 def _get_shared_sync_session() -> requests.Session:
     """Return a shared requests.Session for connection pooling.
 
-    The session is created lazily and reused for the process lifetime;
-    it is never closed explicitly.
+    The session is created lazily and reused for the process lifetime.
+    Call close_shared_sync_session() to release its pooled connections.
     """
     global _shared_sync_session
     if _shared_sync_session is None:
         with _shared_sync_session_lock:
             if _shared_sync_session is None:
-                _shared_sync_session = requests.Session()
+                _shared_sync_session = _create_shared_sync_session()
     return _shared_sync_session
+
+
+def close_shared_sync_session() -> None:
+    """Close the shared synchronous session and its pooled connections.
+
+    Long-running applications may call this to bound the lifetime of the
+    SDK-managed connection pool (e.g. periodically, or after a transport
+    failure). A fresh session is created lazily on the next request.
+    """
+    global _shared_sync_session
+    with _shared_sync_session_lock:
+        session = _shared_sync_session
+        _shared_sync_session = None
+    if session is not None:
+        session.close()
+
+
+# Release pooled connections at interpreter exit.
+atexit.register(close_shared_sync_session)
 
 
 def _send_with_retry(

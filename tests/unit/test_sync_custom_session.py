@@ -2,37 +2,39 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 """
-同步 HTTP 自定义 Session 功能单元测试
+Unit tests for custom sync HTTP Session support.
 
-测试范围：
-1. HttpRequest 接受自定义 Session 参数
-2. 自定义 Session 的使用和资源管理
-3. 临时 Session 的创建和清理
-4. Session 优先级逻辑
-5. 不同场景下的 Session 行为
+Scope:
+1. HttpRequest accepts a custom Session parameter
+2. Usage and resource management of custom Sessions
+3. Creation and cleanup of the SDK-managed shared Session
+4. Session priority logic
+5. Session behavior in different scenarios
 
-注意：所有测试都不依赖真实的 API Key
+Note: no test depends on a real API key.
 """
 
 # pylint: disable=protected-access,unused-argument,unused-variable
 # pylint: disable=broad-exception-raised
 
+import socket
 from unittest.mock import Mock, patch
 
 import pytest
 import requests
 from requests.adapters import HTTPAdapter
 
+from dashscope.api_entities import http_request as http_request_module
 from dashscope.api_entities.http_request import HttpRequest
 from dashscope.api_entities.api_request_data import ApiRequestData
 from dashscope.common.constants import ApiProtocol, HTTPMethod
 
 
 class TestSyncSessionBasics:
-    """测试同步 Session 基本功能"""
+    """Basic sync Session functionality"""
 
     def test_http_request_accepts_session_parameter(self):
-        """测试 HttpRequest 接受 session 参数"""
+        """HttpRequest accepts the session parameter"""
         custom_session = requests.Session()
 
         http_request = HttpRequest(
@@ -46,7 +48,7 @@ class TestSyncSessionBasics:
         assert http_request._external_session is not None
 
     def test_http_request_without_session_parameter(self):
-        """测试 HttpRequest 不传 session 参数"""
+        """HttpRequest without the session parameter"""
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -56,8 +58,8 @@ class TestSyncSessionBasics:
         assert http_request._external_session is None
 
     def test_session_parameter_is_optional(self):
-        """测试 session 参数是可选的"""
-        # 不传 session 参数应该正常工作
+        """The session parameter is optional"""
+        # omitting the session parameter should work
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -70,12 +72,12 @@ class TestSyncSessionBasics:
 
 
 class TestSyncSessionUsage:
-    """测试同步 Session 的实际使用"""
+    """Actual usage of sync Sessions"""
 
     @patch("requests.Session")
     def test_custom_session_is_used_for_request(self, _mock_session_class):
-        """测试自定义 session 被实际用于请求"""
-        # 创建 mock session
+        """Custom session is actually used for the request"""
+        # create mock session
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 200
@@ -83,7 +85,7 @@ class TestSyncSessionUsage:
         mock_response.text = '{"status": "success"}'
         mock_session.post.return_value = mock_response
 
-        # 创建 HttpRequest 并传入自定义 session
+        # create HttpRequest with the custom session
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -92,7 +94,7 @@ class TestSyncSessionUsage:
             session=mock_session,
         )
 
-        # 添加请求数据
+        # add request data
         request_data = ApiRequestData(
             model="test-model",
             task_group="test",
@@ -105,7 +107,7 @@ class TestSyncSessionUsage:
         )
         http_request.data = request_data
 
-        # 执行请求
+        # execute the request
         with patch.object(
             http_request,
             "_handle_response",
@@ -113,10 +115,10 @@ class TestSyncSessionUsage:
         ):
             _ = http_request.call()
 
-        # 验证自定义 session 被使用
+        # verify the custom session was used
         mock_session.post.assert_called_once()
 
-        # 验证自定义 session 没有被关闭
+        # verify the custom session was not closed
         mock_session.close.assert_not_called()
 
     @patch("dashscope.api_entities.http_request._get_shared_sync_session")
@@ -124,8 +126,8 @@ class TestSyncSessionUsage:
         self,
         mock_get_session,
     ):
-        """测试没有自定义 session 时使用共享 session"""
-        # 创建 mock session
+        """Shared session is used without a custom session"""
+        # create mock session
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 200
@@ -134,7 +136,7 @@ class TestSyncSessionUsage:
         mock_session.post.return_value = mock_response
         mock_get_session.return_value = mock_session
 
-        # 创建 HttpRequest 不传 session
+        # create HttpRequest without a session
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -142,7 +144,7 @@ class TestSyncSessionUsage:
             stream=False,
         )
 
-        # 添加请求数据
+        # add request data
         request_data = ApiRequestData(
             model="test-model",
             task_group="test",
@@ -155,7 +157,7 @@ class TestSyncSessionUsage:
         )
         http_request.data = request_data
 
-        # 执行请求
+        # execute the request
         with patch.object(
             http_request,
             "_handle_response",
@@ -163,18 +165,18 @@ class TestSyncSessionUsage:
         ):
             _ = http_request.call()
 
-        # 验证共享 session 被使用
+        # verify the shared session was used
         mock_get_session.assert_called_once()
 
-        # 验证共享 session 没有被关闭
+        # verify the shared session was not closed
         mock_session.close.assert_not_called()
 
 
 class TestSyncSessionResourceManagement:
-    """测试同步 Session 资源管理"""
+    """Sync Session resource management"""
 
     def test_custom_session_not_closed_by_http_request(self):
-        """测试自定义 session 不会被 HttpRequest 关闭"""
+        """Custom session is not closed by HttpRequest"""
         custom_session = Mock(spec=requests.Session)
         mock_response = Mock()
         mock_response.status_code = 200
@@ -209,12 +211,12 @@ class TestSyncSessionResourceManagement:
         ):
             _ = http_request.call()
 
-        # 验证自定义 session 没有被关闭
+        # verify the custom session was not closed
         custom_session.close.assert_not_called()
 
     @patch("dashscope.api_entities.http_request._get_shared_sync_session")
     def test_shared_session_not_closed_on_success(self, mock_get_session):
-        """测试共享 session 在成功后不被关闭"""
+        """Shared session is not closed after success"""
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 200
@@ -249,12 +251,12 @@ class TestSyncSessionResourceManagement:
         ):
             _ = http_request.call()
 
-        # 验证共享 session 没有被关闭
+        # verify the shared session was not closed
         mock_session.close.assert_not_called()
 
     @patch("dashscope.api_entities.http_request._get_shared_sync_session")
     def test_shared_session_not_closed_on_exception(self, mock_get_session):
-        """测试共享 session 在异常时不被关闭"""
+        """Shared session is not closed on exception"""
         mock_session = Mock()
         mock_session.post.side_effect = Exception("Network error")
         mock_get_session.return_value = mock_session
@@ -278,19 +280,19 @@ class TestSyncSessionResourceManagement:
         )
         http_request.data = request_data
 
-        # 执行请求应该抛出异常
+        # the request should raise
         with pytest.raises(Exception, match="Network error"):
             _ = http_request.call()
 
-        # 验证共享 session 没有被关闭
+        # verify the shared session was not closed
         mock_session.close.assert_not_called()
 
 
 class TestSyncSessionWithCustomConfiguration:
-    """测试自定义配置的 Session"""
+    """Sessions with custom configuration"""
 
     def test_custom_session_with_connection_pool(self):
-        """测试带连接池配置的自定义 session"""
+        """Custom session with connection pool configuration"""
         custom_session = requests.Session()
         adapter = HTTPAdapter(
             pool_connections=10,
@@ -308,12 +310,12 @@ class TestSyncSessionWithCustomConfiguration:
         )
 
         assert http_request._external_session is custom_session
-        # 验证 adapter 已配置
+        # verify the adapter is configured
         assert "http://" in custom_session.adapters
         assert "https://" in custom_session.adapters
 
     def test_custom_session_with_headers(self):
-        """测试带自定义 headers 的 session"""
+        """Custom session with custom headers"""
         custom_session = requests.Session()
         custom_session.headers.update(
             {
@@ -334,7 +336,7 @@ class TestSyncSessionWithCustomConfiguration:
         assert custom_session.headers["User-Agent"] == "Custom-Agent/1.0"
 
     def test_custom_session_with_proxies(self):
-        """测试带代理配置的 session"""
+        """Custom session with proxy configuration"""
         custom_session = requests.Session()
         custom_session.proxies = {
             "http": "http://proxy.example.com:8080",
@@ -355,10 +357,10 @@ class TestSyncSessionWithCustomConfiguration:
 
 
 class TestSyncSessionPriority:
-    """测试 Session 优先级"""
+    """Session priority"""
 
     def test_custom_session_has_priority(self):
-        """测试自定义 session 优先于临时 session"""
+        """Custom session takes priority over the shared session"""
         custom_session = requests.Session()
 
         http_request = HttpRequest(
@@ -368,17 +370,17 @@ class TestSyncSessionPriority:
             session=custom_session,
         )
 
-        # 验证存储了自定义 session
+        # verify the custom session is stored
         assert http_request._external_session is custom_session
         assert http_request._external_session is not None
 
 
 class TestSyncSessionWithDifferentMethods:
-    """测试不同 HTTP 方法的 Session 使用"""
+    """Session usage with different HTTP methods"""
 
     @patch("requests.Session")
     def test_custom_session_with_post_request(self, _mock_session_class):
-        """测试 POST 请求使用自定义 session"""
+        """POST request uses the custom session"""
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 200
@@ -411,12 +413,12 @@ class TestSyncSessionWithDifferentMethods:
         ):
             _ = http_request.call()
 
-        # 验证使用了 POST 方法
+        # verify POST was used
         mock_session.post.assert_called_once()
 
     @patch("requests.Session")
     def test_custom_session_with_get_request(self, _mock_session_class):
-        """测试 GET 请求使用自定义 session"""
+        """GET request uses the custom session"""
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 200
@@ -449,15 +451,15 @@ class TestSyncSessionWithDifferentMethods:
         ):
             _ = http_request.call()
 
-        # 验证使用了 GET 方法
+        # verify GET was used
         mock_session.get.assert_called_once()
 
 
 class TestSyncBackwardCompatibility:
-    """测试向后兼容性"""
+    """Backward compatibility"""
 
     def test_works_without_session_parameter(self):
-        """测试不传 session 参数时保持原有行为"""
+        """Behavior is unchanged without the session parameter"""
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -465,16 +467,16 @@ class TestSyncBackwardCompatibility:
             stream=False,
         )
 
-        # 验证不传 session 时，_external_session 为 None
+        # _external_session is None without a session
         assert http_request._external_session is None
 
-        # 验证其他参数正常
+        # other parameters are set normally
         assert http_request.url == "http://example.com/api"
         assert http_request.method == HTTPMethod.POST
 
     @patch("dashscope.api_entities.http_request._get_shared_sync_session")
     def test_default_behavior_unchanged(self, mock_get_session):
-        """测试默认行为：使用共享 session"""
+        """Default behavior: use the shared session"""
         mock_session = Mock()
         mock_response = Mock()
         mock_response.status_code = 200
@@ -483,7 +485,7 @@ class TestSyncBackwardCompatibility:
         mock_session.post.return_value = mock_response
         mock_get_session.return_value = mock_session
 
-        # 不传 session 参数
+        # no session parameter
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -510,14 +512,14 @@ class TestSyncBackwardCompatibility:
         ):
             _ = http_request.call()
 
-        # 验证共享 session 被使用
+        # verify the shared session was used
         mock_get_session.assert_called_once()
-        # 验证共享 session 没有被关闭
+        # verify the shared session was not closed
         mock_session.close.assert_not_called()
 
 
 class TestSyncConnectionRetry:
-    """测试池化连接被远端关闭后的重试行为"""
+    """Retry behavior when a pooled connection is dropped"""
 
     def _build_post_request(self):
         http_request = HttpRequest(
@@ -548,7 +550,7 @@ class TestSyncConnectionRetry:
 
     @patch("dashscope.api_entities.http_request._get_shared_sync_session")
     def test_retry_once_on_connection_error(self, mock_get_session):
-        """连接被远端关闭时重试一次并成功"""
+        """Retry once and succeed when the peer drops the connection"""
         mock_session = Mock()
         mock_response = self._ok_response()
         mock_session.post.side_effect = [
@@ -572,7 +574,7 @@ class TestSyncConnectionRetry:
 
     @patch("dashscope.api_entities.http_request._get_shared_sync_session")
     def test_retry_exhausted_raises(self, mock_get_session):
-        """连续两次 ConnectionError 后向上抛出"""
+        """Raise after two consecutive ConnectionErrors"""
         mock_session = Mock()
         mock_session.post.side_effect = requests.exceptions.ConnectionError(
             "Connection aborted.",
@@ -588,7 +590,7 @@ class TestSyncConnectionRetry:
 
     @patch("dashscope.api_entities.http_request._get_shared_sync_session")
     def test_no_retry_on_other_exceptions(self, mock_get_session):
-        """非连接类异常不重试"""
+        """Non-connection exceptions are not retried"""
         mock_session = Mock()
         mock_session.post.side_effect = ValueError("bad request")
         mock_get_session.return_value = mock_session
@@ -599,3 +601,60 @@ class TestSyncConnectionRetry:
             _ = http_request.call()
 
         assert mock_session.post.call_count == 1
+
+
+class TestSharedSyncSessionPool:
+    """Keepalive configuration and lifecycle of the shared session"""
+
+    def teardown_method(self):
+        """Reset the global shared session after each test"""
+        http_request_module.close_shared_sync_session()
+
+    def test_shared_session_enables_tcp_keepalive(self):
+        """The shared session's connection pool enables TCP keepalive"""
+        session = http_request_module._get_shared_sync_session()
+        assert isinstance(session, requests.Session)
+
+        adapter = session.get_adapter("https://dashscope.aliyuncs.com")
+        socket_options = adapter.poolmanager.connection_pool_kw[
+            "socket_options"
+        ]
+
+        assert (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1) in socket_options
+        # urllib3's default TCP_NODELAY must be preserved
+        assert (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1) in socket_options
+
+    def test_keepalive_options_platform_fallback(self):
+        """SO_KEEPALIVE and TCP_NODELAY are enabled on all platforms"""
+        options = http_request_module._tcp_keepalive_socket_options()
+        assert (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1) in options
+        assert (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1) in options
+
+    def test_shared_session_reused_across_calls(self):
+        """The shared session is reused across calls"""
+        session1 = http_request_module._get_shared_sync_session()
+        session2 = http_request_module._get_shared_sync_session()
+        assert session1 is session2
+
+    def test_close_shared_sync_session_resets_pool(self):
+        """Closing the shared session resets the pool"""
+        session1 = http_request_module._get_shared_sync_session()
+        http_request_module.close_shared_sync_session()
+        assert http_request_module._shared_sync_session is None
+
+        session2 = http_request_module._get_shared_sync_session()
+        assert session2 is not session1
+
+    def test_close_shared_sync_session_closes_session(self):
+        """Closing the shared session releases its connection pool"""
+        mock_session = Mock()
+        http_request_module._shared_sync_session = mock_session
+        http_request_module.close_shared_sync_session()
+        mock_session.close.assert_called_once()
+        assert http_request_module._shared_sync_session is None
+
+    def test_close_shared_sync_session_without_session(self):
+        """Closing before any shared session exists is safe"""
+        http_request_module._shared_sync_session = None
+        http_request_module.close_shared_sync_session()
+        assert http_request_module._shared_sync_session is None
