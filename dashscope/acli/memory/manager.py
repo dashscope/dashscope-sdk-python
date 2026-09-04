@@ -20,7 +20,10 @@ from typing import Any
 
 from dashscope.acli.memory.experience import ExperienceTracker
 from dashscope.acli.memory.plan import PlanTracker
-from dashscope.acli.memory.reflection import ReflectionTracker
+from dashscope.acli.memory.reflection import (
+    ReflectionTracker,
+    StagnationTracker,
+)
 from dashscope.acli.memory.tool_chains import ToolChainLibrary
 from dashscope.acli.memory.trace import TraceLogger
 
@@ -38,12 +41,14 @@ class SessionMemory:
 
         self.plan = PlanTracker()
         self.reflection = ReflectionTracker()
+        self.stagnation = StagnationTracker()
         self.tool_chains = ToolChainLibrary(self.session_dir)
 
     def reset(self) -> None:
         """Reset session memory (called at session start)."""
         self.plan.clear_plan()
         self.reflection.reset()
+        self.stagnation.reset()
 
 
 class PersistentMemory:

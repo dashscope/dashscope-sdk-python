@@ -149,7 +149,7 @@ def run_once_sync(
 def run_interactive(
     system_prompt: Optional[str] = None,
     app_name: str = "Agent",
-    default_model: str = "qwen3.7-plus",
+    default_model: str = "qwen3.8-max",
     default_provider: str = "tongyi",
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,

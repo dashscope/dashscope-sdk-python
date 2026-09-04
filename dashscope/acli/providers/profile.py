@@ -56,7 +56,7 @@ class ProviderProfile:
     base_url: str | None = None
     timeout: float = 120.0
     protocol: str = "openai"
-    max_retries: int = 2
+    max_retries: int = 3
 
 
 def _host_of(url: str | None) -> str:

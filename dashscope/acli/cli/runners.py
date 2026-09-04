@@ -67,13 +67,17 @@ async def _run_oneshot(config: Config, prompt: str):
         sys.exit(1)
 
     provider = get_provider_chain(config)
-    executor = Executor()
+    executor = Executor(
+        auto_approve=config.auto_approve,
+        confirm_mode=config.confirm_mode,
+    )
     agent = Agent(
         provider=provider,
         executor=executor,
         max_turns=config.max_turns,
         provider_name=config.provider,
         model_name=config.model,
+        oneshot=True,
     )
 
     # Pin parent agent ref for local.subagent / local.delegate BEFORE platform
@@ -278,7 +282,10 @@ def _run_tui_mode(config: Config):
     # CLI mode uses the full provider chain so temporary failures can fall back
     # to configured alternatives instead of dying immediately.
     provider = get_provider_chain(config)
-    executor = Executor(auto_approve=config.auto_approve)
+    executor = Executor(
+        auto_approve=config.auto_approve,
+        confirm_mode=config.confirm_mode,
+    )
 
     from dashscope.acli.agents.delegate import (
         set_config as set_delegate_config,

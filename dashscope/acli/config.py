@@ -23,6 +23,7 @@ WORKSPACE_SYSTEM_PROMPT_FILE = WORKSPACE_DIR / "system-prompt.md"
 
 PROVIDER_MODELS = {
     "tongyi": [
+        "qwen3.8-max",
         "qwen3.7-max",
         "qwen3.7-plus",
         "qwen3.5-plus",
@@ -226,7 +227,7 @@ class DelegationConfig:
 @dataclass
 class Config:
     provider: str = "tongyi"
-    model: str = "qwen3.7-plus"
+    model: str = "qwen3.8-max"
     # Dual-LLM: when thinking_model is set, Plan/Thinking loop phases route to
     # the thinking model; Execute uses the execution model (provider/model
     # above).
@@ -241,6 +242,10 @@ class Config:
     openai_api_key: str = ""
     base_url: str = ""
     auto_approve: bool = False
+    # Which tool executions prompt for confirmation:
+    #   "all"       - CONFIRM and DANGEROUS both prompt (classic)
+    #   "dangerous" - only DANGEROUS prompts; CONFIRM auto-passes
+    confirm_mode: str = "dangerous"
     max_turns: int = 50
     timeout: int = 30
     mcp_servers: list[MCPServerConfig] = field(default_factory=list)
@@ -277,9 +282,11 @@ class Config:
     protocol: str = "openai"  # "openai" | "anthropic"
     tui: bool = True
     # False = let the terminal handle the mouse (native selection).
-    # Default off on Windows: Textual's mouse-capture path is crash-prone
-    # in PowerShell/conhost; native terminal mouse still allows selection.
-    tui_mouse: bool = field(default_factory=lambda: os.name != "nt")
+    # Capture is on everywhere, including Windows: without it the wheel goes
+    # to the console host, which scrolls the whole alternate screen — the
+    # input box moves with the output and repaints slowly. Set false only if
+    # your terminal mishandles Textual's mouse reporting.
+    tui_mouse: bool = True
     privacy_mode: bool = (
         False  # When True, all data stays local, no cloud capabilities
     )
@@ -314,7 +321,7 @@ class Config:
     def load(
         cls,
         default_provider: str = "tongyi",
-        default_model: str = "qwen3.7-plus",
+        default_model: str = "qwen3.8-max",
     ) -> Config:
         config = cls()
         # Caller's defaults become the initial values; config files and env
@@ -542,6 +549,20 @@ class Config:
                 self.max_turns = int(data["max_turns"])
             except (ValueError, TypeError):
                 pass
+        if "auto_approve" in data:
+            val = str(data["auto_approve"]).lower()
+            self.auto_approve = val in ("true", "1", "yes")
+        if "confirm_mode" in data:
+            val = str(data["confirm_mode"]).lower()
+            if val in ("all", "dangerous"):
+                self.confirm_mode = val
+        # Env override for headless/benchmark use
+        if os.environ.get("ACLI_AUTO_APPROVE", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
+            self.auto_approve = True
         if "session_persist" in data:
             val = str(data["session_persist"]).lower()
             self.session_persist = val not in ("false", "0", "no")

@@ -192,7 +192,7 @@ def _setup_finalize(config: Config, agent) -> None:
 
 def _apply_preset_bailian(config: Config) -> None:
     config.provider = "tongyi"
-    config.model = "qwen3.7-plus"
+    config.model = "qwen3.8-max"
     config.enabled_capabilities = [
         "bailian.mcp",
         "bailian.cli",
@@ -284,7 +284,7 @@ async def _handle_setup(config: Config, agent) -> None:
     console.print("\nSelect a configuration mode:")
     console.print(
         "  [cyan][1][/cyan] [bold]Alibaba/Bailian[/bold] (default) — "
-        "tongyi/qwen3.7-plus + bailian.mcp/cli",
+        "tongyi/qwen3.8-max + bailian.mcp/cli",
     )
     console.print(
         "  [cyan][2][/cyan] China general        — "

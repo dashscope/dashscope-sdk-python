@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import locale
 import os
 import re
 import shlex
+import shutil
 import sys
 
 from dashscope.acli.tools.registry import PermissionLevel, tool
@@ -14,6 +16,37 @@ MAX_OUTPUT_LENGTH = 10000
 MAX_OUTPUT_BYTES = 5 * 1024 * 1024  # 5 MB hard limit before truncation
 DEFAULT_TIMEOUT = 30
 IS_WINDOWS = os.name == "nt"
+
+
+def _resolve_output_encoding() -> str:
+    """Encoding for decoding subprocess output.
+
+    Resolved at import, not per call: the TUI replaces ``sys.stdout`` with
+    textual's capture object, which has no ``.encoding``, so reading it later
+    raises AttributeError and fails every command.
+    """
+    if not IS_WINDOWS:
+        return "utf-8"
+    return (
+        getattr(sys.stdout, "encoding", None)
+        or getattr(sys.__stdout__, "encoding", None)
+        or locale.getpreferredencoding(False)
+        or "utf-8"
+    )
+
+
+def _resolve_win_shell() -> tuple[str, ...]:
+    """argv prefix for running a command on Windows.
+
+    ``-NoProfile`` matters for latency: user profile scripts run on every
+    spawn, and each run_command pays that cost.
+    """
+    exe = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
+    return (exe, "-NoProfile", "-NonInteractive", "-Command")
+
+
+OUTPUT_ENCODING = _resolve_output_encoding()
+WIN_SHELL = _resolve_win_shell()
 
 BLOCKED_PATTERNS = [
     # POSIX
@@ -530,9 +563,12 @@ async def run_command(command: str, timeout: int | None = None) -> str:
 
     try:
         if IS_WINDOWS:
-            # Use PowerShell on Windows for better shell syntax support
-            proc = await asyncio.create_subprocess_shell(
-                f'powershell -Command "{command}"',
+            # argv form, never a shell string: interpolating into
+            # 'powershell -Command "..."' routes it through cmd.exe first and
+            # any embedded double quote corrupts the command.
+            proc = await asyncio.create_subprocess_exec(
+                *WIN_SHELL,
+                command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=os.getcwd(),
@@ -586,17 +622,10 @@ async def run_command(command: str, timeout: int | None = None) -> str:
 
     output = ""
     if stdout:
-        # On Windows, subprocess output may be in system codepage
-        # (cp936/cp1252)
-        encoding = (
-            "utf-8" if not IS_WINDOWS else (sys.stdout.encoding or "utf-8")
-        )
-        output += stdout.decode(encoding, errors="replace")
+        output += stdout.decode(OUTPUT_ENCODING, errors="replace")
     if stderr:
-        encoding = (
-            "utf-8" if not IS_WINDOWS else (sys.stdout.encoding or "utf-8")
-        )
-        output += "\n[stderr]\n" + stderr.decode(encoding, errors="replace")
+        err = stderr.decode(OUTPUT_ENCODING, errors="replace")
+        output += "\n[stderr]\n" + err
 
     if len(output) > MAX_OUTPUT_LENGTH:
         output = (

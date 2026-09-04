@@ -7,7 +7,7 @@ Usage:
     run(
         system_prompt="You are ...",
         app_name="My App",
-        default_model="qwen3.7-plus",
+        default_model="qwen3.8-max",
         default_provider="tongyi",
         api_key="sk-...",
     )
@@ -26,7 +26,7 @@ from typing import Optional
 def run(
     system_prompt: Optional[str] = None,
     app_name: str = "Agent",
-    default_model: str = "qwen3.7-plus",
+    default_model: str = "qwen3.8-max",
     default_provider: str = "tongyi",
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,

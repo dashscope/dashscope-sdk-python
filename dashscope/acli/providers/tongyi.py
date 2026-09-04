@@ -43,7 +43,7 @@ def _extract_usage(response) -> dict | None:
 class TongyiProvider:
     def __init__(
         self,
-        model: str = "qwen3.7-plus",
+        model: str = "qwen3.8-max",
         api_key: str | None = None,
         request_timeout: int = 60,
         protocol: str = "openai",

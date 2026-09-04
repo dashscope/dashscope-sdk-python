@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-__version__ = "0.6.2"
+__version__ = "0.6.4"
 
 # Per-process identifier sent as x-dashscope-sdk-session-id so the
 # backend can group multi-turn requests from one CLI run.
