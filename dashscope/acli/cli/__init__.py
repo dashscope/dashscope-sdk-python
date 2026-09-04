@@ -86,6 +86,33 @@ from dashscope.acli.cli.streaming import (  # noqa: F401,E402
 _scheduler = None
 
 
+def _apply_cli_overrides(
+    config: Config,
+    protocol_override: str | None,
+    max_turns_override: str | None,
+) -> None:
+    """Apply --protocol/--max-turns to a loaded config; exit on bad input."""
+    if protocol_override:
+        if protocol_override.lower() in ("openai", "anthropic"):
+            config.protocol = protocol_override.lower()
+        else:
+            print(
+                f"Error: unknown protocol '{protocol_override}' "
+                f"(choices: openai, anthropic)",
+            )
+            sys.exit(1)
+
+    if max_turns_override is not None:
+        try:
+            config.max_turns = int(max_turns_override)
+        except ValueError:
+            print(
+                f"Error: --max-turns must be an integer, got "
+                f"'{max_turns_override}'",
+            )
+            sys.exit(1)
+
+
 def main():
     # Parse --cli / --tui / --dry-run flags (can appear anywhere in argv)
     use_cli = "--cli" in sys.argv
@@ -146,7 +173,7 @@ def main():
             )
             print(
                 "  --max-turns <n>         Override max conversation "
-                "turns (default 1000)",
+                "turns (default from config: 50)",
             )
             print(
                 "  --dry-run               Preview current config (loaded "
@@ -175,6 +202,13 @@ def main():
                 print('Usage: acli -c "your request"')
                 sys.exit(1)
             config = Config.load()
+            # This branch returns before main()'s override tail, so the
+            # flags must be applied here or oneshot silently ignores them.
+            _apply_cli_overrides(
+                config,
+                protocol_override,
+                max_turns_override,
+            )
             asyncio.run(_run_oneshot(config, prompt))
             return
         elif arg in ("example", "examples"):
@@ -186,27 +220,7 @@ def main():
             _mcp_server_main()
             return
     config = Config.load()
-    # Apply --protocol override
-    if protocol_override:
-        if protocol_override.lower() in ("openai", "anthropic"):
-            config.protocol = protocol_override.lower()
-        else:
-            print(
-                f"Error: unknown protocol '{protocol_override}' "
-                f"(choices: openai, anthropic)",
-            )
-            sys.exit(1)
-
-    # Apply --max-turns override
-    if max_turns_override is not None:
-        try:
-            config.max_turns = int(max_turns_override)
-        except ValueError:
-            print(
-                f"Error: --max-turns must be an integer, got "
-                f"'{max_turns_override}'",
-            )
-            sys.exit(1)
+    _apply_cli_overrides(config, protocol_override, max_turns_override)
 
     # Handle --dry-run: preview configuration without starting the agent
     if use_dry_run:
