@@ -18,6 +18,7 @@ warnings.filterwarnings(
 )
 
 import typer  # noqa: E402
+from rich.markup import escape  # noqa: E402
 
 import dashscope  # noqa: E402
 from dashscope.cli.common import err_console  # noqa: E402
@@ -437,16 +438,21 @@ def _register_rl_app():
             hidden=True,
         )
     except ImportError as exception:
+        # The message quotes a literal 'dashscope[rl]'; unescaped, rich reads
+        # [rl] as a style tag and prints an install command with no extras.
+        detail = escape(str(exception))
+        if "pip install" not in detail:
+            detail += (
+                ". Install the optional dependencies with: "
+                "[bold]pip install 'dashscope\\[rl]'[/bold]"
+            )
         err_console.print(
-            "[yellow]Warning:[/yellow] Failed to register rl command: "
-            f"{exception}. "
-            "Install the optional dependencies with: "
-            "[bold]pip install 'dashscope[rl]'[/bold]",
+            "[yellow]Warning:[/yellow] Failed to register rl command: " f"{detail}",
         )
     except Exception as exception:
         err_console.print(
             "[yellow]Warning:[/yellow] Failed to register rl command: "
-            f"{exception}",
+            f"{escape(str(exception))}",
         )
 
 
