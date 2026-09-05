@@ -168,11 +168,24 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
     for err in loaded.errors:
         console.print(f"[yellow]custom-extensions.toml: {err}[/yellow]")
 
-    # 1) Provider — Enter keeps the current one.
+    # 1) Provider — Enter keeps the current one, but only when it is
+    # loadable. A persisted extension provider whose custom-extensions.toml
+    # is not present here is absent from `names`, so offering it as the
+    # default turns a bare Enter into "Unknown provider; cancelled".
     names = list(PROVIDER_MODELS) + [
         p.name for p in loaded.providers if p.name not in PROVIDER_MODELS
     ]
-    provider = _numbered_pick("Available providers", names, config.provider)
+    current = config.provider if config.provider in names else ""
+    if config.provider and not current:
+        console.print(
+            f"[yellow]Configured provider '{config.provider}' is not "
+            "available here (no built-in or loaded extension by that "
+            "name), so Enter cannot keep it — pick one below.[/yellow]"
+        )
+    provider = _numbered_pick("Available providers", names, current)
+    if not provider:
+        console.print("[dim]No provider chosen; cancelled[/dim]")
+        return True
     if provider not in names:
         console.print(f"[red]Unknown provider: {provider}; cancelled[/red]")
         return True

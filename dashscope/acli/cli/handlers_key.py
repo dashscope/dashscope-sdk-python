@@ -81,12 +81,25 @@ def ensure_provider_key(config: Config, agent) -> bool:
     ext = find_provider(config.provider)
     targets = all_key_targets(config)
     key_info = targets.get(config.provider)
+    if ext is None and key_info is None:
+        # Neither a built-in nor a loaded extension: this directory cannot
+        # build that provider, so collecting a key is a dead end — and the
+        # "<PROVIDER>_API_KEY" env var we would suggest is read by nothing.
+        console.print(
+            f"\n[yellow]Configured provider '{config.provider}' is not "
+            "available here (no built-in or loaded extension by that "
+            "name), so an API key alone will not make it work.[/yellow]"
+        )
+        console.print(
+            "[dim]Starting anyway; run /provider to pick an available "
+            "provider.[/dim]"
+        )
+        return True
+
     if key_info:
         env_name = key_info.get("env") or ""
-    elif ext is not None:
-        env_name = ext.api_key_env or ""
     else:
-        env_name = f"{config.provider.upper()}_API_KEY"
+        env_name = ext.api_key_env or ""
 
     console.print(
         f"\n[yellow]No API Key detected for " f"{config.provider}[/yellow]",
