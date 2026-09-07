@@ -4,6 +4,10 @@
 
 This example shows how to configure the SDK to use different regional
 endpoints for MaaS (Model as a Service).
+
+Note: API keys are region-specific. Each region requires its own key
+created in that region's Model Studio console; using a key from another
+region fails with 401.
 """
 
 import dashscope
@@ -31,7 +35,7 @@ def example_generation_call():
     response = Generation.call(
         model="qwen-max",
         messages=[{"role": "user", "content": "Hello, world!"}],
-        api_key="your-api-key",  # Replace with your actual API key
+        api_key="your-api-key",  # must be created in this region
     )
     print(response)
 
@@ -46,7 +50,7 @@ def example_chat_completion():
     response = Completions.create(
         model="qwen-max",
         messages=[{"role": "user", "content": "你好，世界！"}],
-        api_key="your-api-key",  # Replace with your actual API key
+        api_key="your-api-key",  # must be created in this region
         stream=False,
     )
     print(response)

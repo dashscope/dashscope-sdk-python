@@ -119,6 +119,14 @@ Supported regions:
 | `eu-central-1` | Germany (Frankfurt) |
 | `us-east-1` | US (Virginia) |
 
+> **API keys are region-specific.** Each region issues its own API keys (`sk-` prefix) in its Model Studio console, and keys cannot be mixed across regions — using a key from another region fails with `401`. Switch `api_key` together with the region.
+
+Region-specific notes:
+
+- `eu-central-1` / `ap-northeast-1`: the deployment scope (Global, or EU / Japan) is chosen when the workspace is created in the console, not per API call.
+- `us-east-1`: model names with the `-us` suffix (e.g. `qwen-plus-us`) restrict inference to the US; names without the suffix default to global inference.
+- Batch inference, model fine-tuning and application development are currently only available in `cn-beijing` and `ap-southeast-1`.
+
 > `set_region` updates process-wide globals, so it is not concurrency-safe when a single process talks to multiple regions at the same time. Call it once at startup, or re-call it before each switch.
 
 ### Using environment variables
@@ -137,6 +145,8 @@ When a MaaS region is set via `DASHSCOPE_API_REGION`, the SDK builds the regiona
 | `DASHSCOPE_HTTP_BASE_URL` | HTTP endpoint (`dashscope.base_http_api_url`) |
 | `DASHSCOPE_WEBSOCKET_BASE_URL` | WebSocket endpoint (`dashscope.base_websocket_api_url`) |
 | `DASHSCOPE_COMPATIBLE_BASE_URL` | OpenAI-compatible endpoint (`dashscope.base_compatible_api_url`) |
+
+`set_region` always builds workspace-exclusive endpoints. Some regions also offer shared domains without a workspace subdomain — `dashscope.aliyuncs.com` (Beijing), `dashscope-intl.aliyuncs.com` (Singapore) and `dashscope-us.aliyuncs.com` (US Virginia); use the override variables above to point at them.
 
 ### OpenAI-compatible chat completions
 

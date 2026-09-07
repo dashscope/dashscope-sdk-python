@@ -34,6 +34,7 @@ from dashscope.api_entities.aio_session import close_shared_aio_session
 from dashscope.api_entities.http_request import close_shared_sync_session
 from dashscope.common.api_key import save_api_key
 from dashscope.common.env import (
+    MAAS_REGIONS,
     api_key,
     api_key_file_path,
     base_compatible_api_url,
@@ -82,15 +83,9 @@ from dashscope.tokenizers import (
 )
 
 
-# Supported MaaS regions and their default base URLs
-_MAAS_REGIONS = {
-    "cn-beijing",
-    "ap-southeast-1",
-    "us-east-1",
-    "cn-hongkong",
-    "eu-central-1",
-    "ap-northeast-1",
-}
+# cn-beijing defaults to the legacy dashscope.aliyuncs.com endpoints;
+# its MaaS URLs are only reachable via an explicit set_region() call.
+_MAAS_REGIONS = {*MAAS_REGIONS, "cn-beijing"}
 
 
 def set_region(region: str, workspace_id: str = None):

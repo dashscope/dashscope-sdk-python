@@ -118,6 +118,14 @@ print(dashscope.base_http_api_url)
 | `eu-central-1` | 德国（法兰克福） |
 | `us-east-1` | 美国（弗吉尼亚） |
 
+> **各地域 API Key 相互独立。**每个地域的 API Key（`sk-` 前缀）需在对应地域的百炼控制台创建，不可跨地域混用——使用其他地域的 Key 会返回 `401`。切换地域时请同步更换 `api_key`。
+
+地域特殊说明：
+
+- `eu-central-1` / `ap-northeast-1`：部署范围（全球，或欧盟 / 日本）在控制台创建业务空间时选择，不在 API 调用层配置。
+- `us-east-1`：模型名带 `-us` 后缀（如 `qwen-plus-us`）限定美国境内推理；不带后缀默认全球推理。
+- 批量推理、模型调优、应用开发等高级功能目前仅 `cn-beijing` 与 `ap-southeast-1` 支持。
+
 > `set_region` 修改的是进程级全局变量，因此在单进程同时访问多个区域时并非并发安全。建议在启动时调用一次，或在每次切换前重新调用。
 
 ### 使用环境变量
@@ -136,6 +144,8 @@ export DASHSCOPE_WORKSPACE_ID='ws-xxx123'      # 用于解析端点子域名
 | `DASHSCOPE_HTTP_BASE_URL` | HTTP 端点（`dashscope.base_http_api_url`） |
 | `DASHSCOPE_WEBSOCKET_BASE_URL` | WebSocket 端点（`dashscope.base_websocket_api_url`） |
 | `DASHSCOPE_COMPATIBLE_BASE_URL` | OpenAI-compatible 端点（`dashscope.base_compatible_api_url`） |
+
+`set_region` 构造的始终是业务空间专属域名。部分地域还提供不含 workspace 子域名的共享域名——北京 `dashscope.aliyuncs.com`、新加坡 `dashscope-intl.aliyuncs.com`、美国 `dashscope-us.aliyuncs.com`，如需使用可通过上面的环境变量直接覆盖。
 
 ### OpenAI-compatible 对话补全
 
