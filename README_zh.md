@@ -122,6 +122,7 @@ print(dashscope.base_http_api_url)
 
 地域特殊说明：
 
+- WebSocket 端点（`wss://.../api-ws/v1/inference`）目前仅 `cn-beijing` 与 `ap-southeast-1` 提供。`set_region` 对所有地域都会设置 `base_websocket_api_url`，但实时语音识别/合成、多模态对话等基于 WebSocket 的实时 API 在其他地域不可用。
 - `eu-central-1` / `ap-northeast-1`：部署范围（全球，或欧盟 / 日本）在控制台创建业务空间时选择，不在 API 调用层配置。
 - `us-east-1`：模型名带 `-us` 后缀（如 `qwen-plus-us`）限定美国境内推理；不带后缀默认全球推理。
 - 批量推理、模型调优、应用开发等高级功能目前仅 `cn-beijing` 与 `ap-southeast-1` 支持。

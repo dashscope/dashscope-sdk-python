@@ -123,6 +123,7 @@ Supported regions:
 
 Region-specific notes:
 
+- WebSocket endpoints (`wss://.../api-ws/v1/inference`) are only served in `cn-beijing` and `ap-southeast-1`. `set_region` still sets `base_websocket_api_url` for every region, but WebSocket-based realtime APIs (realtime speech recognition/synthesis, multimodal dialog, etc.) are not available in the other regions.
 - `eu-central-1` / `ap-northeast-1`: the deployment scope (Global, or EU / Japan) is chosen when the workspace is created in the console, not per API call.
 - `us-east-1`: model names with the `-us` suffix (e.g. `qwen-plus-us`) restrict inference to the US; names without the suffix default to global inference.
 - Batch inference, model fine-tuning and application development are currently only available in `cn-beijing` and `ap-southeast-1`.
