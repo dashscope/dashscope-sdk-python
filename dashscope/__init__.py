@@ -81,6 +81,54 @@ from dashscope.tokenizers import (
     list_tokenizers,
 )
 
+
+# Supported MaaS regions and their default base URLs
+_MAAS_REGIONS = {
+    "cn-beijing",
+    "ap-southeast-1",
+    "us-east-1",
+    "cn-hongkong",
+    "eu-central-1",
+    "ap-northeast-1",
+}
+
+
+def set_region(region: str, workspace_id: str = None):
+    """Switch to a specific MaaS region.
+
+    Updates base_http_api_url, base_compatible_api_url and
+    base_websocket_api_url to point to the MaaS endpoint for the
+    given region and workspace.
+
+    Args:
+        region (str): The MaaS region, e.g. "ap-southeast-1",
+            "us-east-1", "cn-hongkong", "cn-beijing", "eu-central-1",
+            "ap-northeast-1".
+        workspace_id (str): The workspace ID, used as the subdomain
+            of the MaaS endpoint.
+
+    Raises:
+        ValueError: If region is not supported or workspace_id is
+            empty.
+    """
+    if region not in _MAAS_REGIONS:
+        raise ValueError(
+            f"Unsupported region '{region}'. "
+            f"Supported regions: {sorted(_MAAS_REGIONS)}",
+        )
+
+    if not workspace_id:
+        raise ValueError("workspace_id is required")
+
+    global base_http_api_url, base_compatible_api_url
+    global base_websocket_api_url
+
+    host = f"{workspace_id}.{region}.maas.aliyuncs.com"
+    base_http_api_url = f"https://{host}/api/v1"
+    base_compatible_api_url = f"https://{host}/compatible-mode/v1"
+    base_websocket_api_url = f"wss://{host}/api-ws/v1/inference"
+
+
 __all__ = [
     "__version__",
     "base_compatible_api_url",
@@ -141,6 +189,7 @@ __all__ = [
     "MessageFile",
     "AssistantFile",
     "VideoSynthesis",
+    "set_region",
 ]
 
 logging.getLogger(__name__).addHandler(NullHandler())

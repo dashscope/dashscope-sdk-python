@@ -88,6 +88,76 @@ save_api_key(api_key='YOUR-DASHSCOPE-API-KEY',
 
 ```
 
+## 区域与端点配置
+
+默认情况下，SDK 将请求发往华北2（北京）公共端点 `dashscope.aliyuncs.com`。如果你的百炼（Model Studio）业务空间位于其他区域，请在调用前先切换端点。
+
+### 使用 `set_region`
+
+`dashscope.set_region(region, workspace_id)` 会一次性把 HTTP、WebSocket 和 OpenAI-compatible 三个 base URL 指向指定区域。`workspace_id` 为必填项，会作为端点的子域名。
+
+```python
+import dashscope
+
+# 切换到新加坡区域，业务空间为 "ws-xxx123"
+dashscope.set_region(region="ap-southeast-1", workspace_id="ws-xxx123")
+
+# 之后所有调用都会使用：
+#   https://ws-xxx123.ap-southeast-1.maas.aliyuncs.com/api/v1
+print(dashscope.base_http_api_url)
+```
+
+支持的区域：
+
+| 区域 | 地理位置 |
+|--------|----------|
+| `cn-beijing` | 华北2（北京） |
+| `cn-hongkong` | 中国（香港） |
+| `ap-southeast-1` | 新加坡 |
+| `ap-northeast-1` | 日本（东京） |
+| `eu-central-1` | 德国（法兰克福） |
+| `us-east-1` | 美国（弗吉尼亚） |
+
+> `set_region` 修改的是进程级全局变量，因此在单进程同时访问多个区域时并非并发安全。建议在启动时调用一次，或在每次切换前重新调用。
+
+### 使用环境变量
+
+也可以不写代码，直接通过环境变量选择区域：
+
+```shell
+export DASHSCOPE_API_REGION='ap-southeast-1'   # 默认：cn-beijing
+export DASHSCOPE_WORKSPACE_ID='ws-xxx123'      # 用于解析端点子域名
+```
+
+当通过 `DASHSCOPE_API_REGION` 设置了 MaaS 区域时，SDK 会构造对应的区域端点，并把 `DASHSCOPE_WORKSPACE_ID` 代入其中。你也可以直接覆盖每一个 base URL：
+
+| 环境变量 | 覆盖的对象 |
+|----------------------|-----------|
+| `DASHSCOPE_HTTP_BASE_URL` | HTTP 端点（`dashscope.base_http_api_url`） |
+| `DASHSCOPE_WEBSOCKET_BASE_URL` | WebSocket 端点（`dashscope.base_websocket_api_url`） |
+| `DASHSCOPE_COMPATIBLE_BASE_URL` | OpenAI-compatible 端点（`dashscope.base_compatible_api_url`） |
+
+### OpenAI-compatible 对话补全
+
+SDK 提供了 OpenAI-compatible 的对话补全入口，它会请求 `dashscope.base_compatible_api_url`（请求路径 `chat/completions`）——无需额外安装 `openai` 库，并自动跟随上面配置的区域。
+
+```python
+import dashscope
+from dashscope.aigc.chat_completion import Completions
+
+dashscope.set_region(region="cn-hongkong", workspace_id="ws-hk-789")
+
+response = Completions.create(
+    model="qwen-max",
+    messages=[{"role": "user", "content": "你好"}],
+    api_key="YOUR-DASHSCOPE-API-KEY",
+    stream=False,  # 设为 True 则返回 ChatCompletionChunk 生成器
+)
+print(response)
+```
+
+完整可运行示例见 [`samples/set_region_example.py`](samples/set_region_example.py)。
+
 ## AI 助手：DashScope SDK Expert
 
 SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供的 Agentic CLI（`dashscope/acli`）框架构建。对于 DashScope SDK/CLI 用户，它是获取开发咨询和 AI 编码帮助的推荐方式——直接在终端中解答 SDK/API 问题、生成可运行示例、展示 CLI 用法、诊断错误。

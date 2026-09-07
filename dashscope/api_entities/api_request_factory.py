@@ -19,6 +19,7 @@ from dashscope.common.constants import (
 from dashscope.common.error import InputDataRequired, UnsupportedApiProtocol
 from dashscope.common.logging import logger
 from dashscope.common.utils import get_sdk_headers
+from dashscope.common.env import resolve_base_url
 from dashscope.protocol.websocket import WebsocketStreamingMode
 
 
@@ -132,9 +133,17 @@ def _build_api_request(  # pylint: disable=too-many-branches
 
     encryption = None
 
+    # Resolve {workspace_id} placeholder for MaaS international regions
+    workspace = kwargs.pop("workspace", None)
+    if base_address is not None:
+        base_address = resolve_base_url(base_address, workspace)
+
     if api_protocol in [ApiProtocol.HTTP, ApiProtocol.HTTPS]:
         if base_address is None:
-            base_address = dashscope.base_http_api_url
+            base_address = resolve_base_url(
+                dashscope.base_http_api_url,
+                workspace,
+            )
         if not base_address.endswith("/"):
             http_url = base_address + "/"
         else:
@@ -176,7 +185,10 @@ def _build_api_request(  # pylint: disable=too-many-branches
         if base_address is not None:
             websocket_url = base_address
         else:
-            websocket_url = dashscope.base_websocket_api_url
+            websocket_url = resolve_base_url(
+                dashscope.base_websocket_api_url,
+                workspace,
+            )
         request = WebSocketRequest(
             url=websocket_url,
             api_key=api_key,
