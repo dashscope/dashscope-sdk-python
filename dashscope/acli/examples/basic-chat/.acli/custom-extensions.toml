@@ -1,9 +1,9 @@
 # acli custom extensions — basic-chat example
 # ============================================================================
 # Minimal working config: declares only one tongyi provider, demonstrating how
-# to write custom-extensions.toml. Add other providers (kimi / deepseek /
-# zhipu / ollama / ...) by adding [[providers]] blocks following the same
-# pattern.
+# to write custom-extensions.toml. Add other providers (any OpenAI-compatible
+# endpoint, or a local Ollama) by adding [[providers]] blocks following the
+# same pattern.
 #
 # Load locations (either one; workspace takes precedence):
 #   ~/.acli/custom-extensions.toml      applies globally
@@ -32,33 +32,20 @@ vision_models = ["qwen-vl-max", "qwen-vl-plus"]
 protocol = "openai"
 
 # ============================================================================
-# More provider templates (kept in sync with the project .acli/custom-extensions.toml)
+# More provider templates
 # Uncomment the corresponding block and set the env var to use it.
 # ============================================================================
 
+# ---- Any OpenAI-compatible endpoint ----
 # [[providers]]
-# name = "kimi"
-# base_url = "https://api.moonshot.cn/v1"
-# api_key_env = "MOONSHOT_API_KEY"
-# default_model = "kimi-k3"
-# models = ["kimi-k3", "moonshot-v1-128k", "moonshot-v1-32k"]
-
-# [[providers]]
-# name = "deepseek"
-# base_url = "https://api.deepseek.com"
-# api_key_env = "DEEPSEEK_API_KEY"
-# default_model = "deepseek-v4-pro"
-# models = ["deepseek-v4-pro", "deepseek-v4-flash"]
+# name = "my-llm"
+# base_url = "https://llm.example.com/v1"
+# api_key_env = "MY_LLM_API_KEY"
+# default_model = "my-model"
+# models = ["my-model", "my-model-lite"]
 # protocol = "openai"
 
-# [[providers]]
-# name = "zhipu"
-# base_url = "https://open.bigmodel.cn/api/paas/v4"
-# api_key_env = "ZHIPU_API_KEY"
-# default_model = "glm-5.2"
-# models = ["glm-5.2", "glm-4-plus", "glm-4", "glm-4v", "glm-4v-plus", "glm-4-flash"]
-# protocol = "openai"
-
+# ---- Local Ollama, no auth ----
 # [[providers]]
 # name = "ollama"
 # base_url = "http://localhost:11434/v1"
@@ -72,8 +59,8 @@ protocol = "openai"
 # ============================================================================
 # Usage:
 #   1. Uncomment a [[capabilities]] block (including its [[capabilities.tools]])
-#   2. Set the corresponding env var (e.g. export ZHIPU_API_KEY=xxx)
-#   3. Run /capability enable <key> to activate it (e.g. /capability enable zhipu.image)
+#   2. Set the corresponding env var (e.g. export DASHSCOPE_API_KEY=xxx)
+#   3. Run /capability enable <key> to activate it (e.g. /capability enable dashscope.image)
 #   4. Trigger it with natural language in chat ("draw a cat") or let the LLM call it autonomously
 #
 # Two tool types are supported:
@@ -81,31 +68,10 @@ protocol = "openai"
 #   - type = "vision"         — calls a vision LLM to read images; requires provider + model
 # ============================================================================
 
-# ---- Example 1: Zhipu GLM image generation (HTTP tool) ----
-# export ZHIPU_API_KEY="xxx"
-# /capability enable zhipu.image
-# Say in chat: "draw a bicycle parked by a lake"
-# [[capabilities]]
-# key = "zhipu.image"
-# display = "Zhipu GLM Image Generation"
-# auth = "apikey-header:Authorization:$ZHIPU_API_KEY"
-#
-# [[capabilities.tools]]
-# name = "generate_glm_image"
-# description = "Generate an image from a text description with the Zhipu GLM-Image model"
-# endpoint = "https://open.bigmodel.cn/api/paas/v4/images/generations"
-# http_method = "POST"
-# permission = "confirm"
-# params = [
-#   {name = "prompt", type = "string", required = true, description = "Image description, e.g. 'a mountain bike parked by a lake'"},
-#   {name = "model", type = "string", required = false, default = "glm-image-4v", description = "Image generation model name"},
-#   {name = "size", type = "string", required = false, default = "1024x1024", description = "Output image size"},
-# ]
-# body_template = '{"model": {{model}}, "prompt": {{prompt}}, "size": {{size}}}'
-
-# ---- Example 2: Tongyi Wanxiang image generation (HTTP tool, reuses DASHSCOPE_API_KEY) ----
+# ---- Example 1: Tongyi Wanxiang image generation (HTTP tool, reuses DASHSCOPE_API_KEY) ----
 # export DASHSCOPE_API_KEY="xxx"
 # /capability enable dashscope.image
+# Say in chat: "draw a bicycle parked by a lake"
 # [[capabilities]]
 # key = "dashscope.image"
 # display = "Tongyi Wanxiang Image Generation"
@@ -124,7 +90,7 @@ protocol = "openai"
 # ]
 # body_template = '{"model": {{model}}, "input": {"prompt": {{prompt}}}, "parameters": {"size": {{size}}}}'
 
-# ---- Example 3: Tongyi vision understanding (vision tool, calls qwen-vl-max to read images) ----
+# ---- Example 2: Tongyi vision understanding (vision tool, calls qwen-vl-max to read images) ----
 # Lets the text agent call a vision model on demand to understand images; no need to switch the main model.
 # Usage: /capability enable tongyi.vision, then say "look at this image @photo.png and describe it"
 # export DASHSCOPE_API_KEY="xxx"
@@ -145,22 +111,22 @@ protocol = "openai"
 #   {name = "question", type = "string", required = false, default = "Describe the content of this image", description = "Question about the image"},
 # ]
 
-# ---- Example 4: Coze workflow (HTTP tool, calls a Coze cloud agent) ----
-# export COZE_API_KEY="xxx"
-# /capability enable coze.workflow
+# ---- Example 3: External workflow engine (HTTP tool, calls a cloud agent) ----
+# export MY_WORKFLOW_API_KEY="xxx"
+# /capability enable workflow.run
 # [[capabilities]]
-# key = "coze.workflow"
-# display = "Coze Workflow (cloud agent / sub-agent)"
-# auth = "bearer:$COZE_API_KEY"
+# key = "workflow.run"
+# display = "External Workflow (cloud agent / sub-agent)"
+# auth = "bearer:$MY_WORKFLOW_API_KEY"
 #
 # [[capabilities.tools]]
-# name = "run_coze_workflow"
-# description = "Run a Coze workflow to complete a specific task"
-# endpoint = "https://api.coze.cn/v1/workflow/run"
+# name = "run_workflow"
+# description = "Run a remote workflow to complete a specific task"
+# endpoint = "https://workflow.example.com/v1/workflow/run"
 # http_method = "POST"
 # permission = "confirm"
 # params = [
-#   {name = "workflow_id", type = "string", required = true, description = "Coze workflow ID"},
+#   {name = "workflow_id", type = "string", required = true, description = "Workflow ID"},
 #   {name = "parameters", type = "object", required = true, description = "Workflow input parameters (a JSON object matching the workflow definition)"},
 # ]
 # body_template = '{"workflow_id": {{workflow_id}}, "parameters": {{parameters}}}'

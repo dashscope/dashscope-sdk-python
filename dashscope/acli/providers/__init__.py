@@ -74,6 +74,7 @@ def _create_provider(profile: ProviderProfile):
             api_key=api_key,
             base_url=base_url,
             protocol=proto,
+            module=profile.module,
         )
     if proto == "anthropic" or provider_name == "anthropic":
         from dashscope.acli.providers.anthropic import AnthropicProvider
@@ -89,6 +90,7 @@ def _create_provider(profile: ProviderProfile):
             api_key=api_key,
             base_url=base_url,
             protocol=proto,
+            module=profile.module,
         )
     from dashscope.acli.providers.openai import OpenAIProvider
 

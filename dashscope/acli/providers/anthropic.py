@@ -261,7 +261,7 @@ class AnthropicProvider:
                     elif event.type == "content_block_delta":
                         delta = event.delta
                         # Anthropic SDK uses "text_delta"; some
-                        # OpenAI-compatible backends (e.g. ideatalk) emit
+                        # proxied OpenAI-compatible backends emit
                         # "text" or put text directly on the delta.
                         # Accept any object that carries text.
                         if getattr(delta, "type", "") == "text_delta":
@@ -343,7 +343,7 @@ class AnthropicProvider:
                         )
 
                 # Detect silent failures: API returned 200 but no content.
-                # Some backends (e.g. ideatalk rate-limit) send error in body
+                # Some backends (e.g. on rate-limit) send error in body
                 # without raising, producing zero stream events.
                 if not received_content:
                     stop = None

@@ -97,10 +97,7 @@ def register_session_tools(
     registry.register(
         ToolDefinition(
             name="switch_provider",
-            description=(
-                "Switch AI provider "
-                "(tongyi/anthropic/openai/deepseek/zhipu)"
-            ),
+            description=f"Switch AI provider ({'/'.join(PROVIDER_MODELS)})",
             permission=PermissionLevel.AUTO,
             func=switch_provider,
             parameters={

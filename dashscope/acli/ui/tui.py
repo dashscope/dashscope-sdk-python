@@ -1684,6 +1684,10 @@ class AgenticCLIApp(App):
         self._inline_input_future: threading.Event | None = None
         self._inline_input_value: list[str] = [""]
         self._inline_input_active: bool = False
+        # Set on teardown: wizards parked in executor threads get an empty
+        # answer (and future prompts fail fast) instead of blocking the
+        # default-executor join at interpreter shutdown.
+        self._inline_input_aborted: bool = False
         # Calm streaming (old JediTerm fallback): writes during streaming
         # do not follow-scroll
         self._calm_streaming: bool = False
@@ -2055,6 +2059,13 @@ class AgenticCLIApp(App):
             f"[bold]Tools:[/bold] [dim]{tool_count} registered[/dim]",
         )
 
+        # Scenario doc link (embedded mode only)
+        guide_url = getattr(self.config, "_embedded_guide_url", "")
+        if guide_url:
+            info_lines.append(
+                f"[bold]Guide:[/bold] [dim]{guide_url}[/dim]",
+            )
+
         info_lines.append(
             "\n[dim]Input: Enter to submit; Ctrl+J newline; "
             "Ctrl+C cancel/quit [/dim]",
@@ -2115,24 +2126,25 @@ class AgenticCLIApp(App):
 
         # Monkey-patch builtins.input and getpass.getpass so that blocking
         # handlers (e.g. /key, /dev xxx add, /setup, /update without args)
-        # can prompt via the TUI modal instead of hanging on stdin.
+        # can prompt via the TUI modal instead of hanging on stdin. Never
+        # reverted — see on_unmount.
         import builtins
         import getpass
 
-        self._original_input = builtins.input
-        self._original_getpass = getpass.getpass
         builtins.input = self._tui_input
         getpass.getpass = self._tui_getpass
 
     def on_unmount(self) -> None:
-        """Restore original input() and getpass() on exit."""
-        import builtins
-        import getpass
+        """Wake any wizard parked on input() in an executor thread.
 
-        if hasattr(self, "_original_input"):
-            builtins.input = self._original_input
-        if hasattr(self, "_original_getpass"):
-            getpass.getpass = self._original_getpass
+        The input()/getpass() patch deliberately stays installed: restoring
+        the originals here races the unwinding wizard, whose next prompt
+        could land on the real input() and block on stdin, stranding the
+        default executor at interpreter shutdown. Post-exit calls hit the
+        aborted flag in _tui_input and fail fast with EOFError.
+        """
+        self._inline_input_aborted = True
+        self._cancel_inline_input()
 
     async def _tui_confirm_callback(
         self,
@@ -2257,12 +2269,27 @@ class AgenticCLIApp(App):
     # How long an inline input() prompt waits before giving up.
     _INLINE_INPUT_TIMEOUT = 300.0
 
+    def _cancel_inline_input(self) -> None:
+        """Wake a thread parked in _tui_input with an empty answer. Every
+        wizard treats empty as keep-default/cancel, so the thread unwinds
+        through its remaining steps without blocking again. The future
+        object is left in place; the waiter clears it."""
+        with self._inline_input_lock:
+            future = self._inline_input_future
+            if future is not None:
+                self._inline_input_value[0] = ""
+                self._inline_input_active = False
+                future.set()
+
     def _tui_input(self, prompt: str = "", password: bool = False) -> str:
         """Thread-safe replacement for builtins.input() in TUI mode.
         Writes prompt inline to output and reads from command input box.
         Blocks the calling thread until input is received."""
-        if self._loop is None:
-            return ""
+        if self._loop is None or self._inline_input_aborted:
+            # App is exiting: nothing can answer this prompt. EOFError
+            # mirrors a closed stdin — wizard handlers catch it as
+            # keep-default/cancel and unwind without blocking.
+            raise EOFError("input() called after TUI exit")
 
         with self._inline_input_lock:
             if self._inline_input_active:

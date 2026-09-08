@@ -466,8 +466,8 @@ class Config:
             key_field = f"{prov}_api_key"
             if key_field in data and not getattr(self, key_field):
                 setattr(self, key_field, decrypt_value(str(data[key_field])))
-        # Extension providers (ideatalk/deepseek/zhipu/...) may also store keys
-        # as <name>_api_key in the global config file.
+        # Extension providers may also store keys as <name>_api_key in
+        # the global config file.
         for key, val in data.items():
             if (
                 key.endswith("_api_key")
@@ -740,8 +740,7 @@ class Config:
                 lines.append(
                     f"{prov}_api_key = {toml_str(encrypt_value(key_val))}",
                 )
-        # Extension provider keys stored as <name>_api_key (e.g.
-        # ideatalk_api_key)
+        # Extension provider keys stored as <name>_api_key
         for attr in self.__dict__:
             if attr.endswith("_api_key") and attr not in built_in_key_fields:
                 key_val = getattr(self, attr, "")

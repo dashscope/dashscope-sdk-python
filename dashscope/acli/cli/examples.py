@@ -256,6 +256,12 @@ def _copy_example_flat(src: Path, dst: Path, *, force: bool) -> bool:
         )
 
     console.print(f"[green]✓ Example copied to: {acli_dir}[/green]")
+    if src.name == "dashscope-sdk-expert":
+        from dashscope.acli.cli.handlers_key import _GUIDE_DOC, _doc_locale
+
+        console.print(
+            f"[dim]Guide: {_GUIDE_DOC.format(_doc_locale())}[/dim]",
+        )
     if backup_dir is not None:
         console.print(
             f"[dim]Overwritten files backed up to: {backup_dir} "

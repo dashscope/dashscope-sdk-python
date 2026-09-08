@@ -16,6 +16,21 @@ from dashscope.acli.providers.profile import build_profiles_from_config
 
 console = Console()
 
+# Model Studio doc links for the no-key startup prompt; locale segment
+# comes from _doc_locale().
+_GET_API_KEY_DOC = "https://help.aliyun.com/{}/model-studio/get-api-key"
+_GUIDE_DOC = "https://help.aliyun.com/{}/model-studio/dashscope-sdk-expert"
+
+
+def _doc_locale() -> str:
+    """Pick the help-center locale from the process locale env vars."""
+    import os
+
+    for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        if "zh" in (os.environ.get(var) or "").lower():
+            return "zh"
+    return "en"
+
 
 def all_key_targets(config: Config | None = None) -> dict[str, dict]:
     """Merge KEY_TARGETS (built-in) with extension providers into one dict.
@@ -104,6 +119,12 @@ def ensure_provider_key(config: Config, agent) -> bool:
     console.print(
         f"\n[yellow]No API Key detected for " f"{config.provider}[/yellow]",
     )
+    if config.provider.lower() == "tongyi":
+        lang = _doc_locale()
+        console.print(
+            f"[dim]Get an API Key: {_GET_API_KEY_DOC.format(lang)}[/dim]",
+        )
+        console.print(f"[dim]Guide: {_GUIDE_DOC.format(lang)}[/dim]")
     console.print("Choose how to set it up:")
     if env_name:
         console.print(f"  [1] Set env var {env_name} (exit and set)")
@@ -232,7 +253,7 @@ def _set_extension_provider_token(
         console.print("[dim]Cancelled[/dim]")
         return False
 
-    # Save to the provider's dynamic slot, e.g. ideatalk_api_key.
+    # Save to the provider's dynamic slot, i.e. <name>_api_key.
     old_provider = config.provider
     try:
         config.provider = ext_prov.name

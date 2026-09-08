@@ -182,7 +182,15 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
             "available here (no built-in or loaded extension by that "
             "name), so Enter cannot keep it — pick one below.[/yellow]"
         )
-    provider = _numbered_pick("Available providers", names, current)
+    provider = _numbered_pick(
+        "Available providers",
+        names,
+        current,
+        custom_hint=(
+            "Need one that is not listed? /dev provider add registers it "
+            "in custom-extensions.toml"
+        ),
+    )
     if not provider:
         console.print("[dim]No provider chosen; cancelled[/dim]")
         return True

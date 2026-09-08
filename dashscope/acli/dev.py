@@ -146,15 +146,14 @@ _GUIDE_PROVIDER = """\
 > Wire a new LLM into acli's chat / stream / tool-call loop.
 > In most scenarios **no code is needed** — just fill in a TOML block.
 
-acli ships only 3 protocol implementations; every provider (including
-built-ins tongyi/anthropic/openai/deepseek/zhipu/ideatalk/ollama) is
-configured via `custom-extensions.toml`:
+acli ships 3 protocol implementations and 3 built-in providers
+(tongyi / anthropic / openai), which need no TOML at all. Every other
+provider is configured via `custom-extensions.toml`:
 
 | Protocol    | Implementation      | Use case                        |
 |-------------|---------------------|---------------------------------|
 | `openai`    | `OpenAIProvider`    | OpenAI-compatible endpoints     |
-|             |                     | (Moonshot/Yi/Step/Deepseek/     |
-|             |                     | Zhipu/Ollama…)                  |
+|             |                     | (any vendor, or local Ollama…)  |
 | `anthropic` | `AnthropicProvider` | Anthropic Messages API (Claude  |
 |             |                     | / proxied endpoints)            |
 | `dashscope` | `TongyiProvider`    | DashScope OpenAI-compat         |
@@ -168,13 +167,13 @@ configured via `custom-extensions.toml`:
    (global) or `./.acli/custom-extensions.toml` (workspace):
 
 ```toml
-# Moonshot / Kimi — OpenAI compatible
+# Any OpenAI-compatible endpoint
 [[providers]]
-name = "moonshot"
-base_url = "https://api.moonshot.cn/v1"
-api_key_env = "MOONSHOT_API_KEY"
-default_model = "kimi-k2"
-models = ["kimi-k1"]
+name = "my-llm"
+base_url = "https://llm.example.com/v1"
+api_key_env = "MY_LLM_API_KEY"
+default_model = "my-model"
+models = ["my-model", "my-model-lite"]
 protocol = "openai"
 
 # Access Qwen via an Anthropic-protocol proxy
@@ -527,7 +526,7 @@ def _provider_add(config: Config) -> None:
                 return
             api_key_enc = encrypt_for_toml(secret)
         else:
-            api_key_env = _prompt("Env var name (e.g. MOONSHOT_API_KEY)")
+            api_key_env = _prompt("Env var name (e.g. MY_LLM_API_KEY)")
             if not api_key_env:
                 console.print("[red]Env var name must not be empty[/red]")
                 return
@@ -1102,7 +1101,7 @@ def handle_dev_command(cmd: str, config: Config) -> None:
             if len(parts) >= 5:
                 _model_add(config, parts[3], parts[4])
             elif len(parts) == 4:
-                # Allow shorthand: /dev model add glm-image
+                # Allow shorthand: /dev model add qwen-image
                 model = parts[3]
                 provider = _infer_provider_from_model(model)
                 if provider is None:
