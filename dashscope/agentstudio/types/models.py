@@ -129,9 +129,29 @@ class Scope(BaseModel):
 
 
 class Mount(BaseModel):
-    """Session resource mount descriptor."""
+    """Session resource mount descriptor (create-time input on POST /sessions)."""
 
     _fields = ("type", "file_id", "skill_id", "mount_path")
+
+
+class SessionResource(BaseModel):
+    """A resource mounted into a session at runtime.
+
+    The response ``file_id`` is the session-scoped copy id — **not** the
+    source file id passed at mount time. ``mount_path`` is the absolute
+    sandbox path (the server prepends a prefix; the user-supplied path is
+    preserved losslessly and must be under ``/uploads/``).
+    """
+
+    _fields = (
+        "id",
+        "type",
+        "file_id",
+        "mount_path",
+        "created_at",
+        "updated_at",
+        "request_id",
+    )
 
 
 class Networking(BaseModel):
@@ -154,9 +174,36 @@ class EnvironmentConfig(BaseModel):
 
 
 class StopReason(BaseModel):
-    """Carried by ``session_status`` idle events."""
+    """Carried by ``session_status`` idle events (and ``Session.stop_reason``).
 
-    _fields = ("type", "event_ids")
+    A running Session's ``stop_reason`` is ``null``. ``requires_action``
+    carries ``pending_batch_id`` + ``pending_call_ids`` (only the calls not
+    yet adjudicated); do not derive pending from request/response diffs.
+    """
+
+    _fields = ("type", "pending_batch_id", "pending_call_ids")
+
+
+class PermissionPolicy(BaseModel):
+    """Tool approval policy (``permission_policy`` on tool configs).
+
+    Must be the object form ``{"type": "always_allow" | "always_ask"}``;
+    the string form is rejected (the server rejects it as well). Defaults
+    to ``always_allow`` when omitted.
+    """
+
+    _fields = ("type",)
+
+    def __init__(self, **kwargs: Any) -> None:
+        t = kwargs.get("type")
+        if isinstance(t, str) and t not in ("always_allow", "always_ask"):
+            raise ValueError(
+                "permission_policy.type must be 'always_allow' or "
+                "'always_ask'",
+            )
+        if t is None:
+            kwargs["type"] = "always_allow"
+        super().__init__(**kwargs)
 
 
 class Stats(BaseModel):
@@ -296,6 +343,7 @@ _CONTENT_REGISTRY: Dict[str, type] = {
     BlockType.ERROR: ErrorBlock,
     SSEEventType.TOOL_CALL: DataBlock,
     SSEEventType.TOOL_CALL_OUTPUT: DataBlock,
+    SSEEventType.TOOL_APPROVAL_REQUEST: DataBlock,
     SSEEventType.SESSION_STATUS: DataBlock,
     SSEEventType.REASONING: DataBlock,
     SSEEventType.MCP_CALL: DataBlock,
@@ -338,21 +386,38 @@ class MultiAgentRosterEntry(BaseModel):
 
     ``type`` is ``"agent"`` (reference another agent by ``id`` + optional
     ``version``) or ``"self"`` (a copy of the coordinator; at most one).
+    ``name`` / ``description`` are populated by the server on retrieval
+    (enriched from the referenced agent); they are ignored on write.
     """
 
-    _fields = ("type", "id", "version")
+    _fields = ("type", "id", "version", "name", "description")
+
+    def __init__(self, **kwargs: Any) -> None:
+        if not kwargs.get("type"):
+            kwargs["type"] = "agent"
+        if kwargs.get("type") == "self":
+            # A self-reference has no id/version of its own.
+            kwargs.pop("id", None)
+            kwargs.pop("version", None)
+        super().__init__(**kwargs)
 
 
 class MultiAgentConfig(BaseModel):
     """Multi-agent coordinator config (the ``multiagent`` field).
 
     ``type`` is currently always ``"coordinator"``; ``agents`` is the
-    roster of 1-20 entries. An empty list clears the roster.
+    roster of entries (the server enforces the 1-20 size limit and the
+    at-most-one ``"self"`` rule; the SDK normalizes but does not reject
+    server-returned data, so it never fails to parse a valid agent).
+    An empty list clears the roster. The agent version is snapshotted when
+    a session is created; changes only affect new sessions.
     """
 
     _fields = ("type", "agents")
 
     def __init__(self, **kwargs: Any) -> None:
+        if not kwargs.get("type"):
+            kwargs["type"] = "coordinator"
         agents = kwargs.get("agents")
         if isinstance(agents, list):
             kwargs["agents"] = [
@@ -363,6 +428,8 @@ class MultiAgentConfig(BaseModel):
                 )
                 for a in agents
             ]
+        elif agents is None:
+            kwargs["agents"] = []
         super().__init__(**kwargs)
 
 
@@ -526,15 +593,118 @@ class Session(BaseModel):
 
 
 class SessionThread(BaseModel):
+    """A sub-agent thread within a session.
+
+    ``agent`` is a ``{id, version}`` reference to the thread's bound agent.
+    ``status`` is ``idle`` / ``running`` / ``terminated``; ``archived_at``
+    is non-null once archived (archived threads are excluded from list by
+    default).
+    """
+
     _fields = (
         "id",
+        "type",
         "session_id",
         "parent_thread_id",
-        "title",
+        "agent",
         "status",
         "created_at",
         "updated_at",
+        "archived_at",
+        "request_id",
     )
+
+
+# ===========================================================================
+# Security (overview + agent logs)
+# ===========================================================================
+
+
+class SecurityCapability(BaseModel):
+    """A single capability/protection switch in the overview."""
+
+    _fields = ("key", "enabled")
+
+
+class SecurityScanStat(BaseModel):
+    """Scan hit/scanned counters (content_safety / file_scan / skill_scan)."""
+
+    _fields = ("hit", "scanned")
+
+
+class SecurityOverview(BaseModel):
+    """Response of ``GET /security/overview`` (last-24h dashboard)."""
+
+    _fields = (
+        "capabilities",
+        "protection",
+        "content_safety",
+        "file_scan",
+        "skill_scan",
+        "request_id",
+    )
+
+    def __init__(self, **kwargs: Any) -> None:
+        for k in ("capabilities", "protection"):
+            v = kwargs.get(k)
+            if isinstance(v, list):
+                kwargs[k] = [
+                    SecurityCapability(**dict(it))
+                    if isinstance(it, Mapping)
+                    else it
+                    for it in v
+                ]
+        for k in ("content_safety", "file_scan", "skill_scan"):
+            v = kwargs.get(k)
+            if isinstance(v, Mapping):
+                kwargs[k] = SecurityScanStat(**dict(v))
+        super().__init__(**kwargs)
+
+
+class SecurityAlertStats(BaseModel):
+    """Alert counts by severity."""
+
+    _fields = ("total", "high", "medium", "low")
+
+
+class SecurityAlert(BaseModel):
+    """A single security alert row. ``check_time`` / ``handle_time`` are
+    millisecond-string timestamps (not ISO 8601)."""
+
+    _fields = (
+        "alert_id",
+        "risk_level",
+        "risk_name",
+        "risk_desc",
+        "asset_type",
+        "asset_name",
+        "app_id",
+        "app_name",
+        "agent_name",
+        "status",
+        "source",
+        "check_time",
+        "handle_time",
+        "vendor",
+    )
+
+
+class SecurityAlertList(BaseModel):
+    """Response of ``GET /security/agent_logs`` (page-number + cursor)."""
+
+    _fields = ("stats", "data", "next_page", "request_id")
+
+    def __init__(self, **kwargs: Any) -> None:
+        stats = kwargs.get("stats")
+        if isinstance(stats, Mapping):
+            kwargs["stats"] = SecurityAlertStats(**dict(stats))
+        data = kwargs.get("data")
+        if isinstance(data, list):
+            kwargs["data"] = [
+                SecurityAlert(**dict(it)) if isinstance(it, Mapping) else it
+                for it in data
+            ]
+        super().__init__(**kwargs)
 
 
 class DeleteResponse(BaseModel):
@@ -822,8 +992,9 @@ class Message(BaseModel):
     def session_status(self) -> Optional[str]:
         """``session_status`` value from ``session_status`` events.
 
-        Returns ``"idle"``, ``"running"``, ``"rescheduling"``,
-        ``"terminated"`` or ``None`` for non-session_status events.
+        Returns ``"idle"``, ``"running"``, ``"rescheduled"``,
+        ``"terminated"``, ``"deleted"`` or ``None`` for non-session_status
+        events.
         """
         if getattr(self, "type", None) != SSEEventType.SESSION_STATUS:
             return None
@@ -832,6 +1003,189 @@ class Message(BaseModel):
             if isinstance(d, dict) and "session_status" in d:
                 return d["session_status"]
         return None
+
+    @property
+    def _data(self) -> Optional[Dict[str, Any]]:
+        """The first content block's ``data`` payload, if any."""
+        for block in self.content or []:
+            d = getattr(block, "data", None)
+            if isinstance(d, dict):
+                return d
+        return None
+
+    @property
+    def tool_approval_request(self) -> Optional[Dict[str, Any]]:
+        """``tool_approval_request`` payload: ``batch_id`` / ``call_id`` /
+        ``name`` / ``arguments`` (JSON string) / ``tool_type`` /
+        ``server_label`` (MCP only).
+
+        Returns ``None`` for non-``tool_approval_request`` events. The
+        approval identity is the ``(batch_id, call_id)`` composite key —
+        ``call_id`` may be reused across turns, so never match on
+        ``call_id`` alone.
+        """
+        if getattr(self, "type", None) != SSEEventType.TOOL_APPROVAL_REQUEST:
+            return None
+        return self._data
+
+    @property
+    def error(self) -> Optional[Dict[str, Any]]:
+        """``{"code", "message"}`` from ``type: error`` events, else ``None``.
+
+        Approval failures surface in the event stream as ``type: error``
+        events (not as HTTP exceptions). Use :attr:`pending_tool_approvals`
+        to read the suspend signal alongside this.
+        """
+        if getattr(self, "type", None) != SSEEventType.ERROR:
+            return None
+        err = self.extra.get("error")
+        if err is None:
+            raw = getattr(self, "_raw", None) or {}
+            if isinstance(raw, Mapping):
+                err = raw.get("error")
+        return err if isinstance(err, dict) else None
+
+    @property
+    def pending_tool_approvals(self) -> Optional[Dict[str, Any]]:
+        """Suspend signal ``{"batch_id", "call_ids"}`` carried in the
+        ``metadata`` of an error / response frame while the approval
+        barrier is up. ``None`` when the barrier is not up.
+
+        This is the reliable way to tell pending state — do NOT derive it
+        from request/response event diffs (the server emits it only while
+        the barrier stands).
+        """
+        md = self.metadata if isinstance(self.metadata, dict) else None
+        if md is None:
+            return None
+        pending = md.get("pending_tool_approvals")
+        return pending if isinstance(pending, dict) else None
+
+    # -- delta-protocol frames (opt-in via ``event_deltas``) -------------
+    # ``event_start`` / ``event_delta`` carry incremental text when the
+    # stream is opened with ``event_deltas``; a terminal ``object:"message"``
+    # event always follows with the full content. They are distinct from the
+    # business event types carried in ``type``.
+
+    @property
+    def event_start(self) -> Optional[Dict[str, Any]]:
+        """``{"id", "type"}`` from an ``event_start`` delta frame (a preview
+        of an upcoming ``message``/``reasoning`` event; carries no content).
+        ``None`` for other frames."""
+        if getattr(self, "type", None) != "event_start":
+            return None
+        ev = self.extra.get("event")
+        if ev is None:
+            raw = getattr(self, "_raw", None) or {}
+            if isinstance(raw, Mapping):
+                ev = raw.get("event")
+        return ev if isinstance(ev, dict) else None
+
+    @property
+    def event_delta(self) -> Optional[Dict[str, Any]]:
+        """``{"event_id", "delta": {"type", "index", "content"}}`` from an
+        ``event_delta`` frame. ``None`` for other frames."""
+        if getattr(self, "type", None) != "event_delta":
+            return None
+        return {
+            "event_id": self.extra.get("event_id"),
+            "delta": self.extra.get("delta"),
+        }
+
+    @property
+    def delta_text(self) -> Optional[str]:
+        """Incremental text chunk from an ``event_delta`` frame (the
+        ``delta.content.text`` of a ``content_delta``), else ``None``.
+        Use the :attr:`text_deltas` iterator on the stream for the full
+        sequence."""
+        if getattr(self, "type", None) != "event_delta":
+            return None
+        delta = self.extra.get("delta") or {}
+        if not isinstance(delta, dict):
+            return None
+        content = delta.get("content") or {}
+        text = content.get("text") if isinstance(content, dict) else None
+        return text
+
+    # -- business event data accessors -----------------------------------
+    # Convenience accessors over the first content block's ``data`` payload
+    # (and ``metadata`` where the routing lives). Each returns ``None`` for
+    # events whose ``type`` does not match.
+
+    @property
+    def data(self) -> Optional[Dict[str, Any]]:
+        """The first content block's ``data`` payload, for events that carry
+        one (``tool_call`` / ``tool_call_output`` / ``mcp_call`` /
+        ``mcp_call_output`` / ``session_status`` / ``tool_approval_request``
+        / ``model_request_end`` / ``outcome_evaluation`` / ``thread_status``
+        / ``thread_created`` / ``session_updated``). ``None`` otherwise.
+        """
+        return self._data
+
+    @property
+    def model_request_end(self) -> Optional[Dict[str, Any]]:
+        """``model_request_end`` payload: ``model_request_start_id``,
+        ``is_error``, ``input_tokens`` / ``output_tokens`` /
+        ``cache_creation_input_tokens`` / ``cache_read_input_tokens``,
+        ``speed``. ``None`` for other events."""
+        if getattr(self, "type", None) != SSEEventType.MODEL_REQUEST_END:
+            return None
+        return self._data
+
+    @property
+    def outcome_evaluation(self) -> Optional[Dict[str, Any]]:
+        """``outcome_evaluation`` payload: ``outcome_id``, ``iteration``,
+        ``phase`` (start/ongoing/end), ``result``, ``explanation``,
+        token usage, ``speed``. ``None`` for other events."""
+        if getattr(self, "type", None) != SSEEventType.OUTCOME_EVALUATION:
+            return None
+        return self._data
+
+    @property
+    def thread_status(self) -> Optional[Dict[str, Any]]:
+        """``thread_status`` payload: ``session_thread_id``, ``agent_name``,
+        ``thread_status`` (running/idle/terminated/rescheduled), and
+        ``stop_reason`` when idle. ``None`` for other events."""
+        if getattr(self, "type", None) != SSEEventType.THREAD_STATUS:
+            return None
+        return self._data
+
+    @property
+    def thread_created(self) -> Optional[Dict[str, Any]]:
+        """``thread_created`` payload: ``session_thread_id``, ``agent_name``.
+        ``None`` for other events."""
+        if getattr(self, "type", None) != SSEEventType.THREAD_CREATED:
+            return None
+        return self._data
+
+    @property
+    def session_updated(self) -> Optional[Dict[str, Any]]:
+        """``session_updated`` payload: ``title``, ``session_metadata``,
+        ``agent`` (only the changed fields, present when changed).
+        ``None`` for other events."""
+        if getattr(self, "type", None) != SSEEventType.SESSION_UPDATED:
+            return None
+        return self._data
+
+    @property
+    def thread_message_routing(self) -> Optional[Dict[str, str]]:
+        """Sub-agent routing from ``thread_message_sent`` / ``thread_message_received``
+        ``metadata``: ``to_session_thread_id`` / ``to_agent_name`` on sent,
+        ``from_session_thread_id`` / ``from_agent_name`` on received.
+        ``None`` for other events."""
+        if getattr(self, "type", None) not in (
+            SSEEventType.THREAD_MESSAGE_SENT,
+            SSEEventType.THREAD_MESSAGE_RECEIVED,
+        ):
+            return None
+        md = self.metadata if isinstance(self.metadata, dict) else {}
+        keys = (
+            "to_session_thread_id",
+            "to_agent_name",
+            "from_session_thread_id",
+            "from_agent_name",
+        )
+        return {k: md[k] for k in keys if k in md} or None
 
 
 def parse_message(payload: Mapping[str, Any]) -> Message:
@@ -899,35 +1253,37 @@ def user_interrupt(
     return evt
 
 
-def user_tool_confirmation(
+def user_tool_approval_response(
     *,
-    tool_use_id: str,
+    batch_id: str,
+    call_id: str,
     result: str,
     deny_message: Optional[str] = None,
-    session_thread_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Approve or deny a built-in tool invocation.
+    """Submit a tool approval ruling for an ``always_ask`` tool call.
 
-    ``result`` must be ``"allow"`` or ``"deny"``. ``deny_message`` is
-    only meaningful when denying.
+    ``result`` must be ``"allow"`` or ``"deny"``; ``deny_message`` is
+    optional and only meaningful when denying. The approval identity is the
+    ``(batch_id, call_id)`` composite key — ``call_id`` may be reused across
+    turns, so never match on ``call_id`` alone. Approval responses target
+    the primary thread only (no ``session_thread_id``); the legacy
+    ``tool_confirmation`` type is rejected by the server (HTTP 400
+    ``bma_invalid_event``).
     """
-
     if result not in ("allow", "deny"):
-        raise ValueError("tool_confirmation result must be 'allow' or 'deny'")
+        raise ValueError("result must be 'allow' or 'deny'")
     data: Dict[str, Any] = {
-        "call_id": tool_use_id,
+        "batch_id": batch_id,
+        "call_id": call_id,
         "result": result,
     }
     if deny_message and result == "deny":
         data["deny_message"] = deny_message
-    evt: Dict[str, Any] = {
+    return {
         "role": MessageRole.USER,
-        "type": SSEEventType.TOOL_CONFIRMATION,
+        "type": SSEEventType.TOOL_APPROVAL_RESPONSE,
         "content": [{"type": "data", "data": data}],
     }
-    if session_thread_id:
-        evt["session_thread_id"] = session_thread_id
-    return evt
 
 
 def user_custom_tool_result(

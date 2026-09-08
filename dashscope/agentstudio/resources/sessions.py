@@ -18,6 +18,14 @@ from dashscope.agentstudio.resources.session_events import (
     SessionEvents,
     AsyncSessionEvents,
 )
+from dashscope.agentstudio.resources.session_resources import (
+    SessionResources,
+    AsyncSessionResources,
+)
+from dashscope.agentstudio.resources.session_threads import (
+    SessionThreads,
+    AsyncSessionThreads,
+)
 from dashscope.agentstudio.types import DeleteResponse, Session
 from dashscope.agentstudio.types.params import (
     SessionCreateParams,
@@ -35,6 +43,8 @@ class Sessions:
     def __init__(self, client) -> None:
         self._client = client
         self.events = SessionEvents(client)
+        self.resources = SessionResources(client)
+        self.threads = SessionThreads(client)
 
     def create(
         self,
@@ -160,6 +170,8 @@ class AsyncSessions:
     def __init__(self, client) -> None:
         self._client = client
         self.events = AsyncSessionEvents(client)
+        self.resources = AsyncSessionResources(client)
+        self.threads = AsyncSessionThreads(client)
 
     async def create(
         self,

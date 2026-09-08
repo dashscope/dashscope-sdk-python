@@ -120,14 +120,26 @@ class SessionEvents:
         self,
         session_id: str,
         *,
+        event_deltas: Optional[Sequence[str]] = None,
         timeout: Optional[float] = None,
     ) -> "_TypedEventStream":
-        """Open the SSE stream and return an iterator of typed events."""
+        """Open the SSE stream and return an iterator of typed events.
 
+        ``event_deltas`` opts into incremental text streaming for the given
+        event types (``"message"`` and/or ``"reasoning"``; aliases
+        ``"agent.message"`` / ``"agent.thinking"``). When set, the stream
+        additionally emits ``event_start`` / ``event_delta`` frames carrying
+        partial text — consume them via :attr:`_TypedEventStream.text_deltas`.
+        Other values are rejected by the server (HTTP 400).
+        """
+        params: Optional[Dict[str, Any]] = None
+        if event_deltas:
+            params = {"event_deltas[]": list(event_deltas)}
         resp = self._client.transport.request(
             "GET",
             _stream_path(session_id),
             extra_headers={"Accept": "text/event-stream"},
+            params=params,
             stream=True,
             timeout=timeout or AGENTSTUDIO_DEFAULT_TIMEOUT,
         )
@@ -173,7 +185,35 @@ class _TypedEventStream:
                 if d.get("session_status") in (
                     SessionStatus.IDLE,
                     SessionStatus.TERMINATED,
-                    SessionStatus.RESCHEDULING,
+                    SessionStatus.RESCHEDULED,
+                    SessionStatus.DELETED,
+                ):
+                    return
+
+    @property
+    def text_deltas(self):
+        """Iterate over incremental text chunks from ``event_delta`` frames.
+
+        Requires the stream to be opened with ``event_deltas`` (e.g.
+        ``event_deltas=["message"]``); otherwise the server emits only
+        terminal messages and this yields nothing (use
+        :attr:`text_stream` for terminal full text). Stops on terminal
+        ``session_status`` like :attr:`text_stream`.
+        """
+        for event in self:
+            etype = getattr(event, "type", None)
+            if etype == "event_delta":
+                text = event.delta_text
+                if text:
+                    yield text
+            elif etype == SSEEventType.SESSION_STATUS:
+                block = event.content[0] if event.content else None
+                d = getattr(block, "data", None) or {}
+                if d.get("session_status") in (
+                    SessionStatus.IDLE,
+                    SessionStatus.TERMINATED,
+                    SessionStatus.RESCHEDULED,
+                    SessionStatus.DELETED,
                 ):
                     return
 
@@ -266,14 +306,22 @@ class AsyncSessionEvents:
         self,
         session_id: str,
         *,
+        event_deltas: Optional[Sequence[str]] = None,
         timeout: Optional[float] = None,
     ) -> "_AioTypedEventStream":
-        """Open the SSE stream and return an async iterator of typed events."""
+        """Open the SSE stream and return an async iterator of typed events.
 
+        See :meth:`SessionEvents.stream` for the ``event_deltas`` opt-in
+        for incremental text streaming.
+        """
+        params: Optional[Dict[str, Any]] = None
+        if event_deltas:
+            params = {"event_deltas[]": list(event_deltas)}
         resp = await self._client.transport.request(
             "GET",
             _stream_path(session_id),
             extra_headers={"Accept": "text/event-stream"},
+            params=params,
             stream=True,
             timeout=timeout or AGENTSTUDIO_DEFAULT_TIMEOUT,
         )
@@ -324,7 +372,35 @@ class _AioTypedEventStream:
                 if d.get("session_status") in (
                     SessionStatus.IDLE,
                     SessionStatus.TERMINATED,
-                    SessionStatus.RESCHEDULING,
+                    SessionStatus.RESCHEDULED,
+                    SessionStatus.DELETED,
+                ):
+                    return
+
+    @property
+    def text_deltas(self):
+        """Async iterator over incremental text from ``event_delta`` frames.
+
+        Requires the stream to be opened with ``event_deltas``; otherwise
+        yields nothing (use :attr:`text_stream` for terminal full text).
+        """
+        return self._text_deltas()
+
+    async def _text_deltas(self):
+        async for event in self:
+            etype = getattr(event, "type", None)
+            if etype == "event_delta":
+                text = event.delta_text
+                if text:
+                    yield text
+            elif etype == SSEEventType.SESSION_STATUS:
+                block = event.content[0] if event.content else None
+                d = getattr(block, "data", None) or {}
+                if d.get("session_status") in (
+                    SessionStatus.IDLE,
+                    SessionStatus.TERMINATED,
+                    SessionStatus.RESCHEDULED,
+                    SessionStatus.DELETED,
                 ):
                     return
 
