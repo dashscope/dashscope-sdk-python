@@ -9,13 +9,13 @@ jobs:
       fail-fast: true
     env:
       OS: ubuntu-latest
-      PYTHON: '3.8'
+      PYTHON: '3.12'
     steps:
     - uses: actions/checkout@v4
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.8'
+        python-version: '3.12'
     - name: Update setuptools and wheel
       run: |
         pip install setuptools==68.2.2 wheel==0.41.2
