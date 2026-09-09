@@ -156,6 +156,11 @@ def _print_banner(config: Config | None = None) -> None:
                 f"[dim]{', '.join(sdk_index)}[/dim]",
             )
 
+        # Scenario doc link (embedded mode only)
+        guide_url = getattr(config, "_embedded_guide_url", "")
+        if guide_url:
+            console.print(f"  [bold]Guide:[/bold]  [dim]{guide_url}[/dim]")
+
         console.print()
 
     console.print("  [dim]Session: /help /clear /exit[/dim]")

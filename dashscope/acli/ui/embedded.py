@@ -34,6 +34,8 @@ def run(
     prompt_symbol: str = "You> ",
     sdk_index: Optional[list[str]] = None,
     tui: Optional[bool] = None,
+    module: str = "",
+    guide_url: str = "",
 ):
     """Run the full acli agent loop with a custom identity.
 
@@ -54,6 +56,9 @@ def run(
         sdk_index: List of SDK index files loaded (e.g., ["python-sdk",
             "python-cli"]).
         tui: If set, override config.tui. None = use config value.
+        module: Scenario segment for the x-dashscope-sdk-client header
+            (acli/<version>/<module>); empty keeps the default "app".
+        guide_url: Scenario doc link shown in the startup banner.
     """
     from dashscope.acli.config import Config
 
@@ -77,6 +82,10 @@ def run(
         config._embedded_system_prompt = system_prompt
     config._embedded_app_name = app_name
     config._embedded_prompt_symbol = prompt_symbol
+    if module:
+        config._embedded_module = module
+    if guide_url:
+        config._embedded_guide_url = guide_url
     if sdk_index:
         config._embedded_sdk_index = sdk_index
     if tui is not None:

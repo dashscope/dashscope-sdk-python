@@ -4,7 +4,7 @@
 Subagents are a subset of capabilities that function as autonomous workers
 you delegate tasks to (vs. tool capabilities that the main agent calls).
 Currently: local.subagent (built-in) + extension capabilities that act as
-remote agents (e.g., Coze workflows).
+remote agents (e.g., a hosted workflow engine).
 
 The /subagents command provides:
   - list: show all discovered subagents with status

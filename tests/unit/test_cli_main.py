@@ -25,6 +25,21 @@ def strip_ansi_codes(text):
     return ansi_escape.sub("", text)
 
 
+class _ImportErrorOnApp:
+    """Stand-in for a module whose ``from X import app`` raises ImportError.
+
+    Lets the deferred rl import failure be exercised whether or not the
+    optional dependencies happen to be installed in this environment.
+    """
+
+    def __init__(self, message):
+        self._message = message
+
+    @property
+    def app(self):
+        raise ImportError(self._message)
+
+
 # pylint: disable=too-many-public-methods
 class TestCliMain:
     def test_main_prints_authentication_error_without_traceback(
@@ -244,6 +259,90 @@ class TestCliMain:
 
         assert result.exit_code == 0
         assert "register_functions" in result.output
+
+    def test_rl_import_failure_is_silent_until_the_command_is_used(
+        self,
+        monkeypatch,
+        capsys,
+    ):
+        # `rl` is an optional extra, so importing dashscope.cli must not tell
+        # the user about a dependency they may never ask for.
+        monkeypatch.setattr(dashscope.cli, "_RL_IMPORT_ERROR", None)
+        monkeypatch.setitem(
+            sys.modules,
+            "dashscope.cli.agentic_rl",
+            _ImportErrorOnApp(
+                "Agentic RL fine-tuning needs optional dependencies. "
+                "Install them with: pip install 'dashscope[rl]'",
+            ),
+        )
+
+        dashscope.cli._register_rl_app()
+
+        assert capsys.readouterr().err == ""
+        assert isinstance(dashscope.cli._RL_IMPORT_ERROR, ImportError)
+
+    def test_rl_command_keeps_the_extras_name(self, monkeypatch, capsys):
+        # rich reads a literal [rl] as a style tag and drops it, which used to
+        # print `pip install 'dashscope'` — a command that installs none of
+        # the extras the message is about.
+        monkeypatch.setattr(
+            dashscope.cli,
+            "_RL_IMPORT_ERROR",
+            ImportError(
+                "Agentic RL fine-tuning needs optional dependencies. "
+                "Install them with: pip install 'dashscope[rl]'",
+            ),
+        )
+        monkeypatch.setattr(sys, "argv", ["dashscope", "rl", "list"])
+
+        with pytest.raises(SystemExit) as exception_info:
+            cli_main()
+
+        assert exception_info.value.code == 1
+        err = " ".join(capsys.readouterr().err.split())
+        assert "pip install 'dashscope[rl]'" in err
+        assert err.count("Install") == 1
+
+    def test_rl_command_adds_a_hint_when_the_error_has_none(
+        self,
+        monkeypatch,
+        capsys,
+    ):
+        monkeypatch.setattr(
+            dashscope.cli,
+            "_RL_IMPORT_ERROR",
+            ImportError("No module named 'typer_x'"),
+        )
+        monkeypatch.setattr(sys, "argv", ["dashscope", "agentic-rl", "list"])
+
+        with pytest.raises(SystemExit):
+            cli_main()
+
+        err = " ".join(capsys.readouterr().err.split())
+        assert "No module named 'typer_x'" in err
+        assert "pip install 'dashscope[rl]'" in err
+
+    def test_unrelated_command_is_not_told_about_missing_rl_extras(
+        self,
+        monkeypatch,
+        capsys,
+    ):
+        monkeypatch.setattr(
+            dashscope.cli,
+            "_RL_IMPORT_ERROR",
+            ImportError("pip install 'dashscope[rl]'"),
+        )
+        monkeypatch.setattr(sys, "argv", ["dashscope"])
+        monkeypatch.setattr(
+            dashscope.cli,
+            "_route_to_expert",
+            lambda *args, **kwargs: None,
+        )
+
+        cli_main()
+
+        assert capsys.readouterr().err == ""
 
     def test_subcommand_api_key_option_is_not_consumed_by_global_parser(
         self,
