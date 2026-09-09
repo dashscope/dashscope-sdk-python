@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """API key management command handlers."""
-# pylint: disable=too-many-branches,unused-argument
+# pylint: disable=too-many-branches,unused-argument,too-many-statements
 
 from __future__ import annotations
 
@@ -103,11 +103,11 @@ def ensure_provider_key(config: Config, agent) -> bool:
         console.print(
             f"\n[yellow]Configured provider '{config.provider}' is not "
             "available here (no built-in or loaded extension by that "
-            "name), so an API key alone will not make it work.[/yellow]"
+            "name), so an API key alone will not make it work.[/yellow]",
         )
         console.print(
             "[dim]Starting anyway; run /provider to pick an available "
-            "provider.[/dim]"
+            "provider.[/dim]",
         )
         return True
 

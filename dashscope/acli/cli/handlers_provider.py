@@ -180,7 +180,7 @@ def _provider_wizard(agent: Agent, config: Config) -> bool:
         console.print(
             f"[yellow]Configured provider '{config.provider}' is not "
             "available here (no built-in or loaded extension by that "
-            "name), so Enter cannot keep it — pick one below.[/yellow]"
+            "name), so Enter cannot keep it — pick one below.[/yellow]",
         )
     provider = _numbered_pick(
         "Available providers",
