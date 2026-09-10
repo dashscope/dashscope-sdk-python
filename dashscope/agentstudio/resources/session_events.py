@@ -37,6 +37,13 @@ from dashscope.agentstudio.constants import (
     SSEEventType,
 )
 
+_TERMINAL_STATUSES = (
+    SessionStatus.IDLE,
+    SessionStatus.TERMINATED,
+    SessionStatus.RESCHEDULED,
+    SessionStatus.DELETED,
+)
+
 
 class SessionEvents:
     """Session event send / list / stream."""
@@ -49,14 +56,7 @@ class SessionEvents:
         session_id: str,
         events: Sequence[Mapping[str, Any]],
     ) -> Dict[str, Any]:
-        """Send events to a session.
-
-        Returns the server response dict::
-
-            result = client.sessions.events.send(
-                session.id, [user_message("hello")],
-            )
-        """
+        """Send events to a session."""
         if not events:
             raise ValueError("events must contain at least 1 entry")
         body = SessionEventSendParams(input=events).to_dict()
@@ -127,10 +127,7 @@ class SessionEvents:
 
         ``event_deltas`` opts into incremental text streaming for the given
         event types (``"message"`` and/or ``"reasoning"``; aliases
-        ``"agent.message"`` / ``"agent.thinking"``). When set, the stream
-        additionally emits ``event_start`` / ``event_delta`` frames carrying
-        partial text — consume them via :attr:`_TypedEventStream.text_deltas`.
-        Other values are rejected by the server (HTTP 400).
+        ``"agent.message"`` / ``"agent.thinking"``).
         """
         params: Optional[Dict[str, Any]] = None
         if event_deltas:
@@ -154,6 +151,27 @@ class _TypedEventStream:
     def __init__(self, stream: EventStream) -> None:
         self._stream = stream
 
+    @classmethod
+    def from_raw_events(
+        cls,
+        raw_events: Sequence[Mapping[str, Any]],
+    ) -> "_TypedEventStream":
+        """Create from a list of raw event dicts (for testing).
+
+        Events flow through the normal :func:`_coerce_event` pipeline.
+        """
+        obj = object.__new__(cls)
+
+        class _RawStream:
+            def __iter__(self):
+                return iter(raw_events)
+
+            def close(self):
+                pass
+
+        obj._stream = _RawStream()
+        return obj
+
     def __enter__(self) -> "_TypedEventStream":
         return self
 
@@ -169,8 +187,7 @@ class _TypedEventStream:
         """Iterate over text chunks from agent messages.
 
         Automatically stops when the session reaches ``idle`` or
-        ``terminated`` status, so callers don't need to handle
-        ``session_status`` events manually.
+        ``terminated`` status.
         """
         for event in self:
             if getattr(event, "type", None) == SSEEventType.MESSAGE:
@@ -182,23 +199,15 @@ class _TypedEventStream:
             elif getattr(event, "type", None) == SSEEventType.SESSION_STATUS:
                 block = event.content[0] if event.content else None
                 d = getattr(block, "data", None) or {}
-                if d.get("session_status") in (
-                    SessionStatus.IDLE,
-                    SessionStatus.TERMINATED,
-                    SessionStatus.RESCHEDULED,
-                    SessionStatus.DELETED,
-                ):
+                if d.get("session_status") in _TERMINAL_STATUSES:
                     return
 
     @property
     def text_deltas(self):
         """Iterate over incremental text chunks from ``event_delta`` frames.
 
-        Requires the stream to be opened with ``event_deltas`` (e.g.
-        ``event_deltas=["message"]``); otherwise the server emits only
-        terminal messages and this yields nothing (use
-        :attr:`text_stream` for terminal full text). Stops on terminal
-        ``session_status`` like :attr:`text_stream`.
+        Requires the stream to be opened with ``event_deltas``; otherwise
+        yields nothing (use :attr:`text_stream` for terminal full text).
         """
         for event in self:
             etype = getattr(event, "type", None)
@@ -209,12 +218,7 @@ class _TypedEventStream:
             elif etype == SSEEventType.SESSION_STATUS:
                 block = event.content[0] if event.content else None
                 d = getattr(block, "data", None) or {}
-                if d.get("session_status") in (
-                    SessionStatus.IDLE,
-                    SessionStatus.TERMINATED,
-                    SessionStatus.RESCHEDULED,
-                    SessionStatus.DELETED,
-                ):
+                if d.get("session_status") in _TERMINAL_STATUSES:
                     return
 
     def close(self) -> None:
@@ -232,14 +236,6 @@ class AsyncSessionEvents:
         session_id: str,
         events: Sequence[Mapping[str, Any]],
     ) -> Dict[str, Any]:
-        """Send events to a session.
-
-        Returns the server response dict::
-
-            result = await client.sessions.events.send(
-                session.id, [user_message("hello")],
-            )
-        """
         if not events:
             raise ValueError("events must contain at least 1 entry")
         body = SessionEventSendParams(input=events).to_dict()
@@ -309,11 +305,6 @@ class AsyncSessionEvents:
         event_deltas: Optional[Sequence[str]] = None,
         timeout: Optional[float] = None,
     ) -> "_AioTypedEventStream":
-        """Open the SSE stream and return an async iterator of typed events.
-
-        See :meth:`SessionEvents.stream` for the ``event_deltas`` opt-in
-        for incremental text streaming.
-        """
         params: Optional[Dict[str, Any]] = None
         if event_deltas:
             params = {"event_deltas[]": list(event_deltas)}
@@ -349,16 +340,9 @@ class _AioTypedEventStream:
 
     @property
     def text_stream(self):
-        """Async iterator over text chunks from agent messages."""
         return self._text_stream()
 
     async def _text_stream(self):
-        """Async iterator over text chunks from agent messages.
-
-        Automatically stops when the session reaches ``idle`` or
-        ``terminated`` status, so callers don't need to handle
-        ``session_status`` events manually.
-        """
         async for event in self:
             if getattr(event, "type", None) == SSEEventType.MESSAGE:
                 for block in event.content or []:
@@ -369,21 +353,11 @@ class _AioTypedEventStream:
             elif getattr(event, "type", None) == SSEEventType.SESSION_STATUS:
                 block = event.content[0] if event.content else None
                 d = getattr(block, "data", None) or {}
-                if d.get("session_status") in (
-                    SessionStatus.IDLE,
-                    SessionStatus.TERMINATED,
-                    SessionStatus.RESCHEDULED,
-                    SessionStatus.DELETED,
-                ):
+                if d.get("session_status") in _TERMINAL_STATUSES:
                     return
 
     @property
     def text_deltas(self):
-        """Async iterator over incremental text from ``event_delta`` frames.
-
-        Requires the stream to be opened with ``event_deltas``; otherwise
-        yields nothing (use :attr:`text_stream` for terminal full text).
-        """
         return self._text_deltas()
 
     async def _text_deltas(self):
@@ -396,12 +370,7 @@ class _AioTypedEventStream:
             elif etype == SSEEventType.SESSION_STATUS:
                 block = event.content[0] if event.content else None
                 d = getattr(block, "data", None) or {}
-                if d.get("session_status") in (
-                    SessionStatus.IDLE,
-                    SessionStatus.TERMINATED,
-                    SessionStatus.RESCHEDULED,
-                    SessionStatus.DELETED,
-                ):
+                if d.get("session_status") in _TERMINAL_STATUSES:
                     return
 
     async def aclose(self) -> None:

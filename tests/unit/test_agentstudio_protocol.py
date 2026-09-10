@@ -928,32 +928,38 @@ def test_text_stream_stops_on_session_status_idle():
     """Regression: text_stream/text_deltas must not crash on session_status events.
     RESCHEDULING was deleted from constants but stop-set tuples still referenced it,
     causing AttributeError on every stream's normal end path."""
-    from dashscope.agentstudio.resources.session_events import _TypedEventStream
+    from dashscope.agentstudio.resources.session_events import (
+        _TypedEventStream,
+    )
 
-    payloads = [
-        {"object": "message", "status": "completed", "id": "m1", "type": "message",
-         "role": "assistant", "content": [{"type": "text", "text": "hello"}]},
-        {"object": "message", "status": "completed", "id": "m2", "type": "session_status",
-         "content": [{"type": "data", "data": {"session_status": "idle",
-                     "stop_reason": {"type": "end_turn"}}}]},
+    raw_events = [
+        {
+            "object": "message",
+            "status": "completed",
+            "id": "m1",
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": "hello"}],
+        },
+        {
+            "object": "message",
+            "status": "completed",
+            "id": "m2",
+            "type": "session_status",
+            "content": [
+                {
+                    "type": "data",
+                    "data": {
+                        "session_status": "idle",
+                        "stop_reason": {"type": "end_turn"},
+                    },
+                },
+            ],
+        },
     ]
 
-    class _Fake:
-        def __init__(self, items):
-            self._items = items
-        def __iter__(self):
-            return iter(self._items)
-        def close(self):
-            pass
+    ts = _TypedEventStream.from_raw_events(raw_events)
+    assert list(ts.text_stream) == ["hello"]
 
-    # text_stream: must stop on idle without AttributeError
-    ts = _TypedEventStream.__new__(_TypedEventStream)
-    ts._stream = _Fake(payloads)
-    chunks = list(ts.text_stream)
-    assert chunks == ["hello"], chunks
-
-    # text_deltas: also must stop on idle without AttributeError
-    ts2 = _TypedEventStream.__new__(_TypedEventStream)
-    ts2._stream = _Fake(payloads)
-    chunks2 = list(ts2.text_deltas)
-    assert chunks2 == [], "no event_delta frames, should yield nothing and stop on idle"
+    ts2 = _TypedEventStream.from_raw_events(raw_events)
+    assert not list(ts2.text_deltas)
