@@ -2,6 +2,8 @@
 """The no-key startup prompt points DashScope users at the doc links."""
 # pylint: disable=protected-access,redefined-outer-name,unused-argument
 
+# pylint: disable=redefined-outer-name,unused-argument,protected-access
+
 from types import SimpleNamespace
 
 import pytest

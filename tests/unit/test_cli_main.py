@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+# pylint: disable=protected-access
+
 import os
 import re
 import subprocess

@@ -10,6 +10,8 @@ the anthropic adapter path) was written against.
 """
 # pylint: disable=redefined-outer-name,protected-access,expression-not-assigned
 
+# pylint: disable=redefined-outer-name,protected-access
+
 import json
 
 import pytest
@@ -450,7 +452,8 @@ async def test_stream_sse_url_error_raises_after_paths_exhausted(fake_http):
     fake_http.enqueue_stream(list(event))
     provider = _provider(model="qwen3.8-max")
     with pytest.raises(RuntimeError, match="url error"):
-        [c async for c in provider.chat_stream(MESSAGES)]
+        async for _ in provider.chat_stream(MESSAGES):
+            pass
     assert len(fake_http.requests) == 2
 
 
@@ -461,7 +464,8 @@ async def test_stream_no_fallback_after_content_started(fake_http):
     fake_http.enqueue_stream(lines)
     provider = _provider(model="qwen3.8-max")
     with pytest.raises(RuntimeError, match="url error"):
-        [c async for c in provider.chat_stream(MESSAGES)]
+        async for _ in provider.chat_stream(MESSAGES):
+            pass
     assert len(fake_http.requests) == 1
 
 

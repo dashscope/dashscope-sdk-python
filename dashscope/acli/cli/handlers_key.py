@@ -78,6 +78,26 @@ def _prompt_input(prompt: str, secret: bool = False) -> str:
         return ""
 
 
+def _print_no_key_prompt(config: Config, env_name: str) -> None:
+    """Present the missing-key notice, doc links, and setup menu."""
+    console.print(
+        f"\n[yellow]No API Key detected for " f"{config.provider}[/yellow]",
+    )
+    if config.provider.lower() == "tongyi":
+        lang = _doc_locale()
+        console.print(
+            f"[dim]Get an API Key: {_GET_API_KEY_DOC.format(lang)}[/dim]",
+        )
+        console.print(f"[dim]Guide: {_GUIDE_DOC.format(lang)}[/dim]")
+    console.print("Choose how to set it up:")
+    if env_name:
+        console.print(f"  [1] Set env var {env_name} (exit and set)")
+    else:
+        console.print("  [1] Set corresponding env var (exit and set)")
+    console.print("  [2] Enter API Key now")
+    console.print("  [3] Set up later with /provider after startup")
+
+
 def ensure_provider_key(config: Config, agent) -> bool:
     """If the active provider has no resolvable key, prompt the user.
 
@@ -116,22 +136,7 @@ def ensure_provider_key(config: Config, agent) -> bool:
     else:
         env_name = ext.api_key_env or ""
 
-    console.print(
-        f"\n[yellow]No API Key detected for " f"{config.provider}[/yellow]",
-    )
-    if config.provider.lower() == "tongyi":
-        lang = _doc_locale()
-        console.print(
-            f"[dim]Get an API Key: {_GET_API_KEY_DOC.format(lang)}[/dim]",
-        )
-        console.print(f"[dim]Guide: {_GUIDE_DOC.format(lang)}[/dim]")
-    console.print("Choose how to set it up:")
-    if env_name:
-        console.print(f"  [1] Set env var {env_name} (exit and set)")
-    else:
-        console.print("  [1] Set corresponding env var (exit and set)")
-    console.print("  [2] Enter API Key now")
-    console.print("  [3] Set up later with /provider after startup")
+    _print_no_key_prompt(config, env_name)
     choice = input("\nChoose [1/2/3]: ").strip()
 
     if choice == "1":
