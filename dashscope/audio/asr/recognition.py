@@ -629,6 +629,27 @@ class Recognition(BaseApi):
         logger.debug("send_audio_frame: %s", len(buffer))
         self._stream_data.put(buffer)
 
+    def update_context(self, payload_input: dict):
+        """Update recognition context while the task is running.
+
+        The context is sent through a ``continue-task`` event and takes effect
+        on subsequent audio frames.
+
+        Args:
+            payload_input (dict): Conversation context messages.
+
+        Raises:
+            InvalidParameter: Cannot update an uninitiated recognition, or the
+                context is None.
+        """
+        if self._running is False:
+            raise InvalidParameter("Speech recognition has stopped.")
+        if payload_input is None:
+            raise InvalidParameter("Context is required.")
+
+        logger.debug("update_context: %s", payload_input)
+        self._stream_data.put({"input": payload_input})
+
     def _tidy_kwargs(self):
         for k in self._kwargs.copy():
             if self._kwargs[k] is None:
@@ -656,7 +677,7 @@ class Recognition(BaseApi):
 
             while not self._stream_data.empty():
                 frame = self._stream_data.get()
-                yield bytes(frame)
+                yield frame if isinstance(frame, dict) else bytes(frame)
 
             if self._recognition_once:
                 self._running = False
@@ -665,7 +686,7 @@ class Recognition(BaseApi):
         if self._recognition_once is False:
             while not self._stream_data.empty():
                 frame = self._stream_data.get()
-                yield bytes(frame)
+                yield frame if isinstance(frame, dict) else bytes(frame)
 
     def _silence_stop_timer(self):
         """If audio data is not received for a long time, exit worker."""

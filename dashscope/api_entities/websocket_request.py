@@ -335,27 +335,34 @@ class WebSocketRequest(AioBaseRequest):
         await ws.send_str(message)
 
     async def _send_continue_task_data(self, ws):
-        headers = {
-            "task_id": self.task_headers["task_id"],
-            "action": "continue-task",
-        }
+        headers = {**self.task_headers, ACTION_KEY: ActionType.CONTINUE}
         for input_item in self.data.get_websocket_continue_data():
-            if self.is_binary_input:
-                if len(input_item) > 0:
-                    if isinstance(input_item, bytes):
-                        await ws.send_bytes(input_item)
-                        logger.debug(
-                            "Send continue task with bytes: %s",
-                            len(input_item),
-                        )
-                    else:
-                        await ws.send_bytes(list(input_item.values())[0])
+            if len(input_item) > 0:
+                if self.is_binary_input and isinstance(
+                    input_item,
+                    (bytes, bytearray, memoryview),
+                ):
+                    await ws.send_bytes(input_item)
+                    logger.debug(
+                        "Send continue task with bytes: %s",
+                        len(input_item),
+                    )
+                elif self.is_binary_input and isinstance(input_item, dict):
+                    binary_data = next(iter(input_item.values()))
+                    if isinstance(binary_data, (bytes, bytearray, memoryview)):
+                        await ws.send_bytes(binary_data)
                         logger.debug(
                             "Send continue task with list[byte]: %s",
                             len(input_item),
                         )
-            else:
-                if len(input_item) > 0:
+                    else:
+                        message = self._build_up_message(
+                            headers=headers,
+                            payload=input_item,
+                        )
+                        logger.debug("Send continue task: %s", message)
+                        await ws.send_str(message)
+                else:
                     message = self._build_up_message(
                         headers=headers,
                         payload=input_item,
