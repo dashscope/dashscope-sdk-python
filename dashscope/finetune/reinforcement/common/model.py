@@ -256,7 +256,7 @@ class Models(BaseModel):
             logger.debug(
                 f"The struct of Models class: "
                 f""
-                f"{model_dict if LOG_LEVEL=='DEBUG' else deep_mask(model_dict)}",  # noqa: E501
+                f"{model_dict if LOG_LEVEL == 'DEBUG' else deep_mask(model_dict)}",  # noqa: E501
             )
 
             with open(path, "w", encoding="utf-8") as f:
@@ -821,7 +821,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 f"InstanceID: {self.instance_id}, "
                 f"Endpoint: {self.instance_url}, "
                 f"Response: "
-                f"{result if LOG_LEVEL=='DEBUG' else deep_mask(result)}",
+                f"{result if LOG_LEVEL == 'DEBUG' else deep_mask(result)}",
             )
 
         except Exception as e:

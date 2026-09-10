@@ -59,7 +59,7 @@ class OpenAIProvider:
                     "role": "assistant",
                     "content": msg.get("content") or None,
                 }
-                # Reasoning models (deepseek-v4, qwen-thinking, etc.)
+                # Reasoning models (qwen-thinking and the like)
                 # require the reasoning_content from prior assistant
                 # turns to be echoed back.
                 if msg.get("reasoning_content"):

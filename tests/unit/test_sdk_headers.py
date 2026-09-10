@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+# pylint: disable=protected-access
+
 import pytest
 
 from dashscope import __version__ as sdk_version
@@ -126,6 +128,51 @@ def test_cli_import_marks_process():
     )
     assert result.returncode == 0, result.stderr
     print(f"\nCLI process -> {result.stdout.strip()}")
+
+
+def _embedded_config(module):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        provider="tongyi",
+        model="qwen3.8-max",
+        tongyi_api_key="sk-x",
+        base_url="",
+        protocol="openai",
+        timeout=60,
+        fallback_providers=[],
+        anthropic_api_key="",
+        openai_api_key="",
+        _embedded_module=module,
+    )
+
+
+def _provider_for(config, monkeypatch):
+    # pylint: disable=protected-access
+    monkeypatch.setattr(
+        "dashscope.acli.extensions.find_provider",
+        lambda *a, **k: None,
+    )
+    from dashscope.acli.providers import _create_provider
+    from dashscope.acli.providers.profile import build_profiles_from_config
+
+    profile = build_profiles_from_config(config)[0]
+    return _create_provider(profile)
+
+
+def test_embedded_module_segment_flows_to_header(monkeypatch):
+    # pylint: disable=protected-access
+    provider = _provider_for(_embedded_config("expert"), monkeypatch)
+    value = provider._get_headers()[CLIENT_HEADER]
+    print(f"\nembedded expert -> {value}")
+    _check_client_header(value, "acli", acli_version, "expert")
+
+
+def test_embedded_module_defaults_to_app(monkeypatch):
+    # pylint: disable=protected-access
+    provider = _provider_for(_embedded_config(""), monkeypatch)
+    value = provider._get_headers()[CLIENT_HEADER]
+    _check_client_header(value, "acli", acli_version, "app")
 
 
 # ---------------------------------------------------------------------------

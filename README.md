@@ -52,7 +52,7 @@ else:
 
 ## API Key Authentication
 
-The SDK uses API key for authentication. Please refer to [official documentation for alibabacloud china](https://www.alibabacloud.com/help/en/model-studio/) and [official documentation for alibabacloud international](https://www.alibabacloud.com/help/en/model-studio/) regarding how to obtain your api-key.
+The SDK uses API key for authentication. To obtain an API Key, see [How to get an API Key](https://help.aliyun.com/en/model-studio/get-api-key). Please refer to [official documentation for alibabacloud china](https://www.alibabacloud.com/help/en/model-studio/) and [official documentation for alibabacloud international](https://www.alibabacloud.com/help/en/model-studio/) regarding how to obtain your api-key.
 
 ### Using the API Key
 
@@ -95,6 +95,7 @@ The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built 
 
 - Run `dashscope` with no arguments to start the assistant. On first run it offers to install the SDK Expert knowledge pack (per-domain quick-reference skills: text, multimodal, speech, retrieval, fine-tuning, agent, cli), so guidance comes from the SDK's public interfaces — parameters, outputs, error codes — without reading the source
 - Ask it instead of reading docs — e.g. `dashscope "how do I stream Generation output"` or `dashscope "CLI command to cancel a fine-tuning job"`. Type `/help` inside the assistant to list available commands (`/setup`, `/skill`, `/stats`, ...); classic SDK subcommands still work, and unrecognized commands are routed to the assistant
+- Full walkthrough: [DashScope SDK Expert guide](https://help.aliyun.com/en/model-studio/dashscope-sdk-expert)
 
 ## Supported Models
 

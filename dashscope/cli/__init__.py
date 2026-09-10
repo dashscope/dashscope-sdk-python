@@ -18,6 +18,7 @@ warnings.filterwarnings(
 )
 
 import typer  # noqa: E402
+from rich.markup import escape  # noqa: E402
 
 import dashscope  # noqa: E402
 from dashscope.cli.common import err_console  # noqa: E402
@@ -290,6 +291,7 @@ def _maybe_offer_example_download():
         return
     try:
         from dashscope.acli.cli.examples import _handle_example_command
+        from dashscope.acli.cli.handlers_key import _GUIDE_DOC, _doc_locale
     except ImportError:
         return
     err_console.print(
@@ -297,6 +299,9 @@ def _maybe_offer_example_download():
         "example config into ./.acli/\n"
         "(SDK Q&A expert persona + skill templates + SDK knowledge "
         "index; pure config, editable anytime).",
+    )
+    err_console.print(
+        f"[dim]Guide: {_GUIDE_DOC.format(_doc_locale())}[/dim]",
     )
     try:
         answer = input("Download the example config? [Y/n] ").strip().lower()
@@ -322,6 +327,7 @@ def _maybe_offer_example_download():
 def _route_to_expert(command, tui=None):
     """Run the vendored acli agent (dashscope with no/unknown subcommand)."""
     try:
+        from dashscope.acli.cli.handlers_key import _GUIDE_DOC, _doc_locale
         from dashscope.acli.ui.embedded import run
     except ImportError as exception:
         err_console.print(
@@ -358,6 +364,8 @@ def _route_to_expert(command, tui=None):
             api_key=dashscope.api_key or None,
             command=command,
             tui=tui,
+            module="expert",
+            guide_url=_GUIDE_DOC.format(_doc_locale()),
         )
     except SystemExit:
         pass
@@ -416,12 +424,25 @@ app.add_typer(transcription.app)
 app.add_typer(speech_synthesis.app)
 
 
+# Records why the Agentic-RL Typer app could not be registered, so the reason
+# can be reported when `rl` is actually invoked instead of on every command.
+_RL_IMPORT_ERROR: Optional[Exception] = None
+
+_RL_COMMAND_NAMES = ("rl", "agentic-rl")
+
+
 def _register_rl_app():
     """Lazily import and register the Agentic-RL Typer app.
 
     Wrapped in a function so that a missing optional dependency
     won't crash the entire CLI at import time.
+
+    The failure is recorded rather than reported: `rl` is an optional
+    extra, so a user running any other command has no reason to be told
+    about it. ``main()`` surfaces it when the rl command is invoked.
     """
+    global _RL_IMPORT_ERROR  # pylint: disable=global-statement
+
     try:
         from dashscope.cli.agentic_rl import app as rl_app
 
@@ -436,18 +457,21 @@ def _register_rl_app():
             help="🚀 Agentic RL fine-tuning commands",
             hidden=True,
         )
-    except ImportError as exception:
-        err_console.print(
-            "[yellow]Warning:[/yellow] Failed to register rl command: "
-            f"{exception}. "
-            "Install the optional dependencies with: "
-            "[bold]pip install 'dashscope[rl]'[/bold]",
+    except Exception as exception:  # pylint: disable=broad-except
+        _RL_IMPORT_ERROR = exception
+
+
+def _rl_unavailable_detail(exception: Exception) -> str:
+    """Render a deferred rl import failure as an actionable message."""
+    # The message quotes a literal 'dashscope[rl]'; unescaped, rich reads
+    # [rl] as a style tag and prints an install command with no extras.
+    detail = escape(str(exception))
+    if "pip install" not in detail:
+        detail += (
+            ". Install the optional dependencies with: "
+            "[bold]pip install 'dashscope\\[rl]'[/bold]"
         )
-    except Exception as exception:
-        err_console.print(
-            "[yellow]Warning:[/yellow] Failed to register rl command: "
-            f"{exception}",
-        )
+    return detail
 
 
 _register_rl_app()
@@ -486,6 +510,20 @@ def main():
     if "--tui" in argv:
         forced_tui = True
         argv = [a for a in argv if a != "--tui"]
+
+    # `rl` is an optional extra: report a missing dependency only when the
+    # user asks for that command, never on unrelated invocations. Without
+    # this gate the dispatch below reaches typer, which only knows that `rl`
+    # is in _TOP_LEVEL_COMMANDS but was never registered — "No such command"
+    # does not tell the user how to get it.
+    if (
+        _RL_IMPORT_ERROR is not None
+        and _first_non_option(argv) in _RL_COMMAND_NAMES
+    ):
+        err_console.print(
+            f"[red]Error:[/red] {_rl_unavailable_detail(_RL_IMPORT_ERROR)}",
+        )
+        sys.exit(1)
 
     # Top-level --help / -h → show help and exit normally
     if "--help" in argv or "-h" in argv:

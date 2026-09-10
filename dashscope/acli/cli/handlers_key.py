@@ -16,6 +16,21 @@ from dashscope.acli.providers.profile import build_profiles_from_config
 
 console = Console()
 
+# Model Studio doc links for the no-key startup prompt; locale segment
+# comes from _doc_locale().
+_GET_API_KEY_DOC = "https://help.aliyun.com/{}/model-studio/get-api-key"
+_GUIDE_DOC = "https://help.aliyun.com/{}/model-studio/dashscope-sdk-expert"
+
+
+def _doc_locale() -> str:
+    """Pick the help-center locale from the process locale env vars."""
+    import os
+
+    for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        if "zh" in (os.environ.get(var) or "").lower():
+            return "zh"
+    return "en"
+
 
 def all_key_targets(config: Config | None = None) -> dict[str, dict]:
     """Merge KEY_TARGETS (built-in) with extension providers into one dict.
@@ -63,6 +78,26 @@ def _prompt_input(prompt: str, secret: bool = False) -> str:
         return ""
 
 
+def _print_no_key_prompt(config: Config, env_name: str) -> None:
+    """Present the missing-key notice, doc links, and setup menu."""
+    console.print(
+        f"\n[yellow]No API Key detected for " f"{config.provider}[/yellow]",
+    )
+    if config.provider.lower() == "tongyi":
+        lang = _doc_locale()
+        console.print(
+            f"[dim]Get an API Key: {_GET_API_KEY_DOC.format(lang)}[/dim]",
+        )
+        console.print(f"[dim]Guide: {_GUIDE_DOC.format(lang)}[/dim]")
+    console.print("Choose how to set it up:")
+    if env_name:
+        console.print(f"  [1] Set env var {env_name} (exit and set)")
+    else:
+        console.print("  [1] Set corresponding env var (exit and set)")
+    console.print("  [2] Enter API Key now")
+    console.print("  [3] Set up later with /provider after startup")
+
+
 def ensure_provider_key(config: Config, agent) -> bool:
     """If the active provider has no resolvable key, prompt the user.
 
@@ -81,23 +116,27 @@ def ensure_provider_key(config: Config, agent) -> bool:
     ext = find_provider(config.provider)
     targets = all_key_targets(config)
     key_info = targets.get(config.provider)
+    if ext is None and key_info is None:
+        # Neither a built-in nor a loaded extension: this directory cannot
+        # build that provider, so collecting a key is a dead end — and the
+        # "<PROVIDER>_API_KEY" env var we would suggest is read by nothing.
+        console.print(
+            f"\n[yellow]Configured provider '{config.provider}' is not "
+            "available here (no built-in or loaded extension by that "
+            "name), so an API key alone will not make it work.[/yellow]",
+        )
+        console.print(
+            "[dim]Starting anyway; run /provider to pick an available "
+            "provider.[/dim]",
+        )
+        return True
+
     if key_info:
         env_name = key_info.get("env") or ""
-    elif ext is not None:
+    else:
         env_name = ext.api_key_env or ""
-    else:
-        env_name = f"{config.provider.upper()}_API_KEY"
 
-    console.print(
-        f"\n[yellow]No API Key detected for " f"{config.provider}[/yellow]",
-    )
-    console.print("Choose how to set it up:")
-    if env_name:
-        console.print(f"  [1] Set env var {env_name} (exit and set)")
-    else:
-        console.print("  [1] Set corresponding env var (exit and set)")
-    console.print("  [2] Enter API Key now")
-    console.print("  [3] Set up later with /provider after startup")
+    _print_no_key_prompt(config, env_name)
     choice = input("\nChoose [1/2/3]: ").strip()
 
     if choice == "1":
@@ -219,7 +258,7 @@ def _set_extension_provider_token(
         console.print("[dim]Cancelled[/dim]")
         return False
 
-    # Save to the provider's dynamic slot, e.g. ideatalk_api_key.
+    # Save to the provider's dynamic slot, i.e. <name>_api_key.
     old_provider = config.provider
     try:
         config.provider = ext_prov.name

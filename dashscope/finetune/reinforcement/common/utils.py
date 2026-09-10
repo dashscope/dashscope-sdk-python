@@ -752,7 +752,7 @@ def set_api_key(api_key: Optional[str] = None) -> None:
         os.environ["DASHSCOPE_API_KEY"] = api_key
         logger.debug(
             f"Set environ DASHSCOPE_API_KEY: "
-            f"{api_key if LOG_LEVEL=='DEBUG' else deep_mask(api_key)}",
+            f"{api_key if LOG_LEVEL == 'DEBUG' else deep_mask(api_key)}",
         )
         return
 

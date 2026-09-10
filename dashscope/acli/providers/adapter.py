@@ -3,8 +3,8 @@
 Anthropic <-> OpenAI protocol adapter.
 
 Converts Anthropic Messages API format to OpenAI Chat Completions format
-and vice versa, allowing providers like Tongyi (Qwen) and Zhipu to be
-accessed using Anthropic protocol.
+and vice versa, allowing an OpenAI-compatible backend such as Tongyi
+(Qwen) to be accessed using the Anthropic protocol.
 """
 # pylint: disable=too-many-branches,too-many-statements
 

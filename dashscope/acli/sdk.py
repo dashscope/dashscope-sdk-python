@@ -157,6 +157,8 @@ def run_interactive(
     prompt_symbol: str = "You> ",
     sdk_index: Optional[list[str]] = None,
     tui: Optional[bool] = None,
+    module: str = "",
+    guide_url: str = "",
 ) -> None:
     """Run the full acli interactive loop with a custom identity.
 
@@ -176,6 +178,8 @@ def run_interactive(
         prompt_symbol=prompt_symbol,
         sdk_index=sdk_index,
         tui=tui,
+        module=module,
+        guide_url=guide_url,
     )
 
 
