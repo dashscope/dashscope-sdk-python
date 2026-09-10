@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """The startup banner surfaces the embedded host's guide link."""
-# pylint: disable=protected-access,unused-argument
 
 # pylint: disable=protected-access,unused-argument
 

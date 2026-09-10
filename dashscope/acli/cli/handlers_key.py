@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """API key management command handlers."""
-# pylint: disable=too-many-branches,unused-argument,too-many-statements
+# pylint: disable=too-many-branches,unused-argument
 
 from __future__ import annotations
 

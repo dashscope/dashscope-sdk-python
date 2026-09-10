@@ -8,7 +8,6 @@ on the gateway's "url error" 400 and caches the working path. Responses
 and SSE chunks are reshaped to the OpenAI shape the parsing logic (and
 the anthropic adapter path) was written against.
 """
-# pylint: disable=redefined-outer-name,protected-access,expression-not-assigned
 
 # pylint: disable=redefined-outer-name,protected-access
 
