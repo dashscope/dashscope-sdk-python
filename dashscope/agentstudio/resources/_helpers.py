@@ -16,6 +16,8 @@ from dashscope.agentstudio.types import (
     File,
     ServerEvent,
     Session,
+    SessionResource,
+    SessionThread,
     Skill,
     SkillVersion,
     Vault,
@@ -63,6 +65,14 @@ def _coerce_session(payload: Mapping[str, Any]) -> Session:
     return Session(**dict(payload))
 
 
+def _coerce_session_resource(payload: Mapping[str, Any]) -> SessionResource:
+    return SessionResource(**dict(payload))
+
+
+def _coerce_session_thread(payload: Mapping[str, Any]) -> SessionThread:
+    return SessionThread(**dict(payload))
+
+
 def _coerce_vault(payload: Mapping[str, Any]) -> Vault:
     return Vault(**dict(payload))
 
@@ -104,3 +114,27 @@ def _events_path(session_id: str) -> str:
 
 def _stream_path(session_id: str) -> str:
     return f"/sessions/{session_id}/events/stream"
+
+
+def _session_resources_path(session_id: str) -> str:
+    return f"/sessions/{session_id}/resources"
+
+
+def _session_resource_item_path(session_id: str, resource_id: str) -> str:
+    return f"/sessions/{session_id}/resources/{resource_id}"
+
+
+def _session_threads_path(session_id: str) -> str:
+    return f"/sessions/{session_id}/threads"
+
+
+def _session_thread_item_path(session_id: str, thread_id: str) -> str:
+    return f"/sessions/{session_id}/threads/{thread_id}"
+
+
+def _session_thread_events_path(session_id: str, thread_id: str) -> str:
+    return f"/sessions/{session_id}/threads/{thread_id}/events"
+
+
+def _session_thread_archive_path(session_id: str, thread_id: str) -> str:
+    return f"/sessions/{session_id}/threads/{thread_id}/archive"

@@ -394,13 +394,14 @@ class SessionEventSendParams(BaseModel):
 class SessionEventListParams(BaseModel):
     """Query params for ``GET /sessions/{id}/events``.
 
-    ``types`` is a list of event type strings joined by comma in the
-    wire format.  ``created_at_*`` parameters are mapped to the
+    ``types`` is a list of event type strings sent as repeated
+    ``types[]`` query keys (the server parses a list, not a single
+    comma-joined string).  ``created_at_*`` parameters are mapped to the
     bracket-based wire keys ``created_at[gt]`` etc.
     """
 
     _fields = (
-        "types",
+        "types[]",
         "created_at[gt]",
         "created_at[gte]",
         "created_at[lt]",
@@ -424,7 +425,7 @@ class SessionEventListParams(BaseModel):
     ) -> None:
         kwargs = {}
         if types is not None:
-            kwargs["types"] = ",".join(types)
+            kwargs["types[]"] = list(types)
         if created_at_gt is not None:
             kwargs["created_at[gt]"] = created_at_gt
         if created_at_gte is not None:
@@ -436,6 +437,98 @@ class SessionEventListParams(BaseModel):
         kwargs["limit"] = limit
         kwargs["order"] = order
         kwargs["page"] = page
+        super().__init__(**kwargs)
+
+
+# ===========================================================================
+# Session Resources (runtime mount)
+# ===========================================================================
+
+
+class SessionResourceAddParams(BaseModel):
+    """Request body for ``POST /sessions/{id}/resources`` (runtime mount).
+
+    ``type`` is currently always ``"file"``; ``mount_path`` must be an
+    absolute path under ``/uploads/``. The server returns a
+    session-scoped copy ``file_id`` that differs from this source id.
+    """
+
+    _fields = ("type", "file_id", "mount_path")
+
+
+class SessionResourceListParams(BaseModel):
+    """Query params for ``GET /sessions/{id}/resources``."""
+
+    _fields = ("limit", "page")
+
+
+class SessionThreadListParams(BaseModel):
+    """Query params for ``GET /sessions/{id}/threads``."""
+
+    _fields = ("limit", "page")
+
+
+# ===========================================================================
+# Security (overview + agent logs)
+# ===========================================================================
+
+
+class SecurityListAgentLogsParams(BaseModel):
+    """Query params for ``GET /security/agent_logs``.
+
+    Page-number pagination (``current_page`` / ``page_size``); the response
+    also carries a ``next_page`` cursor (null at the end). Filters:
+    ``risk_level`` (high/medium/low), ``status``, ``risk_name``,
+    ``app_name``, ``asset_type`` (agent/tool/skill/knowledge_base/memory/
+    channel), ``vendor``, ``order_by`` (default check_time), ``order``
+    (asc/desc), ``lang`` (zh/en), ``status_list`` (multi-value).
+    """
+
+    _fields = (
+        "current_page",
+        "page_size",
+        "risk_level",
+        "status",
+        "risk_name",
+        "app_name",
+        "asset_type",
+        "vendor",
+        "order_by",
+        "order",
+        "lang",
+        "status_list",
+    )
+
+    def __init__(
+        self,
+        *,
+        current_page: Optional[int] = None,
+        page_size: Optional[int] = None,
+        risk_level: Optional[str] = None,
+        status: Optional[str] = None,
+        risk_name: Optional[str] = None,
+        app_name: Optional[str] = None,
+        asset_type: Optional[str] = None,
+        vendor: Optional[str] = None,
+        order_by: Optional[str] = None,
+        order: Optional[str] = None,
+        lang: Optional[str] = None,
+        status_list: Optional[Sequence[str]] = None,
+    ) -> None:
+        kwargs = {}
+        kwargs["current_page"] = current_page
+        kwargs["page_size"] = page_size
+        kwargs["risk_level"] = risk_level
+        kwargs["status"] = status
+        kwargs["risk_name"] = risk_name
+        kwargs["app_name"] = app_name
+        kwargs["asset_type"] = asset_type
+        kwargs["vendor"] = vendor
+        kwargs["order_by"] = order_by
+        kwargs["order"] = order
+        kwargs["lang"] = lang
+        if status_list is not None:
+            kwargs["status_list"] = list(status_list)
         super().__init__(**kwargs)
 
 

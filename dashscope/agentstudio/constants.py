@@ -34,15 +34,15 @@ AGENTSTUDIO_MAX_RETRIES = 2
 class SSEEventType(StrEnum):
     """Server-sent event types (the value of ``event.type`` in SSE payloads).
 
-    Client-sendable: MESSAGE, INTERRUPT, TOOL_CONFIRMATION,
+    Client-sendable: MESSAGE, INTERRUPT, TOOL_APPROVAL_RESPONSE,
     FUNCTION_CALL_OUTPUT, TOOL_CALL_OUTPUT, DEFINE_OUTCOME.
-    Server-emitted: all types.
+    Server-emitted: all types (23 total).
     """
 
     # Client-sendable
     MESSAGE = "message"
     INTERRUPT = "interrupt"
-    TOOL_CONFIRMATION = "tool_confirmation"
+    TOOL_APPROVAL_RESPONSE = "tool_approval_response"
     FUNCTION_CALL_OUTPUT = "function_call_output"
     TOOL_CALL_OUTPUT = "tool_call_output"
     DEFINE_OUTCOME = "define_outcome"
@@ -53,6 +53,7 @@ class SSEEventType(StrEnum):
     REASONING = "reasoning"
     MCP_CALL = "mcp_call"
     MCP_CALL_OUTPUT = "mcp_call_output"
+    TOOL_APPROVAL_REQUEST = "tool_approval_request"
     THREAD_MESSAGE_SENT = "thread_message_sent"
     THREAD_MESSAGE_RECEIVED = "thread_message_received"
     THREAD_CONTEXT_COMPACTED = "thread_context_compacted"
@@ -87,12 +88,44 @@ class BlockType(StrEnum):
 
 
 class SessionStatus(StrEnum):
-    """Session run-status values (``session_status``)."""
+    """Session run-status values (``session_status``).
+
+    Top-level ``Session.status`` ∈ {idle, running, terminated, rescheduled};
+    the ``session_status`` event ``data.session_status`` value set is the
+    same plus ``deleted`` (a delete returns a tombstone, not a Session with
+    ``status=deleted``). ``idle`` also covers waiting for tool approval,
+    signalled by ``stop_reason.type=requires_action``.
+    """
 
     IDLE = "idle"
     RUNNING = "running"
-    RESCHEDULING = "rescheduling"
+    RESCHEDULED = "rescheduled"
     TERMINATED = "terminated"
+    DELETED = "deleted"
+
+
+class StopReasonType(StrEnum):
+    """``stop_reason.type`` carried by ``session_status`` idle events.
+
+    Only ``idle`` carries ``stop_reason``; a running Session's
+    ``stop_reason`` is ``null``.
+    """
+
+    END_TURN = "end_turn"
+    REQUIRES_ACTION = "requires_action"
+    RETRIES_EXHAUSTED = "retries_exhausted"
+
+
+class PermissionPolicyType(StrEnum):
+    """Tool approval policy (``permission_policy.type``).
+
+    ``always_allow`` (default) executes the tool without asking;
+    ``always_ask`` produces a ``tool_approval_request`` per call.
+    Subagent/subthread ``always_ask`` degrades to ``always_allow``.
+    """
+
+    ALWAYS_ALLOW = "always_allow"
+    ALWAYS_ASK = "always_ask"
 
 
 class WebhookStatus(StrEnum):

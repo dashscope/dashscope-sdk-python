@@ -21,6 +21,7 @@ from dashscope.agentstudio.resources.environments import (
     AsyncEnvironments,
 )
 from dashscope.agentstudio.resources.files import Files, AsyncFiles
+from dashscope.agentstudio.resources.security import Security, AsyncSecurity
 from dashscope.agentstudio.resources.sessions import Sessions, AsyncSessions
 from dashscope.agentstudio.resources.skills import Skills, AsyncSkills
 from dashscope.agentstudio.resources.vaults import Vaults, AsyncVaults
@@ -134,6 +135,7 @@ class Client:
         self.skills = Skills(self)
         self.vaults = Vaults(self)
         self.webhook_endpoints = WebhookEndpoints(self)
+        self.security = Security(self)
 
     def close(self) -> None:
         self.transport.close()
@@ -207,6 +209,7 @@ class AsyncClient:
         self.skills = AsyncSkills(self)
         self.vaults = AsyncVaults(self)
         self.webhook_endpoints = AsyncWebhookEndpoints(self)
+        self.security = AsyncSecurity(self)
 
     async def aclose(self) -> None:
         await self.transport.aclose()
