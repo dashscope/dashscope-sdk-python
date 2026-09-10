@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """The startup banner surfaces the embedded host's guide link."""
 
+# pylint: disable=protected-access,unused-argument
+
 from dashscope.acli.cli.startup import _print_banner
 from dashscope.acli.config import Config
 
@@ -22,7 +24,7 @@ def test_banner_omits_guide_url_by_default(capsys):
 
 
 def test_embedded_run_stores_guide_url(monkeypatch):
-    import dashscope.acli.ui.embedded as embedded
+    from dashscope.acli.ui import embedded
 
     captured = {}
     monkeypatch.setattr(
@@ -40,7 +42,7 @@ def test_embedded_run_stores_guide_url(monkeypatch):
 
 
 def test_embedded_run_defaults_to_no_guide_url(monkeypatch):
-    import dashscope.acli.ui.embedded as embedded
+    from dashscope.acli.ui import embedded
 
     captured = {}
     monkeypatch.setattr(

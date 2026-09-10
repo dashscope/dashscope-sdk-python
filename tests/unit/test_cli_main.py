@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+# pylint: disable=protected-access
+
 import os
 import re
 import subprocess
@@ -40,7 +42,7 @@ class _ImportErrorOnApp:
         raise ImportError(self._message)
 
 
-# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-public-methods,protected-access
 class TestCliMain:
     def test_main_prints_authentication_error_without_traceback(
         self,

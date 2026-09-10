@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+# pylint: disable=protected-access
+
 import pytest
 
 from dashscope import __version__ as sdk_version
@@ -159,6 +161,7 @@ def _provider_for(config, monkeypatch):
 
 
 def test_embedded_module_segment_flows_to_header(monkeypatch):
+    # pylint: disable=protected-access
     provider = _provider_for(_embedded_config("expert"), monkeypatch)
     value = provider._get_headers()[CLIENT_HEADER]
     print(f"\nembedded expert -> {value}")
@@ -166,6 +169,7 @@ def test_embedded_module_segment_flows_to_header(monkeypatch):
 
 
 def test_embedded_module_defaults_to_app(monkeypatch):
+    # pylint: disable=protected-access
     provider = _provider_for(_embedded_config(""), monkeypatch)
     value = provider._get_headers()[CLIENT_HEADER]
     _check_client_header(value, "acli", acli_version, "app")

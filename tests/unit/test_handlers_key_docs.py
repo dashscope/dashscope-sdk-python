@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """The no-key startup prompt points DashScope users at the doc links."""
 
+# pylint: disable=redefined-outer-name,unused-argument,protected-access
+
 from types import SimpleNamespace
 
 import pytest
 
-import dashscope.acli.cli.handlers_key as handlers_key
+from dashscope.acli.cli import handlers_key
 
 
 @pytest.fixture
@@ -54,7 +56,9 @@ def test_tongyi_prompt_shows_en_links(no_key_env, monkeypatch, capsys):
 
 
 def test_non_dashscope_provider_shows_no_links(
-    no_key_env, monkeypatch, capsys
+    no_key_env,
+    monkeypatch,
+    capsys,
 ):
     monkeypatch.setenv("LANG", "zh_CN.UTF-8")
     assert handlers_key.ensure_provider_key(_config("openai"), None)
@@ -64,6 +68,4 @@ def test_non_dashscope_provider_shows_no_links(
 def test_lc_all_wins_over_lang(no_key_env, monkeypatch):
     monkeypatch.setenv("LANG", "en_US.UTF-8")
     monkeypatch.setenv("LC_ALL", "zh_CN.UTF-8")
-    assert (
-        handlers_key._doc_locale() == "zh"
-    )  # pylint: disable=protected-access
+    assert handlers_key._doc_locale() == "zh"
