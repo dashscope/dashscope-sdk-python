@@ -34,6 +34,7 @@ from dashscope.api_entities.aio_session import close_shared_aio_session
 from dashscope.api_entities.http_request import close_shared_sync_session
 from dashscope.common.api_key import save_api_key
 from dashscope.common.env import (
+    MAAS_REGIONS,
     api_key,
     api_key_file_path,
     base_compatible_api_url,
@@ -80,6 +81,48 @@ from dashscope.tokenizers import (
     get_tokenizer,
     list_tokenizers,
 )
+
+
+# cn-beijing defaults to the legacy dashscope.aliyuncs.com endpoints;
+# its MaaS URLs are only reachable via an explicit set_region() call.
+_MAAS_REGIONS = {*MAAS_REGIONS, "cn-beijing"}
+
+
+def set_region(region: str, workspace_id: str = None):
+    """Switch to a specific MaaS region.
+
+    Updates base_http_api_url, base_compatible_api_url and
+    base_websocket_api_url to point to the MaaS endpoint for the
+    given region and workspace.
+
+    Args:
+        region (str): The MaaS region, e.g. "ap-southeast-1",
+            "us-east-1", "cn-hongkong", "cn-beijing", "eu-central-1",
+            "ap-northeast-1".
+        workspace_id (str): The workspace ID, used as the subdomain
+            of the MaaS endpoint.
+
+    Raises:
+        ValueError: If region is not supported or workspace_id is
+            empty.
+    """
+    if region not in _MAAS_REGIONS:
+        raise ValueError(
+            f"Unsupported region '{region}'. "
+            f"Supported regions: {sorted(_MAAS_REGIONS)}",
+        )
+
+    if not workspace_id:
+        raise ValueError("workspace_id is required")
+
+    global base_http_api_url, base_compatible_api_url
+    global base_websocket_api_url
+
+    host = f"{workspace_id}.{region}.maas.aliyuncs.com"
+    base_http_api_url = f"https://{host}/api/v1"
+    base_compatible_api_url = f"https://{host}/compatible-mode/v1"
+    base_websocket_api_url = f"wss://{host}/api-ws/v1/inference"
+
 
 __all__ = [
     "__version__",
@@ -141,6 +184,7 @@ __all__ = [
     "MessageFile",
     "AssistantFile",
     "VideoSynthesis",
+    "set_region",
 ]
 
 logging.getLogger(__name__).addHandler(NullHandler())

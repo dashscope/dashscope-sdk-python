@@ -7,6 +7,7 @@ from abc import abstractmethod
 import websocket
 
 import dashscope
+from dashscope.common.env import resolve_base_url
 from dashscope.common.logging import logger
 from dashscope.common.error import InputRequired
 from dashscope.common.utils import get_sdk_headers, get_user_agent
@@ -166,6 +167,7 @@ class MultiModalDialog:
             raise InputRequired("request_params is required!")
         if url is None:
             url = dashscope.base_websocket_api_url
+        url = resolve_base_url(url, workspace_id)
         if api_key is None:
             api_key = dashscope.api_key
 

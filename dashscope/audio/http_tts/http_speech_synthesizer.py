@@ -203,12 +203,12 @@ class HttpSpeechSynthesizer(BaseApi):
 
         # Get base URL
         import dashscope
+        from dashscope.common.env import resolve_base_url
         from dashscope.common.utils import get_sdk_headers, join_url
 
-        if url:
-            base_url = url
-        else:
-            base_url = dashscope.base_http_api_url
+        if not url:
+            url = dashscope.base_http_api_url
+        base_url = resolve_base_url(url, workspace)
         url_for_call = join_url(
             base_url,
             "services/audio/tts/SpeechSynthesizer",

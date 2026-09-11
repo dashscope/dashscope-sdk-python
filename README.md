@@ -89,6 +89,87 @@ save_api_key(api_key='YOUR-DASHSCOPE-API-KEY',
 
 ```
 
+## Region and Endpoint Configuration
+
+By default the SDK sends requests to the China (Beijing) public endpoint `dashscope.aliyuncs.com`. If your Model Studio (Bailian) workspace lives in another region, switch the endpoint before making calls.
+
+### Using `set_region`
+
+`dashscope.set_region(region, workspace_id)` points the HTTP, WebSocket and OpenAI-compatible base URLs at the given region in a single call. `workspace_id` is required and is used as the endpoint subdomain.
+
+```python
+import dashscope
+
+# Switch to the Singapore region for workspace "ws-xxx123"
+dashscope.set_region(region="ap-southeast-1", workspace_id="ws-xxx123")
+
+# All subsequent calls use:
+#   https://ws-xxx123.ap-southeast-1.maas.aliyuncs.com/api/v1
+print(dashscope.base_http_api_url)
+```
+
+Supported regions:
+
+| Region | Location |
+|--------|----------|
+| `cn-beijing` | China (Beijing) |
+| `cn-hongkong` | China (Hong Kong) |
+| `ap-southeast-1` | Singapore |
+| `ap-northeast-1` | Japan (Tokyo) |
+| `eu-central-1` | Germany (Frankfurt) |
+| `us-east-1` | US (Virginia) |
+
+> **API keys are region-specific.** Each region issues its own API keys (`sk-` prefix) in its Model Studio console, and keys cannot be mixed across regions — using a key from another region fails with `401`. Switch `api_key` together with the region.
+
+Region-specific notes:
+
+- WebSocket endpoints (`wss://.../api-ws/v1/inference`) are only served in `cn-beijing` and `ap-southeast-1`. `set_region` still sets `base_websocket_api_url` for every region, but WebSocket-based realtime APIs (realtime speech recognition/synthesis, multimodal dialog, etc.) are not available in the other regions.
+- `eu-central-1` / `ap-northeast-1`: the deployment scope (Global, or EU / Japan) is chosen when the workspace is created in the console, not per API call.
+- `us-east-1`: model names with the `-us` suffix (e.g. `qwen-plus-us`) restrict inference to the US; names without the suffix default to global inference.
+- Batch inference, model fine-tuning and application development are currently only available in `cn-beijing` and `ap-southeast-1`.
+
+> `set_region` updates process-wide globals, so it is not concurrency-safe when a single process talks to multiple regions at the same time. Call it once at startup, or re-call it before each switch.
+
+### Using environment variables
+
+You can also select the region without code:
+
+```shell
+export DASHSCOPE_API_REGION='ap-southeast-1'   # default: cn-beijing
+export DASHSCOPE_WORKSPACE_ID='ws-xxx123'      # used to resolve the endpoint subdomain
+```
+
+When a MaaS region is set via `DASHSCOPE_API_REGION`, the SDK builds the regional endpoints and substitutes `DASHSCOPE_WORKSPACE_ID` into them. You can also override each base URL directly:
+
+| Environment variable | Overrides |
+|----------------------|-----------|
+| `DASHSCOPE_HTTP_BASE_URL` | HTTP endpoint (`dashscope.base_http_api_url`) |
+| `DASHSCOPE_WEBSOCKET_BASE_URL` | WebSocket endpoint (`dashscope.base_websocket_api_url`) |
+| `DASHSCOPE_COMPATIBLE_BASE_URL` | OpenAI-compatible endpoint (`dashscope.base_compatible_api_url`) |
+
+`set_region` always builds workspace-exclusive endpoints. Some regions also offer shared domains without a workspace subdomain — `dashscope.aliyuncs.com` (Beijing), `dashscope-intl.aliyuncs.com` (Singapore) and `dashscope-us.aliyuncs.com` (US Virginia); use the override variables above to point at them.
+
+### OpenAI-compatible chat completions
+
+The SDK exposes an OpenAI-compatible chat completions entry that talks to `dashscope.base_compatible_api_url` (request path `chat/completions`) — no extra `openai` package required. It follows the region configured above.
+
+```python
+import dashscope
+from dashscope.aigc.chat_completion import Completions
+
+dashscope.set_region(region="cn-hongkong", workspace_id="ws-hk-789")
+
+response = Completions.create(
+    model="qwen-max",
+    messages=[{"role": "user", "content": "Hello"}],
+    api_key="YOUR-DASHSCOPE-API-KEY",
+    stream=False,  # set True to get a generator of ChatCompletionChunk
+)
+print(response)
+```
+
+A complete runnable example is available in [`samples/set_region_example.py`](samples/set_region_example.py).
+
 ## AI Assistant: DashScope SDK Expert
 
 The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built on the bundled Agentic CLI (`dashscope/acli`) framework. For DashScope SDK/CLI users it is the recommended way to get development consultation and AI coding help — answering SDK/API questions, generating runnable examples, showing CLI usage, and diagnosing errors, right in your terminal.
