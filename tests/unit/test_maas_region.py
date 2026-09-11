@@ -51,6 +51,84 @@ class TestResolveBaseUrl(unittest.TestCase):
                 f"https://my-ws.{region_id}.maas.aliyuncs.com/api/v1",
             )
 
+    def test_resolve_rejects_invalid_workspace(self):
+        url = "https://{workspace_id}.us-east-1.maas.aliyuncs.com/api/v1"
+        for bad in ["evil.com/x", "a@evil.com", "evil.com#f", "evil com"]:
+            with self.assertRaises(ValueError):
+                resolve_base_url(url, bad)
+
+    def test_resolve_rejects_invalid_env_default_workspace(self):
+        import dashscope.common.env as env_mod
+
+        url = "https://{workspace_id}.us-east-1.maas.aliyuncs.com/api/v1"
+        with patch.object(env_mod, "_default_workspace_id", "evil.com/x"):
+            with self.assertRaises(ValueError):
+                resolve_base_url(url, None)
+
+
+class TestValidateWorkspaceId(unittest.TestCase):
+    """Test validate_workspace_id character restrictions."""
+
+    def test_valid_ids(self):
+        from dashscope.common.env import validate_workspace_id
+
+        for valid in ["ws-123", "llm-abc_def", "A0", "a" * 64]:
+            self.assertEqual(validate_workspace_id(valid), valid)
+
+    def test_invalid_ids(self):
+        from dashscope.common.env import validate_workspace_id
+
+        for invalid in [
+            "",
+            None,
+            "-leading-dash",
+            "evil.com",
+            "evil.com/x",
+            "evil.com?x",
+            "evil.com#f",
+            "a@evil.com",
+            "evil.com:443",
+            "white space",
+            "a" * 65,
+            # $ also matches before a trailing newline; \Z does not
+            "abc\n",
+        ]:
+            with self.assertRaises(ValueError):
+                validate_workspace_id(invalid)
+
+
+class TestValidateRegion(unittest.TestCase):
+    """Test validate_region character restrictions."""
+
+    def test_valid_regions(self):
+        from dashscope.common.env import validate_region
+
+        # Upper case is accepted: DNS is case-insensitive and httpx
+        # lowercases the host, so rejecting it broke working callers.
+        for valid in [*MAAS_REGIONS, "cn-beijing", "CN-Beijing", "a"]:
+            self.assertEqual(validate_region(valid), valid)
+
+    def test_invalid_regions(self):
+        from dashscope.common.env import validate_region
+
+        for invalid in [
+            "",
+            None,
+            # would move the effective host off *.maas.aliyuncs.com
+            "x@evil.com/#",
+            "evil.com/x",
+            "evil.com:443",
+            "evil.com?x",
+            "white space",
+            "-leading-dash",
+            "trailing-dash-",
+            "abc\n",
+            # RFC 1123 caps a label at 63 chars
+            "a" * 64,
+        ]:
+            with self.assertRaises(ValueError):
+                validate_region(invalid)
+
 
 class TestMaasRegions(unittest.TestCase):
     """Test MAAS_REGIONS constant."""
@@ -127,6 +205,16 @@ class TestMaasEnvLoading(unittest.TestCase):
             env.base_compatible_api_url,
             "https://ws-test-123.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
         )
+
+    def test_maas_region_with_invalid_workspace_raises(self):
+        """Invalid DASHSCOPE_WORKSPACE_ID must fail fast at env load."""
+        with self.assertRaises(ValueError):
+            self._reload_env(
+                {
+                    "DASHSCOPE_API_REGION": "ap-southeast-1",
+                    "DASHSCOPE_WORKSPACE_ID": "evil.com/x",
+                },
+            )
 
     def test_maas_region_without_workspace(self):
         env = self._reload_env(
