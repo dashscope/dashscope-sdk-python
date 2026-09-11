@@ -139,6 +139,29 @@ class TestSetRegion:
 
         assert "workspace_id is required" in str(exc_info.value)
 
+    @pytest.mark.parametrize(
+        "bad_workspace_id",
+        [
+            "evil.com/x",
+            "evil.com?x=1",
+            "evil.com#frag",
+            "a@evil.com",
+            "evil.com:443",
+            "evil com",
+            "evil.com",
+            "-evil",
+            "a" * 65,
+        ],
+    )
+    def test_set_region_invalid_workspace_id(self, bad_workspace_id):
+        """workspace_id with URL-breaking characters must be rejected."""
+        with pytest.raises(ValueError) as exc_info:
+            dashscope.set_region("ap-southeast-1", bad_workspace_id)
+
+        assert "Invalid workspace_id" in str(exc_info.value)
+        # Globals must not be modified on rejection.
+        assert bad_workspace_id not in dashscope.base_http_api_url
+
     def test_set_region_multiple_times(self):
         """Test switching between multiple regions."""
         # First region

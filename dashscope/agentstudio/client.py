@@ -37,6 +37,7 @@ from dashscope.agentstudio.constants import (
 )
 from dashscope.agentstudio.transport import SyncTransport, AsyncTransport
 from dashscope.common.api_key import get_default_api_key
+from dashscope.common.env import validate_region, validate_workspace_id
 
 
 def _resolve_base_url(
@@ -50,6 +51,10 @@ def _resolve_base_url(
     1. explicit base_url parameter (full URL)
     2. DASHSCOPE_AGENTSTUDIO_URL / AGENTSTUDIO_URL env
     3. Build from workspace + region template
+
+    Raises:
+        ValueError: If workspace or region is missing, or is not a valid
+            hostname label.
     """
     if explicit_url:
         return explicit_url
@@ -67,6 +72,11 @@ def _resolve_base_url(
             "or use base_url=... to override)",
         )
     rgn = region or AGENTSTUDIO_DEFAULT_REGION
+    # Both are interpolated into the host below; unvalidated values such as
+    # "a@evil.com/#" would move the effective host off *.maas.aliyuncs.com
+    # while the transport still sends Authorization: Bearer <api_key>.
+    validate_workspace_id(ws)
+    validate_region(rgn)
     return AGENTSTUDIO_BASE_URL_TEMPLATE.format(
         workspace=ws,
         region=rgn,

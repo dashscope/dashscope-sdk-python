@@ -40,6 +40,7 @@ from dashscope.common.env import (
     base_compatible_api_url,
     base_http_api_url,
     base_websocket_api_url,
+    validate_workspace_id,
 )
 from dashscope.finetune.deployments import Deployments
 from dashscope.finetune.finetunes import FineTunes
@@ -103,8 +104,8 @@ def set_region(region: str, workspace_id: str = None):
             of the MaaS endpoint.
 
     Raises:
-        ValueError: If region is not supported or workspace_id is
-            empty.
+        ValueError: If region is not supported, workspace_id is
+            empty, or workspace_id is not a valid hostname label.
     """
     if region not in _MAAS_REGIONS:
         raise ValueError(
@@ -114,6 +115,8 @@ def set_region(region: str, workspace_id: str = None):
 
     if not workspace_id:
         raise ValueError("workspace_id is required")
+
+    validate_workspace_id(workspace_id)
 
     global base_http_api_url, base_compatible_api_url
     global base_websocket_api_url

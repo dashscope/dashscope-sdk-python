@@ -2,6 +2,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import os
+import re
 
 from dashscope.common.constants import (
     DASHSCOPE_API_KEY_ENV,
@@ -10,6 +11,55 @@ from dashscope.common.constants import (
     DASHSCOPE_API_VERSION_ENV,
 )
 from dashscope.common.error import InputRequired
+
+# workspace_id and region become DNS labels of the MaaS endpoint host, so
+# they must not contain characters (/, ?, #, @, :, whitespace, ...) that
+# could break out of the host and redirect requests elsewhere.
+# \A...\Z rather than ^...$: $ also matches before a trailing newline.
+_WORKSPACE_ID_PATTERN = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
+# RFC 1123 hostname label: 1-63 chars, no leading/trailing hyphen. Upper
+# case is allowed because DNS is case-insensitive and httpx lowercases the
+# host, so rejecting it would break working callers for no security gain.
+_REGION_PATTERN = re.compile(
+    r"\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\Z",
+)
+
+
+def validate_workspace_id(workspace_id):
+    """Validate that workspace_id is safe to use as a URL subdomain.
+
+    Raises:
+        ValueError: If workspace_id contains characters outside
+            [A-Za-z0-9_-], is empty, or exceeds 64 characters.
+    """
+    if not workspace_id or not _WORKSPACE_ID_PATTERN.fullmatch(
+        workspace_id,
+    ):
+        raise ValueError(
+            f"Invalid workspace_id {workspace_id!r}: must match "
+            "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+        )
+    return workspace_id
+
+
+def validate_region(region):
+    """Validate that region is safe to use as a URL subdomain.
+
+    Deliberately a hostname-label check and not a MAAS_REGIONS whitelist:
+    rejecting an unknown-but-well-formed region would break callers as soon
+    as a subpackage supports a region this list has not caught up with.
+
+    Raises:
+        ValueError: If region is not a valid hostname label.
+    """
+    if not region or not _REGION_PATTERN.fullmatch(region):
+        raise ValueError(
+            f"Invalid region {region!r}: must be a hostname label "
+            "(1-63 chars of [A-Za-z0-9-], not starting or ending "
+            "with '-')",
+        )
+    return region
+
 
 # MaaS regions: region -> URL subdomain identifier
 # cn-beijing is deliberately excluded: it is the default
@@ -36,6 +86,8 @@ _default_workspace_id = os.environ.get("DASHSCOPE_WORKSPACE_ID")
 # define api base url, ensure end /
 if api_region in MAAS_REGIONS:
     _maas_region_id = MAAS_REGIONS[api_region]
+    if _default_workspace_id:
+        validate_workspace_id(_default_workspace_id)
     _ws = _default_workspace_id if _default_workspace_id else "{workspace_id}"
     _maas_host = f"{_ws}.{_maas_region_id}.maas.aliyuncs.com"
     base_http_api_url = os.environ.get(
@@ -83,6 +135,7 @@ def resolve_base_url(url, workspace_id=None):
         return url
     ws = workspace_id or _default_workspace_id
     if ws:
+        validate_workspace_id(ws)
         return url.replace("{workspace_id}", ws)
     raise InputRequired(
         "The base URL contains '{workspace_id}' but no workspace id "
