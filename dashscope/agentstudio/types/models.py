@@ -847,6 +847,7 @@ class DeploymentPausedReason(BaseModel):
 class Deployment(BaseModel):
     """Managed Agent deployment."""
 
+    environment_variables: Optional[Dict[str, str]]
     metadata: Optional[Dict[str, str]]
 
     _fields = (
@@ -860,6 +861,7 @@ class Deployment(BaseModel):
         "initial_events",
         "resources",
         "vault_ids",
+        "environment_variables",
         "metadata",
         "status",
         "paused_reason",

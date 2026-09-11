@@ -45,6 +45,7 @@ class Deployments:
         schedule: Any = None,
         resources: Optional[Sequence[Any]] = None,
         vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
         metadata: Optional[Mapping[str, str]] = None,
     ) -> Deployment:
         body = DeploymentCreateParams(
@@ -56,6 +57,7 @@ class Deployments:
             schedule=schedule,
             resources=resources,
             vault_ids=vault_ids,
+            environment_variables=environment_variables,
             metadata=metadata,
         ).to_dict()
         resp = self._client.transport.request(
@@ -86,6 +88,7 @@ class Deployments:
         initial_events: Optional[Sequence[Mapping[str, Any]]] = None,
         resources: Optional[Sequence[Any]] = None,
         vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
         metadata: Optional[Mapping[str, str]] = None,
     ) -> Deployment:
         body = DeploymentUpdateParams(
@@ -97,6 +100,7 @@ class Deployments:
             initial_events=initial_events,
             resources=resources,
             vault_ids=vault_ids,
+            environment_variables=environment_variables,
             metadata=metadata,
         ).to_dict()
         resp = self._client.transport.request(
@@ -249,6 +253,7 @@ class AsyncDeployments:
         schedule: Any = None,
         resources: Optional[Sequence[Any]] = None,
         vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
         metadata: Optional[Mapping[str, str]] = None,
     ) -> Deployment:
         body = DeploymentCreateParams(
@@ -260,6 +265,7 @@ class AsyncDeployments:
             schedule=schedule,
             resources=resources,
             vault_ids=vault_ids,
+            environment_variables=environment_variables,
             metadata=metadata,
         ).to_dict()
         resp = await self._client.transport.request(
@@ -290,6 +296,7 @@ class AsyncDeployments:
         initial_events: Optional[Sequence[Mapping[str, Any]]] = None,
         resources: Optional[Sequence[Any]] = None,
         vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
         metadata: Optional[Mapping[str, str]] = None,
     ) -> Deployment:
         body = DeploymentUpdateParams(
@@ -301,6 +308,7 @@ class AsyncDeployments:
             initial_events=initial_events,
             resources=resources,
             vault_ids=vault_ids,
+            environment_variables=environment_variables,
             metadata=metadata,
         ).to_dict()
         resp = await self._client.transport.request(
