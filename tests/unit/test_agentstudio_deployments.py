@@ -285,7 +285,7 @@ def test_async_resources_use_same_contract():
             "biz": "summary",
         }
         assert client.transport.calls[0]["json"]["environment_variables"] == {
-            "API_BASE_URL": "https://example.test"
+            "API_BASE_URL": "https://example.test",
         }
         assert run.id == "drun_01"
         assert runs.data[0].id == "drun_01"
