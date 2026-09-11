@@ -50,6 +50,7 @@ def _deployment_payload() -> Dict[str, Any]:
             },
         ],
         "vault_ids": ["vault_01"],
+        "environment_variables": {"API_BASE_URL": "https://example.test"},
         "metadata": {"biz": "summary"},
         "status": "active",
         "paused_reason": {
@@ -162,6 +163,7 @@ def test_create_serializes_contract_and_hydrates_nested_models(client: Client):
             },
         ],
         vault_ids=["vault_01"],
+        environment_variables={"API_BASE_URL": "https://example.test"},
         metadata={"biz": "summary"},
     )
 
@@ -171,6 +173,9 @@ def test_create_serializes_contract_and_hydrates_nested_models(client: Client):
     assert call["json"]["agent"] == {"id": "agent_01", "version": 12}
     assert call["json"]["initial_events"][0]["type"] == "message"
     assert call["json"]["schedule"]["timezone"] == "Asia/Shanghai"
+    assert call["json"]["environment_variables"] == {
+        "API_BASE_URL": "https://example.test",
+    }
     assert call["json"]["metadata"] == {"biz": "summary"}
     assert isinstance(deployment.agent, Agent)
     assert deployment.agent.version == 12
@@ -178,6 +183,9 @@ def test_create_serializes_contract_and_hydrates_nested_models(client: Client):
     assert isinstance(deployment.resources[0], DeploymentResource)
     assert isinstance(deployment.paused_reason, DeploymentPausedReason)
     assert isinstance(deployment.paused_reason.error, DeploymentError)
+    assert deployment.environment_variables == {
+        "API_BASE_URL": "https://example.test",
+    }
     assert deployment.metadata == {"biz": "summary"}
     assert deployment.request_id == "req_01"
 
@@ -187,18 +195,21 @@ def test_update_distinguishes_omitted_and_explicit_null(client: Client):
     omitted_body = client.transport.calls[-1]["json"]
     assert "environment_id" not in omitted_body
     assert "schedule" not in omitted_body
+    assert "environment_variables" not in omitted_body
 
     client.deployments.update(
         "depl_01",
         environment_id=None,
         schedule=None,
         resources=[],
+        environment_variables={},
         metadata={},
     )
     clear_body = client.transport.calls[-1]["json"]
     assert clear_body["environment_id"] is None
     assert clear_body["schedule"] is None
     assert clear_body["resources"] == []
+    assert clear_body["environment_variables"] == {}
     assert clear_body["metadata"] == {}
 
 
@@ -263,6 +274,7 @@ def test_async_resources_use_same_contract():
             name="daily-summary",
             agent={"id": "agent_01"},
             initial_events=[user_message("Summarize")],
+            environment_variables={"API_BASE_URL": "https://example.test"},
             metadata={"biz": "summary"},
         )
         run = await client.deployments.run("depl_01")
@@ -271,6 +283,9 @@ def test_async_resources_use_same_contract():
         assert deployment.id == "depl_01"
         assert client.transport.calls[0]["json"]["metadata"] == {
             "biz": "summary",
+        }
+        assert client.transport.calls[0]["json"]["environment_variables"] == {
+            "API_BASE_URL": "https://example.test"
         }
         assert run.id == "drun_01"
         assert runs.data[0].id == "drun_01"

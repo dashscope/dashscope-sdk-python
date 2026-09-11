@@ -549,6 +549,7 @@ class DeploymentCreateParams(BaseModel):
         "initial_events",
         "resources",
         "vault_ids",
+        "environment_variables",
         "metadata",
     )
 
@@ -563,6 +564,7 @@ class DeploymentCreateParams(BaseModel):
         schedule: Any = None,
         resources: Optional[Sequence[Any]] = None,
         vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
         metadata: Optional[Mapping[str, str]] = None,
     ) -> None:
         BaseModel.__init__(
@@ -579,6 +581,11 @@ class DeploymentCreateParams(BaseModel):
                 else None
             ),
             vault_ids=(list(vault_ids) if vault_ids is not None else None),
+            environment_variables=(
+                dict(environment_variables)
+                if environment_variables is not None
+                else None
+            ),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
@@ -600,6 +607,7 @@ class DeploymentUpdateParams(BaseModel):
         "initial_events",
         "resources",
         "vault_ids",
+        "environment_variables",
         "metadata",
     )
 
@@ -614,6 +622,7 @@ class DeploymentUpdateParams(BaseModel):
         initial_events: Optional[Sequence[Mapping[str, Any]]] = None,
         resources: Optional[Sequence[Any]] = None,
         vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
         metadata: Optional[Mapping[str, str]] = None,
     ) -> None:
         self._environment_id_given = environment_id is not _NOT_GIVEN
@@ -641,6 +650,11 @@ class DeploymentUpdateParams(BaseModel):
                 else None
             ),
             vault_ids=(list(vault_ids) if vault_ids is not None else None),
+            environment_variables=(
+                dict(environment_variables)
+                if environment_variables is not None
+                else None
+            ),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
