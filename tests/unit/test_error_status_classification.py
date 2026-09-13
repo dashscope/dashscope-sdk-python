@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=protected-access
 """Failures must be reported with the status they actually mean.
 
 Three classification defects: a 403 WebSocket handshake was reported as a 401

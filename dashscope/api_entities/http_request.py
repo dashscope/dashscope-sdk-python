@@ -166,6 +166,36 @@ def _send_with_retry(
         return send()
 
 
+def _sse_parse_failure_response(
+    status: int,
+    data: str,
+    request_id: str,
+    headers: dict,
+) -> DashScopeAPIResponse:
+    """Build the 500 for an SSE body the SDK cannot parse.
+
+    An unparsable body is a server-side defect rather than a bad request, and
+    the payload is the only evidence of it, so it is kept in ``message``.
+
+    ``status`` feeds the log line only: the sync and async callers read it from
+    different attributes.
+    """
+    error_message = data or INTERNAL_ERROR.format_msg()
+    logger.error(
+        "Request failed: status=%s, code=%s, message=%s",
+        status,
+        INTERNAL_ERROR.error_code,
+        truncate_error_message(error_message),
+    )
+    return DashScopeAPIResponse(
+        request_id=request_id,
+        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+        code=INTERNAL_ERROR.error_code,
+        message=error_message,
+        headers=headers,
+    )
+
+
 class HttpRequest(AioBaseRequest):
     def __init__(
         self,
@@ -434,20 +464,11 @@ class HttpRequest(AioBaseRequest):
                     if "request_id" in msg:
                         request_id = msg["request_id"]
                 except json.JSONDecodeError:
-                    error_code = INTERNAL_ERROR.error_code
-                    error_message = data or INTERNAL_ERROR.format_msg()
-                    logger.error(
-                        "Request failed: status=%s, code=%s, message=%s",
+                    yield _sse_parse_failure_response(
                         response.status,
-                        error_code,
-                        truncate_error_message(error_message),
-                    )
-                    yield DashScopeAPIResponse(
-                        request_id=request_id,
-                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                        code=error_code,
-                        message=error_message,
-                        headers=headers,
+                        data,
+                        request_id,
+                        headers,
                     )
                     continue
                 if is_error:
@@ -555,21 +576,11 @@ class HttpRequest(AioBaseRequest):
                     if "request_id" in msg:
                         request_id = msg["request_id"]
                 except json.JSONDecodeError:
-                    error_code = INTERNAL_ERROR.error_code
-                    error_message = data or INTERNAL_ERROR.format_msg()
-                    logger.error(
-                        "Request failed: status=%s, code=%s, message=%s",
+                    yield _sse_parse_failure_response(
                         response.status_code,
-                        error_code,
-                        truncate_error_message(error_message),
-                    )
-                    yield DashScopeAPIResponse(
-                        request_id=request_id,
-                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                        output=None,
-                        code=error_code,
-                        message=error_message,
-                        headers=headers,
+                        data,
+                        request_id,
+                        headers,
                     )
                     continue
                 if is_error:

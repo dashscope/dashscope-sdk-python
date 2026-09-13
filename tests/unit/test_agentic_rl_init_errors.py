@@ -18,6 +18,7 @@ from dashscope.common.error_registry import (
     PERMISSION_DENIED,
     REQUEST_TIMEOUT,
 )
+from dashscope.finetune import agentic_rl
 from dashscope.finetune.agentic_rl import (
     AgenticRL,
     _log_internal_error,
@@ -125,6 +126,21 @@ class TestInitReportsConfigProblemsAsBadRequest:
         assert rendered == "Invalid system configuration detected."
 
 
+class _Collect(logging.Handler):
+    """Collects records straight off the SDK logger.
+
+    ``caplog`` attaches at the root, and the SDK logger does not propagate, so
+    it sees nothing here.
+    """
+
+    def __init__(self, sink):
+        super().__init__(level=logging.ERROR)
+        self._sink = sink
+
+    def emit(self, record):
+        self._sink.append(record)
+
+
 class TestLogInternalError:
     def test_keeps_the_positional_log_shape(self):
         error_def = MagicMock()
@@ -168,17 +184,22 @@ class TestLogInternalError:
         assert mock_logger.error.call_args[0][4] is cause
         assert mock_logger.error.call_args.kwargs["exc_info"] is True
 
-    def test_record_is_attributed_to_the_caller(self, caplog):
+    def test_record_is_attributed_to_the_caller(self):
         """Every handler logs through this helper, so without the stacklevel
         the record's location would be the same line for all five."""
         error_def = MagicMock()
         error_def.name = "sdk.agentic_rl.SomeFailure"
         error_def.format_message.return_value = "rendered"
+        records = []
+        handler = _Collect(records)
 
-        with caplog.at_level(logging.ERROR, logger="dashscope"):
+        agentic_rl.logger.addHandler(handler)
+        try:
             _log_internal_error(error_def, RuntimeErrorWithCode("boom"))
+        finally:
+            agentic_rl.logger.removeHandler(handler)
 
-        assert caplog.records[-1].funcName == (
+        assert records[-1].funcName == (
             "test_record_is_attributed_to_the_caller"
         )
 

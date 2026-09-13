@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=protected-access
 """All four SSE parse-failure paths must report the same error.
 
 A body the SDK cannot parse is a server-side defect, not a bad request, so
@@ -51,9 +52,9 @@ class _FakeAioResponse:
 
 
 def _assert_unified(rsp):
-    assert rsp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, (
-        "an unparsable server body must not be reported as a client error"
-    )
+    assert (
+        rsp.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+    ), "an unparsable server body must not be reported as a client error"
     assert rsp.code == INTERNAL_ERROR.error_code
     assert MALFORMED in rsp.message, "the raw payload must reach the caller"
     assert "response data" not in rsp.message

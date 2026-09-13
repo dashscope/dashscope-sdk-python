@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=protected-access
 """Regression tests for the two P0 defects fixed on dev/errors.
 
 P0-1: ``AioHttpRequest._handle_response`` yielded the result of the
@@ -129,9 +130,7 @@ class TestAioHttpErrorResponseIsAwaited:
             asyncio.run(_collect(_make_request(), response))
 
         assert not [
-            w
-            for w in caught
-            if "never awaited" in str(w.message)
+            w for w in caught if "never awaited" in str(w.message)
         ], "error response coroutine was not awaited"
 
     def test_registry_has_no_external_field(self):

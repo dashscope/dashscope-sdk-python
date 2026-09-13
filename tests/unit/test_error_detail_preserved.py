@@ -127,8 +127,8 @@ class TestIterOverAsyncReportsTheFailure:
 
     def test_registry_text_is_still_present(self):
         async def failing():
+            yield 1
             raise ValueError("bad")
-            yield  # pragma: no cover
 
         response = list(iter_over_async(failing()))[-1]
 

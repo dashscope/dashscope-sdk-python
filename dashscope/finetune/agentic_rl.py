@@ -156,11 +156,11 @@ def _public_exception(public_error, cause: Exception) -> DashScopeException:
     ``error_code`` instead of the internal one.
     """
     summary = f"{type(cause).__name__}: {_exc_message(cause)}"
-    exc_cls = (
-        InvalidParameter if public_error == INVALID_REQUEST
-        else DashScopeException
-    )
-    exc = exc_cls(f"{public_error.format_msg()} | Caused by: {summary}")
+    message = f"{public_error.format_msg()} | Caused by: {summary}"
+    if public_error == INVALID_REQUEST:
+        exc = InvalidParameter(message)
+    else:
+        exc = DashScopeException(message)
     exc.status_code = public_error.status_code
     exc.error_code = public_error.error_code
     return exc
@@ -192,13 +192,19 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         Initialize an AgenticRL instance from a YAML configuration file.
         """
         try:
-            self.tuning = TuningModel.load_from_yaml(config_path or "", **kwargs)
+            self.tuning = TuningModel.load_from_yaml(
+                config_path or "",
+                **kwargs,
+            )
         except Exception as e:
             _log_internal_error(SDK_AGENTIC_RL_CONFIGURATION_ERROR, e)
             # ``load_from_yaml`` reports a missing file and a malformed one
             # through the same IOErrorWithCode, and both are the caller's to
             # fix. An I/O failure deeper in a request stays a 500.
-            public_error = _get_public_error(e, input_errors=(IOErrorWithCode,))
+            public_error = _get_public_error(
+                e,
+                input_errors=(IOErrorWithCode,),
+            )
             raise _public_exception(public_error, e) from e
 
         return self

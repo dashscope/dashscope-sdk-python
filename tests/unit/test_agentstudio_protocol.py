@@ -352,7 +352,10 @@ def test_sdk_originated_codes_use_registry_namespace():
         "sdk.agentstudio.StreamClosedError"
     )
     # Timeout is a specialization of connection failure.
-    assert issubclass(exceptions.APITimeoutError, exceptions.APIConnectionError)
+    assert issubclass(
+        exceptions.APITimeoutError,
+        exceptions.APIConnectionError,
+    )
 
 
 def test_prerelease_error_code_shape_is_accepted():
@@ -367,16 +370,25 @@ def test_prerelease_error_code_shape_is_accepted():
 def test_camel_case_request_id_is_accepted():
     """unwrap() already translates requestId on the success path, so the
     error path must accept the same spelling."""
-    body = {"error": {"code": "api_error", "message": "boom"},
-            "requestId": "req_camel"}
+    body = {
+        "error": {"code": "api_error", "message": "boom"},
+        "requestId": "req_camel",
+    }
     err = exceptions.from_response(status_code=500, body=body)
     assert err.request_id == "req_camel"
     # snake_case still wins when both are present.
-    both = {"error": {"code": "api_error"},
-            "request_id": "req_snake", "requestId": "req_camel"}
-    assert exceptions.from_response(
-        status_code=500, body=both,
-    ).request_id == "req_snake"
+    both = {
+        "error": {"code": "api_error"},
+        "request_id": "req_snake",
+        "requestId": "req_camel",
+    }
+    assert (
+        exceptions.from_response(
+            status_code=500,
+            body=both,
+        ).request_id
+        == "req_snake"
+    )
 
 
 def test_recognized_code_outranks_status():
@@ -662,7 +674,7 @@ def test_exception_classes_are_reexported_from_package_root():
     other tests here import from the ``exceptions`` submodule, so only this one
     catches a repeat.
     """
-    import dashscope.agentstudio as agentstudio
+    from dashscope import agentstudio
 
     names = [
         "AgentStudioError",
