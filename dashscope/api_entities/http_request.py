@@ -24,12 +24,14 @@ from dashscope.common.constants import (
     HTTPMethod,
 )
 from dashscope.common.error import UnsupportedHTTPMethod
+from dashscope.common.error_registry import INTERNAL_ERROR
 from dashscope.common.logging import logger
 from dashscope.common.utils import (
     _handle_aio_stream,
     _handle_aiohttp_failed_response,
     _handle_http_failed_response,
     _handle_stream,
+    truncate_error_message,
 )
 from dashscope.api_entities.encryption import Encryption
 
@@ -210,17 +212,12 @@ class HttpRequest(AioBaseRequest):
 
         # Auto-detect session type and store accordingly
         if session is not None:
-            session_type = type(session).__name__
-            session_module = type(session).__module__
-
-            # Check if it's an aiohttp ClientSession
-            if (
-                session_type == "ClientSession" and "aiohttp" in session_module
-            ) or isinstance(session, aiohttp.ClientSession):
+            if isinstance(session, aiohttp.ClientSession):
                 self._external_session = None
                 self._external_aio_session = session
             else:
-                # Treat as requests Session
+                # Used by synchronous calls only; _handle_aio_request warns if
+                # an async call then has to ignore it.
                 self._external_session = session
                 self._external_aio_session = None
         else:
@@ -267,7 +264,7 @@ class HttpRequest(AioBaseRequest):
         else:
             self.timeout = timeout  # type: ignore[has-type]
 
-    def add_header(self, key, value):
+    def add_header(self, key: str, value: str) -> None:
         self.headers[key] = value
 
     def add_headers(self, headers):
@@ -279,9 +276,8 @@ class HttpRequest(AioBaseRequest):
             return (item for item in response)
         else:
             output = next(response)
-            try:
-                next(response)
-            except StopIteration:
+            # Consume remaining items to ensure generator completes
+            for _ in response:
                 pass
             return output
 
@@ -291,9 +287,8 @@ class HttpRequest(AioBaseRequest):
             return (item async for item in response)
         else:
             result = await response.__anext__()
-            try:
-                await response.__anext__()
-            except StopAsyncIteration:
+            # Consume remaining items to ensure generator completes
+            async for _ in response:
                 pass
             return result
 
@@ -305,6 +300,16 @@ class HttpRequest(AioBaseRequest):
                 session = self._external_aio_session
                 should_close = False
             else:
+                if self._external_session is not None:
+                    # Only an aiohttp.ClientSession can be reused here, so the
+                    # caller's custom connector or proxy would silently not
+                    # apply to this async call.
+                    logger.warning(
+                        "ignoring the supplied %s session for this async "
+                        "call; pass an aiohttp.ClientSession to reuse a "
+                        "custom connection",
+                        type(self._external_session).__name__,
+                    )
                 session = await get_shared_aio_session()
                 should_close = False
 
@@ -369,7 +374,7 @@ class HttpRequest(AioBaseRequest):
                 if should_close:
                     await session.close()
         except Exception:
-            logger.exception("Request failed")
+            logger.exception("Async request failed")
             raise
 
     @staticmethod
@@ -429,11 +434,19 @@ class HttpRequest(AioBaseRequest):
                     if "request_id" in msg:
                         request_id = msg["request_id"]
                 except json.JSONDecodeError:
+                    error_code = INTERNAL_ERROR.error_code
+                    error_message = data or INTERNAL_ERROR.format_msg()
+                    logger.error(
+                        "Request failed: status=%s, code=%s, message=%s",
+                        response.status,
+                        error_code,
+                        truncate_error_message(error_message),
+                    )
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                        code="Unknown",
-                        message=data,
+                        code=error_code,
+                        message=error_message,
                         headers=headers,
                     )
                     continue
@@ -441,8 +454,12 @@ class HttpRequest(AioBaseRequest):
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=status_code,
-                        code=msg["code"],
-                        message=msg["message"],
+                        code=msg.get("code")
+                        or msg.get("error_code")
+                        or f"http_{status_code}",
+                        message=msg.get("message")
+                        or msg.get("error_message")
+                        or f"HTTP {status_code} error",
                         headers=headers,
                     )
                 else:
@@ -538,12 +555,20 @@ class HttpRequest(AioBaseRequest):
                     if "request_id" in msg:
                         request_id = msg["request_id"]
                 except json.JSONDecodeError:
+                    error_code = INTERNAL_ERROR.error_code
+                    error_message = data or INTERNAL_ERROR.format_msg()
+                    logger.error(
+                        "Request failed: status=%s, code=%s, message=%s",
+                        response.status_code,
+                        error_code,
+                        truncate_error_message(error_message),
+                    )
                     yield DashScopeAPIResponse(
                         request_id=request_id,
-                        status_code=HTTPStatus.BAD_REQUEST,
+                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
                         output=None,
-                        code="Unknown",
-                        message=data,
+                        code=error_code,
+                        message=error_message,
                         headers=headers,
                     )
                     continue
@@ -552,10 +577,12 @@ class HttpRequest(AioBaseRequest):
                         request_id=request_id,
                         status_code=status_code,
                         output=None,
-                        code=msg["code"]
-                        if "code" in msg
-                        else None,  # noqa E501
-                        message=msg["message"] if "message" in msg else None,
+                        code=msg.get("code")
+                        or msg.get("error_code")
+                        or f"http_{status_code}",
+                        message=msg.get("message")
+                        or msg.get("error_message")
+                        or f"HTTP {status_code} error",
                         headers=headers,
                     )  # noqa E501
                 else:
@@ -600,6 +627,7 @@ class HttpRequest(AioBaseRequest):
             yield _handle_http_failed_response(response)
 
     def _handle_request(self):  # pylint: disable=too-many-branches
+        session = None
         try:
             # Use external session if provided,
             # otherwise use shared session with connection pooling
@@ -636,10 +664,14 @@ class HttpRequest(AioBaseRequest):
                             timeout=self.timeout,
                         ),
                     )
+                for rsp in self._handle_response(response):
+                    yield rsp
             elif self.method == HTTPMethod.GET:
                 params = {}
                 if hasattr(self, "data") and self.data is not None:
                     params = getattr(self.data, "parameters", {})
+                if params:
+                    params = self.__handle_parameters(params)
                 response = _send_with_retry(
                     lambda: session.get(
                         url=self.url,
@@ -648,12 +680,18 @@ class HttpRequest(AioBaseRequest):
                         timeout=self.timeout,
                     ),
                 )
+                for rsp in self._handle_response(response):
+                    yield rsp
             else:
                 raise UnsupportedHTTPMethod(
                     f"Unsupported http method: {self.method}",
                 )
-            for rsp in self._handle_response(response):
-                yield rsp
         except Exception:
-            logger.exception("Request failed")
+            logger.exception("Sync request failed")
             raise
+        finally:
+            # Note: We don't close the session here because:
+            # - External sessions are managed by the caller
+            # - Shared sessions use connection pooling and are
+            #   managed centrally by _get_shared_sync_session()
+            pass

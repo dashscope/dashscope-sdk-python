@@ -10,6 +10,7 @@ from dashscope.finetune.reinforcement import FunctionType
 from dashscope.finetune.reinforcement import InputError, ConfigurationError
 from dashscope.finetune.reinforcement.common.errors import (
     RuntimeErrorWithCode,
+    TimeoutErrorWithCode,
 )
 from dashscope.finetune.reinforcement.common.utils import (
     async_http_request,
@@ -310,7 +311,10 @@ class TestAsyncHttpRequestRootCause:
                     retry_times=1,
                 )
 
-            assert exc_info.value.error_code == 4002
+            assert (
+                exc_info.value.error_code
+                == "sdk.agentic_rl.RuntimeErrorWithCode"
+            )
             root = exc_info.value.__cause__
             assert isinstance(root, aiohttp.ClientConnectionError)
             assert "Cannot write to transport" in str(root)
@@ -323,7 +327,7 @@ class TestAsyncHttpRequestRootCause:
             ".ClientSession",
             return_value=_mock_session(asyncio.TimeoutError()),
         ):
-            with pytest.raises(RuntimeErrorWithCode) as exc_info:
+            with pytest.raises(TimeoutErrorWithCode) as exc_info:
                 await async_http_request(
                     method="POST",
                     url="https://example.com/api",
@@ -332,7 +336,13 @@ class TestAsyncHttpRequestRootCause:
                     retry_times=1,
                 )
 
-            assert exc_info.value.error_code == 4003
+            assert (
+                exc_info.value.error_code
+                == "sdk.agentic_rl.TimeoutErrorWithCode"
+            )
+            # Callers that map a timeout to a 504 test for the builtin type,
+            # so the wrapper must keep satisfying it.
+            assert isinstance(exc_info.value, TimeoutError)
             assert isinstance(
                 exc_info.value.__cause__,
                 asyncio.TimeoutError,
