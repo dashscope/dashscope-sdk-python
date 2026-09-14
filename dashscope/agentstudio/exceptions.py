@@ -10,10 +10,20 @@ The AgentStudio service returns errors in the canonical CMA shape::
         "request_id": "req_..."
     }
 
-The pre-release backend currently emits ``error_code``/``error_message``
-instead of nested ``error.{code,message}``. We accept both shapes and
-normalize to the documented form. The compatibility branch is marked
-with ``# TODO(bma-fix)`` so we can remove it once the backend aligns.
+Codes come from the server response and are preserved as-is on ``.code``.
+When no code is present, :func:`from_response` reports the generic
+``api_error`` rather than inventing a public code from the status number.
+The raw payload stays on ``.raw``.
+
+The exception *type* is resolved separately: a recognized server code wins,
+otherwise the HTTP status picks the class. Callers can therefore keep using
+``except NotFoundError`` while ``.code`` still carries whatever the server
+actually said (including service-specific codes such as
+``bma_invalid_event``).
+
+The pre-release backend emits ``error_code``/``error_message`` instead of
+nested ``error.{code,message}``. Both shapes are accepted; the compatibility
+branches are marked ``# TODO(bma-fix)`` for removal once the backend aligns.
 """
 
 from __future__ import annotations
@@ -21,6 +31,13 @@ from __future__ import annotations
 from typing import Any, Dict, Mapping, Optional
 
 from dashscope.common.error import DashScopeException
+from dashscope.common.error_registry import (
+    SDK_AGENTSTUDIO_API_CONNECTION_ERROR,
+    SDK_AGENTSTUDIO_API_TIMEOUT_ERROR,
+    SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR,
+    SDK_AGENTSTUDIO_STREAM_ERROR,
+    INTERNAL_ERROR,
+)
 
 
 class AgentStudioError(DashScopeException):
@@ -75,13 +92,13 @@ class AgentStudioError(DashScopeException):
 class APIConnectionError(AgentStudioError):
     """Raised when the HTTP request fails before a response is read."""
 
-    code = "api_connection_error"
+    code = SDK_AGENTSTUDIO_API_CONNECTION_ERROR.name
 
 
 class APITimeoutError(APIConnectionError):
     """Raised on connect / read timeouts."""
 
-    code = "api_timeout_error"
+    code = SDK_AGENTSTUDIO_API_TIMEOUT_ERROR.name
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +107,12 @@ class APITimeoutError(APIConnectionError):
 
 
 class APIStatusError(AgentStudioError):
-    """Raised when the server returns a non-2xx status."""
+    """Raised when the server returns a non-2xx status.
+
+    Subclasses below give callers a stable type to catch. ``.code`` is always
+    the server's own value, so the class carries no information that the code
+    attribute does not -- it exists for ``except`` clauses.
+    """
 
     code = "api_status_error"
 
@@ -124,7 +146,7 @@ class OverloadedError(APIStatusError):
 
 
 class InternalServerError(APIStatusError):
-    code = "api_error"
+    code = INTERNAL_ERROR.anthropic_error_code
 
 
 # ---------------------------------------------------------------------------
@@ -135,19 +157,18 @@ class InternalServerError(APIStatusError):
 class StreamError(AgentStudioError):
     """Raised when an SSE stream encounters a fatal protocol error."""
 
-    code = "stream_error"
+    code = SDK_AGENTSTUDIO_STREAM_ERROR.name
 
 
 class StreamClosedError(StreamError):
     """Raised when consumers attempt I/O on an already-closed stream."""
 
-    code = "stream_closed"
+    code = SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR.name
 
 
 # ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
-
 
 _STATUS_TO_DEFAULT: Dict[int, type] = {
     400: InvalidRequestError,
@@ -155,6 +176,7 @@ _STATUS_TO_DEFAULT: Dict[int, type] = {
     403: PermissionDeniedError,
     404: NotFoundError,
     409: ConflictError,
+    413: InvalidRequestError,
     429: RateLimitError,
     500: InternalServerError,
     502: InternalServerError,
@@ -162,15 +184,22 @@ _STATUS_TO_DEFAULT: Dict[int, type] = {
     504: InternalServerError,
 }
 
+# Covers every anthropic_error_code the error registry can emit, plus the
+# legacy permission_denied_error / conflict_error spellings. Each entry agrees
+# with _STATUS_TO_DEFAULT for the status the registry pairs it with.
 _CODE_TO_CLASS: Dict[str, type] = {
     "invalid_request_error": InvalidRequestError,
     "authentication_error": AuthenticationError,
+    "permission_error": PermissionDeniedError,
     "permission_denied_error": PermissionDeniedError,
     "not_found_error": NotFoundError,
     "conflict_error": ConflictError,
+    "request_too_large": InvalidRequestError,
     "rate_limit_error": RateLimitError,
+    "billing_error": RateLimitError,
     "overloaded_error": OverloadedError,
     "api_error": InternalServerError,
+    "timeout_error": InternalServerError,
 }
 
 
@@ -179,16 +208,21 @@ def from_response(
     status_code: int,
     body: Any,
     headers: Optional[Mapping[str, str]] = None,
-) -> AgentStudioError:
-    """Build an :class:`AgentStudioError` instance from a HTTP response.
+) -> APIStatusError:
+    """Build an :class:`APIStatusError` instance from a HTTP response.
 
-    Accepts both the documented ``{type, error:{code,message}, request_id}``
-    shape and the pre-release ``{type, error:{error_code, error_message}}``
-    shape. Falls back to a Spring default ``{timestamp,status,error,path}``
-    when the body is not JSON-serializable.
+    Accepts the documented ``{type, error:{code,message}, request_id}`` shape,
+    the pre-release ``error:{error_code,error_message}`` shape, the classic
+    flat DashScope ``{code, message, request_id}`` envelope, and falls back to
+    a Spring default ``{timestamp,status,error,path}`` page.
 
     The ``x-request-id`` response header is preferred over the body
     ``request_id`` field (server-generated IDs are more reliable for tracing).
+
+    The server's code is preserved as-is on ``.code``; only when no code is
+    present does it fall back to the generic ``api_error``. The exception
+    class is resolved separately -- a recognized code wins, otherwise the
+    HTTP status decides.
     """
 
     code: Optional[str] = None
@@ -211,30 +245,28 @@ def from_response(
             message = err.get("message") or err.get(
                 "error_message",
             )  # TODO(bma-fix)
-        # Spring default fallback.
-        if (
-            message is None
-            and "error" in body
-            and isinstance(body["error"], str)
-        ):
+        # Spring default fallback. Its ``error`` field is a human phrase
+        # ("Not Found"), so it informs the message but never the code.
+        if message is None and isinstance(body.get("error"), str):
             message = body["error"]
-            code = body.get("error") or "api_error"
+        # Flat DashScope envelope: code/message at the top level.
+        if code is None:
+            code = body.get("code")
         if message is None:
             message = body.get("message")
 
+    # Classify before normalizing: the synthesized generic code below must not
+    # drive classification, or a bodiless 404 would report InternalServerError.
+    cls = _CODE_TO_CLASS.get(code) if code else None
+    if cls is None:
+        cls = _STATUS_TO_DEFAULT.get(status_code, APIStatusError)
+
+    if not code:
+        code = INTERNAL_ERROR.anthropic_error_code
+
     if message is None:
         message = f"HTTP {status_code}"
-    if code is None:
-        code = _STATUS_TO_DEFAULT.get(  # type: ignore[attr-defined]
-            status_code,
-            APIStatusError,
-        ).code
 
-    cls = (
-        _CODE_TO_CLASS.get(code)
-        or _STATUS_TO_DEFAULT.get(status_code)
-        or APIStatusError
-    )
     return cls(
         message,
         code=code,

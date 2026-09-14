@@ -32,7 +32,6 @@ REFERENCE_VIDEO_URLS = "reference_video_urls"
 REFERENCE_URLS = "reference_urls"
 MEDIA_URLS = "media"
 TEXT_EMBEDDING_INPUT_KEY = "texts"
-SERVICE_503_MESSAGE = "Service temporarily unavailable, possibly overloaded or not ready."  # noqa E501  # pylint: disable=line-too-long
 WEBSOCKET_ERROR_CODE = 44
 SSE_CONTENT_TYPE = "text/event-stream"
 DEPRECATED_MESSAGE = "history and auto_history are deprecated for qwen serial models and will be remove in future, use messages"  # noqa E501  # pylint: disable=line-too-long
