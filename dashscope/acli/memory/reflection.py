@@ -6,8 +6,11 @@ Monitors tool execution outcomes and provides adaptive guidance.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import shlex
+from dataclasses import dataclass, replace
 from typing import Any
 
 from dashscope.acli.utils.text import truncate_head_tail
@@ -20,6 +23,17 @@ _EVIDENCE_MAX_CHARS = 1200
 _LESSON_EVIDENCE_CHARS = 300
 # Hard cap on any lesson reaching experience memory, diagnosis included.
 _LESSON_MAX_CHARS = 600
+
+# Non-convergence thresholds. The read-only streak is our own signal and keeps
+# its calibration; the two repeat thresholds are OpenHands' production values,
+# and the futility rule is Terminal-Bench 2.0's definition of "unaware of
+# termination conditions" — pressing on after two identical failures have
+# already established that the call cannot succeed.
+REPEAT_OBSERVATION_THRESHOLD = 4
+REPEAT_ERROR_THRESHOLD = 3
+FUTILITY_THRESHOLD = 2
+# How much of a repeated call's output the escalation message quotes back.
+_REPEAT_PREVIEW_CHARS = 600
 
 # Tools that never change local state.
 _READONLY_TOOLS = frozenset(
@@ -398,30 +412,182 @@ class ReflectionTracker:
         self._clear_evidence()
 
 
-class StagnationTracker:
-    """Detects read-only stalls: long runs of inspection calls with no
-    action that changes state.
+def _call_id(tool_name: str, arguments: Any) -> tuple[str, str]:
+    """Identity of a call: tool name plus canonicalised arguments.
 
-    ReflectionTracker only fires on *failures*; a loop of successful
-    grep/cat/check calls resets it every time. This tracker closes that
-    blind spot by counting consecutive read-only calls.
+    The result is deliberately *not* part of this key — ``refuse_if_futile``
+    has to look the call up before running it, when there is no result yet.
+    """
+    try:
+        args = json.dumps(arguments or {}, sort_keys=True, ensure_ascii=False)
+    except (TypeError, ValueError):
+        args = repr(arguments)
+    return (tool_name, args)
+
+
+def _digest(result: str) -> str:
+    """Short fingerprint of a result, for "same output again" comparisons."""
+    encoded = (result or "").encode("utf-8", "replace")
+    return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+@dataclass(frozen=True)
+class _RepeatState:
+    """What the last occurrence of one call identity looked like."""
+
+    mutations: int
+    streak: int
+    ok: bool
+    digest: str
+    preview: str
+    refused: bool = False
+
+
+class StagnationTracker:
+    """Detects non-convergence: read-only stalls and repeated identical calls.
+
+    Two signatures, because they have different causes. ``readonly_streak``
+    counts inspection calls with nothing that changes state — a loop of
+    successful greps that ReflectionTracker never sees, since every success
+    resets it. The repeat counters catch the tighter loop OpenHands and
+    Terminal-Bench both flag: same call, same arguments, same result.
+
+    Counting repeats needs a state-change marker, not just a count. Without
+    one, re-running the test suite after an edit looks identical to running it
+    twice for no reason, and refusing the first would be worse than the loop.
     """
 
-    def __init__(self, threshold: int = 8):
+    def __init__(
+        self,
+        threshold: int = 8,
+        repeat_observation: int = REPEAT_OBSERVATION_THRESHOLD,
+        repeat_error: int = REPEAT_ERROR_THRESHOLD,
+        futility: int = FUTILITY_THRESHOLD,
+    ):
         self.threshold = threshold
         self.readonly_streak = 0
+        self.repeat_observation_threshold = repeat_observation
+        self.repeat_error_threshold = repeat_error
+        self.futility_threshold = futility
+        # Repeat state for the call currently under suspicion, mirrored out of
+        # _last_seen so the hint can render without a lookup.
+        self.repeat_streak = 0
+        self.repeat_ok = True
+        self.repeat_name = ""
+        self.repeat_preview = ""
+        self._last_seen: dict[tuple[str, str], _RepeatState] = {}
+        self._mutations = 0
 
-    def record(self, readonly: bool) -> None:
+    def record(
+        self,
+        readonly: bool,
+        tool_name: str = "",
+        arguments: Any = None,
+        ok: bool = True,
+        result: str = "",
+    ) -> None:
+        """Record one tool call.
+
+        ``readonly`` on its own still works and feeds only the read-only
+        streak; the repeat counters need the call identity and its outcome as
+        well.
+        """
         if readonly:
             self.readonly_streak += 1
         else:
             self.readonly_streak = 0
+        if not tool_name:
+            return
+
+        call_id = _call_id(tool_name, arguments)
+        digest = _digest(result)
+        state = self._last_seen.get(call_id)
+        # A repeat only counts while nothing changed state since the last
+        # occurrence and the outcome is byte-identical. A different result
+        # means the call is still telling us something.
+        if (
+            state
+            and state.mutations == self._mutations
+            and state.ok == ok
+            and state.digest == digest
+        ):
+            streak = state.streak + 1
+        else:
+            streak = 1
+        preview = truncate_head_tail(
+            result or "",
+            _REPEAT_PREVIEW_CHARS,
+            ratio=0.25,
+        )
+        self._last_seen[call_id] = _RepeatState(
+            mutations=self._mutations,
+            streak=streak,
+            ok=ok,
+            digest=digest,
+            preview=preview,
+        )
+        self._set_repeat(tool_name, streak, ok, preview)
+        # Only a *successful* mutating call can have changed the workspace: a
+        # failed one did not, by definition. Keying this on the read-only
+        # classifier alone would be wrong — that classifier is deliberately
+        # conservative and calls `pytest` mutating, which would mask the exact
+        # repeated-failure loop the detector exists to catch.
+        if not readonly and ok:
+            self._mutations += 1
+
+    def refuse_if_futile(self, tool_name: str, arguments: Any) -> str:
+        """Refusal text when this exact call has already failed identically.
+
+        Consulted before execution, so the loop physically cannot re-run a
+        call that has nothing left to learn from. Only failures are refused —
+        re-reading a file after thinking about it is legitimate, so a repeated
+        success escalates the hint but still runs.
+
+        The refusal counts as another occurrence and is remembered, so the
+        wording escalates instead of repeating itself unchanged while the turn
+        budget burns — which is the "unaware of termination conditions"
+        failure this exists to stop. First refusal: the call did not run, make
+        a different one. Second: a full replan is demanded.
+        """
+        call_id = _call_id(tool_name, arguments)
+        state = self._last_seen.get(call_id)
+        if state is None or state.mutations != self._mutations:
+            return ""
+        if state.ok or state.streak < self.futility_threshold:
+            return ""
+        streak = state.streak + 1
+        self._last_seen[call_id] = replace(state, streak=streak, refused=True)
+        self._set_repeat(tool_name, streak, False, state.preview)
+        if state.refused:
+            return self._replan_demand()
+        fence = _fence_for(state.preview)
+        return (
+            "\n## ⛔ Not executed: this call already failed identically\n"
+            f"`{tool_name}` has now failed {streak} times with the same "
+            "arguments and the same output, and nothing has changed state in "
+            "between. Running it again returns exactly this:\n"
+            f"{fence}\n{state.preview}\n{fence}\n"
+            "Make a DIFFERENT call, or ask the user one specific question.\n"
+        )
 
     def needs_nudge(self) -> bool:
         return self.readonly_streak >= self.threshold
 
+    def needs_replan(self) -> bool:
+        """True when a repeat threshold says the current approach is dead."""
+        if self.repeat_streak < self.futility_threshold:
+            return False
+        limit = (
+            self.repeat_error_threshold
+            if not self.repeat_ok
+            else self.repeat_observation_threshold
+        )
+        return self.repeat_streak >= limit
+
     def get_stagnation_hint(self, hard_cap: int | None = None) -> str:
         """Imperative convergence nudge; escalates as the streak grows."""
+        if self.needs_replan():
+            return self._replan_demand(hard_cap=hard_cap)
         if not self.needs_nudge():
             return ""
         n = self.readonly_streak
@@ -442,15 +608,82 @@ class StagnationTracker:
             ),
             "Do NOT announce an action and then inspect more instead.",
         ]
-        if hard_cap and hard_cap > n:
-            lines.append(
-                f"Hard stop in {hard_cap - n} more read-only calls: "
-                "produce your best-effort result and finish.",
-            )
+        lines.extend(self._hard_cap_lines(hard_cap))
         return "\n".join(lines)
+
+    def _replan_demand(self, hard_cap: int | None = None) -> str:
+        """Structural interruption: summarize, rule out, then replan.
+
+        A nudge the model can ignore is what the loop already had, and it was
+        being ignored. ADaPT's gains come from decomposition being *forced*
+        on failure rather than offered, so continuing is made conditional on
+        producing a revised plan.
+        """
+        kind = "failure" if not self.repeat_ok else "result"
+        lines = [
+            "\n\n## ⛔ Stopped: this call is being repeated",
+            (
+                f"`{self.repeat_name}` has returned the same {kind} "
+                f"{self.repeat_streak} times with nothing changing state in "
+                "between. Identical input cannot produce a different output, "
+                "so another attempt is not progress."
+            ),
+        ]
+        if self.repeat_preview:
+            fence = _fence_for(self.repeat_preview)
+            lines.append(
+                f"Last {kind}:\n{fence}\n{self.repeat_preview}\n{fence}",
+            )
+        lines.extend(
+            [
+                "Before ANY further tool call, answer in order:",
+                "1. What is established as true now, and by which output?",
+                "2. Which approaches are ruled out, and by which output?",
+                (
+                    "3. What is the revised plan? If it is worth writing "
+                    "down, call create_plan."
+                ),
+                (
+                    "A structurally different call, or one specific question "
+                    "to the user, both count as progress. This call again "
+                    "does not."
+                ),
+            ],
+        )
+        lines.extend(self._hard_cap_lines(hard_cap))
+        return "\n".join(lines) + "\n"
+
+    def _hard_cap_lines(self, hard_cap: int | None) -> list[str]:
+        """The oneshot countdown, when a read-only streak is what's capped."""
+        if not hard_cap or not self.readonly_streak:
+            return []
+        if hard_cap <= self.readonly_streak:
+            return []
+        return [
+            f"Hard stop in {hard_cap - self.readonly_streak} more read-only "
+            "calls: produce your best-effort result and finish.",
+        ]
+
+    def _set_repeat(
+        self,
+        name: str,
+        streak: int,
+        ok: bool,
+        preview: str,
+    ) -> None:
+        self.repeat_name = name
+        self.repeat_streak = streak
+        self.repeat_ok = ok
+        self.repeat_preview = preview
 
     def reset(self) -> None:
         self.readonly_streak = 0
+        self.repeat_streak = 0
+        self.repeat_ok = True
+        self.repeat_name = ""
+        self.repeat_preview = ""
+        self._last_seen.clear()
+        self._mutations = 0
 
 
 def convergence_hint(

@@ -501,10 +501,12 @@ class Agent:
         )
 
     def _stagnation_section(self) -> str:
-        """Inject a convergence nudge on long read-only streaks."""
+        """Inject a nudge on read-only stalls or repeated identical calls.
+
+        ``get_stagnation_hint`` returns "" until one of those fires, so the
+        tracker — not this method — decides whether the turn gets a section.
+        """
         tracker = self.memory_manager.session.stagnation
-        if not tracker.needs_nudge():
-            return ""
         cap = self.readonly_hard_cap if self.oneshot else None
         return tracker.get_stagnation_hint(hard_cap=cap)
 
@@ -1112,6 +1114,25 @@ class Agent:
         if tool_call.name not in self._current_turn_tools:
             self._current_turn_tools.append(tool_call.name)
 
+        # Futility refusal, checked before the hook so the user is never asked
+        # to approve a call that will not run. Identical input cannot produce
+        # a different output, so a repeat of an unchanged failure is refused
+        # rather than nudged: the nudge was already being ignored.
+        refusal = self.memory_manager.session.stagnation.refuse_if_futile(
+            tool_call.name,
+            tool_call.arguments,
+        )
+        if refusal:
+            from dashscope.acli.audit import get_audit_logger
+
+            get_audit_logger().log_tool_call(
+                tool_call.name,
+                tool_call.arguments,
+                decision="denied",
+                reason="futility: identical failure, no state change since",
+            )
+            return refusal
+
         # Before-tool-call hooks
         before_ctx = HookContext(
             event="before_tool_call",
@@ -1237,6 +1258,10 @@ class Agent:
             )
             self.memory_manager.session.stagnation.record(
                 is_readonly_tool_call(tool_call.name, tool_call.arguments),
+                tool_name=tool_call.name,
+                arguments=tool_call.arguments,
+                ok=success,
+                result=outcome.text,
             )
             if success:
                 self._turn_tool_successes += 1
