@@ -756,6 +756,38 @@ class TestCliMain:
         assert "Create deployment failed: deployment failed" in result.output
         assert "Traceback" not in result.output
 
+    def test_deployments_create_exits_nonzero_when_status_poll_fails(
+        self,
+        monkeypatch,
+    ):
+        def mock_call(**kwargs):
+            return SimpleNamespace(
+                status_code=200,
+                output={"deployed_model": "deploy-1"},
+            )
+
+        def mock_get(*_args, **_kwargs):
+            raise RuntimeError("network down")
+
+        monkeypatch.setattr(
+            "dashscope.cli.deployments.dashscope.Deployments.call",
+            mock_call,
+        )
+        monkeypatch.setattr(
+            "dashscope.cli.deployments.dashscope.Deployments.get",
+            mock_get,
+        )
+
+        result = CliRunner().invoke(
+            cli_app,
+            ["deployments", "create", "--model", "qwen", "--plan", "ptu"],
+        )
+
+        assert result.exit_code == 1
+        assert "Failed to check deployment status" in result.output
+        assert "deployments get deploy-1" in result.output
+        assert "Traceback" not in result.output
+
     def test_application_response_without_usage_is_supported(
         self,
         monkeypatch,
