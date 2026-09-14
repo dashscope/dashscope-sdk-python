@@ -67,11 +67,15 @@ class _RootCauseMixin:
     def _get_registry_message(self, error_code: str) -> str:
         """Get the registry message for the given error code name.
 
-        Returns empty string if not found.
+        Returns empty string if not found or if the message contains
+        unfilled placeholders.
         """
         for err_def in INTERNAL_ERRORS:
             if err_def.name == error_code:
-                return err_def.format_message()
+                msg = err_def.format_message()
+                if err_def.vars and "{" in msg:
+                    return ""
+                return msg
         return ""
 
 
