@@ -15,11 +15,12 @@ from dashscope.acli.compression import (
     HARD_THRESHOLD_RATIO,
     estimate_message_tokens,
     estimate_tokens,
+    restore_note,
     safety_compress_if_needed,
     shrink_old_tool_messages,
 )
 from dashscope.acli.config import WORKSPACE_DIR, context_window_for_model
-from dashscope.acli.executor import EXEC_ERROR_PREFIX, Executor
+from dashscope.acli.executor import Executor
 from dashscope.acli.hooks import HookBus, HookContext, create_hook_bus
 from dashscope.acli.memory.manager import MemoryManager
 from dashscope.acli.memory.reflection import (
@@ -44,15 +45,6 @@ from dashscope.acli.utils import (
 
 console = Console()
 
-# Tool results are plain strings; outcome classification relies on these
-# prefixes. "Error" marks validation / unknown-tool failures,
-# EXEC_ERROR_PREFIX marks executor exceptions, "Cancelled" marks user
-# rejection/cancellation. The Chinese variants are kept so results from
-# external tools / MCP servers that still return Chinese text are also
-# classified correctly.
-_TOOL_ERROR_PREFIXES = ("错误", "Error", EXEC_ERROR_PREFIX)
-_TOOL_CANCEL_PREFIXES = ("操作已取消", "Cancelled")
-
 
 def _classify_outcome(successes: int, failures: int) -> str:
     """Classify a turn's outcome from its tool execution counters.
@@ -65,6 +57,25 @@ def _classify_outcome(successes: int, failures: int) -> str:
     if failures > 0 and successes == 0:
         return "failure"
     return "partial"
+
+
+def _tool_message(tool_call: ToolCall, result: str) -> dict:
+    """Build the history entry answering ``tool_call``.
+
+    The restore note must be attached here, at truncation time: later
+    shrinking skips a result that already carries an omission marker, so the
+    largest results would end up with no way to be read back.
+    """
+    return {
+        "role": "tool",
+        "content": tool_result_for_history(
+            result,
+            note=restore_note(tool_call.name, tool_call.arguments),
+        ),
+        "name": tool_call.name,
+        "tool_use_id": tool_call.id,
+        "tool_call_id": tool_call.id,
+    }
 
 
 SYSTEM_PROMPT = """You are acli, an intelligent command-line assistant.
@@ -645,15 +656,30 @@ class Agent:
                         f"messages → {len(self.messages)}[/dim]",
                     )
 
-            # Inject reflection hint while repeated failures persist; assign
-            # unconditionally so the hint disappears once failures stop.
-            # The hint is appended, keeping the cache-friendly prefix stable.
-            reflection_hint = self._reflection_section()
-            messages_with_system[0]["content"] = (
-                system_prompt
-                + reflection_hint
+            # Reflection / stagnation / convergence hints are volatile, so
+            # they ride at the tail of the request instead of being folded
+            # into the system message. Rewriting messages_with_system[0] on
+            # every iteration changed the whole prompt prefix byte-for-byte and
+            # defeated provider-side prompt caching, where cached input costs
+            # roughly a tenth of uncached. The system message and the
+            # accumulated history below it stay append-only and byte-stable.
+            #
+            # The hint has to be a user message, not a second system message:
+            # the Anthropic converter keeps only the last system message, so a
+            # second one would replace the real prompt outright, and the Tongyi
+            # converter only reads messages[0] as system.
+            #
+            # _reflection_section records an experience lesson as a side
+            # effect, so it must still run exactly once per iteration.
+            hint = (
+                self._reflection_section()
                 + self._stagnation_section()
                 + self._convergence_section(_loop_i)
+            ).strip()
+            request_messages = (
+                [*messages_with_system, {"role": "user", "content": hint}]
+                if hint
+                else messages_with_system
             )
 
             # Hard stop for read-only stalls in oneshot mode: finish with
@@ -697,7 +723,7 @@ class Agent:
                 try:
                     async for chunk in self.provider.chat_stream(
                         normalize_for_model(
-                            messages_with_system,
+                            request_messages,
                             self.model_name,
                         ),
                         tools_schema,
@@ -756,11 +782,11 @@ class Agent:
 
             # Log LLM call trace
             self.executor.record_prompt_composition(
-                messages_with_system,
+                request_messages,
                 tools_schema,
             )
             self.trace_logger.log_llm_call(
-                messages=messages_with_system,
+                messages=request_messages,
                 tools=tools_schema,
                 response={
                     "content": full_content,
@@ -875,13 +901,7 @@ class Agent:
                         f"\n[{tool_call.name}] →\n"
                         f"{tool_result_for_display(tool_call.name, result)}\n"
                     )
-                    tool_msg = {
-                        "role": "tool",
-                        "content": tool_result_for_history(result),
-                        "name": tool_call.name,
-                        "tool_use_id": tool_call.id,
-                        "tool_call_id": tool_call.id,
-                    }
+                    tool_msg = _tool_message(tool_call, result)
                     self.messages.append(tool_msg)
                     messages_with_system.append(tool_msg)
 
@@ -910,13 +930,7 @@ class Agent:
                             result,
                         )
                         yield f"\n[{tool_call.name}] →\n{rendered}\n"
-                        tool_msg = {
-                            "role": "tool",
-                            "content": tool_result_for_history(result),
-                            "name": tool_call.name,
-                            "tool_use_id": tool_call.id,
-                            "tool_call_id": tool_call.id,
-                        }
+                        tool_msg = _tool_message(tool_call, result)
                         self.messages.append(tool_msg)
                         messages_with_system.append(tool_msg)
                         answered_ids.add(tool_call.id)
@@ -1115,13 +1129,13 @@ class Agent:
                 return "Cancelled"
 
         start_time = time.time()
-        result = await self.executor.execute(tool_def, tool_call.arguments)
-        duration_ms = int((time.time() - start_time) * 1000)
-        success = not result.startswith(
-            _TOOL_ERROR_PREFIXES,
-        ) and not result.startswith(
-            _TOOL_CANCEL_PREFIXES,
+        outcome = await self.executor.execute_detailed(
+            tool_def,
+            tool_call.arguments,
         )
+        duration_ms = int((time.time() - start_time) * 1000)
+        result = outcome.text
+        success = outcome.ok
         self.trace_logger.log_tool_execution(
             tool_call.name,
             tool_call.arguments,
@@ -1172,11 +1186,13 @@ class Agent:
                 "result": result,
                 "duration_ms": duration_ms,
                 "success": success,
+                "signal_kind": outcome.signal_kind,
+                "exit_code": outcome.exit_code,
             },
         )
         # Reflection counts only real failures — user rejection/cancellation
         # is neutral and must not feed the consecutive-failure counter.
-        if not result.startswith(_TOOL_CANCEL_PREFIXES):
+        if not outcome.cancelled:
             self.memory_manager.record_tool_execution(tool_call.name, success)
             self.memory_manager.session.stagnation.record(
                 is_readonly_tool_call(tool_call.name, tool_call.arguments),
@@ -1187,7 +1203,7 @@ class Agent:
                 self._turn_tool_failures += 1
 
         # Add fallback hints for common failures
-        if not success and result.startswith(_TOOL_ERROR_PREFIXES):
+        if not success and not outcome.cancelled:
             fallback_hint = (
                 self.memory_manager.session.tool_chains.get_fallback_hints(
                     tool_call.name,
