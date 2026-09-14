@@ -56,7 +56,6 @@ from dashscope.finetune.reinforcement.common.errors import (
     BasePermissionError,
     IOErrorWithCode,
     RuntimeErrorWithCode,
-    TimeoutErrorWithCode,
     ValueErrorWithCode,
 )
 from dashscope.finetune.reinforcement.common.log import logger
@@ -194,7 +193,6 @@ __all__ = [
     "BasePermissionError",
     "IOErrorWithCode",
     "RuntimeErrorWithCode",
-    "TimeoutErrorWithCode",
     "ValueErrorWithCode",
     # Logging
     "logger",

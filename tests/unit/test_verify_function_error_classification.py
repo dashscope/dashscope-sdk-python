@@ -17,7 +17,6 @@ from dashscope.finetune.reinforcement import FunctionType
 from dashscope.finetune.reinforcement.common.errors import (
     InstanceQueryError,
     OutputError,
-    TimeoutErrorWithCode,
     ValidationError,
 )
 from dashscope.finetune.reinforcement.common.model import (
@@ -93,7 +92,7 @@ class TestVerificationFailuresKeepTheirType:
             with patch(
                 f"{_MODEL}.client_fc",
                 new=AsyncMock(
-                    side_effect=TimeoutErrorWithCode("Request timeout (600s)"),
+                    side_effect=TimeoutError("Request timeout (600s)"),
                 ),
             ):
                 with pytest.raises(TimeoutError) as exc_info:
@@ -102,7 +101,7 @@ class TestVerificationFailuresKeepTheirType:
                         "inst-1",
                     )
 
-        assert "600s" in exc_info.value.message
+        assert "600s" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_unexpected_failure_is_still_wrapped(self):
@@ -173,7 +172,7 @@ class TestTestFunctionsReportsServiceFailuresAs5xx:
                 DashScopeException,
             ),
             (
-                TimeoutErrorWithCode("Request timeout (600s)"),
+                TimeoutError("Request timeout (600s)"),
                 504,
                 "GatewayTimeoutError",
                 DashScopeException,
@@ -231,7 +230,7 @@ class TestTestFunctionsReportsServiceFailuresAs5xx:
                 "dashscope.finetune.agentic_rl."
                 "AgenticRLFunctionComponent.verify_function",
                 new=AsyncMock(
-                    side_effect=TimeoutErrorWithCode("Request timeout (600s)"),
+                    side_effect=TimeoutError("Request timeout (600s)"),
                 ),
             ):
                 with pytest.raises(DashScopeException):

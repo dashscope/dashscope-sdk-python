@@ -28,7 +28,6 @@ from dashscope.finetune.reinforcement.common.errors import (
     ConfigurationError,
     BasePermissionError,
     RuntimeErrorWithCode,
-    TimeoutErrorWithCode,
     OSSUploadError,
 )
 from dashscope.finetune.reinforcement import (
@@ -128,7 +127,7 @@ async def async_http_request(
     except InputError:
         raise
     except asyncio.TimeoutError as e:
-        raise TimeoutErrorWithCode(
+        raise TimeoutError(
             f"Request timeout ({timeout}s)",
         ) from e
     except aiohttp.ClientError as e:
