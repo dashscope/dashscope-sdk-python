@@ -760,7 +760,7 @@ class TestCliMain:
         self,
         monkeypatch,
     ):
-        def mock_call(**kwargs):
+        def mock_call(**_kwargs):
             return SimpleNamespace(
                 status_code=200,
                 output={"deployed_model": "deploy-1"},
