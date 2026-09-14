@@ -306,6 +306,7 @@ class Agent:
         self._turn_tool_successes = 0
         self._turn_tool_failures = 0
         self._reflection_lesson_recorded = False
+        self._reflection_hint_injected = False
         # Per-turn counters for the TUI status line
         self.turn_tool_calls = 0
         self.turn_subagents = 0
@@ -458,26 +459,46 @@ class Agent:
             return ""
 
     def _reflection_section(self) -> str:
-        """Inject reflection hints when repeated failures detected."""
+        """Inject an evidence-anchored hint on repeated tool failures.
+
+        The lesson is deliberately *not* recorded here. This runs before the
+        model has answered, so all it could capture was the tracker's own
+        summary of a count. The diagnosis the model writes in response to the
+        anchored hint is what makes a lesson recallable on a similar task
+        later, so ``_record_reflection_lesson`` picks it up after the stream.
+        """
         tracker = self.memory_manager.session.reflection
-        if tracker.needs_reflection():
-            # Also record lesson in experience memory — once per turn, since
-            # this section is re-evaluated on every loop iteration.
-            lesson = tracker.get_failure_lesson()
-            if (
-                lesson
-                and self._current_turn_tools
-                and not self._reflection_lesson_recorded
-            ):
-                self._reflection_lesson_recorded = True
-                self.memory_manager.record_experience(
-                    task_summary="repeated tool failures",
-                    tools_used=self._current_turn_tools,
-                    outcome="failure",
-                    lesson=lesson,
-                )
-            return tracker.get_reflection_hint()
-        return ""
+        if not tracker.needs_reflection():
+            return ""
+        hint = tracker.get_reflection_hint()
+        if hint and self._current_turn_tools:
+            self._reflection_hint_injected = True
+        return hint
+
+    def _record_reflection_lesson(self, diagnosis: str) -> None:
+        """Persist the model's own failure diagnosis, once per turn.
+
+        Called with the response to a turn that carried a reflection hint. An
+        empty ``diagnosis`` — no content, or a stream cut short — falls back
+        to the tracker's evidence summary, so a turn that hit the failure
+        threshold still leaves something recallable behind.
+        """
+        if not self._reflection_hint_injected:
+            return
+        if self._reflection_lesson_recorded:
+            return
+        tracker = self.memory_manager.session.reflection
+        lesson = tracker.get_failure_lesson(diagnosis=diagnosis)
+        if not lesson:
+            return
+        self._reflection_lesson_recorded = True
+        self._reflection_hint_injected = False
+        self.memory_manager.record_experience(
+            task_summary="repeated tool failures",
+            tools_used=self._current_turn_tools,
+            outcome="failure",
+            lesson=lesson,
+        )
 
     def _stagnation_section(self) -> str:
         """Inject a convergence nudge on long read-only streaks."""
@@ -595,6 +616,9 @@ class Agent:
         self._turn_tool_successes = 0
         self._turn_tool_failures = 0
         self._reflection_lesson_recorded = False
+        # Cleared with the tracker below: a hint from the previous turn must
+        # not license recording a lesson from this turn's first response.
+        self._reflection_hint_injected = False
 
         # Reset reflection tracker for new turn
         self.memory_manager.session.reflection.reset()
@@ -669,8 +693,9 @@ class Agent:
             # second one would replace the real prompt outright, and the Tongyi
             # converter only reads messages[0] as system.
             #
-            # _reflection_section records an experience lesson as a side
-            # effect, so it must still run exactly once per iteration.
+            # All three sections are rebuilt every iteration because tracker
+            # state changes as tools run; each returns "" when its condition
+            # is not met, so an empty hint costs no message at all.
             hint = (
                 self._reflection_section()
                 + self._stagnation_section()
@@ -803,6 +828,13 @@ class Agent:
                 duration_ms=int((time.monotonic() - llm_start) * 1000),
                 model=self.model_name,
             )
+
+            # If this iteration carried a reflection hint, its answer is the
+            # diagnosis worth remembering. Placed before both exits from the
+            # iteration so neither path can skip it, and before the
+            # truncation warning is appended below so the stored lesson is
+            # the model's own text.
+            self._record_reflection_lesson(full_content)
 
             # Filter out invalid tool calls
             tool_calls = [tc for tc in tool_calls if tc.name]
@@ -1191,9 +1223,18 @@ class Agent:
             },
         )
         # Reflection counts only real failures — user rejection/cancellation
-        # is neutral and must not feed the consecutive-failure counter.
+        # is neutral and must not feed the consecutive-failure counter. The
+        # outcome text goes along with the verdict: the hint quotes it back
+        # verbatim, and outcome.text is the raw output as classified, before
+        # any fallback hint was appended to `result`.
         if not outcome.cancelled:
-            self.memory_manager.record_tool_execution(tool_call.name, success)
+            self.memory_manager.record_tool_execution(
+                tool_call.name,
+                success,
+                evidence=outcome.text,
+                signal_kind=outcome.signal_kind,
+                exit_code=outcome.exit_code,
+            )
             self.memory_manager.session.stagnation.record(
                 is_readonly_tool_call(tool_call.name, tool_call.arguments),
             )

@@ -310,8 +310,13 @@ class TestReflectionTracker:
         tracker.record_failure("read_file")
         tracker.record_failure("read_file")
         hint = tracker.get_reflection_hint()
-        # "read_file" should appear once in the joined set
-        assert hint.count("read_file") == 1
+        # "read_file" appears once in the joined set. The verdict line names
+        # the last failing tool again, which is a second deliberate mention,
+        # so the dedup claim has to be checked on the summary line alone.
+        summary = next(
+            ln for ln in hint.splitlines() if "consecutive failures" in ln
+        )
+        assert summary.count("read_file") == 1
 
     def test_record_tool_execution_routes_success(self):
         tracker = ReflectionTracker(threshold=3)
