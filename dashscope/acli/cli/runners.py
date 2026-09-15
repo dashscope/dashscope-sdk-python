@@ -4,7 +4,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 import sys
+import time
+from pathlib import Path
 
 from rich.console import Console
 
@@ -31,6 +35,38 @@ from dashscope.acli.session import get_session_manager
 from dashscope.acli.skills import list_known_services
 
 console = Console()
+
+# How often a harness-observed run re-persists its usage totals.
+_USAGE_FLUSH_SEC = 15.0
+
+
+def _write_usage_file(path: str, executor: Executor) -> None:
+    """Persist this run's token totals to ``path`` for an external harness.
+
+    A file rather than stdout because the harness that sets
+    ``ACLI_USAGE_FILE`` (Terminal-Bench) drives acli through tmux, and a
+    30-minute run scrolls its final lines out of the capturable pane.
+
+    Flushed periodically rather than once at the end for the same audience:
+    the runs that most need measuring are the ones killed by an in-container
+    ``timeout``, which never reach a final write.
+    """
+    stats = executor.get_stats()
+    usage = stats["token_usage"]
+    payload = {
+        "input_tokens": usage["input_tokens"],
+        "output_tokens": usage["output_tokens"],
+        "total_tokens": usage["total_tokens"],
+        "cached_tokens": usage["cached_tokens"],
+        "api_calls": stats["api_calls"],
+        "tool_calls": stats["total_tool_calls"],
+        "duration_sec": round(stats["session_duration"], 3),
+    }
+    try:
+        Path(path).write_text(json.dumps(payload), encoding="utf-8")
+    except OSError:
+        # Observability must never be the reason a run fails.
+        pass
 
 
 async def _run_oneshot(config: Config, prompt: str):
@@ -121,10 +157,17 @@ async def _run_oneshot(config: Config, prompt: str):
         audio_clips = []
     agent_input = _to_multimodal_content(expanded, images, audio_clips)
 
+    usage_path = os.environ.get("ACLI_USAGE_FILE", "")
+    next_flush = time.monotonic() + _USAGE_FLUSH_SEC
     async for chunk in agent.run_stream(agent_input):
         sys.stdout.write(chunk)
         sys.stdout.flush()
+        if usage_path and time.monotonic() >= next_flush:
+            _write_usage_file(usage_path, executor)
+            next_flush = time.monotonic() + _USAGE_FLUSH_SEC
     sys.stdout.write("\n")
+    if usage_path:
+        _write_usage_file(usage_path, executor)
 
 
 def _run_dry_run(config: Config):
