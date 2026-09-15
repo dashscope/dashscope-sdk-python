@@ -3,6 +3,7 @@ from __future__ import annotations
 
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+import time
 from typing import Union, List, Optional, ClassVar, Dict, Any
 from typing_extensions import Self
 
@@ -43,6 +44,7 @@ from dashscope.finetune.reinforcement import (
 from dashscope.finetune.reinforcement.common.errors import (
     RegistrationError,
     ValidationError,
+    InstanceQueryError,
     RuntimeErrorWithCode,
     ValueErrorWithCode,
     DatasetsError,
@@ -426,7 +428,28 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         functype: FunctionType,
         input_data: Dict[str, Any],
         api_key: str = None,
+        pull_logs: bool = False,
+        log_page_size: int = 100,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
     ):
+        """Test a deployed function instance with custom input data.
+
+        Args:
+            instance_id: Target function instance ID.
+            functype: Function type (ROLLOUT/REWARD/GROUP_REWARD).
+            input_data: Test input payload.
+            api_key: DashScope API key (uses DASHSCOPE_API_KEY env var
+                if omitted).
+            pull_logs: If True, pull all logs of the function instance
+                (with pagination) after verification and print them
+                between separator markers.
+            log_page_size: Page size used when pulling logs.
+            start_time: Optional start time filter (in seconds) for log
+                pulling. Defaults to 24 hours before ``end_time``.
+            end_time: Optional end time filter (in seconds) for log
+                pulling. Defaults to the current time (now).
+        """
         try:
             set_api_key(api_key)
 
@@ -450,13 +473,197 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
                 },
             )
 
-            return await AgenticRLFunctionComponent.verify_function(
+            result = await AgenticRLFunctionComponent.verify_function(
                 value,
                 instance_id,
             )
+
+            if pull_logs:
+                await cls._pull_function_instance_logs(
+                    function_instance_id=instance_id,
+                    page_size=log_page_size,
+                    start_time=start_time,
+                    end_time=end_time,
+                )
+
+            return result
 
         except Exception as e:
             raise ValidationError(
                 "Function test failed",
                 error_code=3008,
             ) from e
+
+    @classmethod
+    async def query_function_instance_logs(
+        cls,
+        function_instance_id: str,
+        page_number: int = 1,
+        page_size: int = 100,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        keywords: Optional[List[str]] = None,
+        api_key: str = None,
+    ) -> Dict[str, Any]:
+        """Query one page of logs for a function (faas) instance.
+
+        Args:
+            function_instance_id: Target function instance ID.
+            page_number: Page number, starting from 1.
+            page_size: Number of log entries per page.
+            start_time: Optional start time filter (in seconds).
+            end_time: Optional end time filter (in seconds).
+            keywords: Optional keyword filters for log messages.
+            api_key: DashScope API key (uses DASHSCOPE_API_KEY env var
+                if omitted).
+
+        Returns:
+            Raw response dict of the log query API.
+        """
+        try:
+            set_api_key(api_key)
+
+            fc_component = AgenticRLFunctionComponent
+            return await fc_component.query_function_instance_logs(
+                function_instance_id=function_instance_id,
+                page_number=page_number,
+                page_size=page_size,
+                start_time=start_time,
+                end_time=end_time,
+                keywords=keywords,
+            )
+
+        except Exception as e:
+            if hasattr(e, "error_code"):
+                raise
+            raise InstanceQueryError(
+                "Function instance log query failed",
+                error_code=3009,
+            ) from e
+
+    @classmethod
+    async def query_all_function_instance_logs(
+        cls,
+        function_instance_id: str,
+        page_size: int = 100,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        keywords: Optional[List[str]] = None,
+        api_key: str = None,
+    ) -> List[str]:
+        """Fetch all logs of a function (faas) instance.
+
+        Pages are fetched one by one via the paginated log query until
+        all entries are collected.
+
+        Args:
+            function_instance_id: Target function instance ID.
+            page_size: Number of log entries per page.
+            start_time: Optional start time filter (in seconds).
+            end_time: Optional end time filter (in seconds).
+            keywords: Optional keyword filters for log messages.
+            api_key: DashScope API key (uses DASHSCOPE_API_KEY env var
+                if omitted).
+
+        Returns:
+            Aggregated list of log messages across all pages.
+        """
+        try:
+            set_api_key(api_key)
+
+            fc_component = AgenticRLFunctionComponent
+            return await fc_component.query_all_function_instance_logs(
+                function_instance_id=function_instance_id,
+                page_size=page_size,
+                start_time=start_time,
+                end_time=end_time,
+                keywords=keywords,
+            )
+
+        except Exception as e:
+            if hasattr(e, "error_code"):
+                raise
+            raise InstanceQueryError(
+                "Function instance log query failed",
+                error_code=3010,
+            ) from e
+
+    @classmethod
+    async def delete_function_instance(
+        cls,
+        function_instance_id: str,
+        api_key: str = None,
+    ) -> Dict[str, Any]:
+        """Delete a function (faas) runtime instance.
+
+        Args:
+            function_instance_id: Target function instance ID.
+            api_key: DashScope API key (uses DASHSCOPE_API_KEY env var
+                if omitted).
+
+        Returns:
+            Raw response dict of the delete API, containing
+            ``data.status`` (e.g. "deleted") and
+            ``data.sandbox_code``.
+
+        Raises:
+            InstanceQueryError: If the deletion fails.
+        """
+        try:
+            set_api_key(api_key)
+
+            fc_component = AgenticRLFunctionComponent
+            return await fc_component.delete_function_instance(
+                function_instance_id=function_instance_id,
+            )
+
+        except Exception as e:
+            if hasattr(e, "error_code"):
+                raise
+            raise InstanceQueryError(
+                "Function instance deletion failed",
+                error_code=3011,
+            ) from e
+
+    @classmethod
+    async def _pull_function_instance_logs(
+        cls,
+        function_instance_id: str,
+        page_size: int = 100,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+    ) -> None:
+        """Pull all logs of a function instance and print them between
+        separator markers (best effort, never raises).
+
+        When ``start_time``/``end_time`` are not provided, defaults to
+        pulling logs from 24 hours ago until now.
+        """
+        if end_time is None:
+            end_time = int(time.time())
+        if start_time is None:
+            start_time = end_time - 24 * 60 * 60
+        logger.info(
+            "************start query log "
+            f"(function_instance_id={function_instance_id})*******",
+        )
+        try:
+            logs = await cls.query_all_function_instance_logs(
+                function_instance_id=function_instance_id,
+                page_size=page_size,
+                start_time=start_time,
+                end_time=end_time,
+            )
+            for entry in logs:
+                logger.info(f"[function instance log] {entry}")
+            logger.info(
+                f"Pulled {len(logs)} log entries for function instance "
+                f"{function_instance_id}",
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to pull logs for function instance "
+                f"{function_instance_id}: {e}",
+            )
+        finally:
+            logger.info("************end query log *******")

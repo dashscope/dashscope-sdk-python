@@ -26,6 +26,17 @@ def _generate_ro_id(length: int) -> str:
     return "ro-" + hashlib.sha1(uuid.uuid4().bytes).hexdigest()[:length]
 
 
+def _normalize_error_code(v: Any) -> Any:
+    """Coerce ``int`` error codes to ``str``; pass other values through.
+
+    The protocol keeps ``error_code`` as a string, so passing an int no
+    longer hard-fails validation and downstream always receives a str.
+    """
+    if isinstance(v, int) and not isinstance(v, bool):
+        return str(v)
+    return v
+
+
 # ========================================================================== #
 #                              Enum Definitions                              #
 # ========================================================================== #

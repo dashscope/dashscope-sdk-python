@@ -5,11 +5,12 @@ component/data/reward_output.py
 Data model definitions for Reward processor output results.
 """
 
-from typing import Dict, Optional
-from pydantic import BaseModel, Field
+from typing import Any, Dict, Optional
+from pydantic import BaseModel, Field, field_validator
 
 from dashscope.finetune.reinforcement.component.data.base_data_model import (
     TaskStatus,
+    _normalize_error_code,
 )
 
 
@@ -55,6 +56,16 @@ class RewardOutput(BaseModel):
         default=None,
         description="Error details if the reward computation failed.",
     )
+    error_code: Optional[str] = Field(
+        default=None,
+        description="Error code if the reward computation failed.",
+    )
+
+    @field_validator("error_code", mode="before")
+    @classmethod
+    def normalize_error_code(cls, v: Any) -> Any:
+        """Normalize int error codes to str (protocol stays string)."""
+        return _normalize_error_code(v)
 
     class Config:
         extra = "allow"
