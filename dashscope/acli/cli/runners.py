@@ -7,7 +7,8 @@ from __future__ import annotations
 import json
 import os
 import sys
-import time
+import threading
+from collections.abc import Callable
 from pathlib import Path
 
 from rich.console import Console
@@ -62,11 +63,51 @@ def _write_usage_file(path: str, executor: Executor) -> None:
         "tool_calls": stats["total_tool_calls"],
         "duration_sec": round(stats["session_duration"], 3),
     }
+    target = Path(path)
     try:
-        Path(path).write_text(json.dumps(payload), encoding="utf-8")
+        # Replaced rather than written in place: the harness reads this from
+        # the host while acli is still running, and keeps reading it after the
+        # trial has been abandoned, so a torn write costs the whole trial's
+        # numbers rather than one tick's.
+        tmp = target.with_name(target.name + ".tmp")
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(tmp, target)
     except OSError:
         # Observability must never be the reason a run fails.
         pass
+
+
+def _start_usage_flusher(path: str, executor: Executor) -> Callable[[], None]:
+    """Re-persist usage from a daemon thread; return its stop callable.
+
+    A thread, not a write keyed off the output stream or an asyncio timer:
+    the runs worth measuring are wedged inside ``run_stream``, where no chunk
+    arrives to trigger a write and a blocked event loop starves a timer just
+    as thoroughly. The last flush before the wedge is what survives a later
+    SIGKILL, so ``duration_sec`` also records how long the process stayed
+    alive after it went quiet.
+    """
+    stop = threading.Event()
+
+    def _flush_loop() -> None:
+        while not stop.wait(_USAGE_FLUSH_SEC):
+            try:
+                _write_usage_file(path, executor)
+            except Exception:  # pylint: disable=broad-except
+                # get_stats() copies dicts the main thread is mutating, so a
+                # tick can race. Losing it is fine; killing the run is not.
+                pass
+
+    thread = threading.Thread(target=_flush_loop, daemon=True)
+    thread.start()
+
+    def _stop() -> None:
+        stop.set()
+        # Joined, not just signalled: the caller writes once more afterwards,
+        # and two writers sharing one temp path would clobber each other.
+        thread.join(timeout=5.0)
+
+    return _stop
 
 
 async def _run_oneshot(config: Config, prompt: str):
@@ -158,13 +199,20 @@ async def _run_oneshot(config: Config, prompt: str):
     agent_input = _to_multimodal_content(expanded, images, audio_clips)
 
     usage_path = os.environ.get("ACLI_USAGE_FILE", "")
-    next_flush = time.monotonic() + _USAGE_FLUSH_SEC
-    async for chunk in agent.run_stream(agent_input):
-        sys.stdout.write(chunk)
-        sys.stdout.flush()
-        if usage_path and time.monotonic() >= next_flush:
-            _write_usage_file(usage_path, executor)
-            next_flush = time.monotonic() + _USAGE_FLUSH_SEC
+    stop_flusher = None
+    if usage_path:
+        # Written before the first chunk as well: a run that wedges immediately
+        # still has to leave proof that ACLI_USAGE_FILE reached it.
+        _write_usage_file(usage_path, executor)
+        stop_flusher = _start_usage_flusher(usage_path, executor)
+    try:
+        async for chunk in agent.run_stream(agent_input):
+            sys.stdout.write(chunk)
+            sys.stdout.flush()
+    finally:
+        # Stopped before the trailing write so the two cannot interleave.
+        if stop_flusher is not None:
+            stop_flusher()
     sys.stdout.write("\n")
     if usage_path:
         _write_usage_file(usage_path, executor)
