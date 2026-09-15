@@ -3,6 +3,7 @@ from __future__ import annotations
 
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
+import time
 from typing import Union, List, Optional, ClassVar, Dict, Any
 from typing_extensions import Self
 
@@ -429,6 +430,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         api_key: str = None,
         pull_logs: bool = False,
         log_page_size: int = 100,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
     ):
         """Test a deployed function instance with custom input data.
 
@@ -442,6 +445,10 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
                 (with pagination) after verification and print them
                 between separator markers.
             log_page_size: Page size used when pulling logs.
+            start_time: Optional start time filter (in seconds) for log
+                pulling. Defaults to 24 hours before ``end_time``.
+            end_time: Optional end time filter (in seconds) for log
+                pulling. Defaults to the current time (now).
         """
         try:
             set_api_key(api_key)
@@ -475,6 +482,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
                 await cls._pull_function_instance_logs(
                     function_instance_id=instance_id,
                     page_size=log_page_size,
+                    start_time=start_time,
+                    end_time=end_time,
                 )
 
             return result
@@ -580,13 +589,60 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             ) from e
 
     @classmethod
+    async def delete_function_instance(
+        cls,
+        function_instance_id: str,
+        api_key: str = None,
+    ) -> Dict[str, Any]:
+        """Delete a function (faas) runtime instance.
+
+        Args:
+            function_instance_id: Target function instance ID.
+            api_key: DashScope API key (uses DASHSCOPE_API_KEY env var
+                if omitted).
+
+        Returns:
+            Raw response dict of the delete API, containing
+            ``data.status`` (e.g. "deleted") and
+            ``data.sandbox_code``.
+
+        Raises:
+            InstanceQueryError: If the deletion fails.
+        """
+        try:
+            set_api_key(api_key)
+
+            fc_component = AgenticRLFunctionComponent
+            return await fc_component.delete_function_instance(
+                function_instance_id=function_instance_id,
+            )
+
+        except Exception as e:
+            if hasattr(e, "error_code"):
+                raise
+            raise InstanceQueryError(
+                "Function instance deletion failed",
+                error_code=3011,
+            ) from e
+
+    @classmethod
     async def _pull_function_instance_logs(
         cls,
         function_instance_id: str,
         page_size: int = 100,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
     ) -> None:
         """Pull all logs of a function instance and print them between
-        separator markers (best effort, never raises)."""
+        separator markers (best effort, never raises).
+
+        When ``start_time``/``end_time`` are not provided, defaults to
+        pulling logs from 24 hours ago until now.
+        """
+        if end_time is None:
+            end_time = int(time.time())
+        if start_time is None:
+            start_time = end_time - 24 * 60 * 60
         logger.info(
             "************start query log "
             f"(function_instance_id={function_instance_id})*******",
@@ -595,6 +651,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             logs = await cls.query_all_function_instance_logs(
                 function_instance_id=function_instance_id,
                 page_size=page_size,
+                start_time=start_time,
+                end_time=end_time,
             )
             for entry in logs:
                 logger.info(f"[function instance log] {entry}")

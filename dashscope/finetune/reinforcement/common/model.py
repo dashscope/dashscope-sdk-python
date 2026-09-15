@@ -25,6 +25,7 @@ import yaml
 # Local Application
 from dashscope.finetune.reinforcement.common.constants import (
     FC_API_KEY,
+    FC_DELETE_API,
     FC_LOAD_API,
     FC_QUERY_API,
     FC_QUERY_LOG_API,
@@ -1063,12 +1064,26 @@ class AgenticRLFunctionComponent(Models, BaseModel):
     ) -> Tuple[List[str], Optional[int]]:
         """Extract log messages and total count from a log query response.
 
-        Expected response format::
+        Two payload shapes are supported. The DashScope gateway returns
+        snake_case keys under "output"::
+
+            {
+              "request_id": "...",
+              "output": {
+                "page_number": 1,
+                "page_size": 100,
+                "total_count": 86,
+                "log_entries": [
+                  {"instance_id": "...", "message": "...",
+                   "timestamp": 1699051200}
+                ]
+              }
+            }
+
+        while the backend service returns camelCase keys under "data"::
 
             {
               "success": true,
-              "code": null,
-              "message": null,
               "data": {
                 "pageNumber": 1,
                 "pageSize": 50,
@@ -1083,17 +1098,21 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         Only the "message" field of each log entry is kept; other fields
         are ignored.
         """
-        data = result.get("data", {})
+        data = result.get("output")
+        if not isinstance(data, Dict):
+            data = result.get("data")
         if not isinstance(data, Dict):
             return [], None
 
-        entries = data.get("logEntries") or []
+        entries = data.get("log_entries") or data.get("logEntries") or []
         logs = [
             entry.get("message", "") if isinstance(entry, Dict) else str(entry)
             for entry in entries
         ]
 
-        total = data.get("totalCount")
+        total = data.get("total_count")
+        if total is None:
+            total = data.get("totalCount")
         if not isinstance(total, int):
             total = None
 
@@ -1215,6 +1234,62 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             f"Pages: {page_number} | Entries: {len(all_logs)}",
         )
         return all_logs
+
+    @classmethod
+    async def delete_function_instance(
+        cls,
+        function_instance_id: str,
+    ) -> Dict[str, Any]:
+        """Delete a function (faas) runtime instance.
+
+        Args:
+            function_instance_id: Target function instance ID.
+
+        Returns:
+            Raw response dict of the delete API, e.g.::
+
+                {
+                  "code": 0,
+                  "message": "success",
+                  "data": {
+                    "status": "deleted",
+                    "sandbox_code": "sandbox-xxx"
+                  }
+                }
+        """
+        if not function_instance_id:
+            raise InputError(
+                "No function instance ID available for deletion",
+                error_code=2074,
+            )
+
+        url = f"{FC_DELETE_API}/{function_instance_id}"
+        result = await client_fc(FC_API_KEY, url, {})
+        status = result.get("status", {})
+        if isinstance(status, Dict) and status.get("code", 200) != 200:
+            raise InstanceQueryError(
+                f"Function instance deletion failed: {result}",
+                error_code=2075,
+                instance_id=function_instance_id,
+            )
+        code = result.get("code")
+        if result.get("success") is False or (
+            code is not None and code not in (0, 200)
+        ):
+            raise InstanceQueryError(
+                "Function instance deletion failed: "
+                f"{result.get('message') or result}",
+                error_code=2075,
+                instance_id=function_instance_id,
+            )
+
+        data = result.get("data", {})
+        status_value = data.get("status") if isinstance(data, Dict) else data
+        logger.info(
+            f"Function instance deleted | FunctionInstanceID: "
+            f"{function_instance_id} | Status: {status_value}",
+        )
+        return result
 
 
 class RolloutFunctionComponent(AgenticRLFunctionComponent):
