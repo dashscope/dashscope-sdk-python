@@ -10,7 +10,7 @@ The /subagents command provides:
   - list: show all discovered subagents with status
   - reload: re-scan custom-extensions.toml without restart
   - enable/disable: toggle subagents (delegates to capability system)
-  - config: per-subagent settings (model, temperature, max_turns)
+  - config: per-subagent settings (only max_turns is applied today)
 """
 # pylint: disable=wrong-import-position,too-many-return-statements
 # pylint: disable=too-many-branches,too-many-statements
@@ -33,6 +33,11 @@ SUBAGENT_CAPABILITY_KEYS = {
     "local.subagent",
     "local.delegate",
 }
+
+# Config keys /subagents accepts and persists but nothing applies — only
+# max_turns takes effect. See SubagentConfig for why.
+INERT_CONFIG_KEYS = ("model", "temperature")
+_INERT = "[dim](stored, not applied)[/dim]"
 
 
 @dataclass
@@ -125,6 +130,7 @@ def _subagents_list(config: Config) -> None:
         console.print("[dim]  (no subagents found)[/dim]")
         return
 
+    inert_shown = False
     for a in subagents:
         status = "[green]✓[/green]" if a.enabled else "[dim]✗[/dim]"
         cfg = config.subagents.get(a.key)
@@ -132,9 +138,11 @@ def _subagents_list(config: Config) -> None:
         if cfg:
             parts = []
             if cfg.model:
-                parts.append(f"model={cfg.model}")
+                parts.append(f"model={cfg.model}*")
+                inert_shown = True
             if cfg.temperature:
-                parts.append(f"temp={cfg.temperature}")
+                parts.append(f"temp={cfg.temperature}*")
+                inert_shown = True
             if cfg.max_turns:
                 parts.append(f"turns={cfg.max_turns}")
             if parts:
@@ -146,6 +154,11 @@ def _subagents_list(config: Config) -> None:
             f"[{a.source}/{a.category}]{cfg_str}[/dim]",
         )
 
+    if inert_shown:
+        console.print(
+            "\n[dim]* stored but not applied — a subagent runs on the "
+            "parent's provider.[/dim]",
+        )
     console.print(
         "\n[dim]Usage: /subagents enable|disable|config <name>[/dim]",
     )
@@ -245,7 +258,8 @@ def _subagents_config(config: Config, args: list[str]) -> None:
       /subagents config <name>                  — show current config
       /subagents config <name> <key> <value>    — set a config value
 
-    Supported keys: model, temperature, max_turns
+    Supported keys: model, temperature, max_turns. Only max_turns is
+    applied; the other two are stored and shown as inert.
     """
     if not args:
         # Show all subagent configs
@@ -254,9 +268,12 @@ def _subagents_config(config: Config, args: list[str]) -> None:
             cfg = config.subagents.get(key)
             if cfg:
                 console.print(f"  [cyan]{key}[/cyan]")
-                console.print(f"    model: {cfg.model or '(default)'}")
                 console.print(
-                    f"    temperature: {cfg.temperature or '(default)'}",
+                    f"    model: {cfg.model or '(default)'} {_INERT}",
+                )
+                console.print(
+                    "    temperature: "
+                    f"{cfg.temperature or '(default)'} {_INERT}",
                 )
                 console.print(
                     f"    max_turns: {cfg.max_turns or '(default)'}",
@@ -280,8 +297,10 @@ def _subagents_config(config: Config, args: list[str]) -> None:
 
         cfg = config.subagents.get(key, SubagentConfig())
         console.print(f"[bold]{key} config:[/bold]")
-        console.print(f"  model: {cfg.model or '(default)'}")
-        console.print(f"  temperature: {cfg.temperature or '(default)'}")
+        console.print(f"  model: {cfg.model or '(default)'} {_INERT}")
+        console.print(
+            f"  temperature: {cfg.temperature or '(default)'} {_INERT}",
+        )
         console.print(f"  max_turns: {cfg.max_turns or '(default)'}")
         console.print(
             f"\n[dim]Usage: /subagents config {key} "
@@ -332,4 +351,7 @@ def _subagents_config(config: Config, args: list[str]) -> None:
         return
 
     config.save_workspace()
-    console.print(f"[green]✓ Updated {key}.{cfg_key} = {cfg_val}[/green]")
+    note = f" {_INERT}" if cfg_key in INERT_CONFIG_KEYS else ""
+    console.print(
+        f"[green]✓ Updated {key}.{cfg_key} = {cfg_val}[/green]{note}",
+    )

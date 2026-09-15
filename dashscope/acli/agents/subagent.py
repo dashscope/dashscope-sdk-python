@@ -36,8 +36,8 @@ def set_parent_agent(agent) -> None:
 
 
 def set_config(config) -> None:
-    """Store a reference to the Config so subagent_invoke can look up
-    per-agent overrides (max_turns, model, temperature)."""
+    """Store a reference to the Config so subagent_invoke can look up the
+    per-agent max_turns override."""
     global _config
     _config = config
 
@@ -78,7 +78,7 @@ async def _subagent_invoke(
     )  # local import to avoid module-load cycle
     from dashscope.acli.memory.manager import MemoryManager
 
-    # Look up per-agent config overrides (max_turns, model, temperature)
+    # Only max_turns is read; see SubagentConfig for why the rest is inert.
     capped_turns = min(max(1, max_turns), 50)
     if _config is not None:
         agent_cfg = _config.subagents.get("local.subagent")
