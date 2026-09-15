@@ -11,6 +11,7 @@ from typing import AsyncIterator
 
 from rich.console import Console
 
+from dashscope.acli.acceptance import AcceptanceGate
 from dashscope.acli.compression import (
     HARD_THRESHOLD_RATIO,
     estimate_message_tokens,
@@ -224,6 +225,13 @@ class Agent:
             )
         except ValueError:
             self.converge_hard_ratio = 0.85
+        # Hard acceptance gate (oneshot only): run the project's test command
+        # before accepting a final answer, and send the raw output back when
+        # it fails. Built here, ahead of the policy text below, so the prompt
+        # can promise the gate only when one is actually armed.
+        # Env: ACLI_ACCEPTANCE (0 disables), ACLI_ACCEPTANCE_CMD (overrides
+        # discovery), ACLI_ACCEPTANCE_RETRIES, ACLI_ACCEPTANCE_TIMEOUT.
+        self._acceptance_gate = AcceptanceGate.from_env(self.oneshot)
         # Load custom system prompt: workspace .acli/system-prompt.md first,
         # then global ~/.acli/system-prompt.md, then built-in default.
         # runners.py pre-populates system_prompt via _load_system_prompt();
@@ -256,6 +264,20 @@ class Agent:
                 "actionable feedback: change the approach based on what "
                 "the measurement shows, then re-measure."
             )
+            if self._acceptance_gate.active:
+                # An armed gate implies oneshot — from_env hands back an empty
+                # command otherwise — so this belongs inside the block above.
+                # Naming the command beats a generic promise: the model can
+                # run it itself first instead of meeting the gate at the exit.
+                check = self._acceptance_gate.command
+                self.system_prompt += (
+                    f"\n- Verification gate: `{check}` runs before your "
+                    "final answer is accepted. If it fails, the answer is "
+                    "withheld and the raw output comes back to you as the "
+                    "next requirement. Make it pass by fixing the code — "
+                    "never by editing, skipping, or weakening the check "
+                    "itself."
+                )
         # Discover project instructions from CWD (rules.jsonl,
         # .cursorrules, etc.)
         from dashscope.acli.prompt import discover_project_instructions
@@ -625,6 +647,7 @@ class Agent:
         # Reset reflection tracker for new turn
         self.memory_manager.session.reflection.reset()
         self.memory_manager.session.stagnation.reset()
+        self._acceptance_gate.reset()
 
         # Recall relevant memories
         memory_context = await self._recall_memory(user_input_text)
@@ -854,6 +877,26 @@ class Agent:
                     self.turn_mcp_calls += 1
 
             if not tool_calls:
+                # Acceptance gate. This branch is the loop's only voluntary
+                # exit, so it is the one place where "the model is done" can
+                # be checked against something other than the model's own
+                # opinion. Run before the answer is committed: a rejected
+                # answer belongs in history as an attempt, not in last_content
+                # as a result.
+                verdict = await self._acceptance_gate.check()
+                if verdict is not None and verdict.rejection:
+                    self._withhold_answer(
+                        full_content,
+                        full_reasoning,
+                        verdict.rejection,
+                        messages_with_system,
+                    )
+                    yield (
+                        "\n[Answer withheld: the verification check "
+                        f"`{verdict.run.command}` did not pass; sending its "
+                        "output back]\n"
+                    )
+                    continue
                 if full_content:
                     # Detect truncated tool intent: LLM described an action but
                     # the tool call never materialized (stream cut short).
@@ -875,6 +918,12 @@ class Agent:
                         )
                         full_content += warn
                         yield warn
+                    # The gate could not certify the answer but sending it back
+                    # would not help either, so the caveat travels with it
+                    # instead of the answer being silently downgraded.
+                    if verdict is not None and verdict.note:
+                        full_content += verdict.note
+                        yield verdict.note
                     final_msg: dict = {
                         "role": "assistant",
                         "content": full_content,
@@ -1181,6 +1230,14 @@ class Agent:
                 )
                 return "Cancelled"
 
+        # Acceptance baseline, taken from the last point where the call is
+        # still guaranteed to run: after the futility refusal and the
+        # permission hooks, before the executor. Read-only calls skip it, so a
+        # question-answering turn never pays for a test suite, and the
+        # baseline still comes from a workspace this turn has not touched.
+        if not is_readonly_tool_call(tool_call.name, tool_call.arguments):
+            await self._acceptance_gate.ensure_baseline()
+
         start_time = time.time()
         outcome = await self.executor.execute_detailed(
             tool_def,
@@ -1357,6 +1414,34 @@ class Agent:
         if tool_def and tool_def.permission != PermissionLevel.AUTO:
             return True
         return False
+
+    def _withhold_answer(
+        self,
+        content: str,
+        reasoning: str,
+        rejection: str,
+        messages_with_system: list[dict],
+    ) -> None:
+        """Put a gate-rejected answer and its rejection into history.
+
+        The answer is kept rather than dropped: the model has to see what it
+        claimed in order to retract the right part of it, and a rejection
+        quoting output from an attempt the history never mentions reads as
+        noise. Neither message becomes turn output — the turn is being sent
+        back, not finished.
+        """
+        if content:
+            withheld: dict = {"role": "assistant", "content": content}
+            if reasoning:
+                withheld["reasoning_content"] = reasoning
+            self.messages.append(withheld)
+            messages_with_system.append(withheld)
+        # A user message, matching how the reflection/stagnation hints are
+        # delivered: the provider converters keep only one system message, so
+        # a second one would replace the real prompt.
+        rejection_msg = {"role": "user", "content": rejection}
+        self.messages.append(rejection_msg)
+        messages_with_system.append(rejection_msg)
 
     def _close_pending_tool_calls(
         self,

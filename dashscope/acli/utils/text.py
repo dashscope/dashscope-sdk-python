@@ -76,6 +76,22 @@ def truncate_head_tail(
     )
 
 
+_BACKTICK_RUN_RE = re.compile(r"`+")
+
+
+def markdown_fence(text: str) -> str:
+    """A markdown fence longer than any backtick run inside ``text``.
+
+    A fixed three-backtick fence would be closed early by quoted output that
+    itself contains backticks — a catted markdown file, a compiler quoting a
+    docstring — which leaks the rest of the prompt section into the code
+    block.
+    """
+    runs = _BACKTICK_RUN_RE.findall(text or "")
+    longest = max((len(r) for r in runs), default=0)
+    return "`" * max(3, longest + 1)
+
+
 _FRONTMATTER_RE = re.compile(
     r"^---\s*\n.*?\n---\s*\n",
     re.DOTALL,
