@@ -34,6 +34,22 @@ DEFAULT_TIMEOUT = 600
 EXPLICIT = "explicit"
 DISCOVERED = "discovered"
 
+# Exit statuses meaning the check never reached the code under test, so its
+# output describes the environment rather than the change. 127 is the shell's
+# command-not-found; 2/3/4/5 are pytest's interrupted (also what a collection
+# error such as a missing dependency reports), internal-error, usage-error and
+# nothing-collected. pytest's 1 is deliberately absent: tests ran and one
+# failed, which is the verdict this whole module exists to act on.
+_NOT_FOUND = 127
+_PYTEST_NEVER_RAN = frozenset({2, 3, 4, 5})
+
+
+def _never_ran(run: AcceptanceRun) -> bool:
+    """True when ``run``'s exit status shows the check could not execute."""
+    if run.exit_code == _NOT_FOUND:
+        return True
+    return "pytest" in run.command and run.exit_code in _PYTEST_NEVER_RAN
+
 
 def _env_int(name: str, default: int) -> int:
     try:
@@ -228,20 +244,36 @@ class AcceptanceGate:
         self.attempts += 1
         if run.ok:
             return GateVerdict(run)
+        if _never_ran(run) and self._baseline_never_ran():
+            return GateVerdict(run, note=self._unrunnable_note(run))
         if self._unchanged_since_baseline(run):
             return GateVerdict(run, note=self._insensitive_note(run))
         if self.attempts > self.retries:
             return GateVerdict(run, note=self._unverified_note(run))
         return GateVerdict(run, rejection=self._rejection(run))
 
+    def _baseline_never_ran(self) -> bool:
+        """True when the pre-change check could not execute either.
+
+        This is what separates a broken environment from a broken change. The
+        baseline is captured before the agent touches anything, so a check that
+        already could not run then was not made unrunnable by the change.
+        Requiring it also keeps the sharp edge: a *green* baseline proves the
+        check does run here, so a collection error the agent introduced stays
+        on the rejection path instead of being excused.
+        """
+        base = self.baseline
+        return bool(base and not base.ok and _never_ran(base))
+
     def _unchanged_since_baseline(self, run: AcceptanceRun) -> bool:
         """True when the check came out byte-identical to a failing baseline.
 
-        The usual cause is an acceptance command that does not actually run
-        here — no pytest installed, the wrong interpreter, an immediate
-        timeout. Sending the model back to fix that burns the turn on a
-        problem it neither created nor can solve, so the gate reports it
-        instead of rejecting.
+        The catch-all behind ``_baseline_never_ran``, for a check whose exit
+        statuses this module does not know — cargo, go, an immediate timeout —
+        where reproducing the baseline exactly is the only evidence available
+        that the break is environmental. Sending the model back to fix that
+        burns the turn on a problem it neither created nor can solve, so the
+        gate reports it instead of rejecting.
 
         Byte-identical is the point: a suite that genuinely fails prints
         timings, so real failures differ between runs and still get rejected.
@@ -305,6 +337,14 @@ class AcceptanceGate:
             f"\n[Unverified: `{run.command}` exited {run.exit_code} and the "
             f"retry budget ({self.retries}) is spent, so the answer below is "
             "reported as-is rather than withheld.]\n"
+        )
+
+    def _unrunnable_note(self, run: AcceptanceRun) -> str:
+        return (
+            f"\n[Unverified: `{run.command}` exited {run.exit_code} before "
+            "and after these changes, a status that means it never reached "
+            "the tests. The check does not run in this environment, so it "
+            "says nothing about the answer below.]\n"
         )
 
     def _insensitive_note(self, run: AcceptanceRun) -> str:

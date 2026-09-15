@@ -6,8 +6,9 @@ Covers:
     the interpreter the discovered command names.
   * ``AcceptanceGate.from_env`` — the ``ACLI_ACCEPTANCE*`` switches, including
     the interactive-mode exemption.
-  * The verdict rules: pass, regression, still-failing, a check that is
-    insensitive to the change, and an exhausted retry budget.
+  * The verdict rules: pass, regression, still-failing, a check that could
+    not run at all, one that is insensitive to the change, and an exhausted
+    retry budget.
   * Baseline capture — lazily, once per turn, shared across a parallel tool
     batch, and cancelled by a per-turn reset.
 """
@@ -43,6 +44,16 @@ def fail(detail="FAILED tests/test_x.py::test_a - assert 1 == 2"):
     success and every failing-gate test would pass for the wrong reason.
     """
     return f"{detail}\n[exit code: 1]"
+
+
+def exited(code, detail=""):
+    """A shell output carrying an arbitrary exit status.
+
+    ``fail`` hardcodes 1 because that is what a genuine test failure produces.
+    The liveness probe reads the *other* statuses — the shell's 127 and
+    pytest's collection-error 2 — so they have to be expressible too.
+    """
+    return f"{detail}\n[exit code: {code}]"
 
 
 class _Shell:
@@ -406,6 +417,94 @@ class TestCheck:
         fake_shell.script(fail("1 failed in 0.31s"), fail("1 failed in 0.47s"))
         await gate.ensure_baseline()
         assert (await gate.check()).rejection
+
+    @pytest.mark.asyncio
+    async def test_a_command_the_shell_cannot_find_is_not_blamed_on_the_change(
+        self,
+        fake_shell,
+    ):
+        # 127 means there was no check to run. The two outputs differ here so
+        # the byte-identity fallback cannot be what saves this — the exit
+        # status alone has to be enough.
+        gate = _gate(command="/opt/acli/bin/pytest -q")
+        fake_shell.script(
+            exited(127, "/bin/sh: 1: pytest: not found"),
+            exited(127, "/bin/sh: 1: /opt/acli/bin/pytest: not found"),
+        )
+        await gate.ensure_baseline()
+        verdict = await gate.check()
+        assert verdict.rejection == ""
+        assert "never reached the tests" in verdict.note
+
+    @pytest.mark.asyncio
+    async def test_a_dependency_missing_at_collection_is_not_a_change_failure(
+        self,
+        fake_shell,
+    ):
+        # pytest exits 2 on a collection error and prints a timing line, so a
+        # project whose dependencies are installed only by the grading step
+        # fails differently every run. Without the probe that reads as "still
+        # failing" and withholds an answer the check never evaluated.
+        gate = _gate(command=f"{sys.executable} -m pytest -q")
+        missing = "ModuleNotFoundError: No module named 'astropy'"
+        fake_shell.script(
+            exited(2, f"{missing}\n1 error in 0.05s"),
+            exited(2, f"{missing}\n1 error in 0.07s"),
+        )
+        await gate.ensure_baseline()
+        verdict = await gate.check()
+        assert verdict.rejection == ""
+        assert "never reached the tests" in verdict.note
+
+    @pytest.mark.asyncio
+    async def test_a_green_baseline_keeps_a_collection_error_a_regression(
+        self,
+        fake_shell,
+    ):
+        # The other half of the probe: the baseline passing is proof the check
+        # does run here, so the agent breaking an import is its own doing.
+        gate = _gate()
+        broken = "ModuleNotFoundError: No module named 'app'"
+        fake_shell.script(PASS, exited(2, f"{broken}\n1 error in 0.06s"))
+        await gate.ensure_baseline()
+        verdict = await gate.check()
+        assert verdict.note == ""
+        assert "REGRESSION" in verdict.rejection
+
+    @pytest.mark.asyncio
+    async def test_a_repaired_environment_still_holds_the_answer_to_the_check(
+        self,
+        fake_shell,
+    ):
+        # The check could not run before the turn and can now, which means the
+        # model fixed the environment. Its exit 1 is a real verdict at that
+        # point, so the inert baseline stops excusing anything.
+        gate = _gate()
+        fake_shell.script(
+            exited(2, "1 error in 0.05s"),
+            fail("1 failed in 0.31s"),
+        )
+        await gate.ensure_baseline()
+        verdict = await gate.check()
+        assert verdict.note == ""
+        assert "still failing" in verdict.rejection
+
+    @pytest.mark.asyncio
+    async def test_pytest_statuses_are_not_read_into_another_ecosystem(
+        self,
+        fake_shell,
+    ):
+        # 2 is only "never collected anything" for pytest. cargo reuses it for
+        # a build failure, which is exactly the kind of result worth rejecting.
+        gate = _gate(command="cargo test --quiet")
+        fake_shell.script(
+            exited(2, "error: could not compile `app`"),
+            exited(2, "error: could not compile `app` (2 warnings)"),
+        )
+        await gate.ensure_baseline()
+        verdict = await gate.check()
+        assert verdict.note == ""
+        assert verdict.rejection
 
     @pytest.mark.asyncio
     async def test_the_retry_budget_is_spent_then_the_answer_goes_out_flagged(
