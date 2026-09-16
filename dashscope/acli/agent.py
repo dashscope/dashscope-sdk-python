@@ -31,7 +31,10 @@ from dashscope.acli.memory.reflection import (
 from dashscope.acli.platforms.base import MemoryProvider
 from dashscope.acli.prompt_pipeline import PromptContext, default_pipeline
 from dashscope.acli.providers.base import LLMProvider, LLMResponse, ToolCall
-from dashscope.acli.providers.hardening import is_retryable_error
+from dashscope.acli.providers.hardening import (
+    RetriesExhausted,
+    is_retryable_error,
+)
 from dashscope.acli.skills import get_skill_manager, skills_summary_for_llm
 from dashscope.acli.tools.registry import PermissionLevel, registry
 from dashscope.acli.utils import (
@@ -194,10 +197,11 @@ class Agent:
             )
         except ValueError:
             self.readonly_hard_cap = 40
-        # Turn-level retry: a transient model-API failure that exhausts the
-        # provider's own retries must not kill a long run. Re-run the current
-        # turn (only when nothing was streamed yet, to avoid duplicate output)
-        # up to turn_retry_max times with capped exponential backoff.
+        # Turn-level retry: re-run the current turn (only when nothing was
+        # streamed yet, to avoid duplicate output) up to turn_retry_max times
+        # with capped exponential backoff. Covers providers that carry no
+        # retry layer of their own; a HardenedProvider that exhausted its own
+        # budget raises RetriesExhausted and is deliberately not re-paid here.
         # Env override: ACLI_TURN_RETRY_MAX (0 disables).
         try:
             self.turn_retry_max = int(
@@ -756,12 +760,14 @@ class Agent:
             last_chunk = None
             llm_start = time.monotonic()
 
-            # Turn-level retry around the streaming call. A transient
-            # model-API failure that survives the provider's own retries is
-            # re-attempted here so a single network blip cannot abort a long
-            # run. We only retry when nothing has been streamed yet; once
-            # content is yielded, a retry would duplicate output, so we let
-            # the error propagate.
+            # Turn-level retry around the streaming call, for providers that
+            # carry no retry layer of their own. A HardenedProvider that spent
+            # its budget raises RetriesExhausted and is NOT re-attempted here:
+            # that multiplied max_retries x request_timeout by turn_retry_max,
+            # which against a stalled endpoint measured 819s of silent wall
+            # clock from a 60s configured timeout. We only retry when nothing
+            # has been streamed yet; once content is yielded, a retry would
+            # duplicate output, so we let the error propagate.
             turn_attempt = 0
             while True:
                 full_content = ""
@@ -816,6 +822,7 @@ class Agent:
                 except Exception as e:
                     if (
                         not emitted
+                        and not isinstance(e, RetriesExhausted)
                         and is_retryable_error(e)
                         and turn_attempt < self.turn_retry_max
                     ):
