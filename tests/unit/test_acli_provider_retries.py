@@ -2,10 +2,17 @@
 """The vendored provider stack must not multiply its own retry budget.
 
 ``HardenedProvider`` marks an error whose retries it already spent with
-``RetriesExhausted``, so ``Agent`` does not pay that same budget a second
-time. Against an endpoint that accepts the connection and never replies, the
-unmarked version cost 12 HTTP attempts and ~819s of silent wall clock in one
-turn, from a 60s ``request_timeout``.
+``RetriesExhausted``, and records on it the wall clock that budget cost, so
+``Agent`` can tell the two ways a budget runs out apart. Against an endpoint
+that accepts the connection and never replies, the unmarked version cost 12
+HTTP attempts and ~819s of silent wall clock in one turn, from a 60s
+``request_timeout``; ``Agent`` re-paying that is what the mark exists to stop.
+
+The same budget spent on a refused connection costs only the backoff (~28s),
+and there an upper-layer re-attempt is cheap and is what rides out a transient
+blip. Marking on the exception type alone gives up in both cases, which cost a
+whole bench trial: feal-linear-cryptanalysis died 33s into a 1800s budget
+having issued zero API calls. Hence ``elapsed_sec`` and ``exhausted_slowly``.
 
 The original message is carried verbatim on purpose. ``ProviderChain`` decides
 whether to fall back to the next profile with ``is_retryable_error``, so a
@@ -118,6 +125,39 @@ async def test_an_exhausted_chat_is_marked_too():
 
 def test_the_marker_keeps_the_message_retryable():
     assert is_retryable_error(RetriesExhausted(RuntimeError(STALLED))) is True
+
+
+async def test_a_fast_exhaustion_reports_the_backoff_it_spent():
+    # Four attempts that fail at once cost only the backoff, so the marker has
+    # to say "cheap" -- an upper layer re-attempting this is what rides out a
+    # transient blip, and suppressing it is what lost the feal bench trial.
+    inner = _Scripted(stream=[RuntimeError(STALLED)] * 4)
+    hardened = HardenedProvider(inner, max_retries=3, retry_delay=0.01)
+
+    with pytest.raises(RetriesExhausted) as exc:
+        await _collect(hardened.chat_stream(MESSAGES))
+
+    assert inner.stream_calls == 4
+    assert 0.0 < exc.value.elapsed_sec < RetriesExhausted.SLOW_BUDGET_SEC
+    assert exc.value.exhausted_slowly is False
+
+
+def test_the_slow_threshold_flips_at_one_request_timeout():
+    slow = RetriesExhausted(
+        RuntimeError(STALLED),
+        RetriesExhausted.SLOW_BUDGET_SEC,
+    )
+    assert slow.exhausted_slowly is True
+
+    just_under = RetriesExhausted(
+        RuntimeError(STALLED),
+        RetriesExhausted.SLOW_BUDGET_SEC - 1,
+    )
+    assert just_under.exhausted_slowly is False
+
+    # Unmeasured means nobody collected the number, so it must not claim the
+    # expensive case: giving up on it would recreate the type-only skip.
+    assert RetriesExhausted(RuntimeError(STALLED)).exhausted_slowly is False
 
 
 async def test_the_chain_still_falls_back_after_a_stream_exhaustion():
