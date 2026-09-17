@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 """Minimal OPD contract tests."""
+# pylint: disable=redefined-outer-name  # pytest fixture 标准用法
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -165,7 +167,9 @@ async def test_opd_example_uploads_local_datasets(rl_client):
 
     with patch(
         "dashscope.finetune.reinforcement.common.model.to_bailian_data",
-        new=AsyncMock(side_effect=[["file-train-001"], ["file-validation-001"]]),
+        new=AsyncMock(
+            side_effect=[["file-train-001"], ["file-validation-001"]]
+        ),
     ):
         train_ids, validation_ids = await rl_client.upload_datasets()
 
@@ -186,7 +190,10 @@ def test_regular_rl_example_keeps_resources_and_rl_hyperparameters(rl_client):
     assert rl_client.tuning.teacher_model is None
     assert rl_client.tuning.training.type == TrainingType.TRAINING_TYPE
     assert rl_client.tuning.training.hyper_parameters["algorithm"] == "gspo"
-    assert rl_client.tuning.training.hyper_parameters["lr_scheduler_type"] == "linear"
+    assert (
+        rl_client.tuning.training.hyper_parameters["lr_scheduler_type"]
+        == "linear"
+    )
     assert rl_client.tuning.training.resources == {
         "charge_type": "mtu_postpaid",
         "mtu_spec_code": "MTU4",

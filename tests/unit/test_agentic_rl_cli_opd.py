@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Minimal CLI coverage for teacher_model."""
 
 from unittest.mock import patch
@@ -16,7 +17,8 @@ def test_run_help_explains_conditional_function_requirements():
     assert result.exit_code == 0
     assert "--teacher-model" in help_text
     assert (
-        "1. Configuration-driven: Use -c/--config to specify a YAML file" in help_text
+        "1. Configuration-driven: Use -c/--config to specify a YAML file"
+        in help_text
     )
     assert (
         "2. Direct parameter: Provide all required arguments via CLI options"
