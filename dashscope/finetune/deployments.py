@@ -47,12 +47,12 @@ class Deployments(
 
         Args:
             model (str): The model name.
+            capacity (int): The model service capacity.
             version (str, optional): The model version, unnecessary
                 for fine-tuned model. Defaults to None.
             suffix (str, optional): The name suffix of the model deployment,
                 If specified, the final model name will be model_suffix.
                 Defaults to None.
-            capacity (int, optional): The model service capacity.
             plan (str, optional): The deployment plan required by the
                 service: "ptu" (PTU reserved), "mu" (model unit) or
                 "Lora" (LoRA deployment). Defaults to None.
