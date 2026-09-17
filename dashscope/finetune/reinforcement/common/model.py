@@ -25,8 +25,10 @@ import yaml
 # Local Application
 from dashscope.finetune.reinforcement.common.constants import (
     FC_API_KEY,
+    FC_DELETE_API,
     FC_LOAD_API,
     FC_QUERY_API,
+    FC_QUERY_LOG_API,
     FC_REGISTER_REWARD_API,
     FC_REGISTER_ROLLOUT_API,
     FC_REGISTER_GROUP_REWARD_API,
@@ -1055,6 +1057,239 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 "Function output validation failed",
                 error_code=2047,
             ) from e
+
+    @staticmethod
+    def _extract_log_page(
+        result: Dict[str, Any],
+    ) -> Tuple[List[str], Optional[int]]:
+        """Extract log messages and total count from a log query response.
+
+        Two payload shapes are supported. The DashScope gateway returns
+        snake_case keys under "output"::
+
+            {
+              "request_id": "...",
+              "output": {
+                "page_number": 1,
+                "page_size": 100,
+                "total_count": 86,
+                "log_entries": [
+                  {"instance_id": "...", "message": "...",
+                   "timestamp": 1699051200}
+                ]
+              }
+            }
+
+        while the backend service returns camelCase keys under "data"::
+
+            {
+              "success": true,
+              "data": {
+                "pageNumber": 1,
+                "pageSize": 50,
+                "totalCount": 128,
+                "logEntries": [
+                  {"instanceId": "...", "message": "...",
+                   "timestamp": 1699051200}
+                ]
+              }
+            }
+
+        Only the "message" field of each log entry is kept; other fields
+        are ignored.
+        """
+        data = result.get("output")
+        if not isinstance(data, Dict):
+            data = result.get("data")
+        if not isinstance(data, Dict):
+            return [], None
+
+        entries = data.get("log_entries") or data.get("logEntries") or []
+        logs = [
+            entry.get("message", "") if isinstance(entry, Dict) else str(entry)
+            for entry in entries
+        ]
+
+        total = data.get("total_count")
+        if total is None:
+            total = data.get("totalCount")
+        if not isinstance(total, int):
+            total = None
+
+        return logs, total
+
+    @classmethod
+    async def query_function_instance_logs(
+        cls,
+        function_instance_id: str,
+        page_number: int = 1,
+        page_size: int = 100,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        keywords: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Query logs of a function (faas) instance (single page).
+
+        Args:
+            function_instance_id: Target function instance ID.
+            page_number: Page number, starting from 1.
+            page_size: Number of log entries per page.
+            start_time: Optional start time filter (in seconds).
+            end_time: Optional end time filter (in seconds).
+            keywords: Optional keyword filters for log messages.
+
+        Returns:
+            Raw response dict of the log query API.
+        """
+        if not function_instance_id:
+            raise InputError(
+                "No function instance ID available for log query",
+                error_code=2071,
+            )
+
+        url = f"{FC_QUERY_LOG_API}/{function_instance_id}"
+        request_data: Dict[str, Any] = {
+            "pageNumber": page_number,
+            "pageSize": page_size,
+        }
+        if start_time is not None:
+            request_data["startTime"] = start_time
+        if end_time is not None:
+            request_data["endTime"] = end_time
+        if keywords:
+            request_data["keywords"] = keywords
+
+        result = await client_fc(FC_API_KEY, url, request_data)
+        status = result.get("status", {})
+        if isinstance(status, Dict) and status.get("code", 200) != 200:
+            raise InstanceQueryError(
+                f"Log query failed: {result}",
+                error_code=2072,
+                instance_id=function_instance_id,
+            )
+        if result.get("success") is False:
+            raise InstanceQueryError(
+                f"Log query failed: {result.get('message') or result}",
+                error_code=2073,
+                instance_id=function_instance_id,
+            )
+
+        logger.debug(
+            f"Log query completed | FunctionInstanceID: "
+            f"{function_instance_id} | "
+            f"Page: {page_number} | Size: {page_size}",
+        )
+        return result
+
+    @classmethod
+    async def query_all_function_instance_logs(
+        cls,
+        function_instance_id: str,
+        page_size: int = 100,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        keywords: Optional[List[str]] = None,
+        max_pages: int = 100,
+    ) -> List[str]:
+        """Fetch all logs of a function (faas) instance with pagination.
+
+        Iterates pages starting from page 1 until all entries are
+        collected (based on the reported total count, an empty page, or
+        a short page).
+
+        Args:
+            function_instance_id: Target function instance ID.
+            page_size: Number of log entries per page.
+            start_time: Optional start time filter (in seconds).
+            end_time: Optional end time filter (in seconds).
+            keywords: Optional keyword filters for log messages.
+            max_pages: Safety limit on the number of pages to fetch.
+
+        Returns:
+            Aggregated list of log messages across all pages.
+        """
+        all_logs: List[str] = []
+        page_number = 1
+        while page_number <= max_pages:
+            result = await cls.query_function_instance_logs(
+                function_instance_id=function_instance_id,
+                page_number=page_number,
+                page_size=page_size,
+                start_time=start_time,
+                end_time=end_time,
+                keywords=keywords,
+            )
+            logs, total = cls._extract_log_page(result)
+            all_logs.extend(logs)
+
+            if total is not None and len(all_logs) >= total:
+                break
+            if len(logs) < page_size:
+                break
+            page_number += 1
+
+        logger.debug(
+            f"All logs fetched | FunctionInstanceID: "
+            f"{function_instance_id} | "
+            f"Pages: {page_number} | Entries: {len(all_logs)}",
+        )
+        return all_logs
+
+    @classmethod
+    async def delete_function_instance(
+        cls,
+        function_instance_id: str,
+    ) -> Dict[str, Any]:
+        """Delete a function (faas) runtime instance.
+
+        Args:
+            function_instance_id: Target function instance ID.
+
+        Returns:
+            Raw response dict of the delete API, e.g.::
+
+                {
+                  "code": 0,
+                  "message": "success",
+                  "data": {
+                    "status": "deleted",
+                    "sandbox_code": "sandbox-xxx"
+                  }
+                }
+        """
+        if not function_instance_id:
+            raise InputError(
+                "No function instance ID available for deletion",
+                error_code=2074,
+            )
+
+        url = f"{FC_DELETE_API}/{function_instance_id}"
+        result = await client_fc(FC_API_KEY, url, {})
+        status = result.get("status", {})
+        if isinstance(status, Dict) and status.get("code", 200) != 200:
+            raise InstanceQueryError(
+                f"Function instance deletion failed: {result}",
+                error_code=2075,
+                instance_id=function_instance_id,
+            )
+        code = result.get("code")
+        if result.get("success") is False or (
+            code is not None and code not in (0, 200)
+        ):
+            raise InstanceQueryError(
+                "Function instance deletion failed: "
+                f"{result.get('message') or result}",
+                error_code=2075,
+                instance_id=function_instance_id,
+            )
+
+        data = result.get("data", {})
+        status_value = data.get("status") if isinstance(data, Dict) else data
+        logger.info(
+            f"Function instance deleted | FunctionInstanceID: "
+            f"{function_instance_id} | Status: {status_value}",
+        )
+        return result
 
 
 class RolloutFunctionComponent(AgenticRLFunctionComponent):

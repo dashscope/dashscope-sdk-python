@@ -279,6 +279,22 @@ class TestRolloutDataModels:
         assert output.error == "Model inference timeout"
         assert output.agent_output is None
 
+    def test_rollout_output_error_code_int_normalized(self):
+        output = RolloutOutput(
+            status=TaskStatus.FAILED,
+            error="Model inference timeout",
+            error_code=3001,
+        )
+        assert output.error_code == "3001"
+        assert isinstance(output.error_code, str)
+
+    def test_rollout_output_error_code_str_passthrough(self):
+        output = RolloutOutput(
+            status=TaskStatus.FAILED,
+            error_code="RATE_LIMIT",
+        )
+        assert output.error_code == "RATE_LIMIT"
+
     def test_rollout_output_defaults(self):
         output = RolloutOutput()
         assert output.status == TaskStatus.SUCCESS
@@ -334,6 +350,15 @@ class TestRewardDataModels:
             error="Computation error",
         )
         assert output.status == TaskStatus.FAILED
+
+    def test_reward_output_error_code_int_normalized(self):
+        output = RewardOutput(
+            reward=Reward(reward_score=0.0),
+            status=TaskStatus.FAILED,
+            error_code=3002,
+        )
+        assert output.error_code == "3002"
+        assert isinstance(output.error_code, str)
 
     def test_reward_output_missing_reward(self):
         with pytest.raises(ValidationError):
