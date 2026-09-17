@@ -294,7 +294,7 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
 
         return uploaded_training_ids, uploaded_validation_ids
 
-    def submit_job(
+    def submit_job(  # pylint: disable=too-many-branches
         self,
         model: Optional[str] = None,
         datasets: Optional[List[Dataset]] = None,
