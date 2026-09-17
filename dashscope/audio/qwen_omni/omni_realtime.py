@@ -414,7 +414,7 @@ class OmniRealtimeConversation:
         transcription_params: TranscriptionParams = None,
         input_audio_config: AudioFormatConfig = None,
         output_audio_config: AudioFormatConfig = None,
-        input_video_representation_compactness: int = None,
+        input_video_representation_compact: str = None,
         **kwargs,
     ) -> None:
         """
@@ -461,11 +461,10 @@ class OmniRealtimeConversation:
             type (pcm/wav) and sample rate (8000/16000/24000/48000), as well
             as free extension parameters via ``extra_params``. When provided,
             the request emits the ``session.audio.output.format`` structure.
-        input_video_representation_compactness: int
-            input video representation compactness. When provided, the request
-            emits ``session.video.input.representation_compactness``. No strict
-            client-side validation is performed so newly supported values can
-            be used without upgrading the SDK.
+        input_video_representation_compact: str
+            input video representation compact setting. When provided, the
+            request emits ``session.video.input.representation_compact`` and
+            passes the string value through without client-side validation.
 
         Notes
         -----
@@ -516,12 +515,10 @@ class OmniRealtimeConversation:
                     }
         if transcription_params is not None:
             self._apply_transcription_params(transcription_params)
-        if input_video_representation_compactness is not None:
+        if input_video_representation_compact is not None:
             self.config["video"] = {
                 "input": {
-                    "representation_compactness": (
-                        input_video_representation_compactness
-                    ),
+                    "representation_compact": input_video_representation_compact,
                 },
             }
         self.config.update(kwargs)
