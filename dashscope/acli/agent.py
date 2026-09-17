@@ -82,6 +82,21 @@ def _tool_message(tool_call: ToolCall, result: str) -> dict:
     }
 
 
+def _budget_burned_slowly(error: BaseException) -> bool:
+    """True when the provider stack already spent real wall clock on this turn.
+
+    ``RetriesExhausted`` on its own is not the signal it looks like. Raised
+    after a stalled endpoint it means ``max_retries x request_timeout`` went
+    into attempts that each timed out (268s measured), and re-attempting here
+    multiplies that — the 819s of silent wall clock the turn retry was
+    removed for. Raised after a refused connection it means only the ~28s of
+    backoff was spent, and re-attempting is cheap and is exactly what rides
+    out a transient blip. Matching on the type alone gives up in both cases;
+    the elapsed seconds the exception carries tell them apart.
+    """
+    return isinstance(error, RetriesExhausted) and error.exhausted_slowly
+
+
 SYSTEM_PROMPT = """You are acli, an intelligent command-line assistant.
 The user states what they need and you execute it — never make the user
 run commands themselves.
@@ -201,7 +216,8 @@ class Agent:
         # streamed yet, to avoid duplicate output) up to turn_retry_max times
         # with capped exponential backoff. Covers providers that carry no
         # retry layer of their own; a HardenedProvider that exhausted its own
-        # budget raises RetriesExhausted and is deliberately not re-paid here.
+        # budget slowly (stalled endpoint, not a refused connection) is not
+        # re-paid here — see _budget_burned_slowly.
         # Env override: ACLI_TURN_RETRY_MAX (0 disables).
         try:
             self.turn_retry_max = int(
@@ -762,12 +778,14 @@ class Agent:
 
             # Turn-level retry around the streaming call, for providers that
             # carry no retry layer of their own. A HardenedProvider that spent
-            # its budget raises RetriesExhausted and is NOT re-attempted here:
-            # that multiplied max_retries x request_timeout by turn_retry_max,
-            # which against a stalled endpoint measured 819s of silent wall
-            # clock from a 60s configured timeout. We only retry when nothing
-            # has been streamed yet; once content is yielded, a retry would
-            # duplicate output, so we let the error propagate.
+            # its budget on slow attempts raises RetriesExhausted and is NOT
+            # re-attempted here: that multiplied max_retries x request_timeout
+            # by turn_retry_max, which against a stalled endpoint measured
+            # 819s of silent wall clock from a 60s configured timeout. A
+            # budget spent failing fast is still re-attempted — see
+            # _budget_burned_slowly. We only retry when nothing has been
+            # streamed yet; once content is yielded, a retry would duplicate
+            # output, so that case degrades to a partial turn instead.
             turn_attempt = 0
             while True:
                 full_content = ""
@@ -822,9 +840,9 @@ class Agent:
                 except Exception as e:
                     if (
                         not emitted
-                        and not isinstance(e, RetriesExhausted)
                         and is_retryable_error(e)
                         and turn_attempt < self.turn_retry_max
+                        and not _budget_burned_slowly(e)
                     ):
                         turn_attempt += 1
                         await asyncio.sleep(
@@ -835,6 +853,17 @@ class Agent:
                             ),
                         )
                         continue
+                    if emitted and is_retryable_error(e):
+                        # Mid-stream break. No layer retries this — the chunks
+                        # already yielded would be duplicated — but it should
+                        # not end the run either. Keep the partial response and
+                        # let the loop move on: a connection reset 126s into a
+                        # 1200s budget otherwise costs the other 1074s.
+                        yield (
+                            f"\n[Stream interrupted ({e}); continuing with "
+                            "the partial response]\n"
+                        )
+                        break
                     raise
 
             # Log LLM call trace

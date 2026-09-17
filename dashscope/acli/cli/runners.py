@@ -205,10 +205,18 @@ async def _run_oneshot(config: Config, prompt: str):
         # still has to leave proof that ACLI_USAGE_FILE reached it.
         _write_usage_file(usage_path, executor)
         stop_flusher = _start_usage_flusher(usage_path, executor)
+    failure: Exception | None = None
     try:
         async for chunk in agent.run_stream(agent_input):
             sys.stdout.write(chunk)
             sys.stdout.flush()
+    except Exception as e:  # pylint: disable=broad-except
+        # Anything the retry layers did not absorb. Reported and signalled
+        # through the exit code rather than left to escape asyncio.run as a
+        # traceback: the caller cannot tell a stack dump from output, and a
+        # harness scoring this run needs the two separated. KeyboardInterrupt
+        # and SystemExit stay BaseException, so neither is caught here.
+        failure = e
     finally:
         # Stopped before the trailing write so the two cannot interleave.
         if stop_flusher is not None:
@@ -216,6 +224,9 @@ async def _run_oneshot(config: Config, prompt: str):
     sys.stdout.write("\n")
     if usage_path:
         _write_usage_file(usage_path, executor)
+    if failure is not None:
+        print(f"Error: {failure}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _run_dry_run(config: Config):
