@@ -8,14 +8,38 @@ import os
 import re
 import shlex
 import shutil
+import signal
+import subprocess
 import sys
 
 from dashscope.acli.tools.registry import PermissionLevel, tool
 
 MAX_OUTPUT_LENGTH = 10000
 MAX_OUTPUT_BYTES = 5 * 1024 * 1024  # 5 MB hard limit before truncation
-DEFAULT_TIMEOUT = 30
+# Sized for real work: a project's test or build command. The previous 30s
+# silently killed both, and since the model could not see the limit it spent
+# turns guessing at it (e.g. discovering `sleep 25` works and `sleep 150`
+# does not). Callers override per call with the ``timeout`` argument.
+DEFAULT_TIMEOUT = 600
+TIMEOUT_ENV = "ACLI_COMMAND_TIMEOUT"
 IS_WINDOWS = os.name == "nt"
+# Windows has no setsid/killpg; a new process group is the closest thing, and
+# what lets ``taskkill /T`` reach grandchildren. The flag does not exist on
+# POSIX, hence getattr.
+_NEW_GROUP_FLAGS = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+
+def default_timeout() -> int:
+    """Seconds a run_command call gets before it is killed.
+
+    Resolved per call rather than at import, so exporting
+    ``ACLI_COMMAND_TIMEOUT`` takes effect without a restart.
+    """
+    try:
+        value = int(os.environ.get(TIMEOUT_ENV, "") or DEFAULT_TIMEOUT)
+    except ValueError:
+        return DEFAULT_TIMEOUT
+    return value if value > 0 else DEFAULT_TIMEOUT
 
 
 def _resolve_output_encoding() -> str:
@@ -519,11 +543,101 @@ def _is_safe_single(chunk: str) -> bool:
     return False
 
 
+def _signal_tree(proc: asyncio.subprocess.Process | None) -> None:
+    """Kill the process group. Synchronous: no awaits, so it is safe to call
+    from a ``CancelledError`` handler where awaiting is unreliable.
+    """
+    if proc is None or proc.returncode is not None:
+        return
+    if IS_WINDOWS:
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=10,
+            )
+        except Exception:  # pylint: disable=broad-except
+            pass
+        return
+    try:
+        # proc.pid is the group id: the child was started with
+        # start_new_session, which is what makes this reach grandchildren.
+        os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:
+        try:
+            proc.kill()
+        except Exception:  # pylint: disable=broad-except
+            pass
+
+
+async def _kill_tree(proc: asyncio.subprocess.Process | None) -> None:
+    """Kill the tree, then reap it.
+
+    Without the reap the transport stays open until GC, which asyncio reports
+    as "Exception ignored in BaseSubprocessTransport.__del__ ... Event loop is
+    closed" when the process exits first.
+    """
+    if proc is None:
+        # The spawn itself failed, so there is nothing to clean up.
+        return
+    _signal_tree(proc)
+    try:
+        await proc.wait()
+    except Exception:  # pylint: disable=broad-except
+        pass
+
+
+async def _spawn(command: str) -> asyncio.subprocess.Process:
+    """Start the command in its own process group.
+
+    The group is what lets ``_signal_tree`` reach grandchildren. Without it a
+    timeout killed only the shell, so ``cmd | slow`` kept running after the
+    caller was told the command had timed out.
+    """
+    if IS_WINDOWS:
+        # argv form, never a shell string: interpolating into
+        # 'powershell -Command "..."' routes it through cmd.exe first and
+        # any embedded double quote corrupts the command.
+        return await asyncio.create_subprocess_exec(
+            *WIN_SHELL,
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=os.getcwd(),
+            creationflags=_NEW_GROUP_FLAGS,
+        )
+    # Optional OS sandbox (opt-in; degrades to normal execution
+    # when disabled or when no backend is available).
+    from dashscope.acli import sandbox
+
+    sandbox_argv = None
+    if sandbox.is_enabled():
+        sandbox_argv = sandbox.build_argv(command, os.getcwd())
+    if sandbox_argv is not None:
+        return await asyncio.create_subprocess_exec(
+            *sandbox_argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=os.getcwd(),
+            start_new_session=True,
+        )
+    return await asyncio.create_subprocess_shell(
+        command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=os.getcwd(),
+        start_new_session=True,
+    )
+
+
 @tool(
     name="run_command",
     description=(
         "Execute a shell command and return its output. "
-        "Dangerous commands are blocked."
+        "Dangerous commands are blocked. Pass timeout (seconds) to override "
+        f"the {DEFAULT_TIMEOUT}s default for long builds or test runs."
     ),
     permission=PermissionLevel.CONFIRM,
 )
@@ -555,57 +669,33 @@ async def run_command(command: str, timeout: int | None = None) -> str:
     # fall back to the default instead of letting asyncio.wait_for raise
     # TypeError on `<= 0`.
     try:
-        timeout = (
-            int(timeout) if timeout not in (None, "", 0) else DEFAULT_TIMEOUT
-        )
+        timeout = int(timeout) if timeout not in (None, "", 0) else 0
     except (TypeError, ValueError):
-        timeout = DEFAULT_TIMEOUT
+        timeout = 0
+    if timeout <= 0:
+        timeout = default_timeout()
 
+    proc = None
     try:
-        if IS_WINDOWS:
-            # argv form, never a shell string: interpolating into
-            # 'powershell -Command "..."' routes it through cmd.exe first and
-            # any embedded double quote corrupts the command.
-            proc = await asyncio.create_subprocess_exec(
-                *WIN_SHELL,
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=os.getcwd(),
-            )
-        else:
-            # Optional OS sandbox (opt-in; degrades to normal execution
-            # when disabled or when no backend is available).
-            from dashscope.acli import sandbox
-
-            sandbox_argv = None
-            if sandbox.is_enabled():
-                sandbox_argv = sandbox.build_argv(command, os.getcwd())
-            if sandbox_argv is not None:
-                proc = await asyncio.create_subprocess_exec(
-                    *sandbox_argv,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=os.getcwd(),
-                )
-            else:
-                proc = await asyncio.create_subprocess_shell(
-                    command,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=os.getcwd(),
-                )
+        proc = await _spawn(command)
         stdout, stderr = await asyncio.wait_for(
             proc.communicate(),
             timeout=timeout,
         )
     except asyncio.TimeoutError:
-        try:
-            proc.kill()
-        except Exception:
-            pass
-        return f"Error: command timed out ({timeout}s)"
+        await _kill_tree(proc)
+        return (
+            f"Error: command timed out after {timeout}s and was killed. "
+            "Pass a larger timeout argument (seconds) if it needs longer; "
+            f"the default is {default_timeout()}s."
+        )
+    except asyncio.CancelledError:
+        # Ctrl-C: kill synchronously, because awaiting inside a cancellation
+        # handler can be interrupted before the kill lands.
+        _signal_tree(proc)
+        raise
     except Exception as e:
+        await _kill_tree(proc)
         return f"Error: execution failed - {e}"
 
     # Enforce hard size limits to prevent OOM on huge outputs

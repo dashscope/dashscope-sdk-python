@@ -253,6 +253,8 @@ class Config:
     #   "dangerous" - only DANGEROUS prompts; CONFIRM auto-passes
     confirm_mode: str = "dangerous"
     max_turns: int = 50
+    # LLM request timeout (providers/profile.py). run_command has its own,
+    # separate limit: see acli.tools.shell.default_timeout().
     timeout: int = 30
     mcp_servers: list[MCPServerConfig] = field(default_factory=list)
     memory_enabled: bool = True
