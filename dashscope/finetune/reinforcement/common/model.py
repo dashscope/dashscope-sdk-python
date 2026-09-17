@@ -22,6 +22,16 @@ from pydantic import (
 )
 import yaml
 
+from dashscope.common.error_registry import (
+    INTERNAL_ERROR,
+    SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR,
+    SDK_AGENTIC_RL_INSTANCE_WARMUP_ERROR,
+    SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR,
+    SDK_AGENTIC_RL_BASE_CONNECTION_ERROR,
+    SDK_AGENTIC_RL_REGISTRATION_ERROR,
+    SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR,
+)
+
 # Local Application
 from dashscope.finetune.reinforcement.common.constants import (
     FC_API_KEY,
@@ -75,6 +85,7 @@ from dashscope.finetune.reinforcement.common.utils import (
 )
 from dashscope.finetune.reinforcement.common.log import logger
 from dashscope.finetune.reinforcement.common.errors import (
+    AgenticRLError,
     InputError,
     OutputError,
     OSSConnectionError,
@@ -88,6 +99,21 @@ from dashscope.finetune.reinforcement.common.errors import (
     IOErrorWithCode,
     ValueErrorWithCode,
 )
+
+
+def _exc_message(exc: Exception) -> str:
+    """Extract clean message from an exception.
+
+    Uses the ``.message`` attribute (set by AgenticRLError and friends)
+    to avoid embedding ``[error_code]``, ``name``, and ``(at timestamp)``
+    wrappers when composing outer error messages.
+
+    Falls back to ``str(exc)`` for plain exceptions.
+    """
+    msg = getattr(exc, "message", None)
+    if msg:
+        return str(msg)
+    return str(exc)
 
 
 class MountStorage(BaseModel):
@@ -109,7 +135,7 @@ class Dataset(BaseModel):
     download_url: Optional[str] = None
     mount_storage: Optional[MountStorage] = None
 
-    async def upload_dataset(self) -> Optional[str]:
+    async def upload_dataset(self) -> str:
         if (
             self.data_source_type == DataSourceType.FILE_ID
             and self.file_name is not None
@@ -120,13 +146,21 @@ class Dataset(BaseModel):
                 )
                 if file_id and isinstance(file_id, List) and len(file_id) > 0:
                     self.file_id = file_id[0]
+                else:
+                    raise OSSUploadError(
+                        f"Empty upload result for {self.file_name}",
+                    )
 
             except Exception as e:
                 raise OSSUploadError(
                     "Failed to upload datasets",
-                    error_code=2061,
                 ) from e
 
+        if not self.file_id:
+            raise InputError(
+                f"Missing file_id after upload attempt: {self.file_name}",
+                field="file_id",
+            )
         return self.file_id
 
 
@@ -169,7 +203,6 @@ class Datasets(BaseModel):
         except Exception as e:
             raise OSSUploadError(
                 "Failed to upload datasets",
-                error_code=2062,
             ) from e
 
         return uploaded_training_ids, uploaded_validation_ids
@@ -220,7 +253,6 @@ class Models(BaseModel):
         except Exception as e:
             raise IOErrorWithCode(
                 "Failed to load from dict",
-                error_code=1002,
             ) from e
 
     @classmethod
@@ -235,7 +267,6 @@ class Models(BaseModel):
         except Exception as e:
             raise IOErrorWithCode(
                 f"Failed to load YAML file: {file_path}",
-                error_code=1001,
                 path=file_path,
             ) from e
 
@@ -272,7 +303,6 @@ class Models(BaseModel):
         except Exception as e:
             raise IOErrorWithCode(
                 "Failed to write file",
-                error_code=1003,
             ) from e
 
 
@@ -341,7 +371,6 @@ class FunctionComponentModel(BaseModel):
             if not self.oss_signed_url:
                 raise OSSConnectionError(
                     f"Empty OSS URL received: {result}",
-                    error_code=2001,
                 )
 
             logger.debug(
@@ -355,7 +384,6 @@ class FunctionComponentModel(BaseModel):
         except Exception as e:
             raise OSSConnectionError(
                 "Failed to obtain OSS URL",
-                error_code=2002,
             ) from e
 
     async def create_layer(
@@ -401,7 +429,6 @@ class FunctionComponentModel(BaseModel):
         except Exception as e:
             raise FunctionLayerError(
                 "Function layer create failed",
-                error_code=2013,
             ) from e
 
         return layer_code
@@ -447,7 +474,6 @@ class FunctionComponentModel(BaseModel):
         except Exception as e:
             raise OSSUploadError(
                 "Package upload failed",
-                error_code=2003,
                 endpoint=url or "",
             ) from e
 
@@ -484,7 +510,6 @@ class FunctionComponentModel(BaseModel):
             if status != "SUCCESS":
                 raise FunctionLayerError(
                     f"Function layer create failed: {status}",
-                    error_code=2014,
                 )
 
             return status
@@ -492,22 +517,29 @@ class FunctionComponentModel(BaseModel):
         except Exception as e:
             logger.warning(
                 f"Load function layer failed | layer_code: {layer_code}, "
-                f"Error: {str(e)}",
+                f"Error: {_exc_message(e)}",
             )
 
         return "SUCCESS"
 
-    def clean_temp_files(self, tmp_path: str) -> None:
+    def clean_temp_files(self, *tmp_paths: str) -> None:
         """Cleanup temporary deployment files."""
-        try:
-            for f in [tmp_path]:
-                if os.path.exists(f):
-                    if os.path.isfile(f):
-                        os.remove(f)
+        failed_cleanups = []
+        for tmp_path in tmp_paths:
+            if not tmp_path:
+                continue
+            try:
+                if os.path.exists(tmp_path):
+                    if os.path.isfile(tmp_path):
+                        os.remove(tmp_path)
                     else:
-                        shutil.rmtree(f)
-        except Exception as e:
-            logger.warning(f"Temp file cleanup failed: {str(e)}")
+                        shutil.rmtree(tmp_path)
+            except Exception as e:
+                failed_cleanups.append((tmp_path, str(e)))
+
+        if failed_cleanups:
+            msg = "; ".join(f"{p}: {err}" for p, err in failed_cleanups)
+            logger.error(f"Temp file cleanup failed: {msg}")
 
     def split_classpath(self):
         self.filepath, self.classname = get_filepath_classname(self.classpath)
@@ -675,12 +707,13 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             root = e
             while root.__cause__:
                 root = root.__cause__
+            _err = SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR
             return ResponseFC(
                 status=Status(
                     task=StatusType.FAILED,
-                    name="DeploymentError",
-                    code=524,
-                    message=f"Function layer deployment failed: {root}",
+                    name=_err.name,
+                    code=INTERNAL_ERROR.status_code,
+                    message=(f"{_err.message}: {_exc_message(root)}"),
                 ),
                 output={},
             )
@@ -691,11 +724,13 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             return ResponseFC(
                 status=Status(
                     task=StatusType.FAILED,
-                    name="DeploymentError",
-                    code=525,
-                    message=f"Function deployment failed: {root}",
+                    name=SDK_AGENTIC_RL_REGISTRATION_ERROR.name,
+                    code=INTERNAL_ERROR.status_code,
+                    message=(
+                        f"{SDK_AGENTIC_RL_REGISTRATION_ERROR.message}: "
+                        f"{_exc_message(root)}"
+                    ),
                 ),
-                output={},
             )
 
         try:
@@ -716,7 +751,6 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             else:
                 raise RegistrationError(
                     f"Not exist type: {self.type.name}",
-                    error_code=2011,
                 )
 
             result = await client_fc(
@@ -730,7 +764,6 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             if not self.entity_id:
                 raise RegistrationError(
                     f"Empty entity ID received: {result}",
-                    error_code=2012,
                 )
 
             logger.info(
@@ -753,12 +786,13 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             root = e
             while root.__cause__:
                 root = root.__cause__
+            _err = SDK_AGENTIC_RL_BASE_CONNECTION_ERROR
             return ResponseFC(
                 status=Status(
                     task=StatusType.FAILED,
-                    name="DeploymentError",
-                    code=521,
-                    message=f"Full deployment failed: {root}",
+                    name=_err.name,
+                    code=INTERNAL_ERROR.status_code,
+                    message=(f"{_err.message}: {_exc_message(root)}"),
                 ),
                 output={},
             )
@@ -776,14 +810,12 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             if not target_entity_id:
                 raise ValueErrorWithCode(
                     "No valid registration ID provided",
-                    error_code=2021,
                 )
 
             if FC_LAYER_USED:
                 if self.runtime.layer_code is None:
                     raise ValueErrorWithCode(
                         "layer_code is required when FC_LAYER_USED is enabled",
-                        error_code=2022,
                     )
                 await self.fcmodel.get_layer(
                     layer_code=self.runtime.layer_code,
@@ -804,7 +836,6 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             if not self.instance_id:
                 raise FunctionLoadError(
                     f"Empty instance ID received: {result}",
-                    error_code=2023,
                 )
 
             self.instance_url = result.get("output", {}).get("trigger_url", "")
@@ -815,7 +846,6 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             if (not self.instance_url) or (not self.instance_token):
                 raise FunctionLoadError(
                     "Missing instance URL or token",
-                    error_code=2024,
                 )
 
             logger.info(
@@ -830,16 +860,18 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             logger.debug(
                 f"Instance initialization failed | EntityID:"
                 f" {target_entity_id}, "
-                f"Error: {str(e)}",
+                f"Error: {_exc_message(e)}",
             )
             return ResponseFC(
                 status=Status(
                     task=StatusType.FAILED,
-                    name="FunctionLoadError",
-                    code=522,
-                    message=f"Instance initialization failed: {str(e)}",
+                    name=SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR.name,
+                    code=INTERNAL_ERROR.status_code,
+                    message=(
+                        f"{SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR.message}: "
+                        f"{_exc_message(e)}"
+                    ),
                 ),
-                output={},
             )
 
         # Perform instance warmup if requested
@@ -848,7 +880,6 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 if not self.instance_url.startswith(("http://", "https://")):
                     raise ValueErrorWithCode(
                         "Invalid instance URL format",
-                        error_code=2025,
                     )
 
                 url = f"{self.instance_url.rstrip('/')}/health"
@@ -862,7 +893,6 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 if status != StatusType.HEALTH:
                     raise InstanceWarmupError(
                         f"Health check failed: {result}",
-                        error_code=2026,
                         instance_url=url,
                     )
 
@@ -874,14 +904,15 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             except Exception as e:
                 logger.debug(
                     f"Warmup failed | InstanceID: {self.instance_id}, "
-                    f"Error: {str(e)}",
+                    f"Error: {_exc_message(e)}",
                 )
+                _err = SDK_AGENTIC_RL_INSTANCE_WARMUP_ERROR
                 return ResponseFC(
                     status=Status(
                         task=StatusType.FAILED,
-                        name="InstanceWarmupError",
-                        code=511,
-                        message=f"Instance warmup failed: {str(e)}",
+                        name=_err.name,
+                        code=INTERNAL_ERROR.status_code,
+                        message=(f"{_err.message}: {_exc_message(e)}"),
                     ),
                     output={"instance_id": self.instance_id},
                 )
@@ -907,7 +938,6 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             if not instance_id:
                 raise InputError(
                     "No instance ID available for query",
-                    error_code=2031,
                 )
 
             url = f"{FC_QUERY_API}/{instance_id}"
@@ -916,7 +946,6 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             if status == -1:
                 raise InstanceQueryError(
                     f"Invalid status received: {result}",
-                    error_code=2032,
                 )
 
             logger.debug(
@@ -927,14 +956,15 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         except Exception as e:
             logger.debug(
                 f"Status query failed | InstanceID: {instance_id}, "
-                f"Error: {str(e)}",
+                f"Error: {_exc_message(e)}",
             )
+            _err = SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR
             return ResponseFC(
                 status=Status(
                     task=StatusType.FAILED,
-                    name="InstanceQueryError",
-                    code=523,
-                    message=f"Status query failed: {str(e)}",
+                    name=_err.name,
+                    code=INTERNAL_ERROR.status_code,
+                    message=(f"{_err.message}: {_exc_message(e)}"),
                 ),
                 output={"instance_id": instance_id},
             )
@@ -963,13 +993,11 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             if instance_id is None:
                 raise ValueErrorWithCode(
                     "instance_id is required for verification",
-                    error_code=2041,
                 )
             result = await cls.query(instance_id)
             if result.status.task != StatusType.SUCCEEDED:
                 raise InstanceQueryError(
                     "Status query failed",
-                    error_code=2042,
                 )
             instance_url = instance_url or result.output.get("output", {}).get(
                 "trigger_url",
@@ -982,7 +1010,6 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             if (not instance_url) or (not instance_token):
                 raise OutputError(
                     "No instance url/token provided",
-                    error_code=2043,
                 )
 
             input_data_dict = input_data.model_dump(
@@ -1014,13 +1041,16 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             else:
                 raise ValidationError(
                     "Unsupported input type",
-                    error_code=2044,
                 )
 
         except Exception as e:
+            # AgenticRLError subclasses and timeouts already carry their own
+            # classification. Flattening them into ValidationError made a
+            # failed instance query or a request timeout look like a 400.
+            if isinstance(e, (AgenticRLError, TimeoutError)):
+                raise
             raise ValidationError(
                 "Function verification failed",
-                error_code=2045,
             ) from e
 
         try:
@@ -1039,7 +1069,6 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                             error_msg = match.group(1)
                     raise ValidationError(
                         error_msg,
-                        error_code=2046,
                     )
 
             validated = validator.model_validate(response)
@@ -1053,9 +1082,13 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             return validated.model_dump()
 
         except Exception as e:
+            # The status branch above raises ValidationError carrying the
+            # reason the deployed function reported; re-wrapping it here would
+            # replace that reason with a generic message.
+            if isinstance(e, (AgenticRLError, TimeoutError)):
+                raise
             raise ValidationError(
                 "Function output validation failed",
-                error_code=2047,
             ) from e
 
     @staticmethod
@@ -1407,7 +1440,7 @@ class TuningModel(Models, BaseModel):
     async def register_functions(
         self,
         lazy_load: Optional[bool] = True,
-    ) -> tuple[
+    ) -> Tuple[
         List[str],
         List[str],
         List[str],
@@ -1435,7 +1468,6 @@ class TuningModel(Models, BaseModel):
                         if not entity_id:
                             raise RegistrationError(
                                 "Empty entity ID after registration",
-                                error_code=2051,
                             )
                         logger.debug(
                             f"Registered new function component: "
@@ -1444,7 +1476,6 @@ class TuningModel(Models, BaseModel):
                     else:
                         raise RegistrationError(
                             reg_result.status.message,
-                            error_code=2052,
                         )
 
                 if fc.type == FunctionType.ROLLOUT:
@@ -1461,7 +1492,6 @@ class TuningModel(Models, BaseModel):
                         if not instance_id:
                             raise FunctionLoadError(
                                 "Empty instance ID after load",
-                                error_code=2053,
                             )
                         logger.debug(
                             f"Loaded function component instance: "
@@ -1476,8 +1506,7 @@ class TuningModel(Models, BaseModel):
                             instance_group_reward_ids.append(instance_id)
                     else:
                         raise FunctionLoadError(
-                            f"Load failed: {load_result}",
-                            error_code=2054,
+                            f"Load failed: {load_result.status.message}",
                         )
 
         except Exception as e:
@@ -1485,7 +1514,6 @@ class TuningModel(Models, BaseModel):
                 raise
             raise RegistrationError(
                 "Function component registration failed",
-                error_code=2055,
             ) from e
 
         return (
@@ -1501,7 +1529,7 @@ class TuningModel(Models, BaseModel):
         self,
         training_files: Union[List[str], str] = None,
         validation_files: Union[List[str], str] = None,
-    ) -> tuple[List[str], List[str]]:
+    ) -> Tuple[List[str], List[str]]:
         """Register and validate training/validation datasets."""
         uploaded_training_ids = []
         uploaded_validation_ids = []
@@ -1542,7 +1570,6 @@ class TuningModel(Models, BaseModel):
         except Exception as e:
             raise OSSUploadError(
                 "Dataset registration failed",
-                error_code=2063,
             ) from e
 
         return uploaded_training_ids, uploaded_validation_ids
@@ -1790,15 +1817,17 @@ class TuningModel(Models, BaseModel):
 
         return self.functions
 
-    def check_function_names(self) -> bool:
+    def find_function_name_problems(self) -> Tuple[List[str], List[int]]:
         """
-        Check for duplicate function component names.
+        Report naming problems across the function components.
 
         Returns:
-            True if all names are unique, False if duplicates found.
+            A ``(duplicate_names, missing_name_indexes)`` pair. Both lists are
+            empty when every component carries a unique ``name``.
         """
         seen_names = {}
-        duplicate_found = False
+        duplicate_names: List[str] = []
+        missing_name_indexes: List[int] = []
 
         for index, fc in enumerate(self.functions):
             if not hasattr(fc, "name"):
@@ -1806,7 +1835,7 @@ class TuningModel(Models, BaseModel):
                     f"Function component at index {index} is missing a "
                     f"'name' attribute",
                 )
-                duplicate_found = True
+                missing_name_indexes.append(index)
                 continue
 
             name = fc.name
@@ -1816,14 +1845,26 @@ class TuningModel(Models, BaseModel):
                     f"Original at index {seen_names[name]}, duplicate at "
                     f"index {index}",
                 )
-                duplicate_found = True
+                if name not in duplicate_names:
+                    duplicate_names.append(name)
             else:
                 seen_names[name] = index
 
-        if duplicate_found:
+        return duplicate_names, missing_name_indexes
+
+    def check_function_names(self) -> bool:
+        """
+        Check for duplicate function component names.
+
+        Returns:
+            True if all names are unique, False if duplicates found.
+        """
+        duplicate_names, missing_name = self.find_function_name_problems()
+
+        if duplicate_names or missing_name:
             logger.error(
-                "Duplicate function names detected. All function names must "
-                "be unique.",
+                "Function name check failed. Every function component must "
+                "have a unique 'name' attribute.",
             )
             return False
 
