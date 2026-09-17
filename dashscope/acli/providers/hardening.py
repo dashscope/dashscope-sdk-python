@@ -13,6 +13,7 @@ Wraps any LLMProvider with:
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import AsyncIterator
 
 from dashscope.acli.providers.base import LLMChunk, LLMProvider, LLMResponse
@@ -113,6 +114,46 @@ def is_retryable_error(error: BaseException) -> bool:
     return any(p in text for p in _RETRYABLE_PATTERNS)
 
 
+class RetriesExhausted(RuntimeError):
+    """This layer already spent its whole retry budget on the wrapped error.
+
+    Keeps the original message so ``is_retryable_error`` still answers True
+    and ``ProviderChain`` keeps falling back to the next profile — the budget
+    that is exhausted is this layer's, not the chain's. What the type adds is
+    a signal for layers *above* the provider stack: re-attempting there pays
+    ``max_retries x request_timeout`` a second time, which against a stalled
+    endpoint measured 819s of silent wall clock from a 60s configured
+    timeout.
+
+    The type alone is not enough of a signal, though. A budget spent on a
+    stalled endpoint costs ``max_retries x request_timeout`` (268s measured);
+    the same budget spent on a refused connection costs only the ~28s of
+    backoff, and there an upper layer re-attempting is cheap and is what
+    rides out a transient blip. ``elapsed_sec`` lets the caller tell the two
+    apart instead of paying for the expensive case's protection in the cheap
+    case too.
+    """
+
+    #: Wall clock at which the exhausted budget counts as slow: past roughly
+    #: one request_timeout, the attempts were each stalling rather than
+    #: failing fast, so re-paying them upstream is the expensive case.
+    SLOW_BUDGET_SEC = 60.0
+
+    def __init__(
+        self,
+        error: BaseException,
+        elapsed_sec: float = 0.0,
+    ) -> None:
+        super().__init__(str(error))
+        self.error = error
+        self.elapsed_sec = elapsed_sec
+
+    @property
+    def exhausted_slowly(self) -> bool:
+        """True when the budget went into slow attempts, not fast failures."""
+        return self.elapsed_sec >= self.SLOW_BUDGET_SEC
+
+
 def _is_empty_response(resp: LLMResponse) -> bool:
     return not resp.content.strip() and not resp.tool_calls
 
@@ -149,6 +190,7 @@ class HardenedProvider:
     ) -> LLMResponse:
         last_error: BaseException | None = None
         attempt_messages = messages
+        started = time.monotonic()
 
         for attempt in range(self.max_retries + 1):
             try:
@@ -159,9 +201,15 @@ class HardenedProvider:
                 )
             except Exception as e:
                 last_error = e
-                if attempt < self.max_retries and is_retryable_error(e):
+                retryable = is_retryable_error(e)
+                if retryable and attempt < self.max_retries:
                     await asyncio.sleep(self._backoff(attempt))
                     continue
+                if retryable:
+                    raise RetriesExhausted(
+                        e,
+                        time.monotonic() - started,
+                    ) from e
                 raise
 
             if _is_empty_response(resp):
@@ -181,6 +229,7 @@ class HardenedProvider:
         response_format: dict | None = None,
     ) -> AsyncIterator[LLMChunk]:
         attempt_messages = messages
+        started = time.monotonic()
 
         for attempt in range(self.max_retries + 1):
             emitted_anything = False
@@ -201,14 +250,19 @@ class HardenedProvider:
                 return
             except Exception as e:
                 # First-chunk rule: after any chunk was yielded, retrying
-                # would re-emit content — propagate the error instead.
-                if (
-                    not emitted_anything
-                    and is_retryable_error(e)
-                    and attempt < self.max_retries
-                ):
+                # would re-emit content — propagate the error instead. Such an
+                # error also stays plain rather than RetriesExhausted: this
+                # layer never spent a budget on it, so an upper layer deciding
+                # to re-attempt is not duplicating work.
+                retryable = not emitted_anything and is_retryable_error(e)
+                if retryable and attempt < self.max_retries:
                     # Retry with same messages for transient failures.
                     attempt_messages = messages
                     await asyncio.sleep(self._backoff(attempt))
                     continue
+                if retryable:
+                    raise RetriesExhausted(
+                        e,
+                        time.monotonic() - started,
+                    ) from e
                 raise

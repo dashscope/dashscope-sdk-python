@@ -108,16 +108,12 @@ class TestAgenticRLUtils:
             requirements_path="requirements.txt",
         )
 
-        # Validate generated file (written to cwd by create_deployment_files)
-        try:
-            assert os.path.exists("start.sh")
-            with open("start.sh", "r", encoding="utf-8") as f:
-                content = f.read()
-                assert 'PROCESSOR_CLASS="processor.DemoProcessor"' in content
-                assert 'REQUIREMENTS_FILE="requirements.txt"' in content
-        finally:
-            if os.path.exists("start.sh"):
-                os.remove("start.sh")
+        # Validate generated file in the packaged workspace
+        start_file = test_dir / "start.sh"
+        assert start_file.exists()
+        content = start_file.read_text(encoding="utf-8")
+        assert 'PROCESSOR_CLASS="processor.DemoProcessor"' in content
+        assert 'REQUIREMENTS_FILE="requirements.txt"' in content
 
     def test_create_files_without_requirements(self, tmp_path):
         """Test creating deployment files without requirements."""
@@ -136,18 +132,12 @@ class TestAgenticRLUtils:
             requirements_path="",
         )
 
-        # Validate generated file (written to cwd by create_deployment_files)
-        try:
-            assert os.path.exists("start.sh")
-            with open("start.sh", "r", encoding="utf-8") as f:
-                content = f.read()
-                assert (
-                    'PROCESSOR_CLASS="module.processor.MyProcessor"' in content
-                )
-                assert "local_packages=($SDK_PACKAGE)" in content
-        finally:
-            if os.path.exists("start.sh"):
-                os.remove("start.sh")
+        # Validate generated file in the packaged workspace
+        start_file = test_dir / "start.sh"
+        assert start_file.exists()
+        content = start_file.read_text(encoding="utf-8")
+        assert 'PROCESSOR_CLASS="module.processor.MyProcessor"' in content
+        assert "local_packages=($SDK_PACKAGE)" in content
 
     def test_invalid_file_path(self, tmp_path):
         """Test handling of invalid file paths."""

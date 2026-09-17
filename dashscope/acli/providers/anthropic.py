@@ -129,11 +129,31 @@ class AnthropicProvider:
                     )
                 converted.append({"role": "assistant", "content": content})
             else:
-                _flush_tool_results()
                 content = msg["content"]
                 if isinstance(content, list):
                     content = [_convert_content_block(b) for b in content]
-                converted.append({"role": msg["role"], "content": content})
+                if msg["role"] == "user" and tool_results and content:
+                    # Join the pending tool results rather than emitting a
+                    # second consecutive user message: tool_result blocks may
+                    # share a user turn with text as long as they come first,
+                    # and alternation has to hold.
+                    blocks = (
+                        content
+                        if isinstance(content, list)
+                        else [{"type": "text", "text": content}]
+                    )
+                    converted.append(
+                        {
+                            "role": "user",
+                            "content": [*tool_results, *blocks],
+                        },
+                    )
+                    tool_results.clear()
+                else:
+                    _flush_tool_results()
+                    converted.append(
+                        {"role": msg["role"], "content": content},
+                    )
         _flush_tool_results()
         return system, converted
 

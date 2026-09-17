@@ -174,7 +174,13 @@ class MCPServerConfig:
 
 @dataclass
 class SubagentConfig:
-    """Per-subagent configuration overrides (model, temperature, max_turns)."""
+    """Per-subagent overrides. Only ``max_turns`` is applied.
+
+    ``model`` and ``temperature`` are accepted, validated and persisted by
+    ``/subagents config``, but a subagent shares the parent's provider,
+    whose model and sampling parameters are fixed when it is constructed.
+    Nothing reads them.
+    """
 
     model: str = ""
     temperature: float = 0.0

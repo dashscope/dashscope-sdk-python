@@ -5,9 +5,14 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
+import re
+import shlex
 import time
+from dataclasses import dataclass
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
@@ -28,10 +33,154 @@ PERMISSION_STYLES = {
     PermissionLevel.DANGEROUS: "red bold",
 }
 
-# Canonical prefix for tool-execution failure results. Agent code classifies
-# tool outcomes by this marker — keep it in sync with agent's
-# _TOOL_ERROR_PREFIXES.
+# Text marker the executor emits for tool exceptions. Outcome classification
+# no longer depends on it — ToolOutcome.signal_kind carries the verdict — but
+# the marker stays so results remain self-describing to the model.
 EXEC_ERROR_PREFIX = "Error"
+
+# Where a verdict came from, which is what determines how much to trust it:
+# the executor-level kinds are certain, TOOL_REPORTED is the tool's own claim,
+# EXIT_CODE is the commanded program's own verdict.
+SIGNAL_OK = "ok"
+SIGNAL_VALIDATION = "validation"
+SIGNAL_CANCELLED = "cancelled"
+SIGNAL_EXCEPTION = "exception"
+SIGNAL_TOOL_REPORTED = "tool_reported"
+SIGNAL_EXIT_CODE = "exit_code"
+
+# Self-reported failure/cancellation markers. The Chinese variants are kept so
+# results from external tools and MCP servers that return Chinese text are
+# classified the same way.
+_FAILURE_PREFIXES = ("错误", "Error", EXEC_ERROR_PREFIX)
+_CANCEL_PREFIXES = ("操作已取消", "Cancelled")
+
+# run_command appends this trailer (tools/shell.py). It is the only place the
+# commanded program's own verdict survives; everything else in the text is
+# prose that has to be guessed at.
+_EXIT_CODE_RE = re.compile(r"\[exit code: (-?\d+)\]\s*$")
+
+# Commands whose non-zero exit is an answer rather than a failure: grep exits 1
+# for "no matches", diff exits 1 for "files differ". Counting those as tool
+# failures would feed false positives into reflection — the failure mode
+# Reflexion's Table 2 shows makes self-correction worse than none at all
+# (1.4% false positives on HumanEval, where it works, vs 16.3% on MBPP, where
+# it lost to the baseline).
+_BENIGN_NONZERO_EXIT = frozenset(
+    {
+        "grep",
+        "egrep",
+        "fgrep",
+        "rg",
+        "ag",
+        "diff",
+        "cmp",
+        "test",
+        "[",
+    },
+)
+
+# Splits a shell command into segments so the last one can be identified.
+_COMMAND_SEGMENT_RE = re.compile(r"\|\||&&|[|;\n]")
+
+
+@dataclass(frozen=True)
+class ToolOutcome:
+    """Structured result of one tool call.
+
+    Reflection, experience memory, directive learning and stagnation detection
+    all key off tool success, so this is the single source of truth for that
+    verdict instead of each call site sniffing prefixes off the text.
+    """
+
+    ok: bool
+    text: str
+    signal_kind: str
+    exit_code: int | None = None
+
+    @property
+    def cancelled(self) -> bool:
+        """User rejection is neutral, not a failure.
+
+        Callers must not feed it to the consecutive-failure counter, or
+        declining a permission prompt would look like the tool breaking.
+        """
+        return self.signal_kind == SIGNAL_CANCELLED
+
+
+def _last_segment_binary(command: str) -> str | None:
+    """Name of the binary whose exit status the shell will report.
+
+    A shell reports the last segment's status, so only that segment matters.
+    """
+    segments = [s for s in _COMMAND_SEGMENT_RE.split(command) if s.strip()]
+    if not segments:
+        return None
+    try:
+        tokens = shlex.split(segments[-1])
+    except ValueError:
+        return None
+    if not tokens:
+        return None
+    return os.path.basename(tokens[0])
+
+
+def classify_tool_text(
+    text: str,
+    arguments: dict | None = None,
+) -> ToolOutcome:
+    """Derive an outcome from a tool's returned text.
+
+    Tools still signal failure by returning a string, so this remains
+    inference — but it now happens once, here, instead of being re-guessed at
+    every call site. The shell exit-code trailer is read as the real signal it
+    is rather than being flattened into prose.
+    """
+    if text.startswith(_CANCEL_PREFIXES):
+        return ToolOutcome(
+            ok=False,
+            text=text,
+            signal_kind=SIGNAL_CANCELLED,
+        )
+
+    match = _EXIT_CODE_RE.search(text)
+    if match:
+        code = int(match.group(1))
+        binary = _last_segment_binary(
+            str((arguments or {}).get("command", "")),
+        )
+        return ToolOutcome(
+            # A non-zero exit is a failure unless the command is one whose
+            # exit status is its answer.
+            ok=code == 0 or binary in _BENIGN_NONZERO_EXIT,
+            text=text,
+            signal_kind=SIGNAL_EXIT_CODE,
+            exit_code=code,
+        )
+
+    if text.startswith(_FAILURE_PREFIXES):
+        return ToolOutcome(
+            ok=False,
+            text=text,
+            signal_kind=SIGNAL_TOOL_REPORTED,
+        )
+    return ToolOutcome(ok=True, text=text, signal_kind=SIGNAL_OK)
+
+
+def _command_identity(arguments: dict) -> str | None:
+    """The exact string an ``[a]lways`` grant on run_command is scoped to.
+
+    Deliberately only stripped: no shlex canonicalisation, no prefix or
+    wildcard matching. Two commands differing by an inner space are two
+    different grants, so a near-miss costs one more prompt instead of
+    silently widening what the user approved. ``None`` means there was no
+    usable command string, which leaves the grant unrecorded rather than
+    falling back to trusting the whole tool.
+    """
+    cmd = arguments.get("command", "")
+    if not isinstance(cmd, str):
+        return None
+    cmd = cmd.strip()
+    return cmd or None
 
 
 class Executor:
@@ -50,6 +199,10 @@ class Executor:
         # never enter _always_allow (see _check_permission below).
         self._always_allow: set[str] = set()
         self._always_deny: set[str] = set()
+        # run_command grants live here keyed by the exact command, not in
+        # _always_allow keyed by tool name. Approving one `ls` must not turn
+        # into unprompted approval of every later shell command in the turn.
+        self._always_allow_commands: set[str] = set()
         # Optional async callback for TUI mode confirmation
         self._confirm_callback = None
 
@@ -78,6 +231,59 @@ class Executor:
         """Called by Agent at the end of each turn to reset trust grants."""
         self._always_allow.clear()
         self._always_deny.clear()
+        self._always_allow_commands.clear()
+
+    def trust_snapshot(self) -> tuple[set[str], set[str], set[str]]:
+        """Turn-scoped grants as (tools allowed, commands allowed, denied).
+
+        Copies, so the ``/trust`` handlers can read and report without
+        holding a reference they could mutate behind the executor's back.
+        """
+        return (
+            set(self._always_allow),
+            set(self._always_allow_commands),
+            set(self._always_deny),
+        )
+
+    def trust_tool(self, name: str) -> None:
+        """Pre-approve a whole tool for this turn. Additive only."""
+        self._always_deny.discard(name)
+        self._always_allow.add(name)
+
+    def deny_tool(self, name: str) -> None:
+        """Pre-deny a whole tool for this turn. Additive only."""
+        self._always_allow.discard(name)
+        self._always_deny.add(name)
+
+    def _grant_always(
+        self,
+        tool_def: ToolDefinition,
+        arguments: dict,
+    ) -> None:
+        """Record an ``[a]lways`` answer from a confirmation prompt.
+
+        For run_command the grant is the command, not the tool: caching the
+        tool name let one approved read-only command auto-approve every later
+        shell command in the turn, which is how `curl ... | sh` and
+        `rm -rf ~/work` came back "trusted this turn" without a prompt.
+        """
+        if tool_def.name == "run_command":
+            identity = _command_identity(arguments)
+            if identity is not None:
+                self._always_allow_commands.add(identity)
+            return
+        self._always_allow.add(tool_def.name)
+
+    def _is_command_trusted(
+        self,
+        tool_def: ToolDefinition,
+        arguments: dict,
+    ) -> bool:
+        """True when this exact command already got an ``[a]lways``."""
+        if tool_def.name != "run_command":
+            return False
+        identity = _command_identity(arguments)
+        return identity is not None and identity in self._always_allow_commands
 
     def record_api_call(self, usage: dict | None = None) -> None:
         """Record an API call and its token usage."""
@@ -127,15 +333,33 @@ class Executor:
             )
 
     async def execute(self, tool_def: ToolDefinition, arguments: dict) -> str:
+        """Run one tool call and return its text result.
+
+        Thin wrapper over :meth:`execute_detailed` for callers that only need
+        the text, such as the MCP server bridge.
+        """
+        outcome = await self.execute_detailed(tool_def, arguments)
+        return outcome.text
+
+    async def execute_detailed(
+        self,
+        tool_def: ToolDefinition,
+        arguments: dict,
+    ) -> ToolOutcome:
+        """Run one tool call and return a structured outcome."""
         # Validate required params BEFORE asking for permission — otherwise
         # the model can emit `{}` and the user is forced to confirm a call
         # that will immediately fail validation anyway.
         missing = missing_required_args(tool_def, arguments)
         if missing:
-            return (
-                f"Error: tool {tool_def.name} missing required arguments: "
-                f"{', '.join(missing)}. Call again following the schema "
-                f"(required: {tool_def.parameters.get('required', [])})"
+            return ToolOutcome(
+                ok=False,
+                text=(
+                    f"Error: tool {tool_def.name} missing required arguments: "
+                    f"{', '.join(missing)}. Call again following the schema "
+                    f"(required: {tool_def.parameters.get('required', [])})"
+                ),
+                signal_kind=SIGNAL_VALIDATION,
             )
 
         if not await self._async_check_permission(tool_def, arguments):
@@ -147,7 +371,11 @@ class Executor:
                 decision="denied",
                 reason="user declined",
             )
-            return "Cancelled"
+            return ToolOutcome(
+                ok=False,
+                text="Cancelled",
+                signal_kind=SIGNAL_CANCELLED,
+            )
 
         try:
             arguments = coerce_types(tool_def.func, arguments)
@@ -166,7 +394,7 @@ class Executor:
                 arguments,
                 decision="executed",
             )
-            return str(result)
+            return classify_tool_text(str(result), arguments)
         except Exception as e:
             self.record_error()
             from dashscope.acli.audit import get_audit_logger
@@ -177,7 +405,11 @@ class Executor:
                 decision="failed",
                 reason=str(e),
             )
-            return f"{EXEC_ERROR_PREFIX}: {type(e).__name__}: {e}"
+            return ToolOutcome(
+                ok=False,
+                text=f"{EXEC_ERROR_PREFIX}: {type(e).__name__}: {e}",
+                signal_kind=SIGNAL_EXCEPTION,
+            )
 
     def get_stats(self) -> dict:
         """Return session usage statistics."""
@@ -251,6 +483,8 @@ class Executor:
             # Consult turn-scoped trust cache
             if tool_def.name in self._always_deny:
                 return False
+            if self._is_command_trusted(tool_def, arguments):
+                return True
             if tool_def.name in self._always_allow:
                 return True
             # Delegate to TUI callback
@@ -265,7 +499,7 @@ class Executor:
             if result == "a":
                 # DANGEROUS never enters the trust cache (sync path: y/n only)
                 if not is_dangerous:
-                    self._always_allow.add(tool_def.name)
+                    self._grant_always(tool_def, arguments)
                 return True
             if result == "s":
                 raise UserAbortedTurn("User aborted this turn")
@@ -347,6 +581,17 @@ class Executor:
                 f"[dim red]✗ {tool_def.name} (denied this turn)[/dim red]",
             )
             return False
+        if self._is_command_trusted(tool_def, arguments):
+            identity = _command_identity(arguments) or ""
+            preview = identity if len(identity) <= 80 else identity[:80] + "…"
+            console.print(
+                # Escaped: the command is model-controlled text, so a bare
+                # bracket would be read as markup and could rewrite the very
+                # line telling the user what was approved.
+                f"[dim green]✓ {escape(preview)} "
+                "(trusted this turn)[/dim green]",
+            )
+            return True
         if tool_def.name in self._always_allow:
             console.print(
                 f"[dim green]✓ {tool_def.name} "
@@ -383,11 +628,16 @@ class Executor:
         # CONFIRM gets the four-way prompt with turn-scoped memory.
         # Brackets are escaped (\[…\]) so Rich doesn't parse them as markup
         # tags and eat the first letter — see issue with "es / o / lways /
-        # top" rendering previously.
+        # top" rendering previously. The [a]lways label says what is actually
+        # granted: one command for run_command, the whole tool otherwise.
+        always_scope = (
+            "this command" if tool_def.name == "run_command" else "this tool"
+        )
         try:
             choice = Prompt.ask(
                 r"Execute? \[y]es / \[n]o / \[u]pdate (add info, replan) / "
-                r"\[a]lways (allow this tool for the turn) / \[s]top (abort)",
+                rf"\[a]lways (allow {always_scope} for the turn) / "
+                r"\[s]top (abort)",
                 choices=["y", "n", "u", "a", "s"],
                 default="y",
                 show_choices=False,
@@ -395,7 +645,7 @@ class Executor:
         except (KeyboardInterrupt, EOFError):
             raise UserAbortedTurn("Ctrl-C aborted this turn") from None
         if choice == "a":
-            self._always_allow.add(tool_def.name)
+            self._grant_always(tool_def, arguments)
             return True
         if choice == "u":
             supplement = Prompt.ask("[dim]Supplementary info[/dim]")

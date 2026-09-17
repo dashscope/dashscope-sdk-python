@@ -11,15 +11,17 @@ from typing import AsyncIterator
 
 from rich.console import Console
 
+from dashscope.acli.acceptance import AcceptanceGate
 from dashscope.acli.compression import (
     HARD_THRESHOLD_RATIO,
     estimate_message_tokens,
     estimate_tokens,
+    restore_note,
     safety_compress_if_needed,
     shrink_old_tool_messages,
 )
 from dashscope.acli.config import WORKSPACE_DIR, context_window_for_model
-from dashscope.acli.executor import EXEC_ERROR_PREFIX, Executor
+from dashscope.acli.executor import Executor
 from dashscope.acli.hooks import HookBus, HookContext, create_hook_bus
 from dashscope.acli.memory.manager import MemoryManager
 from dashscope.acli.memory.reflection import (
@@ -29,7 +31,10 @@ from dashscope.acli.memory.reflection import (
 from dashscope.acli.platforms.base import MemoryProvider
 from dashscope.acli.prompt_pipeline import PromptContext, default_pipeline
 from dashscope.acli.providers.base import LLMProvider, LLMResponse, ToolCall
-from dashscope.acli.providers.hardening import is_retryable_error
+from dashscope.acli.providers.hardening import (
+    RetriesExhausted,
+    is_retryable_error,
+)
 from dashscope.acli.skills import get_skill_manager, skills_summary_for_llm
 from dashscope.acli.tools.registry import PermissionLevel, registry
 from dashscope.acli.utils import (
@@ -44,15 +49,6 @@ from dashscope.acli.utils import (
 
 console = Console()
 
-# Tool results are plain strings; outcome classification relies on these
-# prefixes. "Error" marks validation / unknown-tool failures,
-# EXEC_ERROR_PREFIX marks executor exceptions, "Cancelled" marks user
-# rejection/cancellation. The Chinese variants are kept so results from
-# external tools / MCP servers that still return Chinese text are also
-# classified correctly.
-_TOOL_ERROR_PREFIXES = ("错误", "Error", EXEC_ERROR_PREFIX)
-_TOOL_CANCEL_PREFIXES = ("操作已取消", "Cancelled")
-
 
 def _classify_outcome(successes: int, failures: int) -> str:
     """Classify a turn's outcome from its tool execution counters.
@@ -65,6 +61,40 @@ def _classify_outcome(successes: int, failures: int) -> str:
     if failures > 0 and successes == 0:
         return "failure"
     return "partial"
+
+
+def _tool_message(tool_call: ToolCall, result: str) -> dict:
+    """Build the history entry answering ``tool_call``.
+
+    The restore note must be attached here, at truncation time: later
+    shrinking skips a result that already carries an omission marker, so the
+    largest results would end up with no way to be read back.
+    """
+    return {
+        "role": "tool",
+        "content": tool_result_for_history(
+            result,
+            note=restore_note(tool_call.name, tool_call.arguments),
+        ),
+        "name": tool_call.name,
+        "tool_use_id": tool_call.id,
+        "tool_call_id": tool_call.id,
+    }
+
+
+def _budget_burned_slowly(error: BaseException) -> bool:
+    """True when the provider stack already spent real wall clock on this turn.
+
+    ``RetriesExhausted`` on its own is not the signal it looks like. Raised
+    after a stalled endpoint it means ``max_retries x request_timeout`` went
+    into attempts that each timed out (268s measured), and re-attempting here
+    multiplies that — the 819s of silent wall clock the turn retry was
+    removed for. Raised after a refused connection it means only the ~28s of
+    backoff was spent, and re-attempting is cheap and is exactly what rides
+    out a transient blip. Matching on the type alone gives up in both cases;
+    the elapsed seconds the exception carries tell them apart.
+    """
+    return isinstance(error, RetriesExhausted) and error.exhausted_slowly
 
 
 SYSTEM_PROMPT = """You are acli, an intelligent command-line assistant.
@@ -182,10 +212,12 @@ class Agent:
             )
         except ValueError:
             self.readonly_hard_cap = 40
-        # Turn-level retry: a transient model-API failure that exhausts the
-        # provider's own retries must not kill a long run. Re-run the current
-        # turn (only when nothing was streamed yet, to avoid duplicate output)
-        # up to turn_retry_max times with capped exponential backoff.
+        # Turn-level retry: re-run the current turn (only when nothing was
+        # streamed yet, to avoid duplicate output) up to turn_retry_max times
+        # with capped exponential backoff. Covers providers that carry no
+        # retry layer of their own; a HardenedProvider that exhausted its own
+        # budget slowly (stalled endpoint, not a refused connection) is not
+        # re-paid here — see _budget_burned_slowly.
         # Env override: ACLI_TURN_RETRY_MAX (0 disables).
         try:
             self.turn_retry_max = int(
@@ -213,6 +245,13 @@ class Agent:
             )
         except ValueError:
             self.converge_hard_ratio = 0.85
+        # Hard acceptance gate (oneshot only): run the project's test command
+        # before accepting a final answer, and send the raw output back when
+        # it fails. Built here, ahead of the policy text below, so the prompt
+        # can promise the gate only when one is actually armed.
+        # Env: ACLI_ACCEPTANCE (0 disables), ACLI_ACCEPTANCE_CMD (overrides
+        # discovery), ACLI_ACCEPTANCE_RETRIES, ACLI_ACCEPTANCE_TIMEOUT.
+        self._acceptance_gate = AcceptanceGate.from_env(self.oneshot)
         # Load custom system prompt: workspace .acli/system-prompt.md first,
         # then global ~/.acli/system-prompt.md, then built-in default.
         # runners.py pre-populates system_prompt via _load_system_prompt();
@@ -245,6 +284,20 @@ class Agent:
                 "actionable feedback: change the approach based on what "
                 "the measurement shows, then re-measure."
             )
+            if self._acceptance_gate.active:
+                # An armed gate implies oneshot — from_env hands back an empty
+                # command otherwise — so this belongs inside the block above.
+                # Naming the command beats a generic promise: the model can
+                # run it itself first instead of meeting the gate at the exit.
+                check = self._acceptance_gate.command
+                self.system_prompt += (
+                    f"\n- Verification gate: `{check}` runs before your "
+                    "final answer is accepted. If it fails, the answer is "
+                    "withheld and the raw output comes back to you as the "
+                    "next requirement. Make it pass by fixing the code — "
+                    "never by editing, skipping, or weakening the check "
+                    "itself."
+                )
         # Discover project instructions from CWD (rules.jsonl,
         # .cursorrules, etc.)
         from dashscope.acli.prompt import discover_project_instructions
@@ -295,6 +348,7 @@ class Agent:
         self._turn_tool_successes = 0
         self._turn_tool_failures = 0
         self._reflection_lesson_recorded = False
+        self._reflection_hint_injected = False
         # Per-turn counters for the TUI status line
         self.turn_tool_calls = 0
         self.turn_subagents = 0
@@ -447,32 +501,54 @@ class Agent:
             return ""
 
     def _reflection_section(self) -> str:
-        """Inject reflection hints when repeated failures detected."""
+        """Inject an evidence-anchored hint on repeated tool failures.
+
+        The lesson is deliberately *not* recorded here. This runs before the
+        model has answered, so all it could capture was the tracker's own
+        summary of a count. The diagnosis the model writes in response to the
+        anchored hint is what makes a lesson recallable on a similar task
+        later, so ``_record_reflection_lesson`` picks it up after the stream.
+        """
         tracker = self.memory_manager.session.reflection
-        if tracker.needs_reflection():
-            # Also record lesson in experience memory — once per turn, since
-            # this section is re-evaluated on every loop iteration.
-            lesson = tracker.get_failure_lesson()
-            if (
-                lesson
-                and self._current_turn_tools
-                and not self._reflection_lesson_recorded
-            ):
-                self._reflection_lesson_recorded = True
-                self.memory_manager.record_experience(
-                    task_summary="repeated tool failures",
-                    tools_used=self._current_turn_tools,
-                    outcome="failure",
-                    lesson=lesson,
-                )
-            return tracker.get_reflection_hint()
-        return ""
+        if not tracker.needs_reflection():
+            return ""
+        hint = tracker.get_reflection_hint()
+        if hint and self._current_turn_tools:
+            self._reflection_hint_injected = True
+        return hint
+
+    def _record_reflection_lesson(self, diagnosis: str) -> None:
+        """Persist the model's own failure diagnosis, once per turn.
+
+        Called with the response to a turn that carried a reflection hint. An
+        empty ``diagnosis`` — no content, or a stream cut short — falls back
+        to the tracker's evidence summary, so a turn that hit the failure
+        threshold still leaves something recallable behind.
+        """
+        if not self._reflection_hint_injected:
+            return
+        if self._reflection_lesson_recorded:
+            return
+        tracker = self.memory_manager.session.reflection
+        lesson = tracker.get_failure_lesson(diagnosis=diagnosis)
+        if not lesson:
+            return
+        self._reflection_lesson_recorded = True
+        self._reflection_hint_injected = False
+        self.memory_manager.record_experience(
+            task_summary="repeated tool failures",
+            tools_used=self._current_turn_tools,
+            outcome="failure",
+            lesson=lesson,
+        )
 
     def _stagnation_section(self) -> str:
-        """Inject a convergence nudge on long read-only streaks."""
+        """Inject a nudge on read-only stalls or repeated identical calls.
+
+        ``get_stagnation_hint`` returns "" until one of those fires, so the
+        tracker — not this method — decides whether the turn gets a section.
+        """
         tracker = self.memory_manager.session.stagnation
-        if not tracker.needs_nudge():
-            return ""
         cap = self.readonly_hard_cap if self.oneshot else None
         return tracker.get_stagnation_hint(hard_cap=cap)
 
@@ -584,10 +660,14 @@ class Agent:
         self._turn_tool_successes = 0
         self._turn_tool_failures = 0
         self._reflection_lesson_recorded = False
+        # Cleared with the tracker below: a hint from the previous turn must
+        # not license recording a lesson from this turn's first response.
+        self._reflection_hint_injected = False
 
         # Reset reflection tracker for new turn
         self.memory_manager.session.reflection.reset()
         self.memory_manager.session.stagnation.reset()
+        self._acceptance_gate.reset()
 
         # Recall relevant memories
         memory_context = await self._recall_memory(user_input_text)
@@ -645,15 +725,31 @@ class Agent:
                         f"messages → {len(self.messages)}[/dim]",
                     )
 
-            # Inject reflection hint while repeated failures persist; assign
-            # unconditionally so the hint disappears once failures stop.
-            # The hint is appended, keeping the cache-friendly prefix stable.
-            reflection_hint = self._reflection_section()
-            messages_with_system[0]["content"] = (
-                system_prompt
-                + reflection_hint
+            # Reflection / stagnation / convergence hints are volatile, so
+            # they ride at the tail of the request instead of being folded
+            # into the system message. Rewriting messages_with_system[0] on
+            # every iteration changed the whole prompt prefix byte-for-byte and
+            # defeated provider-side prompt caching, where cached input costs
+            # roughly a tenth of uncached. The system message and the
+            # accumulated history below it stay append-only and byte-stable.
+            #
+            # The hint has to be a user message, not a second system message:
+            # the Anthropic converter keeps only the last system message, so a
+            # second one would replace the real prompt outright, and the Tongyi
+            # converter only reads messages[0] as system.
+            #
+            # All three sections are rebuilt every iteration because tracker
+            # state changes as tools run; each returns "" when its condition
+            # is not met, so an empty hint costs no message at all.
+            hint = (
+                self._reflection_section()
                 + self._stagnation_section()
                 + self._convergence_section(_loop_i)
+            ).strip()
+            request_messages = (
+                [*messages_with_system, {"role": "user", "content": hint}]
+                if hint
+                else messages_with_system
             )
 
             # Hard stop for read-only stalls in oneshot mode: finish with
@@ -680,12 +776,16 @@ class Agent:
             last_chunk = None
             llm_start = time.monotonic()
 
-            # Turn-level retry around the streaming call. A transient
-            # model-API failure that survives the provider's own retries is
-            # re-attempted here so a single network blip cannot abort a long
-            # run. We only retry when nothing has been streamed yet; once
-            # content is yielded, a retry would duplicate output, so we let
-            # the error propagate.
+            # Turn-level retry around the streaming call, for providers that
+            # carry no retry layer of their own. A HardenedProvider that spent
+            # its budget on slow attempts raises RetriesExhausted and is NOT
+            # re-attempted here: that multiplied max_retries x request_timeout
+            # by turn_retry_max, which against a stalled endpoint measured
+            # 819s of silent wall clock from a 60s configured timeout. A
+            # budget spent failing fast is still re-attempted — see
+            # _budget_burned_slowly. We only retry when nothing has been
+            # streamed yet; once content is yielded, a retry would duplicate
+            # output, so that case degrades to a partial turn instead.
             turn_attempt = 0
             while True:
                 full_content = ""
@@ -697,7 +797,7 @@ class Agent:
                 try:
                     async for chunk in self.provider.chat_stream(
                         normalize_for_model(
-                            messages_with_system,
+                            request_messages,
                             self.model_name,
                         ),
                         tools_schema,
@@ -742,6 +842,7 @@ class Agent:
                         not emitted
                         and is_retryable_error(e)
                         and turn_attempt < self.turn_retry_max
+                        and not _budget_burned_slowly(e)
                     ):
                         turn_attempt += 1
                         await asyncio.sleep(
@@ -752,15 +853,26 @@ class Agent:
                             ),
                         )
                         continue
+                    if emitted and is_retryable_error(e):
+                        # Mid-stream break. No layer retries this — the chunks
+                        # already yielded would be duplicated — but it should
+                        # not end the run either. Keep the partial response and
+                        # let the loop move on: a connection reset 126s into a
+                        # 1200s budget otherwise costs the other 1074s.
+                        yield (
+                            f"\n[Stream interrupted ({e}); continuing with "
+                            "the partial response]\n"
+                        )
+                        break
                     raise
 
             # Log LLM call trace
             self.executor.record_prompt_composition(
-                messages_with_system,
+                request_messages,
                 tools_schema,
             )
             self.trace_logger.log_llm_call(
-                messages=messages_with_system,
+                messages=request_messages,
                 tools=tools_schema,
                 response={
                     "content": full_content,
@@ -778,6 +890,13 @@ class Agent:
                 model=self.model_name,
             )
 
+            # If this iteration carried a reflection hint, its answer is the
+            # diagnosis worth remembering. Placed before both exits from the
+            # iteration so neither path can skip it, and before the
+            # truncation warning is appended below so the stored lesson is
+            # the model's own text.
+            self._record_reflection_lesson(full_content)
+
             # Filter out invalid tool calls
             tool_calls = [tc for tc in tool_calls if tc.name]
 
@@ -794,6 +913,26 @@ class Agent:
                     self.turn_mcp_calls += 1
 
             if not tool_calls:
+                # Acceptance gate. This branch is the loop's only voluntary
+                # exit, so it is the one place where "the model is done" can
+                # be checked against something other than the model's own
+                # opinion. Run before the answer is committed: a rejected
+                # answer belongs in history as an attempt, not in last_content
+                # as a result.
+                verdict = await self._acceptance_gate.check()
+                if verdict is not None and verdict.rejection:
+                    self._withhold_answer(
+                        full_content,
+                        full_reasoning,
+                        verdict.rejection,
+                        messages_with_system,
+                    )
+                    yield (
+                        "\n[Answer withheld: the verification check "
+                        f"`{verdict.run.command}` did not pass; sending its "
+                        "output back]\n"
+                    )
+                    continue
                 if full_content:
                     # Detect truncated tool intent: LLM described an action but
                     # the tool call never materialized (stream cut short).
@@ -815,6 +954,12 @@ class Agent:
                         )
                         full_content += warn
                         yield warn
+                    # The gate could not certify the answer but sending it back
+                    # would not help either, so the caveat travels with it
+                    # instead of the answer being silently downgraded.
+                    if verdict is not None and verdict.note:
+                        full_content += verdict.note
+                        yield verdict.note
                     final_msg: dict = {
                         "role": "assistant",
                         "content": full_content,
@@ -875,13 +1020,7 @@ class Agent:
                         f"\n[{tool_call.name}] →\n"
                         f"{tool_result_for_display(tool_call.name, result)}\n"
                     )
-                    tool_msg = {
-                        "role": "tool",
-                        "content": tool_result_for_history(result),
-                        "name": tool_call.name,
-                        "tool_use_id": tool_call.id,
-                        "tool_call_id": tool_call.id,
-                    }
+                    tool_msg = _tool_message(tool_call, result)
                     self.messages.append(tool_msg)
                     messages_with_system.append(tool_msg)
 
@@ -910,13 +1049,7 @@ class Agent:
                             result,
                         )
                         yield f"\n[{tool_call.name}] →\n{rendered}\n"
-                        tool_msg = {
-                            "role": "tool",
-                            "content": tool_result_for_history(result),
-                            "name": tool_call.name,
-                            "tool_use_id": tool_call.id,
-                            "tool_call_id": tool_call.id,
-                        }
+                        tool_msg = _tool_message(tool_call, result)
                         self.messages.append(tool_msg)
                         messages_with_system.append(tool_msg)
                         answered_ids.add(tool_call.id)
@@ -1066,6 +1199,25 @@ class Agent:
         if tool_call.name not in self._current_turn_tools:
             self._current_turn_tools.append(tool_call.name)
 
+        # Futility refusal, checked before the hook so the user is never asked
+        # to approve a call that will not run. Identical input cannot produce
+        # a different output, so a repeat of an unchanged failure is refused
+        # rather than nudged: the nudge was already being ignored.
+        refusal = self.memory_manager.session.stagnation.refuse_if_futile(
+            tool_call.name,
+            tool_call.arguments,
+        )
+        if refusal:
+            from dashscope.acli.audit import get_audit_logger
+
+            get_audit_logger().log_tool_call(
+                tool_call.name,
+                tool_call.arguments,
+                decision="denied",
+                reason="futility: identical failure, no state change since",
+            )
+            return refusal
+
         # Before-tool-call hooks
         before_ctx = HookContext(
             event="before_tool_call",
@@ -1114,14 +1266,22 @@ class Agent:
                 )
                 return "Cancelled"
 
+        # Acceptance baseline, taken from the last point where the call is
+        # still guaranteed to run: after the futility refusal and the
+        # permission hooks, before the executor. Read-only calls skip it, so a
+        # question-answering turn never pays for a test suite, and the
+        # baseline still comes from a workspace this turn has not touched.
+        if not is_readonly_tool_call(tool_call.name, tool_call.arguments):
+            await self._acceptance_gate.ensure_baseline()
+
         start_time = time.time()
-        result = await self.executor.execute(tool_def, tool_call.arguments)
-        duration_ms = int((time.time() - start_time) * 1000)
-        success = not result.startswith(
-            _TOOL_ERROR_PREFIXES,
-        ) and not result.startswith(
-            _TOOL_CANCEL_PREFIXES,
+        outcome = await self.executor.execute_detailed(
+            tool_def,
+            tool_call.arguments,
         )
+        duration_ms = int((time.time() - start_time) * 1000)
+        result = outcome.text
+        success = outcome.ok
         self.trace_logger.log_tool_execution(
             tool_call.name,
             tool_call.arguments,
@@ -1172,14 +1332,29 @@ class Agent:
                 "result": result,
                 "duration_ms": duration_ms,
                 "success": success,
+                "signal_kind": outcome.signal_kind,
+                "exit_code": outcome.exit_code,
             },
         )
         # Reflection counts only real failures — user rejection/cancellation
-        # is neutral and must not feed the consecutive-failure counter.
-        if not result.startswith(_TOOL_CANCEL_PREFIXES):
-            self.memory_manager.record_tool_execution(tool_call.name, success)
+        # is neutral and must not feed the consecutive-failure counter. The
+        # outcome text goes along with the verdict: the hint quotes it back
+        # verbatim, and outcome.text is the raw output as classified, before
+        # any fallback hint was appended to `result`.
+        if not outcome.cancelled:
+            self.memory_manager.record_tool_execution(
+                tool_call.name,
+                success,
+                evidence=outcome.text,
+                signal_kind=outcome.signal_kind,
+                exit_code=outcome.exit_code,
+            )
             self.memory_manager.session.stagnation.record(
                 is_readonly_tool_call(tool_call.name, tool_call.arguments),
+                tool_name=tool_call.name,
+                arguments=tool_call.arguments,
+                ok=success,
+                result=outcome.text,
             )
             if success:
                 self._turn_tool_successes += 1
@@ -1187,7 +1362,7 @@ class Agent:
                 self._turn_tool_failures += 1
 
         # Add fallback hints for common failures
-        if not success and result.startswith(_TOOL_ERROR_PREFIXES):
+        if not success and not outcome.cancelled:
             fallback_hint = (
                 self.memory_manager.session.tool_chains.get_fallback_hints(
                     tool_call.name,
@@ -1275,6 +1450,34 @@ class Agent:
         if tool_def and tool_def.permission != PermissionLevel.AUTO:
             return True
         return False
+
+    def _withhold_answer(
+        self,
+        content: str,
+        reasoning: str,
+        rejection: str,
+        messages_with_system: list[dict],
+    ) -> None:
+        """Put a gate-rejected answer and its rejection into history.
+
+        The answer is kept rather than dropped: the model has to see what it
+        claimed in order to retract the right part of it, and a rejection
+        quoting output from an attempt the history never mentions reads as
+        noise. Neither message becomes turn output — the turn is being sent
+        back, not finished.
+        """
+        if content:
+            withheld: dict = {"role": "assistant", "content": content}
+            if reasoning:
+                withheld["reasoning_content"] = reasoning
+            self.messages.append(withheld)
+            messages_with_system.append(withheld)
+        # A user message, matching how the reflection/stagnation hints are
+        # delivered: the provider converters keep only one system message, so
+        # a second one would replace the real prompt.
+        rejection_msg = {"role": "user", "content": rejection}
+        self.messages.append(rejection_msg)
+        messages_with_system.append(rejection_msg)
 
     def _close_pending_tool_calls(
         self,

@@ -126,7 +126,6 @@ async def _run_child(
     tools: list[str] | None,
     context_files: list[str] | None,
     timeout: int,
-    model: str | None,
     system_prompt: str | None = None,
     max_turns: int | None = None,
 ) -> dict[str, Any]:
@@ -166,7 +165,11 @@ async def _run_child(
         memory=None,
         user_name=_parent_agent.user_name,
         provider_name=_parent_agent.provider_name,
-        model_name=model or _parent_agent.model_name,
+        # The child runs on the parent's provider, whose model is fixed at
+        # construction. model_name drives vision/audio normalization and the
+        # truncation window, so any other name would have the child prepare
+        # messages for a model that never sees them.
+        model_name=_parent_agent.model_name,
         session_path=None,
         disabled_caps_provider=_parent_agent.disabled_caps_provider,
         directives_provider=_parent_agent.directives_provider,
@@ -233,7 +236,10 @@ async def _delegate(
     tools: list[str] | None = None,
     context_files: list[str] | None = None,
     timeout: int | None = None,
-    model: str | None = None,
+    # Accepted and ignored. It used to reach Agent.model_name, which never
+    # changed the model served but did change normalization and truncation.
+    # Kept so a model that already learned to send it gets no TypeError.
+    model: str | None = None,  # pylint: disable=unused-argument
     system_prompt: str | None = None,
     max_turns: int | None = None,
 ) -> str:
@@ -244,7 +250,6 @@ async def _delegate(
             tools,
             context_files,
             timeout,
-            model,
             system_prompt,
             max_turns,
         )
@@ -258,7 +263,7 @@ async def _delegate_parallel(
     """Spawn multiple sub-agents in parallel with controlled concurrency.
 
     Each entry in `tasks` is a dict with optional keys:
-    task, tools, context_files, timeout, model, system_prompt, max_turns.
+    task, tools, context_files, timeout, system_prompt, max_turns.
     """
     cfg = _delegation_config()
     limit = max_concurrent or cfg.max_concurrent
@@ -272,7 +277,6 @@ async def _delegate_parallel(
                 tools=task_def.get("tools"),
                 context_files=task_def.get("context_files"),
                 timeout=task_def.get("timeout"),
-                model=task_def.get("model"),
                 system_prompt=task_def.get("system_prompt"),
                 max_turns=task_def.get("max_turns"),
             )
@@ -290,9 +294,8 @@ def register_delegate_tools() -> None:
             "subagent shares the current provider/executor but has an "
             "isolated message history that won't pollute the main "
             "conversation. You may restrict its tool whitelist, pass "
-            "context files, and set timeout, model, system_prompt, "
-            "and max_turns. Returns JSON with {task_id, status, "
-            "result}."
+            "context files, and set timeout, system_prompt, and "
+            "max_turns. Returns JSON with {task_id, status, result}."
         ),
         parameters={
             "type": "object",
@@ -327,13 +330,6 @@ def register_delegate_tools() -> None:
                     ),
                     "default": 120,
                 },
-                "model": {
-                    "type": "string",
-                    "description": (
-                        "model name for the subagent (optional; "
-                        "defaults to the main agent's)."
-                    ),
-                },
                 "system_prompt": {
                     "type": "string",
                     "description": (
@@ -358,8 +354,8 @@ def register_delegate_tools() -> None:
         description=(
             "Delegate multiple sub-tasks in parallel with a cap on "
             "max concurrency. Each element is a task config supporting "
-            "task/tools/context_files/timeout/model/system_prompt/"
-            "max_turns. Returns a JSON array of task results."
+            "task/tools/context_files/timeout/system_prompt/max_turns. "
+            "Returns a JSON array of task results."
         ),
         parameters={
             "type": "object",
