@@ -36,6 +36,44 @@ MAX_COMPRESS_DUMP_CHARS = 30000
 # shrink_old_tool_messages before each LLM call.
 OLD_TOOL_MESSAGE_MAX_CHARS = 2000
 
+# Tools whose output is fully determined by their arguments and free to
+# re-fetch, so a truncated result can tell the model how to read it again.
+# run_command is deliberately excluded — re-running a shell command may have
+# side effects — and so are web_search/image_search, which are paid calls
+# whose results drift.  A "restore" hint for any of those is a false promise.
+RESTORABLE_TOOLS = frozenset({"read_file", "search_files", "list_directory"})
+
+
+def _tool_call_arguments(messages: list[dict]) -> dict[str, object]:
+    """Map tool_call_id -> arguments, read off the assistant messages.
+
+    A tool message carries a result but not the arguments that produced it;
+    those live on the preceding assistant message's ``tool_calls``.
+    """
+    index: dict[str, object] = {}
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        for tc in msg.get("tool_calls") or []:
+            call_id = tc.get("id")
+            args = (tc.get("function") or {}).get("arguments")
+            if call_id and args is not None:
+                index[call_id] = args
+    return index
+
+
+def restore_note(name: str | None, arguments: object) -> str:
+    """Marker suffix saying how to get the omitted content back.
+
+    Empty for tools that are not RESTORABLE_TOOLS, so truncation never
+    advertises a recovery path that would be a side effect or a paid call.
+    """
+    if not name or name not in RESTORABLE_TOOLS or not arguments:
+        return ""
+    if not isinstance(arguments, str):
+        arguments = json.dumps(arguments, ensure_ascii=False)
+    return f" — re-run {name} with {arguments} to re-read"
+
 
 def shrink_old_tool_messages(
     messages: list[dict],
@@ -46,11 +84,17 @@ def shrink_old_tool_messages(
 
     Cheaper than full compression (no LLM call): a session full of stale
     read_file/run_command outputs otherwise re-sends them on every call.
+    Results from RESTORABLE_TOOLS keep a note recording the original call, so
+    the model re-reads instead of reasoning over a hole in its context.
     Idempotent; returns the number of messages shrunk.
     """
-    from dashscope.acli.utils.text import truncate_head_tail
+    from dashscope.acli.utils.text import (
+        has_omitted_marker,
+        truncate_head_tail,
+    )
 
     shrunk = 0
+    arguments_by_id: dict[str, object] | None = None
     boundary = max(len(messages) - keep_recent, 0)
     for i in range(boundary):
         m = messages[i]
@@ -60,10 +104,17 @@ def shrink_old_tool_messages(
         if (
             not isinstance(content, str)
             or len(content) <= max_chars
-            or "[omitted" in content  # truncate_head_tail marker — idempotent
+            or has_omitted_marker(content)  # already truncated — idempotent
         ):
             continue
-        m["content"] = truncate_head_tail(content, max_chars)
+        if arguments_by_id is None:
+            arguments_by_id = _tool_call_arguments(messages)
+        call_id = m.get("tool_call_id") or m.get("tool_use_id") or ""
+        m["content"] = truncate_head_tail(
+            content,
+            max_chars,
+            note=restore_note(m.get("name"), arguments_by_id.get(call_id)),
+        )
         shrunk += 1
     return shrunk
 

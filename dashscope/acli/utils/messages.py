@@ -186,8 +186,15 @@ MAX_TOOL_RESULT_HISTORY_CHARS = 8000
 def tool_result_for_history(
     result: str,
     max_chars: int = MAX_TOOL_RESULT_HISTORY_CHARS,
+    note: str = "",
 ) -> str:
-    """Cap a tool result before it is stored in history (head + tail kept)."""
+    """Cap a tool result before it is stored in history (head + tail kept).
+
+    ``note`` lands inside the omission marker.  It has to be supplied here
+    rather than by shrink_old_tool_messages later: this cap fires first, and
+    a result already carrying a marker is skipped as already-truncated, so the
+    biggest results would otherwise be the ones with no recovery path.
+    """
     from dashscope.acli.utils.text import truncate_head_tail
 
-    return truncate_head_tail(result, max_chars)
+    return truncate_head_tail(result, max_chars, note=note)

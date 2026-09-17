@@ -4,6 +4,8 @@
 import pytest
 
 from dashscope.acli.memory.reflection import (
+    FUTILITY_THRESHOLD,
+    REPEAT_OBSERVATION_THRESHOLD,
     ReflectionTracker,
     StagnationTracker,
     convergence_hint,
@@ -310,8 +312,13 @@ class TestReflectionTracker:
         tracker.record_failure("read_file")
         tracker.record_failure("read_file")
         hint = tracker.get_reflection_hint()
-        # "read_file" should appear once in the joined set
-        assert hint.count("read_file") == 1
+        # "read_file" appears once in the joined set. The verdict line names
+        # the last failing tool again, which is a second deliberate mention,
+        # so the dedup claim has to be checked on the summary line alone.
+        summary = next(
+            ln for ln in hint.splitlines() if "consecutive failures" in ln
+        )
+        assert summary.count("read_file") == 1
 
     def test_record_tool_execution_routes_success(self):
         tracker = ReflectionTracker(threshold=3)
@@ -424,6 +431,229 @@ class TestStagnationTracker:
         tracker.record(True)
         assert tracker.readonly_streak == 2
         assert tracker.needs_nudge() is False
+
+
+# ── StagnationTracker: repeated identical calls ──────────────────────────────
+
+
+def _repeating_tracker():
+    """Tracker whose read-only threshold is out of the repeat tests' way."""
+    return StagnationTracker(threshold=8)
+
+
+def _fail(tracker, result="boom", tool="run_command", args=None):
+    """One mutating, failing call. Identity is fixed unless a test varies it."""
+    tracker.record(
+        False,
+        tool_name=tool,
+        arguments={"command": "pytest"} if args is None else args,
+        ok=False,
+        result=result,
+    )
+
+
+class TestStagnationRepeats:
+    """Same call, same arguments, same output, nothing changed in between."""
+
+    def test_identical_failures_accumulate(self):
+        tracker = _repeating_tracker()
+        _fail(tracker)
+        _fail(tracker)
+        assert tracker.repeat_streak == 2
+        assert tracker.repeat_name == "run_command"
+        assert tracker.repeat_ok is False
+
+    def test_different_arguments_are_different_calls(self):
+        tracker = _repeating_tracker()
+        _fail(tracker, args={"command": "pytest a"})
+        _fail(tracker, args={"command": "pytest b"})
+        assert tracker.repeat_streak == 1
+
+    def test_different_output_is_not_a_repeat(self):
+        # A changed result means the call is still telling us something.
+        tracker = _repeating_tracker()
+        _fail(tracker, result="boom 1")
+        _fail(tracker, result="boom 2")
+        assert tracker.repeat_streak == 1
+
+    def test_argument_order_does_not_change_identity(self):
+        tracker = _repeating_tracker()
+        _fail(tracker, args={"a": 1, "b": 2})
+        _fail(tracker, args={"b": 2, "a": 1})
+        assert tracker.repeat_streak == 2
+
+    def test_unserialisable_arguments_do_not_raise(self):
+        tracker = _repeating_tracker()
+        blob = object()
+        _fail(tracker, args={"obj": blob})
+        _fail(tracker, args={"obj": blob})
+        assert tracker.repeat_streak == 2
+
+    def test_interleaved_read_does_not_break_the_streak(self):
+        # The case a consecutive-only counter misses: check, look something
+        # up, check again — same futility, no consecutive repeats.
+        tracker = _repeating_tracker()
+        _fail(tracker)
+        tracker.record(
+            True,
+            tool_name="read_file",
+            arguments={"path": "a.py"},
+            ok=True,
+            result="source",
+        )
+        _fail(tracker)
+        assert tracker.repeat_streak == 2
+
+    def test_successful_mutation_resets_the_streak(self):
+        # Re-running the suite after an edit is legitimate work, not a loop.
+        tracker = _repeating_tracker()
+        _fail(tracker)
+        tracker.record(
+            False,
+            tool_name="write_file",
+            arguments={"path": "a.py"},
+            ok=True,
+            result="written",
+        )
+        _fail(tracker)
+        assert tracker.repeat_streak == 1
+
+    def test_failed_mutation_is_not_a_state_change(self):
+        tracker = _repeating_tracker()
+        _fail(tracker)
+        _fail(
+            tracker,
+            tool="write_file",
+            args={"path": "a.py"},
+            result="denied",
+        )
+        _fail(tracker)
+        assert tracker.repeat_streak == 2
+
+    def test_repeated_success_needs_the_observation_threshold(self):
+        tracker = _repeating_tracker()
+        grep = {
+            "tool_name": "search_files",
+            "arguments": {"pattern": "TODO"},
+            "ok": True,
+            "result": "no matches",
+        }
+        for _ in range(REPEAT_OBSERVATION_THRESHOLD - 1):
+            tracker.record(True, **grep)
+        assert tracker.needs_replan() is False
+        tracker.record(True, **grep)
+        assert tracker.needs_replan() is True
+
+    def test_repeated_success_is_never_refused(self):
+        # Re-reading a file after thinking about it is legitimate, so a
+        # repeated success escalates the prompt but still runs.
+        tracker = _repeating_tracker()
+        for _ in range(5):
+            tracker.record(
+                True,
+                tool_name="read_file",
+                arguments={"path": "a.py"},
+                ok=True,
+                result="source",
+            )
+        assert tracker.refuse_if_futile("read_file", {"path": "a.py"}) == ""
+
+    def test_single_failure_is_not_refused(self):
+        tracker = _repeating_tracker()
+        _fail(tracker)
+        args = {"command": "pytest"}
+        assert tracker.refuse_if_futile("run_command", args) == ""
+
+    def test_identical_failure_is_refused(self):
+        tracker = _repeating_tracker()
+        _fail(tracker, result="ModuleNotFoundError: yaml")
+        _fail(tracker, result="ModuleNotFoundError: yaml")
+        refusal = tracker.refuse_if_futile(
+            "run_command",
+            {"command": "pytest"},
+        )
+        assert "Not executed" in refusal
+        assert "ModuleNotFoundError: yaml" in refusal
+
+    def test_refusal_quotes_backticked_output_safely(self):
+        # A fixed three-backtick fence would be closed early by output that
+        # itself contains backticks, leaking the rest of the refusal into the
+        # code block.
+        tracker = _repeating_tracker()
+        for _ in range(FUTILITY_THRESHOLD):
+            _fail(tracker, result="```not a fence```")
+        refusal = tracker.refuse_if_futile(
+            "run_command",
+            {"command": "pytest"},
+        )
+        before, quoted, after = refusal.split("````")
+        assert "not a fence" in quoted
+        assert "Make a DIFFERENT call" in after
+        assert "````" not in before
+
+    def test_refusal_escalates_to_a_replan_demand(self):
+        # Otherwise the same sentence repeats while the turn budget burns,
+        # which is the "unaware of termination conditions" failure itself.
+        tracker = _repeating_tracker()
+        for _ in range(FUTILITY_THRESHOLD):
+            _fail(tracker)
+        args = {"command": "pytest"}
+        first = tracker.refuse_if_futile("run_command", args)
+        second = tracker.refuse_if_futile("run_command", args)
+        assert "Not executed" in first
+        assert "Stopped: this call is being repeated" in second
+        assert "revised plan" in second
+
+    def test_state_change_clears_the_refusal(self):
+        tracker = _repeating_tracker()
+        for _ in range(FUTILITY_THRESHOLD):
+            _fail(tracker)
+        args = {"command": "pytest"}
+        assert tracker.refuse_if_futile("run_command", args)
+        tracker.record(
+            False,
+            tool_name="write_file",
+            arguments={"path": "a.py"},
+            ok=True,
+            result="written",
+        )
+        assert tracker.refuse_if_futile("run_command", args) == ""
+
+    def test_replan_demand_replaces_the_readonly_nudge(self):
+        tracker = _repeating_tracker()
+        grep = {
+            "tool_name": "search_files",
+            "arguments": {"pattern": "TODO"},
+            "ok": True,
+            "result": "no matches",
+        }
+        for _ in range(8):
+            tracker.record(True, **grep)
+        hint = tracker.get_stagnation_hint(hard_cap=40)
+        assert "Stopped: this call is being repeated" in hint
+        assert "Stagnation warning" not in hint
+        # Both detectors agree the turn is over: the countdown still shows.
+        assert "Hard stop in 32 more read-only calls" in hint
+
+    def test_preview_is_bounded(self):
+        tracker = _repeating_tracker()
+        _fail(tracker, result="x" * 5000)
+        assert len(tracker.repeat_preview) < 1000
+
+    def test_reset_clears_repeat_state(self):
+        tracker = _repeating_tracker()
+        for _ in range(FUTILITY_THRESHOLD):
+            _fail(tracker)
+        args = {"command": "pytest"}
+        assert tracker.refuse_if_futile("run_command", args)
+        tracker.reset()
+        assert tracker.repeat_streak == 0
+        assert tracker.repeat_name == ""
+        assert tracker.refuse_if_futile("run_command", args) == ""
+        # The state-change marker cleared too: one fresh failure is not yet
+        # futile, exactly as at the start of a turn.
+        _fail(tracker)
+        assert tracker.refuse_if_futile("run_command", args) == ""
 
 
 # ── convergence_hint ──────────────────────────────────────────────────────────

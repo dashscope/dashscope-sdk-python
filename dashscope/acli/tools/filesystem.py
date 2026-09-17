@@ -18,6 +18,16 @@ _MAX_SEARCH_DEPTH = 8
 # Maximum file content size for write_file (50 MB).
 _MAX_WRITE_SIZE = 50 * 1024 * 1024
 
+# Default line window for read_file. SWE-agent's ablation found a bounded
+# window beats whole-file dumps (SWE-bench Lite 18.0 @100 lines vs 12.7 for
+# the full file), so unbounded reads are the behaviour to avoid by default.
+_READ_DEFAULT_LINES = 200
+
+# Hard ceiling on characters returned by one read_file call. Independent of
+# the line window: a single minified or generated line must not be able to
+# blow up the context on its own.
+_READ_MAX_CHARS = 100_000
+
 
 # ---------------------------------------------------------------------------
 # Tools
@@ -26,7 +36,12 @@ _MAX_WRITE_SIZE = 50 * 1024 * 1024
 
 @tool(
     name="read_file",
-    description="Read file contents. Optional start line and line count.",
+    description=(
+        "Read file contents, prefixed with 1-based line numbers. offset is "
+        "the line number to start at; limit is how many lines to return. "
+        "Reads are windowed: when lines remain, the result ends with the "
+        "omitted count and the offset that continues from there."
+    ),
     permission=PermissionLevel.AUTO,
 )
 def read_file(
@@ -44,14 +59,37 @@ def read_file(
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
 
-    start = offset or 0
-    end = start + limit if limit else len(lines)
-    selected = lines[start:end]
+    total = len(lines)
+    # offset is 1-based so it matches the line numbers printed below; None
+    # and <=1 both mean "from the top".
+    start = max((offset or 1) - 1, 0)
+    if start >= total:
+        return (
+            f"[offset {start + 1} is past the end of {path} ({total} lines)]"
+        )
 
-    result_lines = []
-    for i, line in enumerate(selected, start=start + 1):
-        result_lines.append(f"{i:>4}\t{line.rstrip()}")
-    return "\n".join(result_lines)
+    window = limit if limit and limit > 0 else _READ_DEFAULT_LINES
+    end = min(start + window, total)
+    body = "\n".join(
+        f"{i:>4}\t{line.rstrip()}"
+        for i, line in enumerate(lines[start:end], start=start + 1)
+    )
+
+    if len(body) > _READ_MAX_CHARS:
+        cut = body[:_READ_MAX_CHARS]
+        # Back off to the last complete line so the window never ends on a
+        # half-line whose number would mislead a follow-up offset.
+        last_newline = cut.rfind("\n")
+        body = cut[:last_newline] if last_newline > 0 else cut
+        end = start + (body.count("\n") + 1 if body else 0)
+
+    omitted = total - end
+    if omitted > 0:
+        body += (
+            f"\n[omitted {omitted} of {total} lines — "
+            f"read_file path={path} offset={end + 1} to continue]"
+        )
+    return body
 
 
 @tool(

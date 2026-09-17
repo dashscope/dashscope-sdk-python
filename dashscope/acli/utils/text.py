@@ -38,12 +38,31 @@ def truncate_text(text: str, max_chars: int) -> str:
     )
 
 
-def truncate_head_tail(text: str, max_chars: int, ratio: float = 0.6) -> str:
+_OMITTED_MARKER_RE = re.compile(r"\.\.\. \[omitted \d+ chars.*?\] \.\.\.")
+
+
+def has_omitted_marker(text: str) -> bool:
+    """True when ``text`` already carries a ``truncate_head_tail`` marker.
+
+    Matched by shape rather than the bare substring ``[omitted`` because
+    read_file's windowing trailer says ``[omitted N of M lines ...]`` — that
+    is content, not evidence of an earlier truncation.
+    """
+    return bool(_OMITTED_MARKER_RE.search(text))
+
+
+def truncate_head_tail(
+    text: str,
+    max_chars: int,
+    ratio: float = 0.6,
+    note: str = "",
+) -> str:
     """Truncate long text while preserving beginning and end.
 
     The head keeps the first (ratio * max_chars) characters; the tail keeps
     the remainder from the end.  A small marker is inserted so the model knows
-    content was omitted.
+    content was omitted; ``note`` goes inside it to say how to recover the
+    omitted part.
     """
     if len(text) <= max_chars:
         return text
@@ -52,9 +71,25 @@ def truncate_head_tail(text: str, max_chars: int, ratio: float = 0.6) -> str:
     head = text[:head_len]
     tail = text[-tail_len:] if tail_len > 0 else ""
     return (
-        f"{head}\n\n... [omitted {len(text) - max_chars} chars]"
+        f"{head}\n\n... [omitted {len(text) - max_chars} chars{note}]"
         f" ...\n\n{tail}"
     )
+
+
+_BACKTICK_RUN_RE = re.compile(r"`+")
+
+
+def markdown_fence(text: str) -> str:
+    """A markdown fence longer than any backtick run inside ``text``.
+
+    A fixed three-backtick fence would be closed early by quoted output that
+    itself contains backticks — a catted markdown file, a compiler quoting a
+    docstring — which leaks the rest of the prompt section into the code
+    block.
+    """
+    runs = _BACKTICK_RUN_RE.findall(text or "")
+    longest = max((len(r) for r in runs), default=0)
+    return "`" * max(3, longest + 1)
 
 
 _FRONTMATTER_RE = re.compile(

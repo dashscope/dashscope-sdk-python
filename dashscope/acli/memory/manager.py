@@ -125,9 +125,28 @@ class MemoryManager:
         child.trace = parent.trace
         return child
 
-    def record_tool_execution(self, tool_name: str, success: bool) -> None:
-        """Record a tool execution for reflection monitoring."""
-        self.session.reflection.record_tool_execution(tool_name, success)
+    def record_tool_execution(
+        self,
+        tool_name: str,
+        success: bool,
+        evidence: str = "",
+        signal_kind: str = "",
+        exit_code: int | None = None,
+    ) -> None:
+        """Record a tool execution for reflection monitoring.
+
+        ``evidence`` is the tool's own output text and ``signal_kind`` /
+        ``exit_code`` say where the verdict came from. The reflection hint
+        quotes them back verbatim, which is what makes it worth injecting at
+        all.
+        """
+        self.session.reflection.record_tool_execution(
+            tool_name,
+            success,
+            evidence=evidence,
+            signal_kind=signal_kind,
+            exit_code=exit_code,
+        )
 
     def record_experience(
         self,
