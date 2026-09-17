@@ -61,6 +61,7 @@ setuptools.setup(
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
     ],
     platforms="Posix; MacOS X; Windows",
     python_requires=">=3.9",
