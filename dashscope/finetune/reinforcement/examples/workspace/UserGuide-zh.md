@@ -11,8 +11,9 @@ SDK 包含两个核心模块：
 2.  **调优模块**：处理数据集管理、超参数配置、作业提交和生命周期管理（状态、日志、取消）。
 
 **工作流**：
-1. 首先，在函数模块中注册函数（Rollout/Reward/Group Reward）。这些函数可以在本地或远程测试。
-2. 然后，使用调优模块上传数据集、配置作业并提交训练。
+1. 注册自定义函数。普通强化学习必须配置 Rollout 和至少一个 Reward；
+   OPD 的 Rollout、Reward 可选。
+2. 使用调优模块上传数据集、配置作业并提交训练。
 
 ---
 
@@ -45,7 +46,7 @@ workspace/
 ├── data/                   # 数据集
 │   ├── calc_train_min.jsonl
 │   └── calc_validation_min.jsonl
-├── functions/              # 自定义逻辑
+├── functions/              # 自定义函数；仅 OPD 可省略 Rollout/Reward
 │   ├── reward/
 │   │   ├── group_reward_.py
 │   │   ├── reward.py
@@ -54,8 +55,12 @@ workspace/
 │       ├── rollout_only.py
 │       └── rollout.py
 ├── requirements.txt        # 函数组件依赖项
-└── job.yaml                # 可选：作业配置
+├── rl-job.yaml             # 普通 Agentic RL 配置
+└── opd-job.yaml            # OPD 配置
 ```
+
+普通强化学习必须配置自定义 Rollout 和至少一个 Reward。只有 OPD 可以不配置
+Rollout、Reward，或者按需只配置其中一个。
 
 ### 2.5 依赖包（requirements.txt 指南）
 此文件对于将函数组件部署到云端是**必需的**，必须位于工作空间根目录。
@@ -271,7 +276,14 @@ class MyRolloutProcessor(AbstractRolloutProcessor):
 * [CLI] 入口点: dashscope rl
 
 ### 4.1 作业配置
-使用 YAML 或代码初始化客户端。代码参数会覆盖 YAML 配置。
+
+普通强化学习和 OPD 使用同一套 SDK/CLI 工作流，区别在于传入的 YAML 配置。
+代码参数会覆盖 YAML 配置。
+
+| 训练方式 | 配置文件 | 自定义函数 |
+|---|---|---|
+| 普通强化学习 | `rl-job.yaml` | Rollout 必选，Reward 至少一个 |
+| OPD | `opd-job.yaml` | Rollout、Reward 独立可选，可以都不配置 |
 
 **[SDK] \_\_init\_\_**
 ```python
@@ -303,7 +315,45 @@ def init(self, config_path: Optional[str] = None, **kwargs) -> Self: ...
 **示例**:
 ```python
 from dashscope.finetune.agentic_rl import AgenticRL
-rl = AgenticRL().init("job.yaml", job_name="custom_job")
+config_path = "opd-job.yaml"  # 普通强化学习使用 "rl-job.yaml"
+rl = AgenticRL().init(config_path, job_name="custom_job")
+result = await rl.run()
+```
+
+选择 `opd-job.yaml` 时，可以通过保留或删除 Rollout、Reward 函数块选择
+需要的能力：
+
+| 保留的函数块 | OPD 场景 | 轨迹来源 | 任务奖励 |
+|---|---|---|---|
+| 都不保留 | 仅 Teacher | 平台生成 | 不启用 |
+| 仅 Reward | Teacher + Reward | 平台生成 | 自定义 Reward |
+| 仅 Rollout | Teacher + Rollout | 自定义 Rollout | 不启用 |
+| Rollout 和 Reward | Teacher + Rollout + Reward | 自定义 Rollout | 自定义 Reward |
+
+仓库提交的 `opd-job.yaml` 默认保留两个函数块。删除其中一个或两个，即可
+切换为其他 OPD 组合：
+
+```yaml
+teacher_model: qwen3.5-397b-a17b
+
+functions:
+# 删除此块后使用平台生成。
+- type: rollout
+  # ...
+# 删除此块后不使用自定义任务奖励。
+- type: reward
+  # ...
+
+training:
+  type: pg_opd
+```
+
+```bash
+# 普通强化学习
+dashscope rl run -c rl-job.yaml
+
+# OPD
+dashscope rl run -c opd-job.yaml
 ```
 
 ### 4.2 注册函数
@@ -455,18 +505,32 @@ dashscope rl test_functions "ro-ins--xxx" \
 自动注册函数、上传数据并提交作业。
 
 ```python
-def run(self, model: Optional[str] = None, training_files: Optional[Union[List[str], str]] = None, validation_files: Optional[Union[List[str], str]] = None, functions: Optional[Union[List[Union[RolloutFunctionComponent, RewardFunctionComponent, AgenticRLFunctionComponent]], RolloutFunctionComponent, RewardFunctionComponent, AgenticRLFunctionComponent]] = None, hyper_parameters: Optional[Dict[str, str]] = None, job_name: Optional[str] = None, workspace_dir: str = "./", **kwargs) -> FineTune: ...
+async def run(
+    self,
+    model: Optional[str] = None,
+    training_datasets: Optional[List[TrainingDataset]] = None,
+    validation_datasets: Optional[List[ValidationDataset]] = None,
+    functions: Optional[
+        Union[List[AgenticRLFunctionComponent], AgenticRLFunctionComponent]
+    ] = None,
+    hyper_parameters: Optional[Dict[str, str]] = None,
+    resources: Optional[Dict[str, str]] = None,
+    job_name: Optional[str] = None,
+    teacher_model: Optional[str] = None,
+    **kwargs,
+) -> FineTune: ...
 ```
 完整的工作流执行（注册 + 上传 + 提交）。
 
 **参数**:
 - `model`: 基础模型名称
-- `training_files`: 训练数据集文件
-- `validation_files`: 验证数据集文件
+- `training_datasets`: 训练数据集对象
+- `validation_datasets`: 验证数据集对象
 - `functions`: 函数组件
 - `hyper_parameters`: 训练超参数
+- `resources`: 训练资源配置
 - `job_name`: 自定义作业名称
-- `workspace_dir`: 工作目录
+- `teacher_model`: Teacher 模型；设置后启用 OPD，Rollout 和 Reward 仍可省略
 
 **返回**: `FineTune` 作业对象
 
@@ -521,7 +585,7 @@ job = await rl.run(
 
 **[CLI] run**
 
-**用法: dashscope run [OPTIONS]**
+**用法: dashscope rl run [OPTIONS]**
 ```bash
  🚀 启动完整的 RL 调优工作流（函数注册 → 数据集上传 → 作业提交）
 
@@ -530,13 +594,13 @@ job = await rl.run(
  2. 直接参数: 通过 CLI 选项提供所有必需参数
 
  必需参数:
- - rollout_classpath
- - reward_classpaths (至少一个)
- - training_files (至少一个)
+ - training_files（至少一个）
+ - 强化学习需要配置 Rollout 和 Reward，OPD 中两者均为可选。
 
 ╭─ 选项 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ --config                   -c      PATH   YAML 配置文件路径                                                                                                                                            │
 │ --model                            TEXT   基础模型标识符                                                                                                                                                      │
+│ --teacher-model                    TEXT   启用 OPD 并覆盖 YAML 中的 Teacher 模型；Rollout 和 Reward 可省略                                                                                                  │
 │ --training-files                   TEXT   训练数据集文件路径                                                                                                                                            │
 │ --validation-files                 TEXT   验证数据集文件路径                                                                                                                                          │
 │ --rollout-classpath                TEXT   Rollout 类的 Python 导入路径 (module:Class)                                                                                                                         │
@@ -565,7 +629,7 @@ job = await rl.run(
 **示例**: 运行完整工作流（自动）
 ```bash
 dashscope rl run \
-  --config "job.yaml" \
+  --config "rl-job.yaml" \
   --verbose
 ```
 

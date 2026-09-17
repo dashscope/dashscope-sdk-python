@@ -87,7 +87,7 @@
 #   - Operation Modes:
 #     a. Config-Driven Mode:
 #        ```bash
-#        dashscope rl run -c job.yaml -o json
+#        dashscope rl run -c rl-job.yaml -o json
 #        ```
 #   - Key Options:
 #     * -c/--config: YAML configuration file path
@@ -177,7 +177,7 @@ echo "$UPLOAD_RESULT"
 
 # ===================== 4. Submit job =====================
 echo ">>> Step 4: Submitting job..."
-RUN_RESULT=$(dashscope rl run -c job.yaml -o json)
+RUN_RESULT=$(dashscope rl run -c rl-job.yaml -o json)
 echo "$RUN_RESULT"
 
 JOB_ID=$(echo "$RUN_RESULT" | json_get "['job_id']")

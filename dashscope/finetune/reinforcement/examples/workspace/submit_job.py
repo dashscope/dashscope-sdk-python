@@ -22,9 +22,9 @@ Method Documentation:
    - Initializes the RL workflow using a YAML configuration file
    - Key Parameters:
      * config_path (required): Path to YAML configuration file (e.g.,
-     "job.yaml")
+     "rl-job.yaml")
      * job_name: Custom identifier for the training job
-   - Configuration File Example (job.yaml)
+   - Configuration File Example (rl-job.yaml)
    - Benefits:
      * Decouples configuration from code
      * Enables version-controlled parameter management
@@ -45,7 +45,7 @@ Method Documentation:
 """
 
 # Example YAML-driven usage:
-# client.init(config_path="job.yaml", job_name="agentic-rl")
+# client.init(config_path="rl-job.yaml", job_name="agentic-rl")
 # await client.run()  # Uses YAML configuration
 
 from dashscope.finetune.agentic_rl import AgenticRL
@@ -201,7 +201,7 @@ async def main_workflow_yaml():
 
         client = AgenticRL()
         client.init(
-            config_path="job.yaml",
+            config_path="rl-job.yaml",
             name="agentic-rl-from-yaml",
         )
         client.tuning.to_yaml(file_path="init.yaml")
@@ -213,7 +213,7 @@ async def main_workflow_yaml():
         if result.status_code == 200:
             job_id = result.output.job_id
             logger.info(
-                f"agentic rl(from job.yaml) submit: {job_id=}, {result=}",
+                f"agentic rl(from rl-job.yaml) submit: {job_id=}, {result=}",
             )
         else:
             raise ValueError(f"agentic rl submit: {result}")

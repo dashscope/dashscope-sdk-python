@@ -28,6 +28,7 @@ from dashscope.finetune.reinforcement import DASHSCOPE_HTTP_BASE_URL
 from dashscope.finetune.reinforcement import (
     FunctionType,
     DatasetsType,
+    TrainingType,
 )
 from dashscope.finetune.reinforcement import (
     RewardInput,
@@ -171,11 +172,14 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         hyper_parameters: Optional[Dict[str, str]] = None,
         resources: Optional[Dict[str, str]] = None,
         job_name: Optional[str] = None,
+        teacher_model: Optional[str] = None,
         **kwargs,
     ) -> FineTune:
         """
         Submit RL tuning job to the platform.
         """
+        teacher_model = teacher_model or self.tuning.teacher_model
+
         # Resolve job name (fallback to class default)
         if job_name:
             self.tuning.name = job_name
@@ -230,6 +234,15 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         if resources:
             self.tuning.training.resources = resources
 
+        training_type = self.tuning.training.type
+        if teacher_model:
+            training_type = TrainingType.PG_OPD
+        elif training_type == TrainingType.PG_OPD:
+            raise ValueErrorWithCode(
+                f"teacher_model is required when training.type is {training_type}",
+                error_code=3006,
+            )
+
         request = {
             "model": self.tuning.model.name,
             "training_datasets": [ds.model_dump() for ds in training_datasets],
@@ -240,7 +253,8 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             "rewards": rewards,
             "hyper_parameters": self.tuning.training.hyper_parameters,
             "resource_config": self.tuning.training.resources,
-            "training_type": str(self.tuning.training.type),
+            "training_type": str(training_type),
+            "teacher_model": teacher_model,
             "job_name": job_name_with_suffix,
         }
         request = deep_remove_none(request)
@@ -287,6 +301,7 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         hyper_parameters: Optional[Dict[str, str]] = None,
         resources: Optional[Dict[str, str]] = None,
         job_name: Optional[str] = None,
+        teacher_model: Optional[str] = None,
         **kwargs,
     ) -> FineTune:
         """
@@ -315,6 +330,7 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
                 hyper_parameters=hyper_parameters,
                 resources=resources,
                 job_name=job_name,
+                teacher_model=teacher_model,
                 **kwargs,
             )
         except Exception as e:

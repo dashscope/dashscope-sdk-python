@@ -381,14 +381,15 @@ def create_deployment_files(
             function_layer_used=FC_LAYER_USED,
         )
 
-        with open(FC_FILES_START, "w", encoding="utf-8") as f:
+        start_file = os.path.join(dirpath, FC_FILES_START)
+        with open(start_file, "w", encoding="utf-8") as f:
             f.write(content)
 
         # Add execute permission on Unix systems
         if os.name == "posix":
-            os.chmod(FC_FILES_START, 0o755)
+            os.chmod(start_file, 0o755)
 
-        logger.debug(f"Generated startup script: {FC_FILES_START}")
+        logger.debug(f"Generated startup script: {start_file}")
     except Exception as e:
         raise RuntimeErrorWithCode(
             "Deployment file creation error",

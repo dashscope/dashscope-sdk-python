@@ -1397,6 +1397,7 @@ class TuningModel(Models, BaseModel):
 
     name: str = Field(default="agentic-rl", min_length=1, max_length=256)
     model: FoundationModel = FoundationModel()
+    teacher_model: Optional[str] = None
     functions: List[FunctionComponentUnion] = Field(default_factory=list)
     datasets: List[Dataset] = Field(default_factory=list)
     training: Training = Training()
