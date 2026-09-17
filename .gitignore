@@ -138,3 +138,6 @@ cython_debug/
 .pypirc
 
 /.acli/
+
+# Local PyPI investigation tooling; the CI guard lives in tests/unit/.
+/scripts/
