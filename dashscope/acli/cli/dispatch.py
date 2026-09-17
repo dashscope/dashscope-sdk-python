@@ -200,7 +200,15 @@ def _handle_slash_command(
         )
         console.print(f"  Loop mode:    [cyan]{config.loop_mode}[/cyan]")
         console.print(f"  Max turns:    [cyan]{config.max_turns}[/cyan]")
-        console.print(f"  Timeout:      [cyan]{config.timeout}s[/cyan]")
+        # config.timeout is the LLM request timeout; run_command enforces its
+        # own, so showing one "Timeout" line reported a limit nothing used.
+        from dashscope.acli.tools.shell import default_timeout
+
+        console.print(f"  LLM timeout:  [cyan]{config.timeout}s[/cyan]")
+        console.print(
+            f"  Cmd timeout:  [cyan]{default_timeout()}s "
+            f"(ACLI_COMMAND_TIMEOUT)[/cyan]",
+        )
         console.print(
             f"  TUI:          {'[green]on' if config.tui else '[dim]off'}[/]",
         )
