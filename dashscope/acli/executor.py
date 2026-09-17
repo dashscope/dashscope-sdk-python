@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
@@ -165,6 +166,23 @@ def classify_tool_text(
     return ToolOutcome(ok=True, text=text, signal_kind=SIGNAL_OK)
 
 
+def _command_identity(arguments: dict) -> str | None:
+    """The exact string an ``[a]lways`` grant on run_command is scoped to.
+
+    Deliberately only stripped: no shlex canonicalisation, no prefix or
+    wildcard matching. Two commands differing by an inner space are two
+    different grants, so a near-miss costs one more prompt instead of
+    silently widening what the user approved. ``None`` means there was no
+    usable command string, which leaves the grant unrecorded rather than
+    falling back to trusting the whole tool.
+    """
+    cmd = arguments.get("command", "")
+    if not isinstance(cmd, str):
+        return None
+    cmd = cmd.strip()
+    return cmd or None
+
+
 class Executor:
     def __init__(
         self,
@@ -181,6 +199,10 @@ class Executor:
         # never enter _always_allow (see _check_permission below).
         self._always_allow: set[str] = set()
         self._always_deny: set[str] = set()
+        # run_command grants live here keyed by the exact command, not in
+        # _always_allow keyed by tool name. Approving one `ls` must not turn
+        # into unprompted approval of every later shell command in the turn.
+        self._always_allow_commands: set[str] = set()
         # Optional async callback for TUI mode confirmation
         self._confirm_callback = None
 
@@ -209,6 +231,59 @@ class Executor:
         """Called by Agent at the end of each turn to reset trust grants."""
         self._always_allow.clear()
         self._always_deny.clear()
+        self._always_allow_commands.clear()
+
+    def trust_snapshot(self) -> tuple[set[str], set[str], set[str]]:
+        """Turn-scoped grants as (tools allowed, commands allowed, denied).
+
+        Copies, so the ``/trust`` handlers can read and report without
+        holding a reference they could mutate behind the executor's back.
+        """
+        return (
+            set(self._always_allow),
+            set(self._always_allow_commands),
+            set(self._always_deny),
+        )
+
+    def trust_tool(self, name: str) -> None:
+        """Pre-approve a whole tool for this turn. Additive only."""
+        self._always_deny.discard(name)
+        self._always_allow.add(name)
+
+    def deny_tool(self, name: str) -> None:
+        """Pre-deny a whole tool for this turn. Additive only."""
+        self._always_allow.discard(name)
+        self._always_deny.add(name)
+
+    def _grant_always(
+        self,
+        tool_def: ToolDefinition,
+        arguments: dict,
+    ) -> None:
+        """Record an ``[a]lways`` answer from a confirmation prompt.
+
+        For run_command the grant is the command, not the tool: caching the
+        tool name let one approved read-only command auto-approve every later
+        shell command in the turn, which is how `curl ... | sh` and
+        `rm -rf ~/work` came back "trusted this turn" without a prompt.
+        """
+        if tool_def.name == "run_command":
+            identity = _command_identity(arguments)
+            if identity is not None:
+                self._always_allow_commands.add(identity)
+            return
+        self._always_allow.add(tool_def.name)
+
+    def _is_command_trusted(
+        self,
+        tool_def: ToolDefinition,
+        arguments: dict,
+    ) -> bool:
+        """True when this exact command already got an ``[a]lways``."""
+        if tool_def.name != "run_command":
+            return False
+        identity = _command_identity(arguments)
+        return identity is not None and identity in self._always_allow_commands
 
     def record_api_call(self, usage: dict | None = None) -> None:
         """Record an API call and its token usage."""
@@ -408,6 +483,8 @@ class Executor:
             # Consult turn-scoped trust cache
             if tool_def.name in self._always_deny:
                 return False
+            if self._is_command_trusted(tool_def, arguments):
+                return True
             if tool_def.name in self._always_allow:
                 return True
             # Delegate to TUI callback
@@ -422,7 +499,7 @@ class Executor:
             if result == "a":
                 # DANGEROUS never enters the trust cache (sync path: y/n only)
                 if not is_dangerous:
-                    self._always_allow.add(tool_def.name)
+                    self._grant_always(tool_def, arguments)
                 return True
             if result == "s":
                 raise UserAbortedTurn("User aborted this turn")
@@ -504,6 +581,17 @@ class Executor:
                 f"[dim red]✗ {tool_def.name} (denied this turn)[/dim red]",
             )
             return False
+        if self._is_command_trusted(tool_def, arguments):
+            identity = _command_identity(arguments) or ""
+            preview = identity if len(identity) <= 80 else identity[:80] + "…"
+            console.print(
+                # Escaped: the command is model-controlled text, so a bare
+                # bracket would be read as markup and could rewrite the very
+                # line telling the user what was approved.
+                f"[dim green]✓ {escape(preview)} "
+                "(trusted this turn)[/dim green]",
+            )
+            return True
         if tool_def.name in self._always_allow:
             console.print(
                 f"[dim green]✓ {tool_def.name} "
@@ -540,11 +628,16 @@ class Executor:
         # CONFIRM gets the four-way prompt with turn-scoped memory.
         # Brackets are escaped (\[…\]) so Rich doesn't parse them as markup
         # tags and eat the first letter — see issue with "es / o / lways /
-        # top" rendering previously.
+        # top" rendering previously. The [a]lways label says what is actually
+        # granted: one command for run_command, the whole tool otherwise.
+        always_scope = (
+            "this command" if tool_def.name == "run_command" else "this tool"
+        )
         try:
             choice = Prompt.ask(
                 r"Execute? \[y]es / \[n]o / \[u]pdate (add info, replan) / "
-                r"\[a]lways (allow this tool for the turn) / \[s]top (abort)",
+                rf"\[a]lways (allow {always_scope} for the turn) / "
+                r"\[s]top (abort)",
                 choices=["y", "n", "u", "a", "s"],
                 default="y",
                 show_choices=False,
@@ -552,7 +645,7 @@ class Executor:
         except (KeyboardInterrupt, EOFError):
             raise UserAbortedTurn("Ctrl-C aborted this turn") from None
         if choice == "a":
-            self._always_allow.add(tool_def.name)
+            self._grant_always(tool_def, arguments)
             return True
         if choice == "u":
             supplement = Prompt.ask("[dim]Supplementary info[/dim]")
