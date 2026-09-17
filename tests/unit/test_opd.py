@@ -168,7 +168,7 @@ async def test_opd_example_uploads_local_datasets(rl_client):
     with patch(
         "dashscope.finetune.reinforcement.common.model.to_bailian_data",
         new=AsyncMock(
-            side_effect=[["file-train-001"], ["file-validation-001"]]
+            side_effect=[["file-train-001"], ["file-validation-001"]],
         ),
     ):
         train_ids, validation_ids = await rl_client.upload_datasets()
