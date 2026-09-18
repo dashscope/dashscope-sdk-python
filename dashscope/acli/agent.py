@@ -154,7 +154,10 @@ Rules:
 18. **Verify code changes before reporting done.** Run the tests that cover
     what you touched; if nothing covers it, add a focused test for the new
     behaviour and run that. Report the command and its pass/fail result —
-    never claim a change works without having executed it
+    never claim a change works without having executed it. When the output
+    transforms or joins data (ETL, CSV/JSON, migrations), also assert every
+    cross-reference resolves — schema-valid output with dangling IDs still
+    fails
 
 Reply style:
 - **Concise**. No filler like "let me see / let me help you / I'll analyze
