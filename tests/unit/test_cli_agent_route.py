@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Tests for the dashscope → acli agent route (expert subcommand removal).
+"""Tests for the dashscope → acli agent route.
 
 Covers:
 - _cleanup_legacy_expert_sync: removes old managed-marker files from ~/.acli
@@ -7,7 +7,9 @@ Covers:
 - _route_to_expert: runs embedded acli with the global -k api key passed
   through, and offers the example download only for interactive no-arg runs.
 - _maybe_offer_example_download: accept/decline/marker/workspace gating.
-- main(): unknown commands route to the agent with cleaned argv (no key leak).
+- main(): only a bare `dashscope`, an `expert` keyword, or a single unknown
+  token reach the agent; everything else is dispatched to typer so typos and
+  stray options produce a real error.
 """
 # pylint: disable=protected-access,redefined-outer-name,unused-argument
 
@@ -256,12 +258,12 @@ class TestOfferExampleDownload:
 
 
 class TestMainRouting:
-    def test_unknown_command_routes_cleaned_text(self, monkeypatch):
+    def test_single_token_question_routes_cleaned_text(self, monkeypatch):
         routed: list = []
         monkeypatch.setattr(
             cli,
             "_route_to_expert",
-            lambda command, tui=False: routed.append(command),
+            lambda command, tui=None: routed.append(command),
         )
         monkeypatch.setattr(
             sys,
@@ -280,7 +282,7 @@ class TestMainRouting:
         monkeypatch.setattr(
             cli,
             "_route_to_expert",
-            lambda command, tui=False: routed.append(command),
+            lambda command, tui=None: routed.append(command),
         )
         monkeypatch.setattr(sys, "argv", ["dashscope"])
 
@@ -288,24 +290,136 @@ class TestMainRouting:
 
         assert routed == [None]
 
-    def test_expert_is_no_longer_a_command(self, monkeypatch):
+    def test_expert_keyword_is_not_a_typer_command(self):
+        """`expert` is a routing keyword handled inside main(), never a typer
+        group — it must not appear in any table typer dispatches from."""
         assert "expert" not in cli._TOP_LEVEL_COMMANDS
         assert "expert" not in cli._COMMANDS_WITH_LOCAL_API_KEY
+        registered = {
+            g.name or g.typer_instance.info.name
+            for g in cli.app.registered_groups
+        }
+        assert "expert" not in registered
+
+    def test_expert_keyword_forwards_prompt(self, monkeypatch):
         routed: list = []
         monkeypatch.setattr(
             cli,
             "_route_to_expert",
-            lambda command, tui=False: routed.append(command),
+            lambda command, tui=None: routed.append((command, tui)),
         )
         monkeypatch.setattr(sys, "argv", ["dashscope", "expert", "chat"])
 
         cli.main()
 
-        assert routed == ["expert chat"]
+        # The keyword itself is consumed; only the question is forwarded.
+        assert routed == [("chat", True)]
+
+    def test_bare_expert_is_interactive(self, monkeypatch):
+        routed: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append((command, tui)),
+        )
+        monkeypatch.setattr(sys, "argv", ["dashscope", "expert"])
+
+        cli.main()
+
+        assert routed == [(None, True)]
+
+    def test_expert_cli_flag_selects_plain_repl(self, monkeypatch):
+        routed: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append((command, tui)),
+        )
+        monkeypatch.setattr(sys, "argv", ["dashscope", "expert", "--cli"])
+
+        cli.main()
+
+        assert routed == [(None, False)]
+
+    def test_expert_help_prints_usage_without_routing(
+        self,
+        monkeypatch,
+        capsys,
+    ):
+        routed: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append((command, tui)),
+        )
+        monkeypatch.setattr(cli, "app", lambda: routed.append("typer"))
+        monkeypatch.setattr(sys, "argv", ["dashscope", "expert", "--help"])
+
+        cli.main()
+
+        # Must not fall through to typer, which has no `expert` command.
+        assert not routed
+        assert "DashScope SDK Expert" in capsys.readouterr().out
+
+    def test_multiword_unknown_command_reaches_typer(self, monkeypatch):
+        """A typo'd command group must error in typer, not open a chat."""
+        routed: list = []
+        invoked: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append(command),
+        )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
+        monkeypatch.setattr(sys, "argv", ["dashscope", "generaton", "create"])
+
+        cli.main()
+
+        assert not routed
+        assert invoked == [True]
+
+    def test_stray_leading_option_reaches_typer(self, monkeypatch):
+        """`-w/--workspace` is a group option, so its value must not be
+        mistaken for the command name and routed into the agent."""
+        routed: list = []
+        invoked: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append(command),
+        )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["dashscope", "-w", "wsid", "generation", "create"],
+        )
+
+        cli.main()
+
+        assert not routed
+        assert invoked == [True]
+
+    def test_unknown_flag_reaches_typer(self, monkeypatch):
+        routed: list = []
+        invoked: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append(command),
+        )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
+        monkeypatch.setattr(sys, "argv", ["dashscope", "--foo"])
+
+        cli.main()
+
+        assert not routed
+        assert invoked == [True]
 
     def test_registered_groups_are_all_routable(self):
         """A group registered with typer but absent from _TOP_LEVEL_COMMANDS
-        never executes — main() forwards the line to the agent instead.
+        is dispatched to typer anyway now, but the set still drives global
+        -k/--api-key parsing, so the two must not drift apart.
 
         Only this direction is asserted: `rl`/`agentic-rl` stay in the set even
         when the optional extra is not installed.
@@ -316,20 +430,23 @@ class TestMainRouting:
         }
         assert registered <= cli._TOP_LEVEL_COMMANDS
 
-    def test_auth_whoami_executes_instead_of_routing_to_agent(self, monkeypatch):
+    def test_auth_whoami_executes_instead_of_routing_to_agent(
+        self,
+        monkeypatch,
+    ):
         routed: list = []
         invoked: list = []
         monkeypatch.setattr(
             cli,
             "_route_to_expert",
-            lambda command, tui=False: routed.append(command),
+            lambda command, tui=None: routed.append(command),
         )
         monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
         monkeypatch.setattr(sys, "argv", ["dashscope", "auth", "whoami"])
 
         cli.main()
 
-        assert routed == []
+        assert not routed
         assert invoked == [True]
 
 
