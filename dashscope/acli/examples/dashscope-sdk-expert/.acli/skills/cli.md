@@ -11,6 +11,7 @@ This file is authoritative for answering `dashscope` CLI usage questions (based 
 
 | Command group | Subcommands | Purpose | Corresponding SDK class |
 | --- | --- | --- | --- |
+| auth | whoami/login/logout | Verify the active API key and persist one to ~/.dashscope/api_key | dashscope.common.api_key (get_default_api_key/save_api_key) |
 | generation | create | Text generation (including streaming and multi-turn messages) | dashscope.Generation |
 | ft (hidden alias fine-tunes) | create/get/list/stream/cancel/delete | Fine-tuning job management | dashscope.FineTunes |
 | files | upload/get/list/delete | Training file upload and management | dashscope.Files |
@@ -34,9 +35,12 @@ Note: code-generation and understanding still exist in the source but are deprec
 
 ## Common usage
 
-Prerequisite: `export DASHSCOPE_API_KEY=sk-xxx` (or pass the global `-k/--api-key`).
+Prerequisite: `export DASHSCOPE_API_KEY=sk-xxx` (or pass the global `-k/--api-key`, or persist one with `dashscope auth login`).
 
 ```bash
+dashscope auth whoami                 # verify the active key against the API and show its source
+dashscope auth login --key sk-xxx     # save a key to ~/.dashscope/api_key
+dashscope auth logout                 # remove the saved key file
 dashscope generation create -m qwen-plus -p "Hello" -s --temperature 0.7
 dashscope ft create -m qwen-turbo -t file-xxx -v file-yyy -e 2 -b 16 -l 1e-5
 dashscope files upload -f train.jsonl -p fine-tune -d "training set"
@@ -59,6 +63,9 @@ dashscope rl run -c rl_config.yaml -o json -v
 ```
 
 Key option notes:
+- auth whoami: takes no options; validates the resolved key with a lightweight `dashscope.Models.list(page=1, page_size=1)` call and prints `Authenticated  key=sk-xxx...yyyy  source=...`. The key is always masked (first 6 + last 4), never printed in full. `source` reports where it came from: `environment / --api-key flag`, `file (<path>)`, or `unknown`. Exit codes: 0 = present and accepted, 1 = no key configured, 2 = configured but rejected (401/403) or an unexpected response.
+- auth login: `-k/--key` saves to `~/.dashscope/api_key`. Omitted, it prompts interactively with hidden input — that prompt blocks forever in a non-TTY (piped stdin, or a shell tool driven by an agent), so pass `--key` explicitly there. An empty/whitespace key exits 1. Note that `--key sk-xxx` lands in shell history and the process arg list; prefer the interactive prompt when a human is at a terminal.
+- auth logout: takes no options; removes `~/.dashscope/api_key` if present, otherwise prints "nothing to remove" and exits 0. It does not unset `DASHSCOPE_API_KEY`, so a key exported in the environment still authenticates afterwards.
 - generation create: `-p/--prompt`, `--messages` (JSON string), `-s/--stream`, `--temperature/--top-p/--top-k/--max-tokens/--seed/--stop/--repetition-penalty/--presence-penalty/--enable-search/--n/--result-format`
 - ft create: `-t/--training-file-ids` (repeatable), `-v/--validation-file-ids`, `--mode`, `-e/--n-epochs`, `-b/--batch-size`, `-l/--learning-rate`, `-p/--prompt-loss`; get/stream/cancel/delete all take job_id as a positional argument; list uses `-p/--page`, `-s/--size`
 - files: upload `-f/--file`, `-p/--purpose` (default fine-tune), `-d/--description`; all commands support `-u/--base-url`
@@ -79,7 +86,8 @@ Key option notes:
 
 ## Common errors and troubleshooting
 
-- `Error: ... AuthenticationError` (exit code 1): no Key configured; set DASHSCOPE_API_KEY or add `-k`.
+- `Error: ... AuthenticationError` (exit code 1): no Key configured; set DASHSCOPE_API_KEY, add `-k`, or persist one with `dashscope auth login`. Diagnose with `dashscope auth whoami` — it reports both validity and which source the key came from.
+- `dashscope auth whoami` opens the SDK Expert agent instead of printing key info: `auth` was missing from the CLI's top-level routing table, so the line was treated as an unknown command and forwarded to the agent as a question. Fixed in this repo; if a user hits it, they are on an older install and should upgrade rather than keep retrying.
 - `Option '--api-key' requires an argument.` (exit code 2): `-k/--api-key` is missing a value or the value starts with `-`.
 - `--messages must be a valid JSON string`: generation's --messages must be a JSON array string; watch shell quoting/escaping.
 - `File ... does not exist`: local paths (-f, --image, --audio, etc.) are validated locally first; `~` expansion is supported; URLs must include a scheme.

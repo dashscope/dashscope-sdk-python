@@ -91,6 +91,7 @@ _PARAM_MAP = {
 }
 
 _TOP_LEVEL_COMMANDS = {
+    "auth",
     "generation",
     "ft",
     "fine-tunes",

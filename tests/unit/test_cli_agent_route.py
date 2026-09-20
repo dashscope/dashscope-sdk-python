@@ -303,6 +303,35 @@ class TestMainRouting:
 
         assert routed == ["expert chat"]
 
+    def test_registered_groups_are_all_routable(self):
+        """A group registered with typer but absent from _TOP_LEVEL_COMMANDS
+        never executes — main() forwards the line to the agent instead.
+
+        Only this direction is asserted: `rl`/`agentic-rl` stay in the set even
+        when the optional extra is not installed.
+        """
+        registered = {
+            g.name or g.typer_instance.info.name
+            for g in cli.app.registered_groups
+        }
+        assert registered <= cli._TOP_LEVEL_COMMANDS
+
+    def test_auth_whoami_executes_instead_of_routing_to_agent(self, monkeypatch):
+        routed: list = []
+        invoked: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=False: routed.append(command),
+        )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
+        monkeypatch.setattr(sys, "argv", ["dashscope", "auth", "whoami"])
+
+        cli.main()
+
+        assert routed == []
+        assert invoked == [True]
+
 
 class TestBundledExample:
     def test_expert_example_bundled(self):
