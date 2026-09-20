@@ -715,6 +715,151 @@ def test_session_thread_model_fields():
     assert "title" not in d  # legacy field removed
 
 
+def test_session_create_params_agent_string_and_object():
+    """createSession ``agent`` accepts the Agent ID string (forward-compat)
+    or an override object; ``environment_variables`` / ``mcp_configs`` are
+    new top-level fields. Omitted fields are not sent (no null leak)."""
+    from dashscope.agentstudio.types.params import SessionCreateParams
+
+    # String agent — backward compatible.
+    assert SessionCreateParams(agent="agent_01", title="x").to_dict() == {
+        "agent": "agent_01",
+        "title": "x",
+    }
+    # Override object + new top-level fields (doc §2.3 example).
+    body = SessionCreateParams(
+        agent={
+            "type": "agent_with_overrides",
+            "id": "agent_xxx",
+            "version": 3,
+            "system": "你是此 Session 专用的助手。",
+            "tools": [],
+            "mcp_servers": [{"type": "official", "name": "weather"}],
+            "skills": [
+                {
+                    "type": "customer",
+                    "skill_id": "skill_xxx",
+                    "version": "1.0",
+                },
+            ],
+        },
+        environment_variables={"LANG": "zh_CN.UTF-8"},
+        mcp_configs=[
+            {"mcp_server_name": "weather", "headers": {"key1": "value1"}},
+        ],
+    ).to_dict()
+    assert body["agent"]["type"] == "agent_with_overrides"
+    assert body["agent"]["id"] == "agent_xxx"
+    assert body["environment_variables"] == {"LANG": "zh_CN.UTF-8"}
+    assert body["mcp_configs"] == [
+        {"mcp_server_name": "weather", "headers": {"key1": "value1"}},
+    ]
+    # Omitted optional fields are absent — never sent as null.
+    for absent in (
+        "environment_id",
+        "resources",
+        "vault_ids",
+        "metadata",
+    ):
+        assert absent not in body
+
+
+def test_session_update_params_patch_and_clear_semantics():
+    """updateSession: omitted top-level fields are not sent (keep existing);
+    ``[]`` / ``{}`` clear; the ``agent`` patch is passed through verbatim so
+    an explicit ``None`` sub-field serializes to ``null`` (revoke override),
+    an omitted sub-field stays absent (keep), ``[]`` / ``""`` override empty.
+    """
+    from dashscope.agentstudio.types.params import SessionUpdateParams
+
+    # Only title — everything else omitted, no null uploaded.
+    assert SessionUpdateParams(title="x").to_dict() == {"title": "x"}
+    # [] / {} explicitly clear (not null).
+    assert SessionUpdateParams(
+        vault_ids=[],
+        environment_variables={},
+        mcp_configs=[],
+        metadata={},
+    ).to_dict() == {
+        "vault_ids": [],
+        "environment_variables": {},
+        "mcp_configs": [],
+        "metadata": {},
+    }
+    # Full doc §3.3 example body.
+    body = SessionUpdateParams(
+        title="更新后的项目分析",
+        metadata={"project": "demo", "phase": "review"},
+        vault_ids=["vault_project", "vault_shared"],
+        environment_variables={"LANG": "zh_CN.UTF-8", "REPORT_MODE": "strict"},
+        agent={
+            "system": "你是本 Session 专用的项目分析助手。",
+            "tools": [],
+            "mcp_servers": [],
+            "skills": [
+                {
+                    "type": "customer",
+                    "skill_id": "skill_report_writer",
+                    "version": "1.0",
+                },
+            ],
+        },
+        mcp_configs=[
+            {
+                "mcp_server_name": "weather",
+                "headers": {"X-Tenant-Id": "demo"},
+            },
+        ],
+    ).to_dict()
+    assert body["agent"]["system"] == "你是本 Session 专用的项目分析助手。"
+    assert body["agent"]["skills"] == [
+        {
+            "type": "customer",
+            "skill_id": "skill_report_writer",
+            "version": "1.0",
+        },
+    ]
+    assert body["environment_variables"] == {
+        "LANG": "zh_CN.UTF-8",
+        "REPORT_MODE": "strict",
+    }
+    # Agent patch: omitted sub-field absent (keep), None → null (revoke),
+    # [] / "" override to empty. Mapping passed through verbatim.
+    patch = SessionUpdateParams(
+        agent={"system": "", "tools": None, "skills": []},
+    ).to_dict()["agent"]
+    assert patch == {"system": "", "tools": None, "skills": []}
+    assert "mcp_servers" not in patch
+
+
+def test_session_model_hydrates_override_agent_and_new_fields():
+    """Session response parses the agent override object and the new
+    ``environment_variables`` / ``mcp_configs`` fields."""
+    from dashscope.agentstudio.types import Agent, Session
+
+    s = Session(
+        id="sesn_1",
+        agent={
+            "id": "agent_01",
+            "type": "agent_with_overrides",
+            "version": 3,
+            "system": "hi",
+        },
+        environment_variables={"LANG": "zh_CN.UTF-8"},
+        mcp_configs=[
+            {"mcp_server_name": "weather", "headers": {"k": "v"}},
+        ],
+    )
+    assert isinstance(s.agent, Agent)
+    assert s.agent.id == "agent_01"
+    assert s.agent.type == "agent_with_overrides"
+    assert s.agent_id == "agent_01"  # works for string and object forms
+    assert s.environment_variables == {"LANG": "zh_CN.UTF-8"}
+    assert s.mcp_configs == [
+        {"mcp_server_name": "weather", "headers": {"k": "v"}},
+    ]
+
+
 def test_message_error_and_pending_signal():
     from dashscope.agentstudio.types import parse_message
 
