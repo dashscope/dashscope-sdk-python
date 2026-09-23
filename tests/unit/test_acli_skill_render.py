@@ -19,7 +19,7 @@ the substitution mechanism: declared placeholders disappear, their values
 arrive, and every other brace comes back byte-identical.
 """
 
-# pylint: disable=protected-access
+# pylint: disable=protected-access,redefined-outer-name
 
 from __future__ import annotations
 

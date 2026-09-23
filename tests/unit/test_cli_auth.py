@@ -7,6 +7,9 @@ configured, the masked key and its source on success, and the file ``login``
 writes. Every test runs against a throwaway ``~/.dashscope`` and a stubbed
 ``Models.list``, so no real key file is touched and no request is sent.
 """
+
+# pylint: disable=redefined-outer-name,unused-argument
+
 from http import HTTPStatus
 from types import SimpleNamespace
 
@@ -99,7 +102,7 @@ class TestAuthWhoami:
             "DASHSCOPE_API_KEY to configure one."
         )
         assert guidance in text
-        assert calls == [], "must not reach the API without a key"
+        assert not calls, "must not reach the API without a key"
 
     def test_masks_key_and_reports_the_file_source(
         self,
