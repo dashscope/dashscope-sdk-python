@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import AsyncIterator
+from typing import AsyncIterator, ClassVar
 
 import httpx
 
@@ -15,14 +15,21 @@ from dashscope.acli.providers.base import LLMChunk, LLMResponse, ToolCall
 # the DashScope native route (NOT the OpenAI-compatible one) so requests
 # land in the native SLS logstore.
 DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com"
-# The gateway binds each model to exactly one aigc service path (newer
-# models like qwen3.8-max live on multimodal-generation, classic text
-# models on text-generation). The provider tries them in order and
-# remembers the one that answers 200 — see _is_url_error.
+# The gateway binds each model to exactly one aigc service path and answers
+# the other with a 400 "url error" (see _is_url_error), so probing an
+# unlearned model always costs one failed request — one that lands in the
+# prod gateway log as InvalidParameter. multimodal-generation is probed
+# first because acli's default model (qwen3.8-max) and the vl/omni family
+# live there; classic text models are the minority and learn their binding
+# on the first call.
 _GENERATION_PATHS = (
-    "/api/v1/services/aigc/text-generation/generation",
     "/api/v1/services/aigc/multimodal-generation/generation",
+    "/api/v1/services/aigc/text-generation/generation",
 )
+# Learned model → path bindings, shared across processes so a fresh CLI
+# start does not re-probe. Global rather than per-workspace: the binding is
+# a property of the gateway, and bench/CI runs execute in a throwaway cwd.
+_PATH_CACHE_NAME = "generation-paths.json"
 # Historical/standard prefixes a persisted config may carry; the provider
 # normalizes them back to the service root.
 _LEGACY_PREFIXES = ("/compatible-mode/v1", "/api/v1")
@@ -57,6 +64,45 @@ class _StreamAPIError(RuntimeError):
 def _is_url_error_message(message: str) -> bool:
     """url-error check for the SSE variant, which arrives on a 200."""
     return "url error" in (message or "")
+
+
+def _load_path_cache() -> dict[str, str]:
+    """Read the model → generation-path bindings learned by earlier runs.
+
+    Entries that are unreadable or name an unknown path are dropped rather
+    than repaired: a dropped binding costs one probe, which the fallback
+    already survives.
+    """
+    from dashscope.acli.config import CONFIG_DIR
+
+    try:
+        raw = json.loads(
+            (CONFIG_DIR / _PATH_CACHE_NAME).read_text(encoding="utf-8"),
+        )
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(model): str(path)
+        for model, path in raw.items()
+        if str(path) in _GENERATION_PATHS
+    }
+
+
+def _save_path_cache(paths: dict[str, str]) -> None:
+    """Persist learned bindings. An unwritable home must not fail a call."""
+    from dashscope.acli.config import CONFIG_DIR
+    from dashscope.acli.utils.paths import atomic_write_text
+
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(
+            CONFIG_DIR / _PATH_CACHE_NAME,
+            json.dumps(paths, indent=2, sort_keys=True),
+        )
+    except OSError:
+        pass
 
 
 def _to_native_content(content):
@@ -185,6 +231,30 @@ def _native_chunk_to_openai(chunk) -> dict:
 
 
 class TongyiProvider:
+    # model → generation path, shared by every instance in this process and
+    # mirrored to disk by _remember_path. A provider is constructed per
+    # session start, per model switch and per vision call, so without this
+    # each of those re-probes and re-logs the same 400.
+    _path_cache: ClassVar[dict[str, str] | None] = None
+
+    @classmethod
+    def _learned_paths(cls) -> dict[str, str]:
+        # Bound to a local so the Optional class attribute narrows to a dict
+        # for both the caller and the type checker.
+        cache = cls._path_cache
+        if cache is None:
+            cache = _load_path_cache()
+            cls._path_cache = cache
+        return cache
+
+    @classmethod
+    def _remember_path(cls, model: str, path: str) -> None:
+        learned = cls._learned_paths()
+        if learned.get(model) == path:
+            return
+        learned[model] = path
+        _save_path_cache(learned)
+
     def __init__(
         self,
         model: str = "qwen3.8-max",
@@ -205,7 +275,16 @@ class TongyiProvider:
                 break
         self.base_url = base
         self.module = module
-        self._generation_path = _GENERATION_PATHS[0]
+        self._generation_path = self._learned_paths().get(
+            model,
+            _GENERATION_PATHS[0],
+        )
+
+    def _commit_path(self, path: str) -> None:
+        """Record the path that answered 200, for this instance and every
+        later one."""
+        self._generation_path = path
+        self._remember_path(self.model, path)
 
     def _candidate_paths(self) -> list[str]:
         others = [p for p in _GENERATION_PATHS if p != self._generation_path]
@@ -348,7 +427,7 @@ class TongyiProvider:
                         headers=headers,
                     )
                     if response.status_code == 200:
-                        self._generation_path = path
+                        self._commit_path(path)
                         break
                     if i + 1 < len(paths) and _is_url_error(
                         response.status_code,
@@ -487,7 +566,7 @@ class TongyiProvider:
                         try:
                             first = await stream.__anext__()
                         except StopAsyncIteration:
-                            self._generation_path = path
+                            self._commit_path(path)
                             return
                         except _StreamAPIError as e:
                             if i + 1 < len(paths) and _is_url_error_message(
@@ -495,7 +574,7 @@ class TongyiProvider:
                             ):
                                 continue
                             raise
-                        self._generation_path = path
+                        self._commit_path(path)
                         yield first
                         async for chunk in stream:
                             yield chunk

@@ -17,10 +17,15 @@ import pytest
 
 from dashscope.acli.providers.tongyi import (
     _GENERATION_PATHS,
+    _PATH_CACHE_NAME,
     TongyiProvider,
 )
 
-TEXT_GEN, MULTIMODAL_GEN = _GENERATION_PATHS
+# Spelled out rather than destructured from _GENERATION_PATHS: a positional
+# unpack silently swaps these two names the moment the probe order changes,
+# inverting every assertion below while most of them still pass.
+TEXT_GEN = "/api/v1/services/aigc/text-generation/generation"
+MULTIMODAL_GEN = "/api/v1/services/aigc/multimodal-generation/generation"
 ROOT = "https://dashscope.aliyuncs.com"
 
 MESSAGES = [{"role": "user", "content": "hi"}]
@@ -272,7 +277,6 @@ async def test_chat_posts_native_body(fake_http):
     resp = await _provider().chat(MESSAGES, tools=TOOLS)
 
     cap = fake_http.requests[0]
-    assert cap["url"] == ROOT + TEXT_GEN
     body = cap["body"]
     assert body["model"] == "qwen-plus"
     assert body["input"] == {"messages": MESSAGES}
@@ -293,7 +297,6 @@ async def test_chat_stream_posts_native_body_with_sse_headers(fake_http):
     chunks = [c async for c in provider.chat_stream(MESSAGES, tools=TOOLS)]
 
     cap = fake_http.requests[0]
-    assert cap["url"] == ROOT + TEXT_GEN
     params = cap["body"]["parameters"]
     assert params["result_format"] == "message"
     assert params["stream"] is True
@@ -362,27 +365,63 @@ def test_base_url_normalized_to_service_root(given, expected):
 
 
 # ---------------------------------------------------------------------------
-# endpoint fallback: text-generation ⇄ multimodal-generation
+# endpoint selection: multimodal-generation first, text-generation fallback
 # ---------------------------------------------------------------------------
 
 
-async def test_chat_falls_back_to_multimodal_path(fake_http):
-    fake_http.enqueue_post(URL_ERROR_BODY, status_code=400)
-    fake_http.enqueue_post(MULTIMODAL_RESPONSE)
-    provider = _provider(model="qwen3.8-max")
-    resp = await provider.chat(MESSAGES)
+def test_multimodal_path_is_probed_first():
+    """Pinned on purpose. The gateway binds each model to one aigc path and
+    rejects the other with a 400 "url error" that lands in the prod log as
+    InvalidParameter, so the probe order decides who pays it. acli's default
+    model (qwen3.8-max) plus the vl/omni family are multimodal-bound; the
+    classic text models are the minority. Flip this and every fallback
+    assertion below flips with it."""
+    assert _GENERATION_PATHS == (MULTIMODAL_GEN, TEXT_GEN)
 
-    assert [r["url"] for r in fake_http.requests] == [
-        ROOT + TEXT_GEN,
-        ROOT + MULTIMODAL_GEN,
-    ]
+
+async def test_chat_multimodal_model_needs_no_probe(fake_http):
+    """The common case: first request already hits the right path, and the
+    part-list content multimodal-generation returns is flattened."""
+    fake_http.enqueue_post(MULTIMODAL_RESPONSE)
+    resp = await _provider(model="qwen3.8-max").chat(MESSAGES)
+
+    assert [r["url"] for r in fake_http.requests] == [ROOT + MULTIMODAL_GEN]
     assert resp.content == "hello there"
     assert resp.reasoning_content == "thinking..."
     assert resp.usage["cached_tokens"] == 5
+
+
+async def test_stream_multimodal_model_needs_no_probe(fake_http):
+    fake_http.enqueue_stream(MULTIMODAL_SSE_LINES)
+    provider = _provider(model="qwen3.8-max")
+    chunks = [c async for c in provider.chat_stream(MESSAGES)]
+
+    assert [r["url"] for r in fake_http.requests] == [ROOT + MULTIMODAL_GEN]
+    assert "th" in [c.delta_reasoning_content for c in chunks]
+    assert [c.delta_content for c in chunks if c.delta_content] == [
+        "Hel",
+        "lo",
+    ]
+    assert chunks[-1].usage["total_tokens"] == 9
+
+
+async def test_chat_falls_back_to_text_path(fake_http):
+    fake_http.enqueue_post(URL_ERROR_BODY, status_code=400)
+    fake_http.enqueue_post(NATIVE_RESPONSE)
+    provider = _provider(model="qwen-plus")
+    resp = await provider.chat(MESSAGES)
+
+    assert [r["url"] for r in fake_http.requests] == [
+        ROOT + MULTIMODAL_GEN,
+        ROOT + TEXT_GEN,
+    ]
+    assert resp.content == "hello there"
+    assert resp.usage["total_tokens"] == 18
     # working path is cached: the next call skips the 400 round-trip
     fake_http.enqueue_post(NATIVE_RESPONSE)
     await provider.chat(MESSAGES)
-    assert fake_http.requests[-1]["url"] == ROOT + MULTIMODAL_GEN
+    assert len(fake_http.requests) == 3
+    assert fake_http.requests[-1]["url"] == ROOT + TEXT_GEN
 
 
 async def test_chat_no_fallback_on_other_400(fake_http):
@@ -395,27 +434,25 @@ async def test_chat_no_fallback_on_other_400(fake_http):
     assert len(fake_http.requests) == 1
 
 
-async def test_stream_falls_back_to_multimodal_path(fake_http):
+async def test_stream_falls_back_to_text_path(fake_http):
     fake_http.enqueue_stream(
         [],
         status_code=400,
         body=json.dumps(URL_ERROR_BODY, ensure_ascii=False),
     )
-    fake_http.enqueue_stream(MULTIMODAL_SSE_LINES)
-    provider = _provider(model="qwen3.8-max")
+    fake_http.enqueue_stream(NATIVE_SSE_LINES)
+    provider = _provider(model="qwen-plus")
     chunks = [c async for c in provider.chat_stream(MESSAGES)]
 
     assert [r["url"] for r in fake_http.requests] == [
-        ROOT + TEXT_GEN,
         ROOT + MULTIMODAL_GEN,
+        ROOT + TEXT_GEN,
     ]
-    reasoning = [c.delta_reasoning_content for c in chunks]
-    assert "th" in reasoning
     contents = [c.delta_content for c in chunks if c.delta_content]
     assert contents == ["Hel", "lo"]
     last = chunks[-1]
     assert last.finish_reason == "stop"
-    assert last.usage["total_tokens"] == 9
+    assert last.usage["total_tokens"] == 13
 
 
 async def test_stream_falls_back_on_sse_error_event(fake_http):
@@ -429,27 +466,27 @@ async def test_stream_falls_back_on_sse_error_event(fake_http):
             "data:" + json.dumps(URL_ERROR_BODY, ensure_ascii=False),
         ],
     )
-    fake_http.enqueue_stream(MULTIMODAL_SSE_LINES)
-    provider = _provider(model="qwen3.8-max")
+    fake_http.enqueue_stream(NATIVE_SSE_LINES)
+    provider = _provider(model="qwen-plus")
     chunks = [c async for c in provider.chat_stream(MESSAGES)]
 
     assert [r["url"] for r in fake_http.requests] == [
-        ROOT + TEXT_GEN,
         ROOT + MULTIMODAL_GEN,
+        ROOT + TEXT_GEN,
     ]
     assert [c.delta_content for c in chunks if c.delta_content] == [
         "Hel",
         "lo",
     ]
     # the working path is cached only after a real chunk arrived
-    assert provider._generation_path == MULTIMODAL_GEN
+    assert provider._generation_path == TEXT_GEN
 
 
 async def test_stream_sse_url_error_raises_after_paths_exhausted(fake_http):
     event = ["data:" + json.dumps(URL_ERROR_BODY, ensure_ascii=False)]
     fake_http.enqueue_stream(list(event))
     fake_http.enqueue_stream(list(event))
-    provider = _provider(model="qwen3.8-max")
+    provider = _provider()
     with pytest.raises(RuntimeError, match="url error"):
         async for _ in provider.chat_stream(MESSAGES):
             pass
@@ -461,11 +498,87 @@ async def test_stream_no_fallback_after_content_started(fake_http):
         "data:" + json.dumps(URL_ERROR_BODY, ensure_ascii=False),
     ]
     fake_http.enqueue_stream(lines)
-    provider = _provider(model="qwen3.8-max")
+    provider = _provider()
     with pytest.raises(RuntimeError, match="url error"):
         async for _ in provider.chat_stream(MESSAGES):
             pass
     assert len(fake_http.requests) == 1
+
+
+# ---------------------------------------------------------------------------
+# learned-path cache: a probe costs a 400 in the prod gateway log, so the
+# answer is remembered per model — in-process and on disk
+# ---------------------------------------------------------------------------
+
+
+async def test_learned_path_skips_the_probe_in_a_new_instance(fake_http):
+    """A provider is constructed per session start, per model switch and per
+    vision call; only the first of those may pay the probe."""
+    fake_http.enqueue_post(URL_ERROR_BODY, status_code=400)
+    fake_http.enqueue_post(NATIVE_RESPONSE)
+    await _provider().chat(MESSAGES)
+    assert len(fake_http.requests) == 2
+
+    fake_http.enqueue_post(NATIVE_RESPONSE)
+    await _provider().chat(MESSAGES)
+    assert len(fake_http.requests) == 3
+    assert fake_http.requests[-1]["url"] == ROOT + TEXT_GEN
+
+
+async def test_learned_path_survives_a_new_process(fake_http, monkeypatch):
+    """Bench and CI runs execute in throwaway containers, so the binding has
+    to outlive the process to be worth anything."""
+    fake_http.enqueue_post(URL_ERROR_BODY, status_code=400)
+    fake_http.enqueue_post(NATIVE_RESPONSE)
+    await _provider().chat(MESSAGES)
+    assert len(fake_http.requests) == 2
+
+    # Simulate a fresh process: empty in-process cache, same home directory.
+    monkeypatch.setattr(TongyiProvider, "_path_cache", None)
+    fake_http.enqueue_post(NATIVE_RESPONSE)
+    await _provider().chat(MESSAGES)
+    assert len(fake_http.requests) == 3
+    assert fake_http.requests[-1]["url"] == ROOT + TEXT_GEN
+
+
+async def test_path_cache_is_written_next_to_the_global_config(fake_http):
+    from dashscope.acli import config as config_module
+
+    fake_http.enqueue_post(URL_ERROR_BODY, status_code=400)
+    fake_http.enqueue_post(NATIVE_RESPONSE)
+    await _provider().chat(MESSAGES)
+
+    cache_file = config_module.CONFIG_DIR / _PATH_CACHE_NAME
+    assert json.loads(cache_file.read_text(encoding="utf-8")) == {
+        "qwen-plus": TEXT_GEN,
+    }
+
+
+def test_path_cache_drops_unknown_paths(monkeypatch):
+    """A model the gateway rebinds, or a hand-edited cache, must fall back to
+    probing rather than POST to a path that no longer exists."""
+    from dashscope.acli import config as config_module
+
+    cache_file = config_module.CONFIG_DIR / _PATH_CACHE_NAME
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text(
+        json.dumps({"qwen-plus": "/api/v1/services/aigc/bogus/generation"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(TongyiProvider, "_path_cache", None)
+
+    assert _provider()._generation_path == MULTIMODAL_GEN
+
+
+def test_path_cache_survives_a_corrupt_file(monkeypatch):
+    from dashscope.acli import config as config_module
+
+    cache_file = config_module.CONFIG_DIR / _PATH_CACHE_NAME
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cache_file.write_text("not json at all", encoding="utf-8")
+    monkeypatch.setattr(TongyiProvider, "_path_cache", None)
+
+    assert _provider()._generation_path == MULTIMODAL_GEN
 
 
 # ---------------------------------------------------------------------------
