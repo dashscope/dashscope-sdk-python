@@ -219,6 +219,16 @@ def main():
 
             _mcp_server_main()
             return
+        else:
+            # Only a bare `acli` and the explicit -c/--command one-shot enter
+            # the agent — the same contract the dashscope CLI enforces. An
+            # unrecognized token used to fall through and start a chat, which
+            # discarded the whole command line: `acli auth whoami` opened the
+            # agent instead of reporting that no such command exists. Exit 2
+            # matches the usage-error code typer/click use for the same case.
+            print(f"Error: No such command '{arg}'.")
+            print("Try 'acli --help' for help.")
+            sys.exit(2)
     config = Config.load()
     _apply_cli_overrides(config, protocol_override, max_turns_override)
 

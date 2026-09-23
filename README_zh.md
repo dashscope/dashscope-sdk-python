@@ -6,7 +6,7 @@ DashScope Python SDK 提供了访问[阿里云百炼（Model Studio）](https://
 
 ## 最新动态
 
-**v1.27.0 内置交互式 AI 助手 —— [DashScope SDK Expert](#ai-助手dashscope-sdk-expert)。** 直接运行 `dashscope`（不带任何参数），或直接提问（如 `dashscope "如何流式输出 Generation 结果"`），即可在终端中获得 SDK/API 答疑、可运行示例、CLI 用法和错误诊断。助手基于按领域划分的速查技能（文本、多模态、语音、检索、微调、Agent、CLI），这些技能构建在 SDK 的公开接口——参数、输出、错误码——之上，让你直接提问，无需翻文档。在助手内输入 `/help` 可查看可用命令。
+**v1.27.0 内置交互式 AI 助手 —— [DashScope SDK Expert](#ai-助手dashscope-sdk-expert)。** 直接运行 `dashscope`（不带任何参数），或用 `dashscope expert "如何流式输出 Generation 结果"` 直接提问，即可在终端中获得 SDK/API 答疑、可运行示例、CLI 用法和错误诊断。助手基于按领域划分的速查技能（文本、多模态、语音、检索、微调、Agent、CLI），这些技能构建在 SDK 的公开接口——参数、输出、错误码——之上，让你直接提问，无需翻文档。在助手内输入 `/help` 可查看可用命令。
 
 ## 安装
 
@@ -174,7 +174,7 @@ print(response)
 SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供的 Agentic CLI（`dashscope/acli`）框架构建。对于 DashScope SDK/CLI 用户，它是获取开发咨询和 AI 编码帮助的推荐方式——直接在终端中解答 SDK/API 问题、生成可运行示例、展示 CLI 用法、诊断错误。
 
 - 直接运行 `dashscope`（不带参数）即可启动助手。首次运行时会提示安装 SDK Expert 知识包（按领域划分的速查技能：文本、多模态、语音、检索、微调、Agent、CLI），使助手的指导来自 SDK 的公开接口——参数、输出、错误码——而无需阅读源码
-- 直接提问代替翻文档——如 `dashscope "如何流式输出 Generation 结果"` 或 `dashscope "取消微调任务的 CLI 命令"`。在助手内输入 `/help` 可列出可用命令（`/setup`、`/skill`、`/stats` 等）；经典 SDK 子命令依然可用，也可用 `dashscope expert` 显式进入助手（`dashscope expert "问题"` 为一次性提问，`dashscope expert --help` 查看全部形式）
+- 直接提问代替翻文档——如 `dashscope expert "如何流式输出 Generation 结果"` 或 `dashscope expert "取消微调任务的 CLI 命令"`，均为一次性提问后退出。在助手内输入 `/help` 可列出可用命令（`/setup`、`/skill`、`/stats` 等）；经典 SDK 子命令依然可用，单独执行 `dashscope expert` 进入交互式助手，`dashscope expert --help` 查看全部形式
 - 完整使用指南：[DashScope SDK Expert 文档](https://help.aliyun.com/zh/model-studio/dashscope-sdk-expert)
 
 ## 支持的模型

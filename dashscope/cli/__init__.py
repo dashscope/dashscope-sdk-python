@@ -130,12 +130,11 @@ _EXPERT_USAGE = """[bold]DashScope SDK Expert[/bold] — the built-in AI assista
   dashscope expert --cli        interactive, plain REPL instead of the TUI
   dashscope expert --tui        interactive, force the TUI
   dashscope expert "question"   ask once and exit
-  dashscope "question"          ask once and exit (short form)
 
 With no argument, piped stdin is read as a one-shot prompt.
 SDK subcommands (generation, ft, files, models, ...) dispatch as usual; an
-unrecognized [italic]multi-word[/italic] command is reported as an error rather
-than treated as a question.
+unrecognized command is reported as an error rather than treated as a
+question, so ask one with [bold]dashscope expert "question"[/bold].
 
 Requires [bold]pip install dashscope[acli][/bold]."""
 
@@ -577,20 +576,11 @@ def main():
         app()
         return
 
-    # A lone argument that is not a known command is a question, not a
-    # malformed one: `dashscope "how do I stream Generation output"`. Anything
-    # longer falls through to typer, so a typo or a stray option gets a real
-    # error instead of silently opening a chat. argv is already cleaned, so an
-    # extracted -k/--api-key never leaks into the prompt.
-    if (
-        len(argv) == 2
-        and first_cmd is not None
-        and first_cmd not in _TOP_LEVEL_COMMANDS
-    ):
-        _route_to_expert(first_cmd, tui=forced_tui)
-        return
-
-    # Direct command execution (backward compatible)
+    # Anything that is not bare `dashscope` and not `dashscope expert ...`
+    # belongs to typer, so a typo or a stray option gets a real error instead
+    # of silently opening a chat. Forwarding an unrecognized token as a
+    # question used to swallow whole command lines -- `dashscope auth whoami`
+    # opened a session whose first message was the command itself.
     argv = _translate_help_shortcut(argv)
     sys.argv = argv
 

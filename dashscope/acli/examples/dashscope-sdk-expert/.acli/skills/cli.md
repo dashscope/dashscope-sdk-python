@@ -83,8 +83,8 @@ Key option notes:
 - `-h` is automatically converted to `--help`; use `dashscope --help` or `dashscope <group> --help` for the authoritative option list.
 - Legacy syntax compatibility: `dashscope fine_tunes.call` -> `fine-tunes create`, `generation.call` -> `generation create`, etc.; underscore options like `--training_file_ids` and `--api_key` are automatically mapped to hyphenated forms.
 - Bare `dashscope` (no arguments; a change in this repo): enters the built-in agent "DashScope SDK Expert" interactive mode, TUI by default; `--cli` switches to a plain REPL, `--tui` forces TUI; requires `pip install dashscope[acli]`. When stdin is not a TTY, piped text is treated as a one-shot question. On the first interactive run, if there is no ./.acli, it asks whether to download the dashscope-sdk-expert example configuration.
-- Entering the agent explicitly: `dashscope expert` (interactive), `dashscope expert --cli|--tui`, `dashscope expert --help` (prints usage), `dashscope expert "question"` (one-shot). A single unrecognized argument is also read as a question — `dashscope "how do I stream Generation output"`.
-- Anything longer that is not a known command group is a **typer error, not a question**: `dashscope generaton create` reports `No such command`, so a typo surfaces instead of silently opening a chat. Only `-k/--api-key`, `--cli` and `--tui` may precede the command; group-level options must follow it (`dashscope generation create -w wsid`, not `dashscope -w wsid generation create`).
+- Entering the agent explicitly: `dashscope expert` (interactive), `dashscope expert --cli|--tui`, `dashscope expert --help` (prints usage), `dashscope expert "question"` (one-shot). The `expert` keyword is the only way to pass a question on the command line.
+- Anything else that is not a known command group is a **typer error, not a question**: `dashscope generaton create` reports `No such command`, and so does a quoted question like `dashscope "how do I stream Generation output"`, so a typo surfaces instead of silently opening a chat. Only `-k/--api-key`, `--cli` and `--tui` may precede the command; group-level options must follow it (`dashscope generation create -w wsid`, not `dashscope -w wsid generation create`).
 
 ## Common errors and troubleshooting
 
@@ -94,4 +94,5 @@ Key option notes:
 - `--messages must be a valid JSON string`: generation's --messages must be a JSON array string; watch shell quoting/escaping.
 - `File ... does not exist`: local paths (-f, --image, --audio, etc.) are validated locally first; `~` expansion is supported; URLs must include a scheme.
 - `Failed request_id: ..., status_code: ..., code: ..., message: ...` (exit code 1): rejected by the server; troubleshoot by code (InvalidParameter usually means a wrong model name or parameter value); HTTP 200 with a non-empty business code is also treated as a failure.
-- Bare dashscope shows `Install dashscope[acli] to enable the agent`: install `dashscope[acli]`; if it reports `Interactive mode requires a terminal.`, use `dashscope "your question"` for a one-shot question instead.
+- Bare dashscope shows `Install dashscope[acli] to enable the agent`: install `dashscope[acli]`; if it reports `Interactive mode requires a terminal.`, use `dashscope expert "your question"` for a one-shot question instead.
+- `No such command 'how do I ...'`: a question was passed without the `expert` keyword. `dashscope "question"` is no longer a short form — tell the user to write `dashscope expert "question"`.

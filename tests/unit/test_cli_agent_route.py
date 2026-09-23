@@ -7,9 +7,9 @@ Covers:
 - _route_to_expert: runs embedded acli with the global -k api key passed
   through, and offers the example download only for interactive no-arg runs.
 - _maybe_offer_example_download: accept/decline/marker/workspace gating.
-- main(): only a bare `dashscope`, an `expert` keyword, or a single unknown
-  token reach the agent; everything else is dispatched to typer so typos and
-  stray options produce a real error.
+- main(): only a bare `dashscope` or an explicit `expert` keyword reach the
+  agent; everything else is dispatched to typer so typos, stray options and
+  unrecognized commands produce a real error.
 """
 # pylint: disable=protected-access,redefined-outer-name,unused-argument
 
@@ -258,13 +258,20 @@ class TestOfferExampleDownload:
 
 
 class TestMainRouting:
-    def test_single_token_question_routes_cleaned_text(self, monkeypatch):
+    def test_unknown_single_token_reaches_typer(self, monkeypatch):
+        """`dashscope "question"` is not a short form for the agent.
+
+        An unrecognized token must error in typer so a mistyped command stays
+        visible; asking a question is `dashscope expert "question"`.
+        """
         routed: list = []
+        invoked: list = []
         monkeypatch.setattr(
             cli,
             "_route_to_expert",
             lambda command, tui=None: routed.append(command),
         )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
         monkeypatch.setattr(
             sys,
             "argv",
@@ -273,9 +280,32 @@ class TestMainRouting:
 
         cli.main()
 
-        # The extracted -k value must not leak into the routed prompt text.
-        assert routed == ["你好，未知命令"]
+        assert not routed
+        assert invoked == [True]
+        # The global key is still extracted on the typer path.
         assert dashscope.api_key == "sk-secret"
+
+    def test_quoted_command_line_reaches_typer(self, monkeypatch):
+        """A whole command line passed as one shell word is not a question.
+
+        It used to open a chat whose first user message was the command
+        itself, which is indistinguishable in the session log from a user who
+        meant to ask something.
+        """
+        routed: list = []
+        invoked: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append(command),
+        )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
+        monkeypatch.setattr(sys, "argv", ["dashscope", "auth whoami"])
+
+        cli.main()
+
+        assert not routed
+        assert invoked == [True]
 
     def test_no_args_routes_interactive(self, monkeypatch):
         routed: list = []
