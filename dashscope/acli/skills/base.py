@@ -200,13 +200,18 @@ def render_skill(skill: Skill, args: list[str]) -> str | None:
     don't match."""
     if len(args) < len(skill.arguments):
         return None
-    kwargs = {}
+    template = skill.prompt_template
+    # A skill body is Markdown, not a format string: it is full of literal
+    # braces from the JSON and Python it documents. Running str.format() over
+    # the whole body raised KeyError on `{"role": ...}`, which the old
+    # `except KeyError` turned into a bogus "missing args" report for every
+    # no-argument skill that showed a payload, and let the IndexError from
+    # `{}` escape entirely. Substitute only the declared arguments and leave
+    # every other brace exactly as the author wrote it.
     for i, arg_name in enumerate(skill.arguments):
         if i == len(skill.arguments) - 1:
-            kwargs[arg_name] = " ".join(args[i:])
+            value = " ".join(args[i:])
         else:
-            kwargs[arg_name] = args[i]
-    try:
-        return skill.prompt_template.format(**kwargs)
-    except KeyError:
-        return None
+            value = args[i]
+        template = template.replace("{" + arg_name + "}", value)
+    return template

@@ -67,7 +67,10 @@ def register_skill_tools(get_agent: Callable) -> None:
                     f"{skill.mcp_service}; ask the user to connect first."
                 )
         rendered = render_skill(skill, [str(a) for a in (args or [])])
-        if not rendered:
+        # `is None`, not falsy: render_skill only returns None when arguments
+        # are missing, so the hint below always lists at least one name. An
+        # empty body is a valid (if useless) skill, not a missing argument.
+        if rendered is None:
             hint = " ".join(f"<{a}>" for a in skill.arguments)
             return f"Error: missing args. '{name}' requires: {hint}"
         agent = get_agent()

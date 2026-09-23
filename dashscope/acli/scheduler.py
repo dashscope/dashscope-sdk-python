@@ -591,7 +591,9 @@ class Scheduler:
                     continue
 
             rendered = render_skill(skill, inv.args)
-            if not rendered:
+            # `is None`, not falsy: None is the missing-arguments signal, so
+            # arg_hint is never empty here.
+            if rendered is None:
                 arg_hint = " ".join(f"<{a}>" for a in skill.arguments)
                 results.append(
                     f"missing args: /skill {inv.name} {arg_hint}",
