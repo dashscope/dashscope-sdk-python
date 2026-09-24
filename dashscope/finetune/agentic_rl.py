@@ -4,7 +4,7 @@ from __future__ import annotations
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import time
-from typing import Union, List, Optional, ClassVar, Dict, Any
+from typing import Union, List, Optional, ClassVar, Dict, Any, Tuple
 from typing_extensions import Self
 
 from dashscope.client.base_api import CreateMixin
@@ -41,15 +41,133 @@ from dashscope.finetune.reinforcement import (
     generate_random_id,
     get_func_type_id,
     deep_remove_none,
+    HTTP_REQUEST_TIMEOUT,
+)
+from dashscope.common.error import (
+    AuthenticationError,
+    InvalidParameter,
+    DashScopeException,
+)
+from dashscope.common.error_registry import (
+    INVALID_API_KEY,
+    INVALID_REQUEST,
+    INTERNAL_ERROR,
+    PERMISSION_DENIED,
+    REQUEST_TIMEOUT,
+    SDK_INVALID_API_KEY,
+    SDK_AGENTIC_RL_CONFIGURATION_ERROR,
+    SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED,
+    SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED,
+    SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES,
+    SDK_AGENTIC_RL_JOB_SUBMISSION_FAILED,
+    SDK_AGENTIC_RL_WORKFLOW_FAILED,
+    SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE,
+    SDK_AGENTIC_RL_FUNCTION_TEST_FAILED,
+    SDK_AGENTIC_RL_FUNCTION_TEST_TIMEOUT,
+    SDK_AGENTIC_RL_VALIDATION_ERROR,
 )
 from dashscope.finetune.reinforcement.common.errors import (
-    RegistrationError,
+    BasePermissionError,
+    ConfigurationError,
+    InputError,
+    IOErrorWithCode,
     ValidationError,
     InstanceQueryError,
-    RuntimeErrorWithCode,
     ValueErrorWithCode,
-    DatasetsError,
 )
+
+
+def _get_public_error(
+    exc: Exception,
+    input_errors: Tuple[type, ...] = (),
+):
+    """Map an internal exception to the appropriate public error.
+
+    Per dashscope public-errors spec:
+    - BasePermissionError → PERMISSION_DENIED (403)
+    - ConfigurationError / ValidationError / InputError → INVALID_REQUEST (400)
+    - TimeoutError → REQUEST_TIMEOUT (504)
+    - All others → INTERNAL_ERROR (500)
+
+    ``input_errors`` adds caller-specific types that also mean bad user input.
+    Flows that validate a payload before sending anything treat a generic
+    ``ValueError`` as a 400; the request paths cannot, because there the same
+    type may come from the server side.
+    """
+    invalid_input_types = (
+        ConfigurationError,
+        ValidationError,
+        InputError,
+    ) + input_errors
+
+    if isinstance(exc, BasePermissionError):
+        return PERMISSION_DENIED
+    elif isinstance(exc, invalid_input_types):
+        return INVALID_REQUEST
+    elif isinstance(exc, TimeoutError):
+        return REQUEST_TIMEOUT
+    else:
+        return INTERNAL_ERROR
+
+
+def _exc_message(exc: Exception) -> str:
+    """Extract clean message from an exception.
+
+    Uses the ``.message`` attribute (set by AgenticRLError and friends)
+    to avoid embedding ``[error_code]``, ``name``, and ``(at timestamp)``
+    wrappers when composing outer error messages.
+
+    Falls back to ``str(exc)`` for plain exceptions.
+    """
+    msg = getattr(exc, "message", None)
+    if msg:
+        return str(msg)
+    return str(exc)
+
+
+def _log_internal_error(
+    error_def,
+    cause: Exception,
+    extra_vars: Optional[Dict[str, str]] = None,
+) -> None:
+    """Record a failure under its internal ``sdk.agentic_rl.*`` code.
+
+    Kept as a separate call so the five handlers stay one line each.
+    """
+    inner_code = getattr(cause, "error_code", None) or "unknown"
+    variables = {"inner_code": inner_code}
+    if extra_vars:
+        variables.update(extra_vars)
+
+    logger.error(
+        "[%s] %s | [%s] %s",
+        error_def.name,
+        error_def.format_message(variables),
+        inner_code,
+        cause,
+        exc_info=True,
+        # Without this every handler logs from this helper's line, so the
+        # record prefix can no longer tell the five call sites apart.
+        stacklevel=2,
+    )
+
+
+def _public_exception(public_error, cause: Exception) -> DashScopeException:
+    """Build the caller-facing exception for a classified internal failure.
+
+    A 400 keeps the narrower ``InvalidParameter`` type; everything else becomes
+    a plain ``DashScopeException``. Both carry the public ``status_code`` and
+    ``error_code`` instead of the internal one.
+    """
+    summary = f"{type(cause).__name__}: {_exc_message(cause)}"
+    message = f"{public_error.format_msg()} | Caused by: {summary}"
+    if public_error == INVALID_REQUEST:
+        exc = InvalidParameter(message)
+    else:
+        exc = DashScopeException(message)
+    exc.status_code = public_error.status_code
+    exc.error_code = public_error.error_code
+    return exc
 
 
 class AgenticRL(AgenticRLTuning, CreateMixin):
@@ -61,16 +179,37 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         try:
             set_api_key(api_key)
         except Exception as e:
-            raise ValueErrorWithCode(
-                "Invalid API key configuration",
-                error_code=3001,
-            ) from e
+            logger.error(
+                "[%s] %s | %s",
+                SDK_INVALID_API_KEY.name,
+                SDK_INVALID_API_KEY.format_message(),
+                e,
+                exc_info=True,
+            )
+            exc = AuthenticationError(INVALID_API_KEY.format_msg())
+            exc.status_code = INVALID_API_KEY.status_code
+            exc.error_code = INVALID_API_KEY.error_code
+            raise exc from e
 
     def init(self, config_path: Optional[str] = None, **kwargs) -> Self:
         """
         Initialize an AgenticRL instance from a YAML configuration file.
         """
-        self.tuning = TuningModel.load_from_yaml(config_path or "", **kwargs)
+        try:
+            self.tuning = TuningModel.load_from_yaml(
+                config_path or "",
+                **kwargs,
+            )
+        except Exception as e:
+            _log_internal_error(SDK_AGENTIC_RL_CONFIGURATION_ERROR, e)
+            # ``load_from_yaml`` reports a missing file and a malformed one
+            # through the same IOErrorWithCode, and both are the caller's to
+            # fix. An I/O failure deeper in a request stays a 500.
+            public_error = _get_public_error(
+                e,
+                input_errors=(IOErrorWithCode,),
+            )
+            raise _public_exception(public_error, e) from e
 
         return self
 
@@ -84,7 +223,7 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             ]
         ] = None,
         lazy_load: Optional[bool] = True,
-    ) -> tuple[
+    ) -> Tuple[
         List[str],
         List[str],
         List[str],
@@ -109,12 +248,13 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             )
             logger.info("Function components registered")
         except Exception as e:
-            if hasattr(e, "error_code"):
+            if isinstance(e, DashScopeException):
                 raise
-            raise RegistrationError(
-                "Function registration failed",
-                error_code=3002,
-            ) from e
+            _log_internal_error(
+                SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED,
+                e,
+            )
+            raise _public_exception(_get_public_error(e), e) from e
 
         return (
             rollout_entity_ids,
@@ -130,7 +270,7 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         datasets: Optional[List[Dataset]] = None,
         training_files: Optional[Union[List[str], str]] = None,
         validation_files: Optional[Union[List[str], str]] = None,
-    ) -> tuple[List[str], List[str]]:
+    ) -> Tuple[List[str], List[str]]:
         if datasets:
             self.tuning.datasets = datasets
 
@@ -144,14 +284,17 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             )
             logger.info("Datasets uploaded")
         except Exception as e:
-            raise DatasetsError(
-                "Datasets upload failed",
-                error_code=3003,
-            ) from e
+            if isinstance(e, DashScopeException):
+                raise
+            _log_internal_error(
+                SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED,
+                e,
+            )
+            raise _public_exception(_get_public_error(e), e) from e
 
         return uploaded_training_ids, uploaded_validation_ids
 
-    def submit_job(
+    def submit_job(  # pylint: disable=too-many-branches
         self,
         model: Optional[str] = None,
         datasets: Optional[List[Dataset]] = None,
@@ -206,11 +349,26 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         )
         # names of functions
         if not self.tuning.check_function_names():
-            raise ValueErrorWithCode(
-                "Duplicate function names detected. All function names must "
-                "be unique.",
-                error_code=3004,
+            duplicates, _missing = self.tuning.find_function_name_problems()
+            if duplicates:
+                name_error = SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES
+                name_detail = name_error.format_message(
+                    {"names": ", ".join(duplicates)},
+                )
+            else:
+                # The check also fails when a component carries no `name` at
+                # all, which is not a duplication problem.
+                name_error = SDK_AGENTIC_RL_VALIDATION_ERROR
+                name_detail = name_error.format_message()
+            logger.error(
+                "[%s] %s",
+                name_error.name,
+                name_detail,
             )
+            exc = InvalidParameter(INVALID_REQUEST.format_msg())
+            exc.status_code = INVALID_REQUEST.status_code
+            exc.error_code = INVALID_REQUEST.error_code
+            raise exc
 
         # datasets
         if datasets:
@@ -267,12 +425,13 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
                 **kwargs,
             )
         except Exception as e:
-            if hasattr(e, "error_code"):
+            if isinstance(e, DashScopeException):
                 raise
-            raise RuntimeErrorWithCode(
-                "Job submission failed",
-                error_code=3005,
-            ) from e
+            _log_internal_error(
+                SDK_AGENTIC_RL_JOB_SUBMISSION_FAILED,
+                e,
+            )
+            raise _public_exception(_get_public_error(e), e) from e
 
         return FineTune(**resp)
 
@@ -334,12 +493,13 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
                 **kwargs,
             )
         except Exception as e:
-            if hasattr(e, "error_code"):
+            # Log before the passthrough: the inner calls already convert
+            # their failures into DashScopeException, so waiting until after
+            # this check would leave the workflow failure unrecorded.
+            _log_internal_error(SDK_AGENTIC_RL_WORKFLOW_FAILED, e)
+            if isinstance(e, DashScopeException):
                 raise
-            raise RuntimeErrorWithCode(
-                "RL tuning workflow failed",
-                error_code=3006,
-            ) from e
+            raise _public_exception(_get_public_error(e), e) from e
 
     @classmethod
     def cancel(
@@ -437,6 +597,29 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             **kwargs,
         )
 
+    @staticmethod
+    def _validate_input(functype: FunctionType, input_data: Dict[str, Any]):
+        _FUNCTYPE_MODEL = {
+            FunctionType.ROLLOUT: RolloutInput,
+            FunctionType.REWARD: RewardInput,
+            FunctionType.GROUP_REWARD: GroupRewardInput,
+        }
+        model_cls = _FUNCTYPE_MODEL.get(functype)
+        if model_cls is None:
+            logger.error(
+                "[%s] %s | functype=%s",
+                SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE.name,
+                SDK_AGENTIC_RL_UNSUPPORTED_FUNCTION_TYPE.format_message(
+                    {"functype": str(functype)},
+                ),
+                functype,
+            )
+            exc = InvalidParameter(INVALID_REQUEST.format_msg())
+            exc.status_code = INVALID_REQUEST.status_code
+            exc.error_code = INVALID_REQUEST.error_code
+            raise exc
+        return model_cls.model_validate(input_data)
+
     @classmethod
     async def test_functions(
         cls,
@@ -469,17 +652,7 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
         try:
             set_api_key(api_key)
 
-            if functype == FunctionType.ROLLOUT:
-                value = RolloutInput.model_validate(input_data)
-            elif functype == FunctionType.REWARD:
-                value = RewardInput.model_validate(input_data)
-            elif functype == FunctionType.GROUP_REWARD:
-                value = GroupRewardInput.model_validate(input_data)
-            else:
-                raise ValueErrorWithCode(
-                    f"Unsupported function type: {functype}",
-                    error_code=3007,
-                )
+            value = cls._validate_input(functype, input_data)
 
             logger.info(
                 f"Starting {str(functype)} verification",
@@ -505,10 +678,25 @@ class AgenticRL(AgenticRLTuning, CreateMixin):
             return result
 
         except Exception as e:
-            raise ValidationError(
-                "Function test failed",
-                error_code=3008,
-            ) from e
+            if isinstance(e, (DashScopeException, InvalidParameter)):
+                raise
+
+            # ValueError/TypeError raised by ``model_validate`` describe a
+            # payload the caller can fix, so they are a 400 here.
+            public_error = _get_public_error(
+                e,
+                input_errors=(ValueError, TypeError),
+            )
+
+            if public_error == REQUEST_TIMEOUT:
+                error_def = SDK_AGENTIC_RL_FUNCTION_TEST_TIMEOUT
+                extra_vars = {"timeout": str(HTTP_REQUEST_TIMEOUT)}
+            else:
+                error_def = SDK_AGENTIC_RL_FUNCTION_TEST_FAILED
+                extra_vars = None
+
+            _log_internal_error(error_def, e, extra_vars)
+            raise _public_exception(public_error, e) from e
 
     @classmethod
     async def query_function_instance_logs(
