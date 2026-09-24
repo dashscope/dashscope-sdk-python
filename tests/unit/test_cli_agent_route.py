@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Tests for the dashscope → acli agent route (expert subcommand removal).
+"""Tests for the dashscope → acli agent route.
 
 Covers:
 - _cleanup_legacy_expert_sync: removes old managed-marker files from ~/.acli
   without touching user-owned files.
 - _route_to_expert: runs embedded acli with the global -k api key passed
   through, and offers the example download only for interactive no-arg runs.
+  On non-TTY stdin, piped text becomes a one-shot prompt and an empty pipe
+  exits 2 telling the user the `expert` keyword form.
 - _maybe_offer_example_download: accept/decline/marker/workspace gating.
-- main(): unknown commands route to the agent with cleaned argv (no key leak).
+- main(): only a bare `dashscope` or an explicit `expert` keyword reach the
+  agent; everything else is dispatched to typer so typos, stray options and
+  unrecognized commands produce a real error.
 """
 # pylint: disable=protected-access,redefined-outer-name,unused-argument
 
@@ -46,6 +50,33 @@ class TtyStdin:
 
 def _make_tty(monkeypatch):
     monkeypatch.setattr(sys, "stdin", TtyStdin())
+
+
+class NonTtyStdin:
+    """Piped stdin, optionally empty or unreadable."""
+
+    def __init__(self, data=""):
+        self._data = data
+
+    def isatty(self):
+        return False
+
+    def read(self):
+        if self._data is None:
+            raise OSError("stdin unavailable")
+        return self._data
+
+
+@pytest.fixture()
+def captured_err(monkeypatch):
+    lines: list = []
+
+    class Recorder:
+        def print(self, *args, **kwargs):
+            lines.append(" ".join(str(a) for a in args))
+
+    monkeypatch.setattr(cli, "err_console", Recorder())
+    return lines
 
 
 class TestCleanupLegacyExpertSync:
@@ -158,6 +189,57 @@ class TestRouteToExpert:
         assert not managed.exists()
         assert captured_run["command"] == "hi"
 
+    def test_piped_stdin_becomes_a_one_shot_prompt(
+        self,
+        fake_config_dir,
+        captured_run,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(cli, "_maybe_offer_example_download", lambda: None)
+        monkeypatch.setattr(sys, "stdin", NonTtyStdin("  怎么用 Generation  \n"))
+
+        cli._route_to_expert(None)
+
+        assert captured_run["command"] == "怎么用 Generation"
+
+    def test_empty_pipe_names_the_expert_keyword(
+        self,
+        fake_config_dir,
+        captured_run,
+        captured_err,
+        monkeypatch,
+    ):
+        """The refusal is the user's only recovery instruction.
+
+        It told people to run `dashscope "your question"` for two releases
+        after that form stopped routing to the agent, so the one message that
+        could have fixed their command line sent them to `No such command`.
+        """
+        monkeypatch.setattr(sys, "stdin", NonTtyStdin("   \n"))
+
+        with pytest.raises(SystemExit) as exc:
+            cli._route_to_expert(None)
+
+        assert exc.value.code == 2
+        assert not captured_run
+        message = "\n".join(captured_err)
+        assert 'dashscope expert "your question"' in message
+        assert 'e.g. dashscope "' not in message
+
+    def test_unreadable_stdin_refuses_the_same_way(
+        self,
+        fake_config_dir,
+        captured_err,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(sys, "stdin", NonTtyStdin(None))
+
+        with pytest.raises(SystemExit) as exc:
+            cli._route_to_expert(None)
+
+        assert exc.value.code == 2
+        assert 'dashscope expert "your question"' in "\n".join(captured_err)
+
 
 class TestOfferExampleDownload:
     def test_accept_downloads_example(
@@ -256,13 +338,20 @@ class TestOfferExampleDownload:
 
 
 class TestMainRouting:
-    def test_unknown_command_routes_cleaned_text(self, monkeypatch):
+    def test_unknown_single_token_reaches_typer(self, monkeypatch):
+        """`dashscope "question"` is not a short form for the agent.
+
+        An unrecognized token must error in typer so a mistyped command stays
+        visible; asking a question is `dashscope expert "question"`.
+        """
         routed: list = []
+        invoked: list = []
         monkeypatch.setattr(
             cli,
             "_route_to_expert",
-            lambda command, tui=False: routed.append(command),
+            lambda command, tui=None: routed.append(command),
         )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
         monkeypatch.setattr(
             sys,
             "argv",
@@ -271,16 +360,39 @@ class TestMainRouting:
 
         cli.main()
 
-        # The extracted -k value must not leak into the routed prompt text.
-        assert routed == ["你好，未知命令"]
+        assert not routed
+        assert invoked == [True]
+        # The global key is still extracted on the typer path.
         assert dashscope.api_key == "sk-secret"
+
+    def test_quoted_command_line_reaches_typer(self, monkeypatch):
+        """A whole command line passed as one shell word is not a question.
+
+        It used to open a chat whose first user message was the command
+        itself, which is indistinguishable in the session log from a user who
+        meant to ask something.
+        """
+        routed: list = []
+        invoked: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append(command),
+        )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
+        monkeypatch.setattr(sys, "argv", ["dashscope", "auth whoami"])
+
+        cli.main()
+
+        assert not routed
+        assert invoked == [True]
 
     def test_no_args_routes_interactive(self, monkeypatch):
         routed: list = []
         monkeypatch.setattr(
             cli,
             "_route_to_expert",
-            lambda command, tui=False: routed.append(command),
+            lambda command, tui=None: routed.append(command),
         )
         monkeypatch.setattr(sys, "argv", ["dashscope"])
 
@@ -288,20 +400,164 @@ class TestMainRouting:
 
         assert routed == [None]
 
-    def test_expert_is_no_longer_a_command(self, monkeypatch):
+    def test_expert_keyword_is_not_a_typer_command(self):
+        """`expert` is a routing keyword handled inside main(), never a typer
+        group — it must not appear in any table typer dispatches from."""
         assert "expert" not in cli._TOP_LEVEL_COMMANDS
         assert "expert" not in cli._COMMANDS_WITH_LOCAL_API_KEY
+        registered = {
+            g.name or g.typer_instance.info.name
+            for g in cli.app.registered_groups
+        }
+        assert "expert" not in registered
+
+    def test_expert_keyword_forwards_prompt(self, monkeypatch):
         routed: list = []
         monkeypatch.setattr(
             cli,
             "_route_to_expert",
-            lambda command, tui=False: routed.append(command),
+            lambda command, tui=None: routed.append((command, tui)),
         )
         monkeypatch.setattr(sys, "argv", ["dashscope", "expert", "chat"])
 
         cli.main()
 
-        assert routed == ["expert chat"]
+        # The keyword itself is consumed; only the question is forwarded.
+        assert routed == [("chat", True)]
+
+    def test_bare_expert_is_interactive(self, monkeypatch):
+        routed: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append((command, tui)),
+        )
+        monkeypatch.setattr(sys, "argv", ["dashscope", "expert"])
+
+        cli.main()
+
+        assert routed == [(None, True)]
+
+    def test_expert_cli_flag_selects_plain_repl(self, monkeypatch):
+        routed: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append((command, tui)),
+        )
+        monkeypatch.setattr(sys, "argv", ["dashscope", "expert", "--cli"])
+
+        cli.main()
+
+        assert routed == [(None, False)]
+
+    def test_expert_help_prints_usage_without_routing(
+        self,
+        monkeypatch,
+        capsys,
+    ):
+        routed: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append((command, tui)),
+        )
+        monkeypatch.setattr(cli, "app", lambda: routed.append("typer"))
+        monkeypatch.setattr(sys, "argv", ["dashscope", "expert", "--help"])
+
+        cli.main()
+
+        # Must not fall through to typer, which has no `expert` command.
+        assert not routed
+        assert "DashScope SDK Expert" in capsys.readouterr().out
+
+    def test_multiword_unknown_command_reaches_typer(self, monkeypatch):
+        """A typo'd command group must error in typer, not open a chat."""
+        routed: list = []
+        invoked: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append(command),
+        )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
+        monkeypatch.setattr(sys, "argv", ["dashscope", "generaton", "create"])
+
+        cli.main()
+
+        assert not routed
+        assert invoked == [True]
+
+    def test_stray_leading_option_reaches_typer(self, monkeypatch):
+        """`-w/--workspace` is a group option, so its value must not be
+        mistaken for the command name and routed into the agent."""
+        routed: list = []
+        invoked: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append(command),
+        )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["dashscope", "-w", "wsid", "generation", "create"],
+        )
+
+        cli.main()
+
+        assert not routed
+        assert invoked == [True]
+
+    def test_unknown_flag_reaches_typer(self, monkeypatch):
+        routed: list = []
+        invoked: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append(command),
+        )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
+        monkeypatch.setattr(sys, "argv", ["dashscope", "--foo"])
+
+        cli.main()
+
+        assert not routed
+        assert invoked == [True]
+
+    def test_registered_groups_are_all_routable(self):
+        """A group registered with typer but absent from _TOP_LEVEL_COMMANDS
+        is dispatched to typer anyway now, but the set still drives global
+        -k/--api-key parsing, so the two must not drift apart.
+
+        Only this direction is asserted: `rl`/`agentic-rl` stay in the set even
+        when the optional extra is not installed.
+        """
+        registered = {
+            g.name or g.typer_instance.info.name
+            for g in cli.app.registered_groups
+        }
+        assert registered <= cli._TOP_LEVEL_COMMANDS
+
+    def test_auth_whoami_executes_instead_of_routing_to_agent(
+        self,
+        monkeypatch,
+    ):
+        routed: list = []
+        invoked: list = []
+        monkeypatch.setattr(
+            cli,
+            "_route_to_expert",
+            lambda command, tui=None: routed.append(command),
+        )
+        monkeypatch.setattr(cli, "app", lambda: invoked.append(True))
+        monkeypatch.setattr(sys, "argv", ["dashscope", "auth", "whoami"])
+
+        cli.main()
+
+        assert not routed
+        assert invoked == [True]
 
 
 class TestBundledExample:

@@ -21,7 +21,7 @@ import typer  # noqa: E402
 from rich.markup import escape  # noqa: E402
 
 import dashscope  # noqa: E402
-from dashscope.cli.common import err_console  # noqa: E402
+from dashscope.cli.common import console, err_console  # noqa: E402
 from dashscope.common.error import AuthenticationError  # noqa: E402
 from dashscope.common.utils import set_sdk_client  # noqa: E402
 from dashscope.cli import (  # noqa: E402
@@ -91,6 +91,7 @@ _PARAM_MAP = {
 }
 
 _TOP_LEVEL_COMMANDS = {
+    "auth",
     "generation",
     "ft",
     "fine-tunes",
@@ -115,6 +116,28 @@ _TOP_LEVEL_COMMANDS = {
 
 
 _COMMANDS_WITH_LOCAL_API_KEY = {"oss", "rl", "agentic-rl"}
+
+# Routing keyword for the bundled agent, handled in main() before typer sees
+# argv. Deliberately NOT a member of _TOP_LEVEL_COMMANDS: that set mirrors the
+# typer-registered command groups, and `expert` is not one of them.
+_EXPERT_COMMAND = "expert"
+
+_EXPERT_USAGE = """[bold]DashScope SDK Expert[/bold] — the built-in AI assistant.
+
+[bold]Usage:[/bold]
+  dashscope                     interactive assistant (TUI by default)
+  dashscope expert              the same, spelled explicitly
+  dashscope expert --cli        interactive, plain REPL instead of the TUI
+  dashscope expert --tui        interactive, force the TUI
+  dashscope expert "question"   ask once and exit
+
+With no argument, piped stdin is read as a one-shot prompt.
+SDK subcommands (generation, ft, files, models, ...) dispatch as usual; an
+unrecognized command is reported as an error rather than treated as a
+question, so ask one with [bold]dashscope expert "question"[/bold].
+
+Requires [bold]pip install dashscope[acli][/bold]."""
+
 _LEGACY_COMMANDS_WITH_SIZE_OPTION = {
     "files.list",
     "fine_tunes.list",
@@ -325,7 +348,10 @@ def _maybe_offer_example_download():
 
 
 def _route_to_expert(command, tui=None):
-    """Run the vendored acli agent (dashscope with no/unknown subcommand)."""
+    """Run the vendored acli agent (bare ``dashscope`` or ``dashscope expert``).
+
+    ``command`` is a one-shot prompt, or None for the interactive REPL.
+    """
     try:
         from dashscope.acli.cli.handlers_key import _GUIDE_DOC, _doc_locale
         from dashscope.acli.ui.embedded import run
@@ -348,7 +374,7 @@ def _route_to_expert(command, tui=None):
         if not piped:
             err_console.print(
                 "[red]Error:[/red] Interactive mode requires a terminal. "
-                'Pass a prompt instead, e.g. dashscope "your question".',
+                'Pass a prompt instead, e.g. dashscope expert "your question".',
             )
             sys.exit(2)
         command = piped
@@ -511,19 +537,37 @@ def main():
         forced_tui = True
         argv = [a for a in argv if a != "--tui"]
 
+    first_cmd = _first_non_option(argv)
+
     # `rl` is an optional extra: report a missing dependency only when the
     # user asks for that command, never on unrelated invocations. Without
     # this gate the dispatch below reaches typer, which only knows that `rl`
     # is in _TOP_LEVEL_COMMANDS but was never registered — "No such command"
     # does not tell the user how to get it.
-    if (
-        _RL_IMPORT_ERROR is not None
-        and _first_non_option(argv) in _RL_COMMAND_NAMES
-    ):
+    if _RL_IMPORT_ERROR is not None and first_cmd in _RL_COMMAND_NAMES:
         err_console.print(
             f"[red]Error:[/red] {_rl_unavailable_detail(_RL_IMPORT_ERROR)}",
         )
         sys.exit(1)
+
+    # No arguments at all → the agent, interactively. -k/--api-key and
+    # --cli/--tui were stripped above, so `dashscope -k sk-x` lands here too.
+    if len(argv) == 1:
+        _route_to_expert(None, tui=forced_tui)
+        return
+
+    # `dashscope expert ...` → the agent, explicitly. Handled before the
+    # --help gate so `dashscope expert --help` describes the agent instead of
+    # reaching typer, which has no such command.
+    if first_cmd == _EXPERT_COMMAND:
+        idx = argv.index(_EXPERT_COMMAND)
+        expert_args = argv[idx + 1 :]
+        if "--help" in expert_args or "-h" in expert_args:
+            console.print(_EXPERT_USAGE)
+            return
+        prompt = " ".join(expert_args).strip()
+        _route_to_expert(prompt or None, tui=forced_tui)
+        return
 
     # Top-level --help / -h → show help and exit normally
     if "--help" in argv or "-h" in argv:
@@ -532,20 +576,11 @@ def main():
         app()
         return
 
-    # No subcommand → enter the agent (acli) directly
-    first_cmd = _first_non_option(argv)
-    if first_cmd is None:
-        _route_to_expert(None, tui=forced_tui)
-        return
-
-    # Unknown command → route to the agent with the original user input.
-    # Use the cleaned argv so an extracted -k/--api-key is not leaked into
-    # the prompt text.
-    if first_cmd not in _TOP_LEVEL_COMMANDS:
-        _route_to_expert(" ".join(argv[1:]), tui=forced_tui)
-        return
-
-    # Direct command execution (backward compatible)
+    # Anything that is not bare `dashscope` and not `dashscope expert ...`
+    # belongs to typer, so a typo or a stray option gets a real error instead
+    # of silently opening a chat. Forwarding an unrecognized token as a
+    # question used to swallow whole command lines -- `dashscope auth whoami`
+    # opened a session whose first message was the command itself.
     argv = _translate_help_shortcut(argv)
     sys.argv = argv
 

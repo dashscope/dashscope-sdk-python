@@ -200,7 +200,17 @@ class EnvironmentSection:
     name = "environment"
 
     def render(self, ctx: PromptContext) -> str:
-        env_info: list[str] = []
+        import platform
+
+        from dashscope.acli.tools.shell import shell_label
+
+        # The platform is stated because run_command's syntax depends on it and
+        # a wrong guess costs a whole turn: on Windows the model wrote
+        # `2>/dev/null || find /` and got back a PowerShell ParserError.
+        env_info: list[str] = [
+            f"Current OS: {platform.system()} {platform.machine()}",
+            f"run_command executes via: {shell_label()}",
+        ]
         if ctx.user_name:
             env_info.append(f"Current user: {ctx.user_name}")
         if ctx.provider_name or ctx.model_name:
@@ -210,8 +220,6 @@ class EnvironmentSection:
                 "mentioned in history or summaries may be outdated — "
                 "always defer to this line for model questions)",
             )
-        if not env_info:
-            return ""
         env_info.append(
             "Rule: when mentioning this CLI's commands, only cite real "
             "commands that definitely exist; when unsure, point the user "

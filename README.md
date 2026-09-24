@@ -6,7 +6,7 @@ The DashScope Python SDK provides a comprehensive interface to [Alibaba Cloud Mo
 
 ## What is New
 
-**v1.27.0 ships an interactive AI assistant — [DashScope SDK Expert](#ai-assistant-dashscope-sdk-expert).** Run `dashscope` with no arguments (or ask directly, e.g. `dashscope "how do I stream Generation output"`) to get SDK/API answers, runnable examples, CLI usage, and error diagnosis right in your terminal. Guidance is drawn from per-domain quick-reference skills (text, multimodal, speech, retrieval, fine-tuning, agent, cli) built on the SDK's public interfaces — parameters, outputs, and error codes — so you can ask instead of reading the docs. Type `/help` inside the assistant to view available commands.
+**v1.27.0 ships an interactive AI assistant — [DashScope SDK Expert](#ai-assistant-dashscope-sdk-expert).** Run `dashscope` with no arguments (or ask directly with `dashscope expert "how do I stream Generation output"`) to get SDK/API answers, runnable examples, CLI usage, and error diagnosis right in your terminal. Guidance is drawn from per-domain quick-reference skills (text, multimodal, speech, retrieval, fine-tuning, agent, cli) built on the SDK's public interfaces — parameters, outputs, and error codes — so you can ask instead of reading the docs. Type `/help` inside the assistant to view available commands.
 
 ## Installation
 To install the DashScope Python SDK, simply run:
@@ -175,7 +175,7 @@ A complete runnable example is available in [`samples/set_region_example.py`](sa
 The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built on the bundled Agentic CLI (`dashscope/acli`) framework. For DashScope SDK/CLI users it is the recommended way to get development consultation and AI coding help — answering SDK/API questions, generating runnable examples, showing CLI usage, and diagnosing errors, right in your terminal.
 
 - Run `dashscope` with no arguments to start the assistant. On first run it offers to install the SDK Expert knowledge pack (per-domain quick-reference skills: text, multimodal, speech, retrieval, fine-tuning, agent, cli), so guidance comes from the SDK's public interfaces — parameters, outputs, error codes — without reading the source
-- Ask it instead of reading docs — e.g. `dashscope "how do I stream Generation output"` or `dashscope "CLI command to cancel a fine-tuning job"`. Type `/help` inside the assistant to list available commands (`/setup`, `/skill`, `/stats`, ...); classic SDK subcommands still work, and unrecognized commands are routed to the assistant
+- Ask it instead of reading docs — e.g. `dashscope expert "how do I stream Generation output"` or `dashscope expert "CLI command to cancel a fine-tuning job"`, each of which asks once and exits. Type `/help` inside the assistant to list available commands (`/setup`, `/skill`, `/stats`, ...); classic SDK subcommands still work, plain `dashscope expert` enters the assistant interactively, and `dashscope expert --help` shows all the forms
 - Full walkthrough: [DashScope SDK Expert guide](https://help.aliyun.com/en/model-studio/dashscope-sdk-expert)
 
 ## Supported Models

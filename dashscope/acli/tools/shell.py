@@ -42,21 +42,58 @@ def default_timeout() -> int:
     return value if value > 0 else DEFAULT_TIMEOUT
 
 
-def _resolve_output_encoding() -> str:
-    """Encoding for decoding subprocess output.
+def _resolve_output_encodings() -> tuple[str, ...]:
+    """Encodings to try when decoding subprocess output, best guess first.
 
     Resolved at import, not per call: the TUI replaces ``sys.stdout`` with
     textual's capture object, which has no ``.encoding``, so reading it later
     raises AttributeError and fails every command.
+
+    A captured child writes in its own console's code page, which on Windows is
+    the OEM page and need not match Python's stdout encoding. Decoding a zh-CN
+    PowerShell error as UTF-8 handed the model mojibake instead of the one
+    message that explained its failure. UTF-8 stays first and is tried
+    strictly: it fails loudly on OEM bytes, whereas a DBCS page like cp936
+    accepts almost anything and would silently mangle UTF-8 output.
     """
-    if not IS_WINDOWS:
-        return "utf-8"
-    return (
-        getattr(sys.stdout, "encoding", None)
-        or getattr(sys.__stdout__, "encoding", None)
-        or locale.getpreferredencoding(False)
-        or "utf-8"
-    )
+    candidates = ["utf-8"]
+    if IS_WINDOWS:
+        import ctypes
+
+        kernel32 = getattr(ctypes, "windll", None)
+        oem = kernel32.kernel32.GetOEMCP() if kernel32 is not None else 0
+        if oem:
+            candidates.append(f"cp{oem}")
+        for extra in (
+            getattr(sys.stdout, "encoding", None),
+            getattr(sys.__stdout__, "encoding", None),
+            locale.getpreferredencoding(False),
+        ):
+            if extra:
+                candidates.append(extra)
+    unique: list[str] = []
+    for name in candidates:
+        if name.lower() not in {u.lower() for u in unique}:
+            unique.append(name)
+    return tuple(unique)
+
+
+def _decode_output(data: bytes) -> str:
+    """Decode child output, falling back across console code pages."""
+    for encoding in (OUTPUT_ENCODING,) + OUTPUT_ENCODINGS:
+        try:
+            return data.decode(encoding)
+        except LookupError:
+            continue
+        except UnicodeDecodeError as exc:
+            # Truncation is byte-based, so it can split a trailing multi-byte
+            # character. That is not evidence the whole buffer is in another
+            # encoding — repair the tail instead of re-decoding everything.
+            if exc.start >= len(data) - 4:
+                return data.decode(encoding, errors="replace")
+            continue
+    # Last resort only reachable if every candidate name is unusable.
+    return data.decode("utf-8", errors="replace")
 
 
 def _resolve_win_shell() -> tuple[str, ...]:
@@ -69,8 +106,40 @@ def _resolve_win_shell() -> tuple[str, ...]:
     return (exe, "-NoProfile", "-NonInteractive", "-Command")
 
 
-OUTPUT_ENCODING = _resolve_output_encoding()
+OUTPUT_ENCODINGS = _resolve_output_encodings()
+# The primary candidate keeps its own name because callers and tests pin a
+# single encoding; _decode_output honours it before trying the fallbacks.
+OUTPUT_ENCODING = OUTPUT_ENCODINGS[0]
 WIN_SHELL = _resolve_win_shell()
+
+
+def shell_label() -> str:
+    """How ``run_command`` executes a command, for the system prompt.
+
+    Lives next to ``_spawn`` so the prompt cannot drift from what the tool
+    really runs. Nothing used to say which shell this is: a model that assumes
+    POSIX spends a turn on ``ls -la ... 2>/dev/null || find /`` before a
+    PowerShell ParserError tells it otherwise.
+    """
+    if not IS_WINDOWS:
+        return (
+            "POSIX sh via `/bin/sh -c` — not the user's interactive shell, "
+            "so no aliases, rc files or zsh/bash-only syntax"
+        )
+    exe = os.path.basename(WIN_SHELL[0])
+    if exe.lower().startswith("pwsh"):
+        chaining = "`&&`/`||` work (PowerShell 7+)"
+    else:
+        chaining = (
+            "`&&`/`||` are not statement separators (Windows PowerShell "
+            "5.1) — use `;` or separate calls"
+        )
+    return (
+        f"PowerShell on Windows ({exe}). Write PowerShell, not POSIX: no "
+        f"`2>/dev/null`, no `ls -la`/`find`/`grep`; {chaining}. Use "
+        "`$env:USERPROFILE`, `Get-ChildItem`, `Select-String`."
+    )
+
 
 BLOCKED_PATTERNS = [
     # POSIX
@@ -712,10 +781,9 @@ async def run_command(command: str, timeout: int | None = None) -> str:
 
     output = ""
     if stdout:
-        output += stdout.decode(OUTPUT_ENCODING, errors="replace")
+        output += _decode_output(stdout)
     if stderr:
-        err = stderr.decode(OUTPUT_ENCODING, errors="replace")
-        output += "\n[stderr]\n" + err
+        output += "\n[stderr]\n" + _decode_output(stderr)
 
     if len(output) > MAX_OUTPUT_LENGTH:
         output = (

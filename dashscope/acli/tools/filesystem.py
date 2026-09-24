@@ -96,7 +96,8 @@ def read_file(
     name="write_file",
     description=(
         "Write content to a file; overwrites if it exists. "
-        "The result includes a unified diff."
+        "The result includes a unified diff. `path` must be inside the "
+        "working directory or the system temp dir."
     ),
     permission=PermissionLevel.CONFIRM,
 )
@@ -262,11 +263,22 @@ def delete_directory(path: str) -> str:
     return f"Deleted directory: {path}"
 
 
+def _pattern_names_hidden_dir(pattern: str) -> bool:
+    """True when the caller explicitly asked about a dot-directory."""
+    return any(
+        seg.startswith(".")
+        for seg in pattern.replace(os.sep, "/").split("/")
+        if seg
+    )
+
+
 @tool(
     name="search_files",
     description=(
-        "Search files by name pattern. "
-        "Supports wildcards like *.py, test_*."
+        "Search files by name or path pattern, relative to `path` "
+        "(default: the working directory). Supports wildcards like *.py, "
+        "test_*, src/*.ts and .github/workflows/*.yml. `*` crosses directory "
+        "separators, so *.md finds every Markdown file at any depth."
     ),
     permission=PermissionLevel.AUTO,
 )
@@ -279,6 +291,8 @@ def search_files(pattern: str, path: str | None = None) -> str:
     if not os.path.isdir(search_root):
         return f"Error: search path not found - {search_root}"
 
+    needle = pattern.replace(os.sep, "/")
+    want_hidden = _pattern_names_hidden_dir(pattern)
     matches = []
     root_depth = search_root.rstrip(os.sep).count(os.sep)
     for root, dirs, files in os.walk(search_root):
@@ -286,16 +300,22 @@ def search_files(pattern: str, path: str | None = None) -> str:
         current_depth = root.rstrip(os.sep).count(os.sep) - root_depth
         if current_depth >= _MAX_SEARCH_DEPTH:
             dirs[:] = []
-        # Skip hidden and sensitive directories
+        # Sensitive directories are always skipped. Other dot-directories are
+        # skipped unless the pattern asks for one, so `.acli/skills/*.md` is
+        # searchable without walking every `.git` in the tree.
         dirs[:] = [
             d
             for d in dirs
-            if not d.startswith(".") and d not in SENSITIVE_NAMES
+            if d not in SENSITIVE_NAMES
+            and (want_hidden or not d.startswith("."))
         ]
         for name in files:
-            if fnmatch.fnmatch(name, pattern):
-                if name in SENSITIVE_NAMES:
-                    continue
+            if name in SENSITIVE_NAMES:
+                continue
+            rel = os.path.relpath(os.path.join(root, name), search_root)
+            if fnmatch.fnmatch(rel.replace(os.sep, "/"), needle) or (
+                fnmatch.fnmatch(name, needle)
+            ):
                 matches.append(os.path.join(root, name))
                 if len(matches) >= 100:
                     break
@@ -303,7 +323,11 @@ def search_files(pattern: str, path: str | None = None) -> str:
             break
 
     if not matches:
-        return f"No files match '{pattern}'"
+        return (
+            f"No files match '{pattern}' under {search_root}. The pattern is "
+            "matched against paths relative to that root, and dot-directories "
+            "are skipped unless the pattern names one."
+        )
     result = f"Found {len(matches)} matching files:\n"
     result += "\n".join(f"  {m}" for m in matches)
     return result

@@ -42,6 +42,7 @@ from dashscope.acli.utils import (
     UserSupplement,
     normalize_for_model,
     sanitize,
+    sanitize_text,
     text_of,
     tool_result_for_display,
     tool_result_for_history,
@@ -66,14 +67,22 @@ def _classify_outcome(successes: int, failures: int) -> str:
 def _tool_message(tool_call: ToolCall, result: str) -> dict:
     """Build the history entry answering ``tool_call``.
 
-    The restore note must be attached here, at truncation time: later
+    Redaction happens here, ahead of truncation. ``save_session`` already ran
+    ``sanitize`` over the on-disk copy, so before this a key read out of the
+    environment was scrubbed from the session file and still handed to the
+    model in full — the persistence path was protecting the wrong reader.
+    Scrubbing after truncation would not work either: ``truncate_head_tail``
+    cuts on a character budget and can split a token in half, leaving a
+    fragment that matches no pattern.
+
+    The restore note must be attached here for the same reason: later
     shrinking skips a result that already carries an omission marker, so the
     largest results would end up with no way to be read back.
     """
     return {
         "role": "tool",
         "content": tool_result_for_history(
-            result,
+            sanitize_text(result),
             note=restore_note(tool_call.name, tool_call.arguments),
         ),
         "name": tool_call.name,
@@ -154,7 +163,10 @@ Rules:
 18. **Verify code changes before reporting done.** Run the tests that cover
     what you touched; if nothing covers it, add a focused test for the new
     behaviour and run that. Report the command and its pass/fail result —
-    never claim a change works without having executed it
+    never claim a change works without having executed it. When the output
+    transforms or joins data (ETL, CSV/JSON, migrations), also assert every
+    cross-reference resolves — schema-valid output with dangling IDs still
+    fails
 
 Reply style:
 - **Concise**. No filler like "let me see / let me help you / I'll analyze
@@ -245,6 +257,20 @@ class Agent:
             )
         except ValueError:
             self.converge_hard_ratio = 0.85
+        # Silence nudge: one reminder per turn after N tool calls have gone by
+        # without any prose reaching the user. Mode-independent on purpose —
+        # the shape this exists for is an interactive turn of *distinct*
+        # run_command calls, which every existing backstop misses:
+        # StagnationTracker's read-only classifier counts run_command as
+        # mutating and so resets its streak, its repeat counters need
+        # byte-identical calls, and _convergence_section is oneshot-only.
+        # Env: ACLI_SILENT_TOOL_NUDGE (0 disables).
+        try:
+            self.silent_tool_nudge = int(
+                os.environ.get("ACLI_SILENT_TOOL_NUDGE", "6"),
+            )
+        except ValueError:
+            self.silent_tool_nudge = 6
         # Hard acceptance gate (oneshot only): run the project's test command
         # before accepting a final answer, and send the raw output back when
         # it fails. Built here, ahead of the policy text below, so the prompt
@@ -354,6 +380,10 @@ class Agent:
         self.turn_subagents = 0
         self.turn_mcp_calls = 0
         self.turn_skills = 0
+        # Consecutive tool calls that streamed no prose, and whether the
+        # silence nudge has already been spent this turn.
+        self._silent_tool_calls = 0
+        self._silent_nudge_injected = False
         # Explicit /skill invocations to count on the next turn
         self._pending_skill_names: list[str] = []
 
@@ -567,6 +597,33 @@ class Agent:
             self.converge_hard_ratio,
         )
 
+    def _silence_section(self) -> str:
+        """Inject one reminder when tool calls stop producing prose.
+
+        Spent at most once per turn. Repeating it every iteration teaches the
+        model to skim past it, which is the failure mode prose instructions
+        already have — the point of a structural backstop is that it fires on
+        a count rather than on the model's willingness to re-read advice.
+
+        Deliberately not gated on ``oneshot``: the user watching a spinner for
+        five minutes with no text is the interactive case, and the oneshot
+        runs already have the convergence and read-only-cap sections.
+        """
+        if self._silent_nudge_injected or not self.silent_tool_nudge:
+            return ""
+        if self._silent_tool_calls < self.silent_tool_nudge:
+            return ""
+        self._silent_nudge_injected = True
+        return (
+            "\n## ⏸ You have gone quiet\n"
+            f"{self._silent_tool_calls} tool calls in a row and not one word "
+            "of it reached the user.\n"
+            "Before the next call, say in one or two sentences what you are "
+            "doing and what you have found so far. If the calls were "
+            "collecting information to answer a question you can already "
+            "answer, answer it instead of calling again.\n"
+        )
+
     async def _recall_memory(self, user_input) -> str:
         """Search for relevant profile info and format as context.
 
@@ -649,6 +706,8 @@ class Agent:
         self.turn_tool_calls = 0
         self.turn_subagents = 0
         self.turn_mcp_calls = 0
+        self._silent_tool_calls = 0
+        self._silent_nudge_injected = False
         try:
             active = get_skill_manager().active_packages(user_input_text)
             names = [p.name for p in active] + self._pending_skill_names
@@ -725,26 +784,28 @@ class Agent:
                         f"messages → {len(self.messages)}[/dim]",
                     )
 
-            # Reflection / stagnation / convergence hints are volatile, so
-            # they ride at the tail of the request instead of being folded
-            # into the system message. Rewriting messages_with_system[0] on
-            # every iteration changed the whole prompt prefix byte-for-byte and
-            # defeated provider-side prompt caching, where cached input costs
-            # roughly a tenth of uncached. The system message and the
-            # accumulated history below it stay append-only and byte-stable.
+            # Reflection / stagnation / convergence / silence hints are
+            # volatile, so they ride at the tail of the request instead of
+            # being folded into the system message. Rewriting
+            # messages_with_system[0] on every iteration changed the whole
+            # prompt prefix byte-for-byte and defeated provider-side prompt
+            # caching, where cached input costs roughly a tenth of uncached.
+            # The system message and the accumulated history below it stay
+            # append-only and byte-stable.
             #
             # The hint has to be a user message, not a second system message:
             # the Anthropic converter keeps only the last system message, so a
             # second one would replace the real prompt outright, and the Tongyi
             # converter only reads messages[0] as system.
             #
-            # All three sections are rebuilt every iteration because tracker
+            # All four sections are rebuilt every iteration because tracker
             # state changes as tools run; each returns "" when its condition
             # is not met, so an empty hint costs no message at all.
             hint = (
                 self._reflection_section()
                 + self._stagnation_section()
                 + self._convergence_section(_loop_i)
+                + self._silence_section()
             ).strip()
             request_messages = (
                 [*messages_with_system, {"role": "user", "content": hint}]
@@ -901,6 +962,13 @@ class Agent:
             tool_calls = [tc for tc in tool_calls if tc.name]
 
             self.turn_tool_calls += len(tool_calls)
+            # Silence is per-iteration, not cumulative over the turn: an
+            # iteration that streamed prose did talk to the user, so the run
+            # of unheard calls starts over from the next one.
+            if full_content.strip():
+                self._silent_tool_calls = 0
+            else:
+                self._silent_tool_calls += len(tool_calls)
             for tc in tool_calls:
                 if tc.name in ("delegate", "subagent_invoke"):
                     self.turn_subagents += 1
