@@ -374,7 +374,7 @@ def _route_to_expert(command, tui=None):
         if not piped:
             err_console.print(
                 "[red]Error:[/red] Interactive mode requires a terminal. "
-                'Pass a prompt instead, e.g. dashscope "your question".',
+                'Pass a prompt instead, e.g. dashscope expert "your question".',
             )
             sys.exit(2)
         command = piped

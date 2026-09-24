@@ -6,6 +6,8 @@ Covers:
   without touching user-owned files.
 - _route_to_expert: runs embedded acli with the global -k api key passed
   through, and offers the example download only for interactive no-arg runs.
+  On non-TTY stdin, piped text becomes a one-shot prompt and an empty pipe
+  exits 2 telling the user the `expert` keyword form.
 - _maybe_offer_example_download: accept/decline/marker/workspace gating.
 - main(): only a bare `dashscope` or an explicit `expert` keyword reach the
   agent; everything else is dispatched to typer so typos, stray options and
@@ -48,6 +50,33 @@ class TtyStdin:
 
 def _make_tty(monkeypatch):
     monkeypatch.setattr(sys, "stdin", TtyStdin())
+
+
+class NonTtyStdin:
+    """Piped stdin, optionally empty or unreadable."""
+
+    def __init__(self, data=""):
+        self._data = data
+
+    def isatty(self):
+        return False
+
+    def read(self):
+        if self._data is None:
+            raise OSError("stdin unavailable")
+        return self._data
+
+
+@pytest.fixture()
+def captured_err(monkeypatch):
+    lines: list = []
+
+    class Recorder:
+        def print(self, *args, **kwargs):
+            lines.append(" ".join(str(a) for a in args))
+
+    monkeypatch.setattr(cli, "err_console", Recorder())
+    return lines
 
 
 class TestCleanupLegacyExpertSync:
@@ -159,6 +188,57 @@ class TestRouteToExpert:
 
         assert not managed.exists()
         assert captured_run["command"] == "hi"
+
+    def test_piped_stdin_becomes_a_one_shot_prompt(
+        self,
+        fake_config_dir,
+        captured_run,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(cli, "_maybe_offer_example_download", lambda: None)
+        monkeypatch.setattr(sys, "stdin", NonTtyStdin("  怎么用 Generation  \n"))
+
+        cli._route_to_expert(None)
+
+        assert captured_run["command"] == "怎么用 Generation"
+
+    def test_empty_pipe_names_the_expert_keyword(
+        self,
+        fake_config_dir,
+        captured_run,
+        captured_err,
+        monkeypatch,
+    ):
+        """The refusal is the user's only recovery instruction.
+
+        It told people to run `dashscope "your question"` for two releases
+        after that form stopped routing to the agent, so the one message that
+        could have fixed their command line sent them to `No such command`.
+        """
+        monkeypatch.setattr(sys, "stdin", NonTtyStdin("   \n"))
+
+        with pytest.raises(SystemExit) as exc:
+            cli._route_to_expert(None)
+
+        assert exc.value.code == 2
+        assert not captured_run
+        message = "\n".join(captured_err)
+        assert 'dashscope expert "your question"' in message
+        assert 'e.g. dashscope "' not in message
+
+    def test_unreadable_stdin_refuses_the_same_way(
+        self,
+        fake_config_dir,
+        captured_err,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(sys, "stdin", NonTtyStdin(None))
+
+        with pytest.raises(SystemExit) as exc:
+            cli._route_to_expert(None)
+
+        assert exc.value.code == 2
+        assert 'dashscope expert "your question"' in "\n".join(captured_err)
 
 
 class TestOfferExampleDownload:
