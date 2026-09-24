@@ -67,15 +67,20 @@ with client.sessions.events.stream(session.id) as stream:
 | Error code/exception | HTTP status | Meaning | Handling |
 | --- | --- | --- | --- |
 | `InputRequired` / `ModelRequired` / `InvalidInput` | raised locally | missing required params such as app_id/prompt/model | add params per the exception message; Application failures do not raise — check status_code |
-| `invalid_request_error` (InvalidRequestError) | 400 | invalid agentstudio request parameters | check parameter names/types, e.g. empty events raises a local ValueError |
+| `invalid_request_error` / `request_too_large` (InvalidRequestError) | 400/413 | invalid agentstudio request parameters, or payload too large | check parameter names/types, e.g. empty events raises a local ValueError |
 | `authentication_error` (AuthenticationError) | 401 | api_key missing or invalid | check api_key or DASHSCOPE_API_KEY |
-| `permission_denied_error` (PermissionDeniedError) | 403 | no access to the resource | check workspace/uid and resource ownership |
+| `permission_denied_error` / `permission_error` (PermissionDeniedError) | 403 | no access to the resource | check workspace/uid and resource ownership |
 | `not_found_error` (NotFoundError) | 404 | agent/session and other resources do not exist | verify the id and region/workspace are correct |
 | `conflict_error` (ConflictError) | 409 | version in agents.update does not match the server | retrieve the latest version first, then update |
-| `rate_limit_error` (RateLimitError) | 429 | rate limited | retry with backoff (client default max_retries=2) |
-| `api_error` (InternalServerError) / `overloaded_error` (OverloadedError) | 500/502/504 / 503 | server error/overloaded | troubleshoot with `request_id` or retry |
+| `rate_limit_error` / `billing_error` (RateLimitError) | 429 | rate limited or out of quota | retry with backoff (client default max_retries=2) |
+| `api_error` / `timeout_error` (InternalServerError), `overloaded_error` (OverloadedError) | 500/502/504 / 503 | server error/overloaded | troubleshoot with `request_id` or retry |
 | `APITimeoutError` / `APIConnectionError` | no response | connection/read/write timeout | increase timeout, check network, then retry |
 | `StreamError` / `StreamClosedError` | mid-stream | SSE protocol error/stream closed | call `events.stream` again to reopen the stream |
+
+Match on the exception class, not on `.code`: `.code` echoes the server's raw
+string, so a 403 may arrive as either `permission_denied_error` or
+`permission_error`, and it is normalised to `api_error` when the server omits
+it. The class is always the one listed above.
 
 ## Java SDK
 
