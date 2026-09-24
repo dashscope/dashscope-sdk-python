@@ -96,7 +96,8 @@ def read_file(
     name="write_file",
     description=(
         "Write content to a file; overwrites if it exists. "
-        "The result includes a unified diff."
+        "The result includes a unified diff. `path` must be inside the "
+        "working directory or the system temp dir."
     ),
     permission=PermissionLevel.CONFIRM,
 )
