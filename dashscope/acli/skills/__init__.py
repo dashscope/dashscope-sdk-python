@@ -9,6 +9,7 @@ from dashscope.acli.skills.base import (
     list_skills,
     load_skill_files,
     register,
+    register_skill_file,
     render_skill,
     skills_summary_for_llm,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "list_skills",
     "load_skill_files",
     "register",
+    "register_skill_file",
     "render_skill",
     "skills_summary_for_llm",
 ]

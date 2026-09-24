@@ -125,10 +125,6 @@ def _identify_pattern(tool_sequence: list[str]) -> str | None:
             return "edit-and-test"
         return "file-edit"
 
-    # Code refactoring workflow
-    if "read_file" in tool_sequence and "edit_file" in tool_sequence:
-        return "code-refactor"
-
     # Project setup workflow
     if "run_command" in tool_sequence and "write_file" in tool_sequence:
         if any("init" in t or "create" in t for t in tool_sequence):
@@ -138,10 +134,6 @@ def _identify_pattern(tool_sequence: list[str]) -> str | None:
     if "search_files" in tool_sequence or "grep" in tool_sequence:
         if "read_file" in tool_sequence:
             return "search-and-analyze"
-
-    # Git workflow
-    if any("git" in t for t in tool_sequence):
-        return "git-workflow"
 
     return None
 
@@ -176,39 +168,49 @@ def _extract_parameters(user_request: str) -> list[dict[str, str]]:
 
 
 def generate_skill_markdown(analysis: dict[str, Any]) -> str:
-    """Generate skill markdown from trajectory analysis."""
+    """Generate skill markdown from trajectory analysis.
+
+    Frontmatter stays within what the loader's _parse_simple_yaml can read:
+    one entry per line, lists in ``[a, b]`` form. The previous nested YAML
+    ``arguments:`` block parsed as garbage keys, and its inner
+    ``description:`` lines clobbered the real top-level description.
+    """
     name = analysis["pattern_name"]
     tools = analysis["tools_sequence"]
     params = analysis["parameters"]
 
-    # Build skill markdown
+    arg_names = [p["name"] for p in params]
     lines = [
         "---",
         f"name: {name}",
         f"description: Automated workflow - {analysis['rationale']}",
-        "arguments:",
+        f"arguments: [{', '.join(arg_names)}]",
+        "---",
+        "",
+        f"# {name}",
+        "",
+        "Automatically run the following workflow:",
+        "",
     ]
-
-    for p in params:
-        lines.append(f"  - name: {p['name']}")
-        lines.append(f"    description: {p['description']}")
-        lines.append("    required: true")
-        if "example" in p:
-            lines.append(f"    example: {p['example']}")
-
-    lines.append("---")
-    lines.append("")
-    lines.append(f"# {name}")
-    lines.append("")
-    lines.append("Automatically run the following workflow:")
-    lines.append("")
     for i, tool in enumerate(tools, 1):
         lines.append(f"{i}. `{tool}`")
     lines.append("")
+
+    if params:
+        lines.append("## Arguments")
+        lines.append("")
+        for p in params:
+            entry = f"- `{p['name']}` — {p['description']}"
+            if "example" in p:
+                entry += f" (e.g. {p['example']})"
+            lines.append(entry)
+        lines.append("")
+
     lines.append("## Usage example")
     lines.append("")
     lines.append("```")
-    lines.append(f"/{name} {params[0]['example'] if params else '<arg>'}")
+    example_args = " ".join(p.get("example", p["name"]) for p in params)
+    lines.append(f"/{name} {example_args}" if example_args else f"/{name}")
     lines.append("```")
     lines.append("")
     lines.append("## Workflow")
@@ -218,6 +220,10 @@ def generate_skill_markdown(analysis: dict[str, Any]) -> str:
     for i, tool in enumerate(tools, 1):
         lines.append(f"{i}. Call the `{tool}` tool")
     lines.append("")
+    if arg_names:
+        refs = ", ".join(f"`{{{n}}}`" for n in arg_names)
+        lines.append(f"Apply the workflow to {refs}.")
+        lines.append("")
     lines.append("Report the results when done.")
 
     return "\n".join(lines)

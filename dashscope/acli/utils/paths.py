@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from uuid import uuid4
 
 # Directory / file names considered sensitive. Any path containing these
 # as a component is blocked for read, write, and delete operations.
@@ -123,10 +124,13 @@ def atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:
 
     Writes to a temp file in the SAME directory, flush+fsync, then
     os.replace — a crash mid-write leaves the old file intact instead of
-    truncating it.
+    truncating it. The temp name carries pid+uuid: two writers sharing one
+    fixed temp path would clobber each other's content before the replace.
     """
     path = Path(path)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = path.with_name(
+        f"{path.name}.{os.getpid()}.{uuid4().hex[:8]}.tmp",
+    )
     try:
         with tmp.open("w", encoding=encoding) as f:
             f.write(text)

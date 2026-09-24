@@ -7,6 +7,7 @@ Records LLM calls, tool executions, and decision points to JSONL files.
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -19,7 +20,12 @@ class TraceLogger:
     def __init__(self, workspace_dir: Path):
         self.traces_dir = workspace_dir / "traces"
         self.traces_dir.mkdir(parents=True, exist_ok=True)
-        self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # pid suffix: two acli processes started in the same second (parent +
+        # subagent, parallel runs) would otherwise share one trace file and
+        # interleave their JSONL lines.
+        self.session_id = (
+            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.getpid()}"
+        )
         self.trace_file = self.traces_dir / f"{self.session_id}.jsonl"
         self._session_start = time.time()
 
@@ -47,11 +53,14 @@ class TraceLogger:
         response: dict,
         duration_ms: int = 0,
         model: str = "",
+        prompt_stats: dict | None = None,
     ) -> None:
         """Log an LLM API call.
 
         Lightweight fields (counts, usage, duration) are always recorded;
         the full prompt payload is included only in debug mode (/debug on).
+        ``prompt_stats`` carries the per-call section char counts and token
+        estimate (always on — sizes only, never content).
         """
         data: dict[str, Any] = {
             "model": model,
@@ -62,6 +71,8 @@ class TraceLogger:
             "tool_calls": response.get("tool_calls", []),
             "usage": response.get("usage"),
         }
+        if prompt_stats:
+            data["prompt_stats"] = prompt_stats
         from dashscope.acli import debuglog
 
         if debuglog.debug_enabled():

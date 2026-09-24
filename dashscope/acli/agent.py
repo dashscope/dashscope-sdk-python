@@ -121,46 +121,41 @@ Rules:
    reuse paths seen in training data (e.g. /Users/xxx/...)
 3. For clear-intent requests (git commit, read file, search), call tools
    directly without stating a plan first. For code changes, go straight to
-   the edit — but you must verify it afterwards (rule 18). Only for
+   the edit — but you must verify it afterwards (rule 17). Only for
    irreversible operations (delete, overwrite, force push) or complex
    multi-step tasks, briefly explain and wait for user confirmation
-4. If a task needs several steps (refactor, new feature, multi-file change),
-   call create_plan with the goal and its steps first, then execute them one
-   by one, marking each with complete_step — the plan is echoed back to you
-   as "## Current plan" on every later turn. For a 2-3 step task, skip the
-   plan and just do it
-5. When a tool call fails, do not retry the same call; report the error to
+4. When a tool call fails, do not retry the same call; report the error to
    the user with a suggestion
-6. Tools prefixed [MCP:xxx] come from Bailian MCP services; call them directly
-7. If the "user profile" contains info, personalize answers with it (e.g.
+5. Tools prefixed [MCP:xxx] come from Bailian MCP services; call them directly
+6. If the "user profile" contains info, personalize answers with it (e.g.
    recommend Python solutions for a Python user)
-8. When a request matches an "available Skill template" below, prefer that
+7. When a request matches an "available Skill template" below, prefer that
    flow — if the Skill's MCP is connected, call its tools directly; if not,
    connect first with mcp_connect, then call
-9. When a question may involve personal preferences, tech stack, or work
+8. When a question may involve personal preferences, tech stack, or work
    environment, proactively search the profile with memory_search for context
-10. If no suitable tool can complete the task, answer from your knowledge;
-    never call a nonexistent tool
-11. To switch model/Provider → call switch_model or switch_provider directly
-12. To use cloud services (time, code execution, doc parsing, etc.) → call
+9. If no suitable tool can complete the task, answer from your knowledge;
+   never call a nonexistent tool
+10. To switch model/Provider → call switch_model or switch_provider directly
+11. To use cloud services (time, code execution, doc parsing, etc.) → call
     mcp_connect directly
-13. To enable/disable capabilities → call capability_enable /
+12. To enable/disable capabilities → call capability_enable /
     capability_disable directly
-14. Never reply "please use the /xxx command" — if you have a tool that can
+13. Never reply "please use the /xxx command" — if you have a tool that can
     do it, just do it
-15. **Do not use run_command with python3 -c inline scripts to read/write
+14. **Do not use run_command with python3 -c inline scripts to read/write
     files** — it is inefficient. Read with read_file, write with write_file;
     shell tools like sed/grep are fine to use
-16. **If a question can be answered directly (no files, commands, or external
+15. **If a question can be answered directly (no files, commands, or external
     info needed), answer from your knowledge without calling tools** — e.g.
     self-introduction, explaining concepts, translating text, small talk
-17. **Multiple independent subtasks (e.g. "look at these 2 files", several
+16. **Multiple independent subtasks (e.g. "look at these 2 files", several
     unrelated tasks at once) → call delegate_parallel to fan out subagents**,
     or send multiple delegate calls in the same turn; a single independent
     but lengthy subtask (whole-file review, multi-file scan) → call
     subagent_invoke for isolated execution and take back only the conclusion.
     Do not grind through them serially yourself
-18. **Verify code changes before reporting done.** Run the tests that cover
+17. **Verify code changes before reporting done.** Run the tests that cover
     what you touched; if nothing covers it, add a focused test for the new
     behaviour and run that. Report the command and its pass/fail result —
     never claim a change works without having executed it. When the output
@@ -801,12 +796,17 @@ class Agent:
             # All four sections are rebuilt every iteration because tracker
             # state changes as tools run; each returns "" when its condition
             # is not met, so an empty hint costs no message at all.
-            hint = (
-                self._reflection_section()
-                + self._stagnation_section()
-                + self._convergence_section(_loop_i)
-                + self._silence_section()
-            ).strip()
+            hint_parts = {
+                "reflection": self._reflection_section(),
+                "stagnation": self._stagnation_section(),
+                "convergence": self._convergence_section(_loop_i),
+                "silence": self._silence_section(),
+            }
+            hint = "".join(hint_parts.values()).strip()
+            # Which behaviour hints fired this call, and their sizes. Kept
+            # out of the prompt and logged with the llm_call event so hint
+            # efficacy is measurable from traces instead of guessed.
+            hint_chars = {k: len(v) for k, v in hint_parts.items() if v}
             request_messages = (
                 [*messages_with_system, {"role": "user", "content": hint}]
                 if hint
@@ -928,10 +928,18 @@ class Agent:
                     raise
 
             # Log LLM call trace
-            self.executor.record_prompt_composition(
+            prompt_stats = self.executor.record_prompt_composition(
                 request_messages,
                 tools_schema,
             )
+            # Char-based estimate logged next to the provider's usage in the
+            # same event, so the two token accounts can be reconciled from
+            # traces instead of drifting silently apart.
+            prompt_stats["est_prompt_tokens"] = estimate_message_tokens(
+                request_messages,
+            ) + estimate_tokens(json.dumps(tools_schema, ensure_ascii=False))
+            if hint_chars:
+                prompt_stats["hint_chars"] = hint_chars
             self.trace_logger.log_llm_call(
                 messages=request_messages,
                 tools=tools_schema,
@@ -949,6 +957,7 @@ class Agent:
                 },
                 duration_ms=int((time.monotonic() - llm_start) * 1000),
                 model=self.model_name,
+                prompt_stats=prompt_stats,
             )
 
             # If this iteration carried a reflection hint, its answer is the

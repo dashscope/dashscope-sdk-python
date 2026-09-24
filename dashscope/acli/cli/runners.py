@@ -148,12 +148,32 @@ async def _run_oneshot(config: Config, prompt: str):
         auto_approve=config.auto_approve,
         confirm_mode=config.confirm_mode,
     )
+
+    # Memory and the shared hook bus must exist before the Agent does (same
+    # wiring as cli/repl.py): without them oneshot had no memory provider at
+    # all, so every memory- or skill-shaped capability scored a constant zero
+    # in non-interactive runs.
+    memory = None
+    if config.memory_enabled:
+        from dashscope.acli.cli.handlers_profile import set_memory_client
+        from dashscope.acli.platforms import get_memory_provider
+
+        memory = get_memory_provider(config)
+        if memory:
+            set_memory_client(memory)
+
+    from dashscope.acli.hooks import create_hook_bus
+
+    hook_bus = create_hook_bus()
+
     agent = Agent(
         provider=provider,
         executor=executor,
         max_turns=config.max_turns,
+        memory=memory,
         provider_name=config.provider,
         model_name=config.model,
+        hook_bus=hook_bus,
         oneshot=True,
     )
 
@@ -178,10 +198,45 @@ async def _run_oneshot(config: Config, prompt: str):
     set_delegate_parent(agent)
     set_delegate_config(config)
 
-    from dashscope.acli.cli.mcp import _connect_mcp
+    from dashscope.acli.cli.mcp import (
+        _connect_mcp,
+        _disconnect_mcp,
+        _mcp_clients,
+    )
     from dashscope.acli.tools.platform import register_platform_tools
 
     register_platform_tools(config, connect_mcp_fn=_connect_mcp)
+
+    # The four registrations below mirror the interactive/TUI paths
+    # (cli/repl.py, _run_tui_mode). Oneshot used to skip them, which left
+    # skill packages unloaded and the session/skill/evolution tools
+    # unregistered in exactly the mode benchmarks run in.
+    from dashscope.acli.skills import get_skill_manager
+
+    skill_manager = get_skill_manager()
+    skill_manager._registry_url = getattr(config, "skill_registry", "")
+    skill_manager._global = False
+    skill_manager.load(hook_bus=hook_bus)
+
+    from dashscope.acli.tools.session import register_session_tools
+
+    register_session_tools(
+        config,
+        get_agent=lambda: agent,
+        get_provider_fn=get_provider,
+        connect_mcp_fn=_connect_mcp,
+        disconnect_mcp_fn=_disconnect_mcp,
+        list_mcp_services_fn=list_known_services,
+        get_mcp_clients_fn=lambda: _mcp_clients,
+    )
+
+    from dashscope.acli.tools.evolution import register_evolution_tools
+
+    register_evolution_tools(get_agent=lambda: agent)
+
+    from dashscope.acli.tools.skills import register_skill_tools
+
+    register_skill_tools(get_agent=lambda: agent)
 
     expanded, images, audio_clips = _expand_at_references(prompt)
     if images and not is_vision_model(config.model):

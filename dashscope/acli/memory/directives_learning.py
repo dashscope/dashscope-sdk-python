@@ -17,6 +17,7 @@ Architecture:
 from __future__ import annotations
 
 import json
+import threading
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,11 @@ def _empty_patterns() -> dict[str, Any]:
 
 # The patterns file is read on every prompt assembly; memoize on mtime.
 _patterns_cache: tuple[Path, int, dict[str, Any]] | None = None
+
+# Held across the whole load→mutate→save of every writer below: without it
+# two threads recording a sequence (or accepting a directive) interleave
+# their read-modify-write and silently drop one side's update.
+_cache_lock = threading.Lock()
 
 
 def _load_patterns() -> dict[str, Any]:
@@ -97,19 +103,20 @@ def record_tool_sequence(tools: list[str]) -> None:
     if len(tools) < 2:
         return
 
-    patterns = _load_patterns()
-    patterns["sequences"].append(
-        {
-            "tools": tools,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-    )
+    with _cache_lock:
+        patterns = _load_patterns()
+        patterns["sequences"].append(
+            {
+                "tools": tools,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
-    # Keep only last 100 sequences
-    if len(patterns["sequences"]) > 100:
-        patterns["sequences"] = patterns["sequences"][-100:]
+        # Keep only last 100 sequences
+        if len(patterns["sequences"]) > 100:
+            patterns["sequences"] = patterns["sequences"][-100:]
 
-    _save_patterns(patterns)
+        _save_patterns(patterns)
 
 
 def analyze_patterns() -> list[dict[str, Any]]:
@@ -179,18 +186,19 @@ def _generate_directive(tool1: str, tool2: str, count: int) -> str:
 
 def propose_directive(directive: str, rationale: str) -> dict[str, Any]:
     """Create a directive proposal."""
-    patterns = _load_patterns()
+    with _cache_lock:
+        patterns = _load_patterns()
 
-    proposal = {
-        "id": f"dir_{int(datetime.now(timezone.utc).timestamp())}",
-        "directive": directive,
-        "rationale": rationale,
-        "status": "pending",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
+        proposal = {
+            "id": f"dir_{int(datetime.now(timezone.utc).timestamp())}",
+            "directive": directive,
+            "rationale": rationale,
+            "status": "pending",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
 
-    patterns["proposed_directives"].append(proposal)
-    _save_patterns(patterns)
+        patterns["proposed_directives"].append(proposal)
+        _save_patterns(patterns)
 
     return proposal
 
@@ -207,38 +215,40 @@ def list_proposed_directives(status: str = "pending") -> list[dict[str, Any]]:
 
 def accept_directive(proposal_id: str, config: Any) -> bool:
     """Accept a proposed directive and add it to user_directives."""
-    patterns = _load_patterns()
-    proposals = patterns.get("proposed_directives", [])
+    with _cache_lock:
+        patterns = _load_patterns()
+        proposals = patterns.get("proposed_directives", [])
 
-    for p in proposals:
-        if p["id"] == proposal_id and p.get("status") == "pending":
-            directive_text = p["directive"]
+        for p in proposals:
+            if p["id"] == proposal_id and p.get("status") == "pending":
+                directive_text = p["directive"]
 
-            # Add to config.user_directives
-            if hasattr(config, "user_directives"):
-                if directive_text not in config.user_directives:
-                    config.user_directives.append(directive_text)
-                    config.save_workspace()
+                # Add to config.user_directives
+                if hasattr(config, "user_directives"):
+                    if directive_text not in config.user_directives:
+                        config.user_directives.append(directive_text)
+                        config.save_workspace()
 
-            p["status"] = "accepted"
-            p["accepted_at"] = datetime.now(timezone.utc).isoformat()
-            _save_patterns(patterns)
-            return True
+                p["status"] = "accepted"
+                p["accepted_at"] = datetime.now(timezone.utc).isoformat()
+                _save_patterns(patterns)
+                return True
 
     return False
 
 
 def reject_directive(proposal_id: str) -> bool:
     """Reject a proposed directive."""
-    patterns = _load_patterns()
-    proposals = patterns.get("proposed_directives", [])
+    with _cache_lock:
+        patterns = _load_patterns()
+        proposals = patterns.get("proposed_directives", [])
 
-    for p in proposals:
-        if p["id"] == proposal_id and p.get("status") == "pending":
-            p["status"] = "rejected"
-            p["rejected_at"] = datetime.now(timezone.utc).isoformat()
-            _save_patterns(patterns)
-            return True
+        for p in proposals:
+            if p["id"] == proposal_id and p.get("status") == "pending":
+                p["status"] = "rejected"
+                p["rejected_at"] = datetime.now(timezone.utc).isoformat()
+                _save_patterns(patterns)
+                return True
 
     return False
 

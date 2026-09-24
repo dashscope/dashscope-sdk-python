@@ -626,7 +626,7 @@ class StagnationTracker:
                 "2. Which approaches are ruled out, and by which output?",
                 (
                     "3. What is the revised plan? If it is worth writing "
-                    "down, call create_plan."
+                    "down, write it down."
                 ),
                 (
                     "A structurally different call, or one specific question "

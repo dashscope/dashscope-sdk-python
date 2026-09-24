@@ -65,11 +65,19 @@ def register_evolution_tools(get_agent: Callable) -> None:
                 "or generation failed"
             )
 
+        from dashscope.acli.skills import register_skill_file
+
+        registered = register_skill_file(skill_path)
+        availability = (
+            "Registered and available right now"
+            if registered
+            else "Saved; will load on next start"
+        )
         return (
             f"✓ Generated new skill from this conversation\n"
             f"  Name: {analysis['pattern_name']}\n"
             f"  Path: {skill_path}\n"
             f"  Workflow: {' → '.join(analysis['tools_sequence'][:3])}\n\n"
-            f"Auto-loaded on next start. "
+            f"{availability}. "
             f"Trigger with /{analysis['pattern_name']}."
         )

@@ -33,13 +33,13 @@ TOOL_CHAINS = {
         "steps": [
             "1. search_files to find all usages",
             "2. read_file to read the relevant code",
-            "3. create_plan for the refactor plan",
+            "3. plan the order of edits before touching files",
             "4. write_file to edit files one by one",
             "5. run_command to run tests and verify",
         ],
         "example": (
             "User: 'refactor the auth module, extract shared functions'\n"
-            "→ search_files 'def auth' → read_file → create_plan "
+            "→ search_files 'def auth' → read_file "
             "→ write_file → run_command pytest"
         ),
     },

@@ -7,8 +7,10 @@ Records tool usage patterns, success/failure outcomes, and lessons learned.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from dashscope.acli.utils.keywords import (
     expand_scoring_terms,
@@ -60,7 +62,12 @@ class ExperienceTracker:
                 encoding="utf-8",
             ).splitlines()
             keep = [line for line in lines if line.strip()][-self.KEEP_LINES :]
-            tmp = self.experience_file.with_suffix(".jsonl.tmp")
+            # Unique temp name: two trackers rotating at once must not
+            # clobber each other's temp file before the replace.
+            tmp = self.experience_file.with_name(
+                f"{self.experience_file.name}.{os.getpid()}."
+                f"{uuid4().hex[:8]}.tmp",
+            )
             tmp.write_text("\n".join(keep) + "\n", encoding="utf-8")
             tmp.replace(self.experience_file)
         except OSError:

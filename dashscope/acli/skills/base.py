@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,37 +20,89 @@ class Skill:
 
 BUILTIN_SKILLS: dict[str, Skill] = {}
 
+# Guards every mutation of BUILTIN_SKILLS. RLock because load_skill_files()
+# re-enters register() while holding it.
+_skills_lock = threading.RLock()
+
+# Names that came from .md files, as opposed to register() calls from
+# custom-extensions.toml or dev tooling. Only these are cleared on rescan:
+# apply_extensions() registers toml skills BEFORE load_skill_files() runs,
+# so clearing everything would wipe them.
+_FILE_SKILL_NAMES: set[str] = set()
+
 
 def register(skill: Skill):
-    BUILTIN_SKILLS[skill.name] = skill
+    with _skills_lock:
+        BUILTIN_SKILLS[skill.name] = skill
 
 
 def load_skill_files():
     """Load skills from .md files in ~/.acli/skills/ and .acli/skills/.
 
-    Global files load first; workspace files override by name.
+    Global files load first; workspace files override by name. File-sourced
+    entries from the previous scan are dropped first, so deleting a skill
+    file propagates without a restart.
     """
     from dashscope.acli.config import CONFIG_DIR, WORKSPACE_DIR
 
     global_dir = CONFIG_DIR / "skills"
     workspace_dir = WORKSPACE_DIR / "skills"
 
-    for skills_dir in (global_dir, workspace_dir):
-        if not skills_dir.is_dir():
-            continue
-        for path in sorted(skills_dir.glob("*.md")):
-            try:
-                skill = _parse_skill_md(path)
+    with _skills_lock:
+        for name in _FILE_SKILL_NAMES:
+            BUILTIN_SKILLS.pop(name, None)
+        _FILE_SKILL_NAMES.clear()
+
+        for skills_dir in (global_dir, workspace_dir):
+            if not skills_dir.is_dir():
+                continue
+            for path in sorted(skills_dir.glob("*.md")):
+                try:
+                    skill = _parse_skill_md(path)
+                except Exception as e:
+                    import logging
+
+                    logging.getLogger(__name__).warning(
+                        "Skipping unparseable skill file %s: %s",
+                        path,
+                        e,
+                    )
+                    continue
                 if skill:
                     register(skill)
-            except Exception as e:
-                import logging
+                    _FILE_SKILL_NAMES.add(skill.name)
 
-                logging.getLogger(__name__).warning(
-                    "Skipping unparseable skill file %s: %s",
-                    path,
-                    e,
-                )
+
+def register_skill_file(path: Path | str) -> bool:
+    """Register one skill .md at runtime, without waiting for a restart.
+
+    Copies *path* into the workspace skills dir when it lives elsewhere,
+    then rescans so the catalog, /skill completion, and the prompt summary
+    all see the change immediately. Returns True when the file parsed and
+    its skill is registered after the rescan.
+    """
+    from dashscope.acli.config import WORKSPACE_DIR
+
+    src = Path(path)
+    try:
+        skill = _parse_skill_md(src)
+    except Exception:
+        return False
+    if skill is None:
+        return False
+
+    skills_dir = WORKSPACE_DIR / "skills"
+    target = skills_dir / src.name
+    try:
+        if src.resolve() != target.resolve():
+            skills_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, target)
+    except OSError:
+        return False
+
+    load_skill_files()
+    with _skills_lock:
+        return BUILTIN_SKILLS.get(skill.name) is not None
 
 
 def _parse_skill_md(path: Path) -> Skill | None:

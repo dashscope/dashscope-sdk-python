@@ -308,8 +308,21 @@ class Executor:
         self,
         messages: list[dict],
         tools_schema: list[dict] | None = None,
-    ) -> None:
-        """Accumulate prompt size (chars) by category for one LLM call."""
+    ) -> dict[str, int]:
+        """Accumulate prompt size (chars) by category for one LLM call.
+
+        Also returns the per-call breakdown so the trace can persist what
+        this specific request was made of; the accumulator feeding /stats
+        keeps its coarser system/user/assistant/tools buckets.
+        """
+        per_call = {
+            "system_chars": 0,
+            "user_chars": 0,
+            "assistant_chars": 0,
+            "tool_result_chars": 0,
+            "tool_call_args_chars": 0,
+            "tools_schema_chars": 0,
+        }
         for msg in messages:
             role = msg.get("role")
             content = msg.get("content")
@@ -321,16 +334,20 @@ class Executor:
                 n = 0
             if role in ("system", "user", "assistant"):
                 self._prompt_composition[role] += n
+                per_call[f"{role}_chars"] += n
             elif role == "tool":
                 self._prompt_composition["tools"] += n
+                per_call["tool_result_chars"] += n
             if role == "assistant":
                 for tc in msg.get("tool_calls") or []:
                     args = (tc.get("function") or {}).get("arguments") or ""
                     self._prompt_composition["tools"] += len(args)
+                    per_call["tool_call_args_chars"] += len(args)
         if tools_schema:
-            self._prompt_composition["tools"] += len(
-                json.dumps(tools_schema, ensure_ascii=False),
-            )
+            n = len(json.dumps(tools_schema, ensure_ascii=False))
+            self._prompt_composition["tools"] += n
+            per_call["tools_schema_chars"] += n
+        return per_call
 
     async def execute(self, tool_def: ToolDefinition, arguments: dict) -> str:
         """Run one tool call and return its text result.

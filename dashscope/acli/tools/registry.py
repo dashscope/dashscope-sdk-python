@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import os
 import sys
 import types
 from dataclasses import dataclass, field
@@ -97,6 +98,242 @@ _CAPABILITY_AGENT_TOOLS = frozenset(
     },
 )
 
+# Core filesystem/shell tools are offered on every call.
+_CORE_TOOLS = frozenset(
+    {
+        "read_file",
+        "write_file",
+        "list_directory",
+        "search_files",
+        "create_directory",
+        "delete_file",
+        "delete_directory",
+        "move_file",
+        "run_command",
+        "web_search",
+    },
+)
+
+# Session tools offered on every call, plus use_skill (model-invocable
+# skill templates from .acli/skills/*.md).
+_SESSION_ALWAYS_ON = frozenset(
+    {
+        "switch_model",
+        "switch_provider",
+        "capability_enable",
+        "capability_disable",
+        "view_image",
+        "mcp_connect",
+        "mcp_disconnect",
+        "use_skill",
+    },
+)
+
+# bailian_* CLI wrappers are numerous (~25 schemas each with full
+# parameter definitions); offering them only when the request mentions
+# the matching capability keeps every unrelated call much smaller.
+_B_ALL = [
+    "bailian_text_chat",
+    "bailian_omni",
+    "bailian_image_generate",
+    "bailian_image_edit",
+    "bailian_video_generate",
+    "bailian_video_edit",
+    "bailian_video_ref",
+    "bailian_video_task_get",
+    "bailian_video_download",
+    "bailian_vision_describe",
+    "bailian_app_call",
+    "bailian_app_list",
+    "bailian_memory_add",
+    "bailian_memory_search",
+    "bailian_memory_list",
+    "bailian_memory_update",
+    "bailian_memory_delete",
+    "bailian_memory_profile_create",
+    "bailian_memory_profile_get",
+    "bailian_knowledge_retrieve",
+    "bailian_search_web",
+    "bailian_speech_synthesize",
+    "bailian_speech_recognize",
+    "bailian_file_upload",
+    "bailian_model_list",
+    "bailian_console_call",
+    "bailian_usage_free",
+]
+_B_IMAGE = [
+    "bailian_image_generate",
+    "bailian_image_edit",
+    "bailian_vision_describe",
+    "bailian_omni",
+]
+_B_VIDEO = [
+    "bailian_video_generate",
+    "bailian_video_edit",
+    "bailian_video_ref",
+    "bailian_video_task_get",
+    "bailian_video_download",
+]
+_B_SPEECH = ["bailian_speech_synthesize", "bailian_speech_recognize"]
+_B_MEMORY = [
+    "bailian_memory_add",
+    "bailian_memory_search",
+    "bailian_memory_list",
+    "bailian_memory_update",
+    "bailian_memory_delete",
+    "bailian_memory_profile_create",
+    "bailian_memory_profile_get",
+]
+
+# Keyword → tool mapping for conditional inclusion.
+# Chinese keywords are kept for CJK input; English equivalents
+# are appended alongside them so English prompts match too.
+_KEYWORD_TOOLS = {
+    "memory": ["memory_search", "memory_store"] + _B_MEMORY,
+    "档案": ["memory_search", "memory_store"],
+    "profile": ["memory_search", "memory_store"],
+    "偏好": ["memory_search", "memory_store"],
+    "preference": ["memory_search", "memory_store"],
+    "记忆": _B_MEMORY,
+    "数据": [
+        "data_upload",
+        "data_files",
+        "data_delete",
+        "data_categories",
+    ],
+    "data": [
+        "data_upload",
+        "data_files",
+        "data_delete",
+        "data_categories",
+    ],
+    "prompt": [
+        "prompt_list",
+        "prompt_get",
+        "prompt_create",
+        "prompt_delete",
+        "prompt_render",
+    ],
+    "模板": [
+        "prompt_list",
+        "prompt_get",
+        "prompt_create",
+        "prompt_delete",
+        "prompt_render",
+    ],
+    "template": [
+        "prompt_list",
+        "prompt_get",
+        "prompt_create",
+        "prompt_delete",
+        "prompt_render",
+    ],
+    "搜索": ["web_search", "context_search"],
+    "search": ["web_search", "context_search"],
+    "模型": ["switch_model", "switch_provider"],
+    "model": ["switch_model", "switch_provider"],
+    "能力": ["capability_enable", "capability_disable"],
+    "capability": ["capability_enable", "capability_disable"],
+    # Browser / web scraping tools
+    "scrape": [
+        "scrape_web",
+        "scrape_web_html",
+        "scrape_web_screenshot",
+    ],
+    "抓取": [
+        "scrape_web",
+        "scrape_web_html",
+        "scrape_web_screenshot",
+    ],
+    "网页": [
+        "scrape_web",
+        "scrape_web_html",
+        "scrape_web_screenshot",
+    ],
+    "webpage": [
+        "scrape_web",
+        "scrape_web_html",
+        "scrape_web_screenshot",
+    ],
+    "截图": [
+        "scrape_web",
+        "scrape_web_html",
+        "scrape_web_screenshot",
+    ],
+    "screenshot": [
+        "scrape_web",
+        "scrape_web_html",
+        "scrape_web_screenshot",
+    ],
+    "browser": [
+        "scrape_web",
+        "scrape_web_html",
+        "scrape_web_screenshot",
+    ],
+    "爬取": [
+        "scrape_web",
+        "scrape_web_html",
+        "scrape_web_screenshot",
+    ],
+    "crawl": [
+        "scrape_web",
+        "scrape_web_html",
+        "scrape_web_screenshot",
+    ],
+    # Camera tools
+    "拍照": ["camera_capture", "camera_record"],
+    "photo": ["camera_capture", "camera_record"],
+    "摄像头": ["camera_capture", "camera_record"],
+    "录屏": ["camera_capture", "camera_record"],
+    "录制": ["camera_capture", "camera_record"],
+    "record": ["camera_capture", "camera_record"],
+    "camera": ["camera_capture", "camera_record"],
+    # Bailian platform tools (schemas are keyword-gated, see _B_* above)
+    "图片": _B_IMAGE,
+    "画图": _B_IMAGE,
+    "draw": _B_IMAGE,
+    "image": _B_IMAGE,
+    "vision": _B_IMAGE,
+    "多模态": ["bailian_omni"],
+    "multimodal": ["bailian_omni"],
+    "omni": ["bailian_omni"],
+    "视频": _B_VIDEO,
+    "video": _B_VIDEO,
+    "语音": _B_SPEECH,
+    "speech": _B_SPEECH,
+    "tts": ["bailian_speech_synthesize"],
+    "朗读": ["bailian_speech_synthesize"],
+    "read aloud": ["bailian_speech_synthesize"],
+    "知识库": ["bailian_knowledge_retrieve"],
+    "knowledge": ["bailian_knowledge_retrieve"],
+    "rag": ["bailian_knowledge_retrieve"],
+    "百炼应用": ["bailian_app_call", "bailian_app_list"],
+    "bailian app": ["bailian_app_call", "bailian_app_list"],
+    "用量": ["bailian_usage_free"],
+    "usage": ["bailian_usage_free"],
+    "quota": ["bailian_usage_free"],
+    "上传": ["bailian_file_upload"],
+    "upload": ["bailian_file_upload"],
+    # Catch-all: mentioning the platform unlocks the full set
+    "百炼": _B_ALL,
+    "bailian": _B_ALL,
+}
+
+
+def ever_visible_tool_names() -> frozenset[str]:
+    """Every tool name any to_schema_list call can offer statically.
+
+    Union of the always-on sets and all keyword-gated values. Capability
+    extension tools ({cap}_{tool}) and mcp_* are dynamic and deliberately
+    excluded — base prompts never address them by name. Used by the
+    consistency guard that fails CI when a base prompt instructs the model
+    to call a tool it can never see.
+    """
+    names = set(_CORE_TOOLS) | _SESSION_ALWAYS_ON | _CAPABILITY_AGENT_TOOLS
+    for gated in _KEYWORD_TOOLS.values():
+        names.update(gated)
+    return frozenset(names)
+
 
 Tool = ToolDefinition  # alias for backwards-compatibility
 
@@ -154,227 +391,15 @@ class ToolRegistry:
         Specialized tools (platform, MCP) are included if keywords match."""
         result = []
 
-        # Core tools always included
-        core_tools = {
-            "read_file",
-            "write_file",
-            "list_directory",
-            "search_files",
-            "create_directory",
-            "delete_file",
-            "delete_directory",
-            "move_file",
-            "run_command",
-            "web_search",
-        }
-
-        # bailian_* CLI wrappers are numerous (~25 schemas each with full
-        # parameter definitions); offering them only when the request mentions
-        # the matching capability keeps every unrelated call much smaller.
-        b_all = [
-            "bailian_text_chat",
-            "bailian_omni",
-            "bailian_image_generate",
-            "bailian_image_edit",
-            "bailian_video_generate",
-            "bailian_video_edit",
-            "bailian_video_ref",
-            "bailian_video_task_get",
-            "bailian_video_download",
-            "bailian_vision_describe",
-            "bailian_app_call",
-            "bailian_app_list",
-            "bailian_memory_add",
-            "bailian_memory_search",
-            "bailian_memory_list",
-            "bailian_memory_update",
-            "bailian_memory_delete",
-            "bailian_memory_profile_create",
-            "bailian_memory_profile_get",
-            "bailian_knowledge_retrieve",
-            "bailian_search_web",
-            "bailian_speech_synthesize",
-            "bailian_speech_recognize",
-            "bailian_file_upload",
-            "bailian_model_list",
-            "bailian_console_call",
-            "bailian_usage_free",
-        ]
-        b_image = [
-            "bailian_image_generate",
-            "bailian_image_edit",
-            "bailian_vision_describe",
-            "bailian_omni",
-        ]
-        b_video = [
-            "bailian_video_generate",
-            "bailian_video_edit",
-            "bailian_video_ref",
-            "bailian_video_task_get",
-            "bailian_video_download",
-        ]
-        b_speech = ["bailian_speech_synthesize", "bailian_speech_recognize"]
-        b_memory = [
-            "bailian_memory_add",
-            "bailian_memory_search",
-            "bailian_memory_list",
-            "bailian_memory_update",
-            "bailian_memory_delete",
-            "bailian_memory_profile_create",
-            "bailian_memory_profile_get",
-        ]
-
-        # Keyword → tool mapping for conditional inclusion.
-        # Chinese keywords are kept for CJK input; English equivalents
-        # are appended alongside them so English prompts match too.
-        keyword_tools = {
-            "memory": ["memory_search", "memory_store"] + b_memory,
-            "档案": ["memory_search", "memory_store"],
-            "profile": ["memory_search", "memory_store"],
-            "偏好": ["memory_search", "memory_store"],
-            "preference": ["memory_search", "memory_store"],
-            "记忆": b_memory,
-            "数据": [
-                "data_upload",
-                "data_files",
-                "data_delete",
-                "data_categories",
-            ],
-            "data": [
-                "data_upload",
-                "data_files",
-                "data_delete",
-                "data_categories",
-            ],
-            "prompt": [
-                "prompt_list",
-                "prompt_get",
-                "prompt_create",
-                "prompt_delete",
-                "prompt_render",
-            ],
-            "模板": [
-                "prompt_list",
-                "prompt_get",
-                "prompt_create",
-                "prompt_delete",
-                "prompt_render",
-            ],
-            "template": [
-                "prompt_list",
-                "prompt_get",
-                "prompt_create",
-                "prompt_delete",
-                "prompt_render",
-            ],
-            "搜索": ["web_search", "context_search"],
-            "search": ["web_search", "context_search"],
-            "模型": ["switch_model", "switch_provider"],
-            "model": ["switch_model", "switch_provider"],
-            "能力": ["capability_enable", "capability_disable"],
-            "capability": ["capability_enable", "capability_disable"],
-            # Browser / web scraping tools
-            "scrape": [
-                "scrape_web",
-                "scrape_web_html",
-                "scrape_web_screenshot",
-            ],
-            "抓取": [
-                "scrape_web",
-                "scrape_web_html",
-                "scrape_web_screenshot",
-            ],
-            "网页": [
-                "scrape_web",
-                "scrape_web_html",
-                "scrape_web_screenshot",
-            ],
-            "webpage": [
-                "scrape_web",
-                "scrape_web_html",
-                "scrape_web_screenshot",
-            ],
-            "截图": [
-                "scrape_web",
-                "scrape_web_html",
-                "scrape_web_screenshot",
-            ],
-            "screenshot": [
-                "scrape_web",
-                "scrape_web_html",
-                "scrape_web_screenshot",
-            ],
-            "browser": [
-                "scrape_web",
-                "scrape_web_html",
-                "scrape_web_screenshot",
-            ],
-            "爬取": [
-                "scrape_web",
-                "scrape_web_html",
-                "scrape_web_screenshot",
-            ],
-            "crawl": [
-                "scrape_web",
-                "scrape_web_html",
-                "scrape_web_screenshot",
-            ],
-            # Camera tools
-            "拍照": ["camera_capture", "camera_record"],
-            "photo": ["camera_capture", "camera_record"],
-            "摄像头": ["camera_capture", "camera_record"],
-            "录屏": ["camera_capture", "camera_record"],
-            "录制": ["camera_capture", "camera_record"],
-            "record": ["camera_capture", "camera_record"],
-            "camera": ["camera_capture", "camera_record"],
-            # Bailian platform tools (schemas are keyword-gated, see b_* above)
-            "图片": b_image,
-            "画图": b_image,
-            "draw": b_image,
-            "image": b_image,
-            "vision": b_image,
-            "多模态": ["bailian_omni"],
-            "multimodal": ["bailian_omni"],
-            "omni": ["bailian_omni"],
-            "视频": b_video,
-            "video": b_video,
-            "语音": b_speech,
-            "speech": b_speech,
-            "tts": ["bailian_speech_synthesize"],
-            "朗读": ["bailian_speech_synthesize"],
-            "read aloud": ["bailian_speech_synthesize"],
-            "知识库": ["bailian_knowledge_retrieve"],
-            "knowledge": ["bailian_knowledge_retrieve"],
-            "rag": ["bailian_knowledge_retrieve"],
-            "百炼应用": ["bailian_app_call", "bailian_app_list"],
-            "bailian app": ["bailian_app_call", "bailian_app_list"],
-            "用量": ["bailian_usage_free"],
-            "usage": ["bailian_usage_free"],
-            "quota": ["bailian_usage_free"],
-            "上传": ["bailian_file_upload"],
-            "upload": ["bailian_file_upload"],
-            # Catch-all: mentioning the platform unlocks the full set
-            "百炼": b_all,
-            "bailian": b_all,
-        }
-
         # Determine which tools to include
-        include_tools = set(core_tools)
+        include_tools = set(_CORE_TOOLS)
 
-        # Add session tools (always available)
-        include_tools.update(
-            [
-                "switch_model",
-                "switch_provider",
-                "capability_enable",
-                "capability_disable",
-                "view_image",
-            ],
-        )
-        include_tools.update(["mcp_connect", "mcp_disconnect"])
+        include_tools.update(_SESSION_ALWAYS_ON)
 
-        # Model-invocable skill templates (.acli/skills/*.md)
-        include_tools.add("use_skill")
+        # evolve_skill stays env-gated until caps and utility pruning land —
+        # auto-generated skills without pruning are library noise.
+        if os.environ.get("ACLI_EVOLVE_SKILL", "0") == "1":
+            include_tools.add("evolve_skill")
 
         # Add capability-gated agent tools (delegate/subagent_invoke) whenever
         # they are registered — registration itself is the capability gate.
@@ -406,7 +431,7 @@ class ToolRegistry:
                 ).lower()
             else:
                 input_lower = user_input.lower()
-            for keyword, tools in keyword_tools.items():
+            for keyword, tools in _KEYWORD_TOOLS.items():
                 if keyword.lower() in input_lower:
                     include_tools.update(tools)
 
