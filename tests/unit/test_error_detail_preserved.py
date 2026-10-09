@@ -7,17 +7,24 @@ transports wrapped httpx timeouts, whose ``str()`` is usually empty;
 text; and the WebSocket connect/handshake handlers dropped the host, port and
 server reason. The 503 detection also matched a bare "503" anywhere in the
 message, which fires on addresses such as ``host:5030``.
+
+The agentstudio SSE iterators had the opposite gap: a mid-stream transport
+failure reached the caller as a bare httpx exception (often with an empty
+message) instead of a ``StreamError`` naming the cause.
 """
+from types import SimpleNamespace
+from unittest import mock
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
 from dashscope.agentstudio import exceptions
+from dashscope.agentstudio.exceptions import describe_exception
+from dashscope.agentstudio.streaming import AsyncEventStream, EventStream
 from dashscope.agentstudio.transport import (
     AsyncTransport,
     SyncTransport,
-    _describe_exception,
 )
 from dashscope.api_entities.websocket_request import (
     _internal_error_message,
@@ -29,13 +36,13 @@ from dashscope.common.utils import iter_over_async
 
 class TestDescribeException:
     def test_messageless_exception_falls_back_to_type_name(self):
-        assert _describe_exception(httpx.ReadTimeout("")) == "ReadTimeout"
+        assert describe_exception(httpx.ReadTimeout("")) == "ReadTimeout"
 
     def test_whitespace_only_message_is_treated_as_empty(self):
-        assert _describe_exception(httpx.ReadTimeout("   ")) == "ReadTimeout"
+        assert describe_exception(httpx.ReadTimeout("   ")) == "ReadTimeout"
 
     def test_message_is_prefixed_with_type_name(self):
-        assert _describe_exception(ValueError("bad")) == "ValueError: bad"
+        assert describe_exception(ValueError("bad")) == "ValueError: bad"
 
 
 def _transport_kwargs(client):
@@ -108,6 +115,65 @@ class TestAsyncTransportKeepsDetail:
             await transport.request("GET", "/v1/agents")
 
         assert "ConnectError" in exc_info.value.message
+
+
+class TestStreamErrorWrapsTransportFailures:
+    """A mid-stream transport failure must surface as StreamError carrying
+    the cause, not as a bare httpx exception with an empty message."""
+
+    def test_sync_mid_stream_failure_becomes_stream_error(self):
+        original = httpx.ReadError("")
+        stream = EventStream(response=MagicMock(spec=httpx.Response))
+
+        def produce():
+            yield SimpleNamespace(data='{"type":"ok"}')
+            raise original
+
+        with mock.patch.object(stream, "_event_source") as es:
+            es.iter_sse.side_effect = produce
+            it = iter(stream)
+            assert next(it) == {"type": "ok"}
+            with pytest.raises(exceptions.StreamError) as exc_info:
+                next(it)
+
+        assert exc_info.value.code == "sdk.agentstudio.StreamError"
+        assert "ReadError" in exc_info.value.message
+        assert exc_info.value.__cause__ is original
+
+    def test_sync_agentstudio_error_passes_through_unwrapped(self):
+        original = exceptions.StreamClosedError("stream already closed")
+        stream = EventStream(response=MagicMock(spec=httpx.Response))
+
+        def produce():
+            raise original
+            yield  # pragma: no cover - makes produce a generator
+
+        with mock.patch.object(stream, "_event_source") as es:
+            es.iter_sse.side_effect = produce
+            with pytest.raises(exceptions.StreamClosedError) as exc_info:
+                next(iter(stream))
+
+        assert exc_info.value is original
+
+    @pytest.mark.asyncio
+    async def test_async_mid_stream_failure_becomes_stream_error(self):
+        original = httpx.ReadError("")
+        stream = AsyncEventStream(response=AsyncMock(spec=httpx.Response))
+
+        async def produce():
+            yield SimpleNamespace(data='{"type":"ok"}')
+            raise original
+
+        with mock.patch.object(stream, "_event_source") as es:
+            es.aiter_sse.side_effect = produce
+            ait = stream.__aiter__()
+            assert await ait.__anext__() == {"type": "ok"}
+            with pytest.raises(exceptions.StreamError) as exc_info:
+                await ait.__anext__()
+
+        assert exc_info.value.code == "sdk.agentstudio.StreamError"
+        assert "ReadError" in exc_info.value.message
+        assert exc_info.value.__cause__ is original
 
 
 class TestIterOverAsyncReportsTheFailure:

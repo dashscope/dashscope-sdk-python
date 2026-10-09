@@ -22,6 +22,7 @@ from dashscope.common.constants import (
     HTTPMethod,
 )
 from dashscope.common.error import InvalidParameter, InvalidTask, ModelRequired
+from dashscope.common.error_registry import INTERNAL_ERROR
 from dashscope.common.logging import logger
 from dashscope.common.env import resolve_base_url
 from dashscope.common.utils import (
@@ -1623,6 +1624,8 @@ class StreamEventMixin:
         ):
             for is_error, status_code, data in cls._handle_stream(response):
                 if is_error:
+                    code = None
+                    message = None
                     try:
                         error_data = json.loads(data)
                         code = error_data.get("code") or error_data.get(
@@ -1632,14 +1635,14 @@ class StreamEventMixin:
                             "error_message",
                         )
                     except json.JSONDecodeError:
-                        code = None
+                        # Unparseable payload: keep the raw text as detail.
                         message = data
                     yield DashScopeAPIResponse(
                         request_id=request_id,
                         status_code=status_code,
                         output=None,
-                        code=code,
-                        message=message,
+                        code=code or INTERNAL_ERROR.error_code,
+                        message=message or INTERNAL_ERROR.format_msg(),
                     )  # noqa E501
                 else:
                     yield DashScopeAPIResponse(

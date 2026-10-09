@@ -32,6 +32,7 @@ from dashscope.agentstudio.constants import (
     AGENTSTUDIO_DEFAULT_TIMEOUT,
     AGENTSTUDIO_MAX_RETRIES,
 )
+from dashscope.common.error_registry import AUTH_FAILED
 from dashscope.common.utils import get_sdk_headers
 
 logger = logging.getLogger("dashscope.agentstudio")
@@ -204,18 +205,6 @@ def _should_retry_exception(err: BaseException) -> Tuple[bool, Optional[Any]]:
     return False, None
 
 
-def _describe_exception(err: BaseException) -> str:
-    """Render an exception into a message worth showing the caller.
-
-    ``httpx`` timeout exceptions usually carry no message at all, so a bare
-    ``str(err)`` would surface an empty string. Fall back to the type name.
-    """
-    detail = str(err).strip()
-    if detail:
-        return f"{type(err).__name__}: {detail}"
-    return type(err).__name__
-
-
 # ---------------------------------------------------------------------------
 # Header builder (shared by sync + async transports)
 # ---------------------------------------------------------------------------
@@ -232,10 +221,10 @@ def build_headers(
     """Compose the canonical AgentStudio request headers."""
 
     if not api_key:
-        raise exceptions.APIStatusError(
+        raise exceptions.AuthenticationError(
             "api_key is required. Pass it via Client(api_key=...) or "
             "the DASHSCOPE_API_KEY environment variable.",
-            code="authentication_error",
+            status_code=AUTH_FAILED.status_code,
         )
 
     headers: Dict[str, str] = {
@@ -376,7 +365,7 @@ class SyncTransport:
                 last_exc = exc
                 if attempt >= self.max_retries:
                     raise exceptions.APITimeoutError(
-                        _describe_exception(exc),
+                        exceptions.describe_exception(exc),
                     ) from exc
             except Exception as exc:
                 if isinstance(exc, exceptions.AgentStudioError):
@@ -385,7 +374,7 @@ class SyncTransport:
                 last_exc = exc
                 if attempt >= self.max_retries or not should_retry:
                     raise exceptions.APIConnectionError(
-                        _describe_exception(exc),
+                        exceptions.describe_exception(exc),
                     ) from exc
             else:
                 if stream:
@@ -604,7 +593,7 @@ class AsyncTransport:
                 last_exc = exc
                 if attempt >= self.max_retries:
                     raise exceptions.APITimeoutError(
-                        _describe_exception(exc),
+                        exceptions.describe_exception(exc),
                     ) from exc
             except Exception as exc:
                 if isinstance(exc, exceptions.AgentStudioError):
@@ -613,7 +602,7 @@ class AsyncTransport:
                 last_exc = exc
                 if attempt >= self.max_retries or not should_retry:
                     raise exceptions.APIConnectionError(
-                        _describe_exception(exc),
+                        exceptions.describe_exception(exc),
                     ) from exc
             else:
                 if stream:

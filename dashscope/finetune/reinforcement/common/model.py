@@ -713,7 +713,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     task=StatusType.FAILED,
                     name=_err.name,
                     code=INTERNAL_ERROR.status_code,
-                    message=(f"{_err.message}: {_exc_message(root)}"),
+                    message=(f"{_err.format_message()}: {_exc_message(root)}"),
                 ),
                 output={},
             )
@@ -727,7 +727,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     name=SDK_AGENTIC_RL_REGISTRATION_ERROR.name,
                     code=INTERNAL_ERROR.status_code,
                     message=(
-                        f"{SDK_AGENTIC_RL_REGISTRATION_ERROR.message}: "
+                        f"{SDK_AGENTIC_RL_REGISTRATION_ERROR.format_message()}: "
                         f"{_exc_message(root)}"
                     ),
                 ),
@@ -792,7 +792,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     task=StatusType.FAILED,
                     name=_err.name,
                     code=INTERNAL_ERROR.status_code,
-                    message=(f"{_err.message}: {_exc_message(root)}"),
+                    message=(f"{_err.format_message()}: {_exc_message(root)}"),
                 ),
                 output={},
             )
@@ -868,7 +868,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     name=SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR.name,
                     code=INTERNAL_ERROR.status_code,
                     message=(
-                        f"{SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR.message}: "
+                        f"{SDK_AGENTIC_RL_FUNCTION_LOAD_ERROR.format_message()}: "
                         f"{_exc_message(e)}"
                     ),
                 ),
@@ -912,7 +912,9 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                         task=StatusType.FAILED,
                         name=_err.name,
                         code=INTERNAL_ERROR.status_code,
-                        message=(f"{_err.message}: {_exc_message(e)}"),
+                        message=(
+                            f"{_err.format_message()}: {_exc_message(e)}"
+                        ),
                     ),
                     output={"instance_id": self.instance_id},
                 )
@@ -964,7 +966,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     task=StatusType.FAILED,
                     name=_err.name,
                     code=INTERNAL_ERROR.status_code,
-                    message=(f"{_err.message}: {_exc_message(e)}"),
+                    message=(f"{_err.format_message()}: {_exc_message(e)}"),
                 ),
                 output={"instance_id": instance_id},
             )

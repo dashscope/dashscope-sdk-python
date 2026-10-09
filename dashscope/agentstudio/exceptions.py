@@ -40,6 +40,18 @@ from dashscope.common.error_registry import (
 )
 
 
+def describe_exception(err: BaseException) -> str:
+    """Render an exception into a message worth showing the caller.
+
+    ``httpx`` timeout exceptions usually carry no message at all, so a bare
+    ``str(err)`` would surface an empty string. Fall back to the type name.
+    """
+    detail = str(err).strip()
+    if detail:
+        return f"{type(err).__name__}: {detail}"
+    return type(err).__name__
+
+
 class AgentStudioError(DashScopeException):
     """Base exception for all AgentStudio SDK errors.
 
@@ -175,6 +187,9 @@ _STATUS_TO_DEFAULT: Dict[int, type] = {
     401: AuthenticationError,
     403: PermissionDeniedError,
     404: NotFoundError,
+    # 408 pairs with 504: both are timeouts, which the registry classes
+    # as InternalServerError (timeout_error).
+    408: InternalServerError,
     409: ConflictError,
     413: InvalidRequestError,
     429: RateLimitError,
@@ -185,7 +200,8 @@ _STATUS_TO_DEFAULT: Dict[int, type] = {
 }
 
 # Covers every anthropic_error_code the error registry can emit, plus the
-# legacy permission_denied_error / conflict_error spellings. Each entry agrees
+# registry's request_timeout key spelling and the legacy
+# permission_denied_error / conflict_error spellings. Each entry agrees
 # with _STATUS_TO_DEFAULT for the status the registry pairs it with.
 _CODE_TO_CLASS: Dict[str, type] = {
     "invalid_request_error": InvalidRequestError,
@@ -200,6 +216,7 @@ _CODE_TO_CLASS: Dict[str, type] = {
     "overloaded_error": OverloadedError,
     "api_error": InternalServerError,
     "timeout_error": InternalServerError,
+    "request_timeout": InternalServerError,
 }
 
 

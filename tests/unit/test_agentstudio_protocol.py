@@ -18,7 +18,11 @@ import json
 import pytest
 
 from dashscope.agentstudio import exceptions
-from dashscope.agentstudio.transport import is_error_payload, unwrap
+from dashscope.agentstudio.transport import (
+    build_headers,
+    is_error_payload,
+    unwrap,
+)
 from dashscope.agentstudio.types import (
     user_custom_tool_result,
     user_define_outcome,
@@ -399,6 +403,38 @@ def test_recognized_code_outranks_status():
     assert isinstance(err, exceptions.RateLimitError)
     assert not isinstance(err, exceptions.InvalidRequestError)
     assert err.status_code == 400
+
+
+def test_request_timeout_code_classifies_as_internal_server_error():
+    """The registry's ``request_timeout`` key spelling classifies the same as
+    ``timeout_error`` -- InternalServerError -- regardless of the paired
+    status."""
+    for status in (408, 504):
+        body = {"type": "error", "error": {"code": "request_timeout"}}
+        err = exceptions.from_response(status_code=status, body=body)
+        assert isinstance(err, exceptions.InternalServerError), status
+        assert err.code == "request_timeout"
+
+
+def test_bare_408_classifies_as_internal_server_error():
+    """408 is retried and then surfaced; without a server code it must not
+    degrade to the bare APIStatusError base class."""
+    err = exceptions.from_response(status_code=408, body=None)
+    assert isinstance(err, exceptions.InternalServerError)
+    assert err.code == "api_error"
+
+
+def test_missing_api_key_raises_authentication_error():
+    """A missing api_key is a local configuration error. It must stay
+    catchable as ``except AuthenticationError`` and report 401, matching
+    the registry's AUTH_FAILED entry."""
+    with pytest.raises(exceptions.AuthenticationError) as exc_info:
+        build_headers(api_key=None, uid=None, user_agent="ua")
+    assert exc_info.value.code == "authentication_error"
+    assert exc_info.value.status_code == 401
+
+    with pytest.raises(exceptions.AuthenticationError):
+        build_headers(api_key="", uid=None, user_agent="ua")
 
 
 # ---------------------------------------------------------------------------

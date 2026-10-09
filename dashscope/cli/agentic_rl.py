@@ -430,15 +430,13 @@ async def _run_workflow_async(
 
     Raises:
         ValueError: If required parameters are missing
-        RuntimeError: If workflow execution fails
+        DashScopeException: If workflow execution fails. The SDK already
+            classifies it with the registry's status_code/error_code, so it
+            must propagate unwrapped for the CLI to display both.
     """
-    try:
-        client = AgenticRL(api_key=api_key or "")
-        client.init(config_path=config_path, **run_kwargs)
-        result = await client.run()
-        return result
-    except Exception as e:
-        raise RuntimeError("Workflow execution failed") from e
+    client = AgenticRL(api_key=api_key or "")
+    client.init(config_path=config_path, **run_kwargs)
+    return await client.run()
 
 
 @app.command()
