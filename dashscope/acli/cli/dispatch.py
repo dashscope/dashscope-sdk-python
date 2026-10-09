@@ -367,6 +367,13 @@ def _handle_slash_command(
 
         handle_provider_command(cmd, agent, config)
         return True
+    elif cmd.startswith("/model"):
+        from dashscope.acli.cli.handlers_provider import (
+            handle_model_command,
+        )
+
+        handle_model_command(cmd, agent, config)
+        return True
     elif cmd.startswith("/dev test provider") or cmd.startswith(
         "/dev debug call",
     ):

@@ -8,8 +8,10 @@ plain secrets from being immediately visible in local config files.
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import platform
+import sys
 import uuid
 
 _ENC_PREFIX = "ENC:"
@@ -36,11 +38,30 @@ def encrypt_value(plaintext: str) -> str:
 
 
 def decrypt_value(stored: str) -> str:
-    """Reverse :func:`encrypt_value`."""
+    """Reverse :func:`encrypt_value`; undecryptable values decode to "".
+
+    The machine key derives from hostname + MAC, so a config.toml copied
+    from another machine — or a renamed host — holds ENC: values this
+    machine cannot read. Raising here used to kill agent startup with a
+    bare UnicodeDecodeError; treating the value as unset routes the user
+    back through key entry instead.
+    """
     if not stored:
         return ""
     if not stored.startswith(_ENC_PREFIX):
         return stored
     key = _machine_key()
-    encrypted = base64.b64decode(stored[len(_ENC_PREFIX) :])
-    return _xor_cipher(encrypted, key).decode()
+    try:
+        encrypted = base64.b64decode(
+            stored[len(_ENC_PREFIX) :],
+            validate=True,
+        )
+        return _xor_cipher(encrypted, key).decode()
+    except (binascii.Error, UnicodeDecodeError):
+        print(
+            "acli: a stored ENC: value could not be decrypted on this "
+            "machine (hostname or hardware changed?); treating it as "
+            "unset — re-enter it via /provider",
+            file=sys.stderr,
+        )
+        return ""

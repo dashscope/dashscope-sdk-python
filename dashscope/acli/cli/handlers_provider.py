@@ -301,3 +301,57 @@ def handle_provider_command(cmd: str, agent: Agent, config: Config) -> bool:
             "[dim]/provider is now a Q&A wizard; args ignored[/dim]",
         )
     return _provider_wizard(agent, config)
+
+
+def handle_model_command(cmd: str, agent: Agent, config: Config) -> bool:
+    """/model [name] — switch the model inside the current provider.
+
+    Users coming from other CLIs type /model reflexively; making them
+    rediscover it under the /provider wizard costs a turn. Provider, key
+    and protocol stay with /provider.
+    """
+    parts = cmd.split(maxsplit=1)
+    if len(parts) == 1 or not parts[1].strip():
+        console.print(
+            f"[cyan]{config.provider}/{config.model}[/cyan]  "
+            f"protocol={config.protocol}",
+        )
+        console.print(
+            "[dim]Usage: /model <name> switches the model; "
+            "/provider covers provider/key/protocol.[/dim]",
+        )
+        return True
+
+    model = parts[1].strip()
+    normalized = normalize_model_name(model)
+    if normalized != model:
+        console.print(
+            f"[dim]Model name normalized to {normalized} "
+            f"(API model IDs are case-sensitive)[/dim]",
+        )
+
+    # Same rule as the wizard's model step: an unlisted name under a
+    # built-in provider is registered as a custom model; under an
+    # extension provider it is used as-is.
+    models = PROVIDER_MODELS.get(config.provider, [])
+    if not models:
+        ext = find_provider(config.provider)
+        if ext is not None:
+            models = ext.resolved_models()
+    if (
+        models
+        and normalized not in models
+        and config.provider in PROVIDER_MODELS
+    ):
+        register_custom_model(config, config.provider, normalized)
+        console.print(
+            f"[green]✓ Registered {config.provider}/{normalized}[/green]",
+        )
+    config.model = normalized
+    config.save_global()
+    config.save_workspace()
+    if _rebuild_provider(agent, config):
+        console.print(
+            f"[green]✓ Switched: {config.provider}/{config.model}[/green]",
+        )
+    return True

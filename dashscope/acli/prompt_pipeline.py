@@ -212,7 +212,12 @@ class EnvironmentSection:
             f"run_command executes via: {shell_label()}",
         ]
         if ctx.user_name:
-            env_info.append(f"Current user: {ctx.user_name}")
+            # Display name from config.toml, NOT the OS login — the model
+            # once fabricated /Users/<name>/... paths from this line.
+            env_info.append(
+                f"Current user: {ctx.user_name} "
+                "(configured display name, not the OS account)",
+            )
         if ctx.provider_name or ctx.model_name:
             env_info.append(
                 f"Current model: {ctx.provider_name}/{ctx.model_name} "

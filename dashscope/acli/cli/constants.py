@@ -197,6 +197,7 @@ _TOP_LEVEL_COMMANDS = [
     "/tts",
     "/camera",
     "/provider",
+    "/model",
     "/setup",
     "/capability",
     "/subagents",

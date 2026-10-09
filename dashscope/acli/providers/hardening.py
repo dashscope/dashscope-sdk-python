@@ -74,6 +74,13 @@ _NON_RETRYABLE_PATTERNS = (
     "model not found",
     "insufficient_quota",
     "billing",
+    # Gateway account blocks, e.g. "Access denied, please make sure your
+    # account is in good standing ... #overdue-payment" — permanent until
+    # the account is fixed, so never retry/fallback on them.
+    "access denied",
+    "accessdenied",
+    "good standing",
+    "overdue",
     # Chinese patterns
     "权限",  # permission
     "认证",  # authentication
@@ -83,6 +90,7 @@ _NON_RETRYABLE_PATTERNS = (
     "配额",  # quota
     "账单",  # billing
     "不存在",  # does not exist
+    "欠费",  # overdue payment
     # English equivalents of the Chinese entries not already covered
     # by the English block above
     "permission",
@@ -90,6 +98,32 @@ _NON_RETRYABLE_PATTERNS = (
     "quota",
     "does not exist",
 )
+
+# Subset of non-retryable errors where resubmitting the same request is
+# pointless until the user fixes their account (overdue payment, service
+# not activated). Surfaced as an actionable hint at the display layer.
+_ACCOUNT_ERROR_PATTERNS = (
+    "access denied",
+    "accessdenied",
+    "good standing",
+    "overdue",
+    "insufficient_quota",
+    "billing",
+    "欠费",
+)
+
+
+def account_error_hint(error: BaseException) -> str:
+    """Actionable hint for account/billing failures, else an empty string."""
+    text = str(error).lower()
+    if any(p in text for p in _ACCOUNT_ERROR_PATTERNS):
+        return (
+            "This is an account/billing error (overdue payment or service "
+            "not activated); retrying will not help until the account is "
+            "in good standing."
+        )
+    return ""
+
 
 # Hint appended to a retry when the model produced an empty reply.
 _EMPTY_RECOVERY_HINT = {

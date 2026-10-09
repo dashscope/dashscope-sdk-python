@@ -81,6 +81,11 @@ HELP_SECTIONS: list[tuple[str, list[tuple[str, str]]]] = [
                 "Configure Provider / Key / model / protocol (Q&A style)",
             ),
             (
+                "/model",
+                "Switch the model within the current provider "
+                "(/model <name>)",
+            ),
+            (
                 "/trust",
                 "Tool trust/deny cache for this session "
                 "(list/clear/allow/deny)",

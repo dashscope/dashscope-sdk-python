@@ -21,6 +21,7 @@ from dashscope.acli.utils import (
     AsyncSpinner,
     UserAbortedTurn,
     message_text_for_compress,
+    truncate,
 )
 
 console = Console()
@@ -206,7 +207,10 @@ async def _do_summarize(
             lesson = f"Steps: {'; '.join(steps)}"
 
         tracker.record_experience(
-            task_summary=task[:200],
+            # Flatten newlines and mark truncation: the task is usually
+            # the raw prompt, and a mid-word cut with embedded newlines
+            # breaks the numbered "Past Lessons" list in the system prompt.
+            task_summary=truncate(" ".join(task.split()), 200),
             tools_used=tools_used,
             outcome=outcome,
             lesson=lesson,
@@ -313,6 +317,11 @@ async def _stream_response(agent: Agent, config: Config, user_input):
         console.print("\n[dim]Turn aborted[/dim]")
     except Exception as e:
         console.print(f"\n[red]Error: {e}[/red]")
+        from dashscope.acli.providers.hardening import account_error_hint
+
+        hint = account_error_hint(e)
+        if hint:
+            console.print(f"[yellow]{hint}[/yellow]")
     finally:
         # Restore default SIGINT handler
         try:

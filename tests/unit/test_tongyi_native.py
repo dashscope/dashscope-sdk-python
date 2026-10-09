@@ -344,6 +344,30 @@ def test_openai_content_parts_converted_to_native():
     assert converted[1]["content"] == "just text"
 
 
+def test_reasoning_content_is_stripped_from_the_wire():
+    """reasoning_content stays in local history for display/session restore,
+    but it must not go back on the wire: the API does not accept it as input
+    and resending it re-bills the whole thinking trace every turn."""
+    messages = [
+        {"role": "user", "content": "hi"},
+        {
+            "role": "assistant",
+            "content": "hello",
+            "reasoning_content": "thinking trace",
+        },
+        {"role": "user", "content": "again"},
+    ]
+    body = _provider()._build_request_body(  # pylint: disable=protected-access
+        messages,
+        None,
+    )
+    converted = body["input"]["messages"]
+    assert converted[1] == {"role": "assistant", "content": "hello"}
+    # The caller's history dict keeps the trace — only the wire copy is
+    # rebuilt without it.
+    assert messages[1]["reasoning_content"] == "thinking trace"
+
+
 # ---------------------------------------------------------------------------
 # base_url normalization
 # ---------------------------------------------------------------------------

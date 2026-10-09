@@ -46,6 +46,7 @@ from dashscope.acli.utils import (
     text_of,
     tool_result_for_display,
     tool_result_for_history,
+    truncate,
 )
 
 console = Console()
@@ -654,7 +655,15 @@ class Agent:
             console.print(f"\n[dim red](memory error: {e})[/dim red]")
 
     async def run_stream(self, user_input) -> AsyncIterator[str]:
-        self.messages.append({"role": "user", "content": user_input})
+        # A failed/interrupted turn can leave its user message as the last
+        # history entry; resubmitting the same text must not stack a second
+        # copy on top of it — the orphan is reused as this turn's input.
+        if not (
+            self.messages
+            and self.messages[-1].get("role") == "user"
+            and self.messages[-1].get("content") == user_input
+        ):
+            self.messages.append({"role": "user", "content": user_input})
 
         from dashscope.acli.audit import get_audit_logger
 
@@ -666,15 +675,40 @@ class Agent:
             async for chunk in self._run_stream_body(user_input):
                 _partial.append(chunk)
                 yield chunk
-        except BaseException:
+        except BaseException as e:
             # On cancellation / error, save whatever was received so the
             # user message and partial reply survive the next session load.
+            # A partial that is pure markdown scaffolding ("**", "```")
+            # carries no information and is dropped.
             partial_text = "".join(_partial).strip()
-            if partial_text:
+            if partial_text and any(ch.isalnum() for ch in partial_text):
                 self.messages.append(
                     {
                         "role": "assistant",
                         "content": partial_text + " [interrupted]",
+                    },
+                )
+            elif not isinstance(
+                e,
+                (
+                    UserAbortedTurn,
+                    KeyboardInterrupt,
+                    SystemExit,
+                    GeneratorExit,
+                    asyncio.CancelledError,
+                ),
+            ):
+                # A provider/turn failure with zero output otherwise leaves
+                # only the user message behind: the history then shows N
+                # stacked user prompts with no trace of why each attempt
+                # failed, and the model cannot learn the cause on resubmit.
+                self.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": (
+                            "[Turn failed before any response: "
+                            f"{sanitize_text(str(e))[:500]}]"
+                        ),
                     },
                 )
             self.save_session()
@@ -1224,7 +1258,9 @@ class Agent:
 
         # Record experience for learning (only if tools were used)
         if self._current_turn_tools:
-            task_summary = text_of(user_input)[:100]  # Truncate for storage
+            # Flatten + ellipsis: raw prompts carry newlines, and a
+            # mid-word cut breaks the "Past Lessons" list rendering.
+            task_summary = truncate(" ".join(text_of(user_input).split()), 100)
             outcome = _classify_outcome(
                 self._turn_tool_successes,
                 self._turn_tool_failures,

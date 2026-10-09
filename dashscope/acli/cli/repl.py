@@ -562,6 +562,15 @@ async def _run_loop(config: Config):
                     continue
             elif result:
                 continue
+            else:
+                # Not a registered command: the text goes to the model (an
+                # agent can legitimately answer slash-command questions),
+                # but say so — a typo'd command must not fail silently.
+                console.print(
+                    f"[dim]Unknown command "
+                    f"{user_input.split()[0]}; sending it to the model "
+                    f"instead (/help lists commands).[/dim]",
+                )
 
         # Expand @path tokens to file contents before sending to the agent.
         # Done here (post slash-command handling) so slash commands themselves

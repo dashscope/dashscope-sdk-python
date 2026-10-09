@@ -140,6 +140,12 @@ def _to_native_content(content):
 def _to_native_messages(messages: list[dict]) -> list[dict]:
     result = []
     for m in messages:
+        # reasoning_content is kept in local history for display/session
+        # restore, but it must not go back on the wire: the API does not
+        # accept it as input, and resending it re-bills the whole thinking
+        # trace on every turn.
+        if "reasoning_content" in m:
+            m = {k: v for k, v in m.items() if k != "reasoning_content"}
         if isinstance(_safe_get(m, "content"), list):
             m = {**m, "content": _to_native_content(m["content"])}
         result.append(m)

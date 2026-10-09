@@ -280,7 +280,12 @@ async def _run_oneshot(config: Config, prompt: str):
     if usage_path:
         _write_usage_file(usage_path, executor)
     if failure is not None:
+        from dashscope.acli.providers.hardening import account_error_hint
+
         print(f"Error: {failure}", file=sys.stderr)
+        hint = account_error_hint(failure)
+        if hint:
+            print(hint, file=sys.stderr)
         sys.exit(1)
 
 

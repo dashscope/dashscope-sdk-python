@@ -32,6 +32,7 @@ from dashscope.acli.providers.base import LLMChunk
 from dashscope.acli.providers.hardening import (
     HardenedProvider,
     RetriesExhausted,
+    account_error_hint,
     is_retryable_error,
 )
 from dashscope.acli.providers.profile import ProviderChain, ProviderProfile
@@ -207,3 +208,33 @@ async def test_a_failure_after_the_first_chunk_stays_plain():
     assert [c.delta_content for c in seen] == ["hi"]
     assert not isinstance(exc.value, RetriesExhausted)
     assert inner.stream_calls == 1
+
+
+# The literal 403 the DashScope gateway raises on an overdue account.
+# Permanent until the user fixes billing, so neither the retry layer nor
+# the fallback chain may spend a budget on it.
+OVERDUE = (
+    "DashScope API error: 403 - Access denied, please make sure your "
+    "account is in good standing. For details, see: "
+    "https://help.aliyun.com/zh/model-studio/error-code#overdue-payment"
+)
+
+
+async def test_a_gateway_account_block_is_never_retried():
+    inner = _Scripted(chat=[RuntimeError(OVERDUE)] * 4)
+    hardened = HardenedProvider(inner, max_retries=3, retry_delay=0.01)
+
+    with pytest.raises(RuntimeError) as exc:
+        await hardened.chat(MESSAGES)
+    assert not isinstance(exc.value, RetriesExhausted)
+    assert inner.chat_calls == 1
+    assert is_retryable_error(exc.value) is False
+
+
+def test_account_error_hint_flags_billing_errors_only():
+    assert "account/billing" in account_error_hint(RuntimeError(OVERDUE))
+    assert account_error_hint(RuntimeError("账户已欠费，请充值"))
+    # Non-retryable is not the same as an account error: a bad key gets no
+    # billing hint, and neither does a transient timeout.
+    assert account_error_hint(RuntimeError("invalid api key")) == ""
+    assert account_error_hint(RuntimeError("timeout")) == ""
