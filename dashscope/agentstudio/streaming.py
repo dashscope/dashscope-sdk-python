@@ -122,7 +122,11 @@ class EventStream:
                 if item is None:
                     return
                 if isinstance(item, Exception):
-                    raise item
+                    if isinstance(item, exceptions.AgentStudioError):
+                        raise item
+                    raise exceptions.StreamError(
+                        exceptions.describe_exception(item),
+                    ) from item
                 yield item
         finally:
             self.close()
@@ -205,7 +209,11 @@ class AsyncEventStream:
                 if item is None:
                     return
                 if isinstance(item, Exception):
-                    raise item
+                    if isinstance(item, exceptions.AgentStudioError):
+                        raise item
+                    raise exceptions.StreamError(
+                        exceptions.describe_exception(item),
+                    ) from item
                 yield item
         finally:
             await self.aclose()

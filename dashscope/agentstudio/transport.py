@@ -32,6 +32,7 @@ from dashscope.agentstudio.constants import (
     AGENTSTUDIO_DEFAULT_TIMEOUT,
     AGENTSTUDIO_MAX_RETRIES,
 )
+from dashscope.common.error_registry import AUTH_FAILED
 from dashscope.common.utils import get_sdk_headers
 
 logger = logging.getLogger("dashscope.agentstudio")
@@ -223,7 +224,7 @@ def build_headers(
         raise exceptions.AuthenticationError(
             "api_key is required. Pass it via Client(api_key=...) or "
             "the DASHSCOPE_API_KEY environment variable.",
-            code="authentication_error",
+            status_code=AUTH_FAILED.status_code,
         )
 
     headers: Dict[str, str] = {
@@ -363,14 +364,18 @@ class SyncTransport:
             except httpx.TimeoutException as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
-                    raise exceptions.APITimeoutError(str(exc)) from exc
+                    raise exceptions.APITimeoutError(
+                        exceptions.describe_exception(exc),
+                    ) from exc
             except Exception as exc:
                 if isinstance(exc, exceptions.AgentStudioError):
                     raise
                 should_retry, _ = _should_retry_exception(exc)
                 last_exc = exc
                 if attempt >= self.max_retries or not should_retry:
-                    raise exceptions.APIConnectionError(str(exc)) from exc
+                    raise exceptions.APIConnectionError(
+                        exceptions.describe_exception(exc),
+                    ) from exc
             else:
                 if stream:
                     if resp.status_code >= 400:
@@ -587,14 +592,18 @@ class AsyncTransport:
             except httpx.TimeoutException as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
-                    raise exceptions.APITimeoutError(str(exc)) from exc
+                    raise exceptions.APITimeoutError(
+                        exceptions.describe_exception(exc),
+                    ) from exc
             except Exception as exc:
                 if isinstance(exc, exceptions.AgentStudioError):
                     raise
                 should_retry, _ = _should_retry_exception(exc)
                 last_exc = exc
                 if attempt >= self.max_retries or not should_retry:
-                    raise exceptions.APIConnectionError(str(exc)) from exc
+                    raise exceptions.APIConnectionError(
+                        exceptions.describe_exception(exc),
+                    ) from exc
             else:
                 if stream:
                     if resp.status_code >= 400:

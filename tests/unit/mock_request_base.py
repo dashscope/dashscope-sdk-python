@@ -20,7 +20,7 @@ class MockServerBase(BaseTestEnvironment):
         super().setup_class()
         dashscope.base_http_api_url = "http://localhost:8089/api/v1/"
         dashscope.base_websocket_api_url = (
-            "http://localhost:8089/api-ws/v1/inference"
+            "ws://localhost:8089/api-ws/v1/inference"
         )
         dashscope.api_key = "default"
         dashscope.api_protocol = "http"

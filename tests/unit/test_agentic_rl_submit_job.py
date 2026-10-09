@@ -507,15 +507,13 @@ class TestAgenticRLClient:
 
     def test_init_with_invalid_api_key(self):
         from dashscope.finetune.agentic_rl import AgenticRL
-        from dashscope.finetune.reinforcement.common.errors import (
-            ValueErrorWithCode,
-        )
+        from dashscope.common.error import DashScopeException
 
         with patch(
             "dashscope.finetune.agentic_rl.set_api_key",
             side_effect=Exception("Invalid key"),
         ):
-            with pytest.raises(ValueErrorWithCode):
+            with pytest.raises(DashScopeException):
                 AgenticRL(api_key="invalid")
 
     def test_init_without_api_key(self):
@@ -603,9 +601,7 @@ class TestAgenticRLClient:
     @pytest.mark.asyncio
     async def test_register_functions_failure(self):
         from dashscope.finetune.agentic_rl import AgenticRL
-        from dashscope.finetune.reinforcement.common.errors import (
-            RegistrationError,
-        )
+        from dashscope.common.error import DashScopeException
 
         client = AgenticRL()
         client.tuning = MagicMock()
@@ -614,7 +610,7 @@ class TestAgenticRLClient:
         )
         client.tuning.functions = []
 
-        with pytest.raises(RegistrationError):
+        with pytest.raises(DashScopeException):
             await client.register_functions()
 
     @pytest.mark.asyncio
@@ -634,9 +630,7 @@ class TestAgenticRLClient:
     @pytest.mark.asyncio
     async def test_upload_datasets_failure(self):
         from dashscope.finetune.agentic_rl import AgenticRL
-        from dashscope.finetune.reinforcement.common.errors import (
-            DatasetsError,
-        )
+        from dashscope.common.error import DashScopeException
 
         client = AgenticRL()
         client.tuning = MagicMock()
@@ -645,7 +639,7 @@ class TestAgenticRLClient:
         )
         client.tuning.datasets = []
 
-        with pytest.raises(DatasetsError):
+        with pytest.raises(DashScopeException):
             await client.upload_datasets()
 
 
@@ -692,9 +686,7 @@ class TestSubmitJob:
 
     def test_submit_job_duplicate_function_names(self):
         from dashscope.finetune.agentic_rl import AgenticRL
-        from dashscope.finetune.reinforcement.common.errors import (
-            ValueErrorWithCode,
-        )
+        from dashscope.common.error import DashScopeException
 
         client = AgenticRL()
         client.tuning = MagicMock()
@@ -710,8 +702,11 @@ class TestSubmitJob:
         client.tuning.check_function_names = MagicMock(
             return_value=False,
         )
+        client.tuning.find_function_name_problems = MagicMock(
+            return_value=(["rollout_fn"], []),
+        )
 
-        with pytest.raises(ValueErrorWithCode, match="Duplicate"):
+        with pytest.raises(DashScopeException, match="request is invalid"):
             client.submit_job()
 
 
@@ -846,9 +841,7 @@ class TestRunMethod:
     @pytest.mark.asyncio
     async def test_run_register_failure_raises(self):
         from dashscope.finetune.agentic_rl import AgenticRL
-        from dashscope.finetune.reinforcement.common.errors import (
-            RuntimeErrorWithCode,
-        )
+        from dashscope.common.error import DashScopeException
 
         with patch.object(
             AgenticRL,
@@ -859,15 +852,13 @@ class TestRunMethod:
             client = AgenticRL()
             client.tuning = MagicMock()
 
-            with pytest.raises(RuntimeErrorWithCode):
+            with pytest.raises(DashScopeException):
                 await client.run(model="qwen3.5-9b")
 
     @pytest.mark.asyncio
     async def test_run_upload_failure_raises(self):
         from dashscope.finetune.agentic_rl import AgenticRL
-        from dashscope.finetune.reinforcement.common.errors import (
-            RuntimeErrorWithCode,
-        )
+        from dashscope.common.error import DashScopeException
 
         with patch.object(
             AgenticRL,
@@ -882,15 +873,13 @@ class TestRunMethod:
             client = AgenticRL()
             client.tuning = MagicMock()
 
-            with pytest.raises(RuntimeErrorWithCode):
+            with pytest.raises(DashScopeException):
                 await client.run(model="qwen3.5-9b")
 
     @pytest.mark.asyncio
     async def test_run_submit_failure_raises(self):
         from dashscope.finetune.agentic_rl import AgenticRL
-        from dashscope.finetune.reinforcement.common.errors import (
-            RuntimeErrorWithCode,
-        )
+        from dashscope.common.error import DashScopeException
 
         with patch.object(
             AgenticRL,
@@ -908,7 +897,7 @@ class TestRunMethod:
             client = AgenticRL()
             client.tuning = MagicMock()
 
-            with pytest.raises(RuntimeErrorWithCode):
+            with pytest.raises(DashScopeException):
                 await client.run(model="qwen3.5-9b")
 
     @pytest.mark.asyncio

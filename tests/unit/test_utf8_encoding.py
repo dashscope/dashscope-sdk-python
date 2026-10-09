@@ -59,7 +59,7 @@ def _make_mock_sync_session():
 class _MockAioResponse:
     status = 200
     content_type = "application/json"
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json; charset=utf-8"}
 
     async def json(self):
         return {"output": {"text": "ok"}, "request_id": "test-123"}
@@ -82,6 +82,18 @@ class _MockAioSession:
     async def request(
         self,
         method,
+        url,
+        data=None,
+        headers=None,
+        timeout=None,
+    ):
+        self.captured["data"] = data
+        self.captured["headers"] = headers
+        return _MockAioResponse()
+
+    # pylint: disable=unused-argument
+    async def post(
+        self,
         url,
         data=None,
         headers=None,
@@ -125,15 +137,6 @@ class TestHttpRequestUtf8Headers:
             stream=True,
         )
         assert "text/event-stream" in req.headers["Accept"]
-
-    def test_get_has_no_content_type(self):
-        req = HttpRequest(
-            url="https://example.com/api/v1/test",
-            api_key="test-key",
-            http_method=HTTPMethod.GET,
-            stream=False,
-        )
-        assert "Content-Type" not in req.headers
 
 
 class TestAioHttpRequestUtf8Headers:

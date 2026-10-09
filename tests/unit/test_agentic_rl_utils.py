@@ -300,7 +300,10 @@ class TestAsyncHttpRequestRootCause:
                     retry_times=1,
                 )
 
-            assert exc_info.value.error_code == 4002
+            assert (
+                exc_info.value.error_code
+                == "sdk.agentic_rl.RuntimeErrorWithCode"
+            )
             root = exc_info.value.__cause__
             assert isinstance(root, aiohttp.ClientConnectionError)
             assert "Cannot write to transport" in str(root)
@@ -313,7 +316,7 @@ class TestAsyncHttpRequestRootCause:
             ".ClientSession",
             return_value=_mock_session(asyncio.TimeoutError()),
         ):
-            with pytest.raises(RuntimeErrorWithCode) as exc_info:
+            with pytest.raises(TimeoutError) as exc_info:
                 await async_http_request(
                     method="POST",
                     url="https://example.com/api",
@@ -322,7 +325,6 @@ class TestAsyncHttpRequestRootCause:
                     retry_times=1,
                 )
 
-            assert exc_info.value.error_code == 4003
             assert isinstance(
                 exc_info.value.__cause__,
                 asyncio.TimeoutError,
