@@ -146,7 +146,7 @@ class TestStreamErrorWrapsTransportFailures:
 
         def produce():
             raise original
-            yield  # pragma: no cover - makes produce a generator
+            yield  # noqa: W0101, pylint: disable=unreachable
 
         with mock.patch.object(stream, "_event_source") as es:
             es.iter_sse.side_effect = produce
