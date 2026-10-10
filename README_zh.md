@@ -186,6 +186,7 @@ SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供�
 | 文本向量 | text-embedding-v4、text-embedding-v3 | `TextEmbedding` |
 | 多模态向量 | tongyi-embedding-vision-plus、qwen3-vl-embedding | `MultiModalEmbedding` |
 | 文本重排 | qwen3-rerank、gte-rerank-v2 | `TextReRank` |
+| 决策模型 | decision-model-preview | `DecisionModel` |
 | 图像生成 | wan2.7-image-pro、qwen-image-2.0-pro | `ImageSynthesis` |
 | 视频生成 | wan2.7-t2v、wan2.7-i2v、happyhorse-1.0-t2v/i2v | `VideoSynthesis` |
 | 语音合成（TTS） | cosyvoice-v3.5-plus、cosyvoice-v1 | `SpeechSynthesizer`、`HttpSpeechSynthesizer` |

@@ -187,6 +187,7 @@ The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built 
 | Text Embedding | text-embedding-v4, text-embedding-v3 | `TextEmbedding` |
 | Multi-Modal Embedding | tongyi-embedding-vision-plus, qwen3-vl-embedding | `MultiModalEmbedding` |
 | Text ReRank | qwen3-rerank, gte-rerank-v2 | `TextReRank` |
+| Decision Model | decision-model-preview | `DecisionModel` |
 | Image Generation | wan2.7-image-pro, qwen-image-2.0-pro | `ImageSynthesis` |
 | Video Generation | wan2.7-t2v, wan2.7-i2v, happyhorse-1.0-t2v/i2v | `VideoSynthesis` |
 | Speech Synthesis (TTS) | cosyvoice-v3.5-plus, cosyvoice-v1 | `SpeechSynthesizer`, `HttpSpeechSynthesizer` |

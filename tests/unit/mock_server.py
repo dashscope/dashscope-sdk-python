@@ -596,6 +596,10 @@ class MockServer:
             "/api/v1/services/rerank/text-rerank/text-rerank",
             self.handle_post,
         )
+        app.router.add_post(
+            "/compatible-mode/v1/systemone",
+            self.handle_post,
+        )
         # fine-tune
         app.router.add_post("/api/v1/fine-tunes", self.handle_post)
         app.router.add_get("/api/v1/fine-tunes", self.handle_get)

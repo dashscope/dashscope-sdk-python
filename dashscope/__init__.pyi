@@ -324,6 +324,61 @@ class AioTextReRank:
     ) -> ReRankResponse: ...
 
 # ---------------------------------------------------------------------------
+# Decision Model
+# ---------------------------------------------------------------------------
+class DecisionUsage:
+    input_tokens: int
+
+class DecisionAnswer:
+    type: str
+    choice: str | None
+    noul: float | None
+    score: float | None
+    probabilities: Dict[str, float] | None
+    confidence: float | None
+    legend: Dict[str, str] | None
+
+class DecisionModelResponse:
+    model: str
+    request_id: str
+    status_code: int
+    answers: Dict[str, DecisionAnswer] | None
+    usage: DecisionUsage | None
+    latency_ms: float | None
+    code: str
+    message: str
+
+class DecisionModel:
+    class Models:
+        decision_model_preview: str
+    @classmethod
+    def call(
+        cls,
+        model: str,
+        state: Union[str, Dict[str, Any]],
+        questions: Dict[str, Dict[str, Any]],
+        api_key: str | None = None,
+        workspace: str | None = None,
+        extra_headers: Dict | None = None,
+        **kwargs: Any,
+    ) -> DecisionModelResponse: ...
+
+class AioDecisionModel:
+    class Models:
+        decision_model_preview: str
+    @classmethod
+    async def call(
+        cls,
+        model: str,
+        state: Union[str, Dict[str, Any]],
+        questions: Dict[str, Dict[str, Any]],
+        api_key: str | None = None,
+        workspace: str | None = None,
+        extra_headers: Dict | None = None,
+        **kwargs: Any,
+    ) -> DecisionModelResponse: ...
+
+# ---------------------------------------------------------------------------
 # Image Synthesis
 # ---------------------------------------------------------------------------
 class ImageSynthesis:
