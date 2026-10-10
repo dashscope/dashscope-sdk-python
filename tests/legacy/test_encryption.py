@@ -11,7 +11,7 @@ class TestEncryption:
     @staticmethod
     @pytest.mark.skip(reason="Legacy integration test, requires real DashScope API")
     def test_get_public_keys():
-        pub_keys = Encryption._get_public_keys()
+        pub_keys = Encryption()._get_public_keys()
         print(f"\nrsa:\n{json.dumps(pub_keys, indent=4, ensure_ascii=False)}")
         print(f"\npublic_key_id: {pub_keys.get('public_key_id')}")
         print(f"\npublic_key: {pub_keys.get('public_key')}")
@@ -37,7 +37,7 @@ class TestEncryption:
     @staticmethod
     @pytest.mark.skip(reason="Legacy integration test, requires real DashScope API")
     def test_encrypt_aes_key_with_rsa():
-        public_keys = Encryption._get_public_keys()
+        public_keys = Encryption()._get_public_keys()
         public_key = public_keys.get("public_key")
         aes_key = Encryption._generate_aes_secret_key()
 

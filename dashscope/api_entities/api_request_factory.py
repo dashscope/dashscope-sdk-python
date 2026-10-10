@@ -162,7 +162,10 @@ def _build_api_request(  # pylint: disable=too-many-branches
             http_url += "?" + urlencode(extra_url_parameters)
 
         if enable_encryption is True:
-            encryption = Encryption()
+            encryption = Encryption(
+                base_url=base_address,
+                api_key=api_key,
+            )
             encryption.initialize()
             if encryption.is_valid():
                 logger.debug("encryption enabled")

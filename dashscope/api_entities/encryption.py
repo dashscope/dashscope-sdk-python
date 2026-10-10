@@ -4,6 +4,7 @@
 import base64
 import json
 import os
+from typing import Optional
 
 import requests
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -19,11 +20,16 @@ from dashscope.common.constants import (
 )
 from dashscope.common.logging import logger
 from dashscope.common.env import resolve_base_url
+from dashscope.common.api_key import get_default_api_key
 from dashscope.common.utils import get_sdk_headers
 
 
 class Encryption:
-    def __init__(self):
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ):
         self.pub_key_id: str = ""
         self.pub_key_str: str = ""
         self.aes_key_bytes: bytes = b""
@@ -31,6 +37,8 @@ class Encryption:
         self.iv_bytes: bytes = b""
         self.base64_iv_str: str = ""
         self.valid: bool = False
+        self._base_url = base_url
+        self._api_key = api_key
 
     def initialize(self):
         public_keys = self._get_public_keys()
@@ -87,14 +95,12 @@ class Encryption:
     def get_base64_iv_str(self):
         return self.base64_iv_str
 
-    @staticmethod
-    def _get_public_keys():
-        url = (
-            resolve_base_url(dashscope.base_http_api_url)
-            + "/public-keys/latest"
-        )
+    def _get_public_keys(self):
+        base_url = self._base_url or dashscope.base_http_api_url
+        api_key = self._api_key or get_default_api_key()
+        url = resolve_base_url(base_url) + "/public-keys/latest"
         headers = {
-            "Authorization": f"Bearer {dashscope.api_key}",
+            "Authorization": f"Bearer {api_key}",
             **get_sdk_headers(module="utils"),
         }
 
