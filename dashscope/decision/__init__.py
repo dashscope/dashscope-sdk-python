@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
-from dashscope.decision_model.decision_model import (
+from dashscope.decision.decision import (
     AioDecisionModel,
     DecisionAnswer,
     DecisionModel,

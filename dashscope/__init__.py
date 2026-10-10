@@ -42,7 +42,7 @@ from dashscope.common.env import (
     base_websocket_api_url,
     validate_workspace_id,
 )
-from dashscope.decision_model import AioDecisionModel, DecisionModel
+from dashscope.decision import AioDecisionModel, DecisionModel
 from dashscope.finetune.deployments import Deployments
 from dashscope.finetune.finetunes import FineTunes
 from dashscope.embeddings.batch_text_embedding import BatchTextEmbedding
