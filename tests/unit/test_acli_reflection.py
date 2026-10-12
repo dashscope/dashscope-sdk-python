@@ -10,6 +10,7 @@ from dashscope.acli.memory.reflection import (
     StagnationTracker,
     convergence_hint,
     is_readonly_tool_call,
+    time_budget_hint,
 )
 
 
@@ -717,3 +718,58 @@ class TestConvergenceHint:
     def test_hard_hint_says_no_new_approach(self):
         hint = convergence_hint(90, 100)
         assert "Do NOT start a new approach" in hint
+
+
+# ── time_budget_hint ─────────────────────────────────────────────────────────
+
+
+class TestTimeBudgetHint:
+    """Wall-clock counterpart of convergence_hint, deliverable-first.
+
+    Fires on elapsed/budget, covering the few-but-huge-generations shape
+    where the turn-count nudge never triggers (7/150 turns can still burn
+    95% of the harness's wall-clock cap).
+    """
+
+    def test_below_soft_returns_empty(self):
+        assert time_budget_hint(100, 900) == ""
+        # 449/900 = 0.499 < 0.5
+        assert time_budget_hint(449, 900) == ""
+
+    def test_at_soft_boundary_is_deliverable_first(self):
+        # 450/900 = 0.50 → fires soft
+        hint = time_budget_hint(450, 900)
+        assert "half spent" in hint
+        assert "450s of your ~900s budget" in hint
+        assert "(450s left)" in hint
+        assert "best-effort version NOW" in hint
+        # Explicitly not the turn nudge's "converge" wording: the failure
+        # shape here is a missing artifact, not a plateaued loop.
+        assert "converge" not in hint
+        assert "nearly exhausted" not in hint
+
+    def test_soft_band_existing_deliverable_clause(self):
+        hint = time_budget_hint(600, 900)
+        assert "re-save after every improvement" in hint
+
+    def test_at_hard_boundary(self):
+        # 720/900 = 0.80 → fires hard
+        hint = time_budget_hint(720, 900)
+        assert "nearly exhausted" in hint
+        assert "best version" in hint
+        assert "ONE final verification" in hint
+        assert "Do NOT start a new approach" in hint
+        assert "half spent" not in hint
+
+    def test_remaining_clamps_at_zero(self):
+        hint = time_budget_hint(1000, 900)
+        assert "(0s left)" in hint
+
+    def test_custom_ratios(self):
+        assert "half spent" in time_budget_hint(200, 900, soft_ratio=0.2)
+        hint = time_budget_hint(230, 900, soft_ratio=0.2, hard_ratio=0.25)
+        assert "nearly exhausted" in hint
+
+    def test_disabled_without_budget(self):
+        assert time_budget_hint(100, 0) == ""
+        assert time_budget_hint(100, -5) == ""

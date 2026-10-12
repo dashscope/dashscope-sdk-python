@@ -2,8 +2,10 @@
 # pylint: disable=too-many-branches,too-many-statements
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import time
 from typing import AsyncIterator, ClassVar
 
 import httpx
@@ -269,11 +271,47 @@ class TongyiProvider:
         protocol: str = "openai",
         base_url: str | None = None,
         module: str = "app",
+        max_output_tokens: int | None = None,
+        thinking_budget: int | None = None,
     ):
         self.model = model
         self.api_key = api_key
         self.request_timeout = request_timeout
         self.protocol = protocol
+        # Per-call output cap (reasoning tokens count against it). The
+        # failure shape this exists for: a run of 15-minute, ~25K-token
+        # monolithic generations that never lands a deliverable before the
+        # wall-clock cap — with no cap the agent loop never regains control
+        # between request boundaries, so every between-turn mechanism (time
+        # budget, convergence, reflection) is unreachable. Truncation is
+        # safe: the stream assembly repairs or empties a cut tool call, and
+        # the agent treats finish_reason=length as "continue", not "done".
+        # Env: ACLI_MAX_OUTPUT_TOKENS (0/unset disables).
+        if max_output_tokens is None:
+            try:
+                max_output_tokens = int(
+                    os.environ.get("ACLI_MAX_OUTPUT_TOKENS", "0"),
+                )
+            except ValueError:
+                max_output_tokens = 0
+        self.max_output_tokens = max(0, max_output_tokens)
+        # Reasoning-token budget. Probing qwen3.8-max on the native
+        # multimodal-generation path showed max_tokens caps only the
+        # visible text (100 → 284 output tokens incl. 180 reasoning), so
+        # the monolithic-thinking shape sails past it untouched;
+        # thinking_budget bounds the reasoning itself (200 → exactly 200).
+        # When the budget runs out the server wraps up the turn with
+        # finish_reason=stop, so the agent loop regains control without
+        # needing the length-continuation branch. Env:
+        # ACLI_THINKING_BUDGET (0/unset disables).
+        if thinking_budget is None:
+            try:
+                thinking_budget = int(
+                    os.environ.get("ACLI_THINKING_BUDGET", "0"),
+                )
+            except ValueError:
+                thinking_budget = 0
+        self.thinking_budget = max(0, thinking_budget)
         base = (base_url or DASHSCOPE_BASE_URL).rstrip("/")
         for prefix in _LEGACY_PREFIXES:
             if base.endswith(prefix):
@@ -360,6 +398,10 @@ class TongyiProvider:
         if stream:
             parameters["stream"] = True
             parameters["incremental_output"] = True
+        if self.max_output_tokens > 0:
+            parameters["max_tokens"] = self.max_output_tokens
+        if self.thinking_budget > 0:
+            parameters["thinking_budget"] = self.thinking_budget
         ds_tools = self._convert_tools(tools)
         if ds_tools:
             parameters["tools"] = ds_tools
@@ -600,11 +642,37 @@ class TongyiProvider:
         usage_sent = False
         _json_buf: str | None = None
 
-        async for line in response.aiter_lines():
+        # SSE keepalive comment lines (": ...") carry no progress but reset
+        # httpx's read timeout, so a wedged generation can hold the stream
+        # open indefinitely — measured 882s on a request that never emitted
+        # a single data: line, surviving the whole max_retries x
+        # request_timeout budget until the caller's own cap killed it.
+        # Count only data: lines as progress and bound their gap at one
+        # request_timeout; a stalled stream must surface as a retryable
+        # error, not hang the turn.
+        lines = response.aiter_lines()
+        last_progress = time.monotonic()
+        while True:
+            remaining = self.request_timeout - (
+                time.monotonic() - last_progress
+            )
+            try:
+                line = await asyncio.wait_for(
+                    lines.__anext__(),
+                    timeout=max(remaining, 0),
+                )
+            except StopAsyncIteration:
+                break
+            except asyncio.TimeoutError:
+                raise RuntimeError(
+                    f"stream stalled: no data received for "
+                    f"{self.request_timeout}s (keepalive timeout)",
+                ) from None
             # Native SSE sends "data:{...}" with no space;
             # compatible-mode sends "data: {...}".
             if not line.startswith("data:"):
                 continue
+            last_progress = time.monotonic()
             payload = line[5:].strip()
             if payload == "[DONE]":
                 break

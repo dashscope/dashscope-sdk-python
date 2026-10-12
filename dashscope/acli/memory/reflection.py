@@ -725,3 +725,62 @@ def convergence_hint(
             "passing result."
         )
     return ""
+
+
+def time_budget_hint(
+    elapsed_sec: float,
+    budget_sec: float,
+    soft_ratio: float = 0.5,
+    hard_ratio: float = 0.8,
+) -> str:
+    """Wall-clock counterpart of ``convergence_hint``, deliverable-first.
+
+    The turn-count nudge never fires on the failure shape this covers: a run
+    of very few, very long generations (7/150 turns) can still burn 95% of
+    the harness's wall-clock cap, and every hard-set task that died that way
+    (dna-assembly, write-compressor) died with its required output file
+    never written at all. So the soft band does NOT say "converge": it says
+    "land a best-effort deliverable now, then keep refining" — securing an
+    artifact early is what the turn nudge's plateaued loop already has and
+    these runs lack.
+
+    Returns "" below ``soft_ratio`` or when ``budget_sec`` is unset/<=0;
+    a secure-the-deliverable nudge in the soft band; a best-version-on-disk
+    finalize nudge at/after ``hard_ratio``.
+    """
+    if budget_sec <= 0 or elapsed_sec < 0:
+        return ""
+    frac = elapsed_sec / budget_sec
+    remaining = max(0.0, budget_sec - elapsed_sec)
+    elapsed_i = int(elapsed_sec)
+    budget_i = int(budget_sec)
+    remaining_i = int(remaining)
+    if frac >= hard_ratio:
+        return (
+            "\n\n## ⏳ Wall-clock budget nearly exhausted\n"
+            f"{elapsed_i}s of your ~{budget_i}s budget are gone "
+            f"({remaining_i}s left).\n"
+            "Do NOT start a new approach — there is no time left to debug "
+            "it. Right now:\n"
+            "1. Make sure the deliverable file on disk is the best version "
+            "you have produced (overwrite a broken draft with an older "
+            "working one if needed).\n"
+            "2. Run ONE final verification against the acceptance "
+            "criterion.\n"
+            "3. Finish.\n"
+        )
+    if frac >= soft_ratio:
+        return (
+            "\n\n## ⏳ Wall-clock budget half spent\n"
+            f"{elapsed_i}s of your ~{budget_i}s budget are gone "
+            f"({remaining_i}s left); the run is killed when it hits 0.\n"
+            "If the file/artifact this task requires does not exist yet in "
+            "complete form, write a best-effort version NOW with your "
+            "current approach — a rough working deliverable beats a perfect "
+            "plan that never lands. Then keep refining and overwrite it "
+            "with better versions.\n"
+            "If it already exists, keep improving it — but re-save after "
+            "every improvement, so whatever is on disk when time runs out "
+            "is your best attempt."
+        )
+    return ""

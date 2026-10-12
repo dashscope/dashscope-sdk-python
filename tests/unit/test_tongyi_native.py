@@ -11,7 +11,9 @@ the anthropic adapter path) was written against.
 
 # pylint: disable=redefined-outer-name,protected-access
 
+import asyncio
 import json
+import time
 
 import pytest
 
@@ -366,6 +368,60 @@ def test_reasoning_content_is_stripped_from_the_wire():
     # The caller's history dict keeps the trace — only the wire copy is
     # rebuilt without it.
     assert messages[1]["reasoning_content"] == "thinking trace"
+
+
+def test_max_output_tokens_sent_when_configured():
+    body = _provider(max_output_tokens=4096)._build_request_body(  # pylint: disable=protected-access
+        MESSAGES,
+        None,
+    )
+    assert body["parameters"]["max_tokens"] == 4096
+
+
+def test_max_output_tokens_absent_by_default(monkeypatch):
+    monkeypatch.delenv("ACLI_MAX_OUTPUT_TOKENS", raising=False)
+    body = _provider()._build_request_body(  # pylint: disable=protected-access
+        MESSAGES,
+        None,
+    )
+    assert "max_tokens" not in body["parameters"]
+
+
+def test_max_output_tokens_env_override(monkeypatch):
+    monkeypatch.setenv("ACLI_MAX_OUTPUT_TOKENS", "2048")
+    assert _provider().max_output_tokens == 2048
+    # An explicit constructor argument wins over the env.
+    assert _provider(max_output_tokens=512).max_output_tokens == 512
+    # An unparseable value falls back to disabled, not a crash.
+    monkeypatch.setenv("ACLI_MAX_OUTPUT_TOKENS", "junk")
+    assert _provider().max_output_tokens == 0
+
+
+def test_thinking_budget_sent_when_configured():
+    body = _provider(thinking_budget=4096)._build_request_body(  # pylint: disable=protected-access
+        MESSAGES,
+        None,
+    )
+    assert body["parameters"]["thinking_budget"] == 4096
+
+
+def test_thinking_budget_absent_by_default(monkeypatch):
+    monkeypatch.delenv("ACLI_THINKING_BUDGET", raising=False)
+    body = _provider()._build_request_body(  # pylint: disable=protected-access
+        MESSAGES,
+        None,
+    )
+    assert "thinking_budget" not in body["parameters"]
+
+
+def test_thinking_budget_env_override(monkeypatch):
+    monkeypatch.setenv("ACLI_THINKING_BUDGET", "2048")
+    assert _provider().thinking_budget == 2048
+    # An explicit constructor argument wins over the env.
+    assert _provider(thinking_budget=512).thinking_budget == 512
+    # An unparseable value falls back to disabled, not a crash.
+    monkeypatch.setenv("ACLI_THINKING_BUDGET", "junk")
+    assert _provider().thinking_budget == 0
 
 
 # ---------------------------------------------------------------------------
@@ -729,3 +785,48 @@ def test_request_body_is_json_serializable():
     assert parsed["parameters"]["response_format"] == {
         "type": "json_object",
     }
+
+
+class _KeepaliveOnlyResponse(_FakeStreamResponse):
+    """The wedged-generation signature: keepalive comments flow forever
+    (resetting httpx's read timeout) while no data: line ever arrives —
+    the 067b bench failures sat in this state until the harness cap."""
+
+    async def aiter_lines(self):
+        while True:
+            await asyncio.sleep(0.01)
+            yield ": keep-alive"
+
+
+class _StallAfterContentResponse(_FakeStreamResponse):
+    """One real chunk, then keepalive silence forever."""
+
+    async def aiter_lines(self):
+        yield NATIVE_SSE_LINES[3]
+        while True:
+            await asyncio.sleep(0.01)
+            yield ": keep-alive"
+
+
+async def test_stream_stall_on_keepalives_raises_retryable(fake_http):
+    fake_http._stream_queue.append(_KeepaliveOnlyResponse([]))
+    provider = _provider(request_timeout=1)
+    started = time.monotonic()
+    with pytest.raises(RuntimeError, match="stream stalled") as excinfo:
+        async for _ in provider.chat_stream(MESSAGES):
+            pass
+    # bounded by the idle timeout (~1s), not by the caller's cap
+    assert time.monotonic() - started < 10
+    from dashscope.acli.providers.hardening import is_retryable_error
+
+    assert is_retryable_error(excinfo.value)
+
+
+async def test_stream_stall_after_content_raises(fake_http):
+    fake_http._stream_queue.append(_StallAfterContentResponse([]))
+    provider = _provider(request_timeout=1)
+    chunks = []
+    with pytest.raises(RuntimeError, match="stream stalled"):
+        async for chunk in provider.chat_stream(MESSAGES):
+            chunks.append(chunk)
+    assert any(c.delta_content for c in chunks)

@@ -27,6 +27,7 @@ from dashscope.acli.memory.manager import MemoryManager
 from dashscope.acli.memory.reflection import (
     convergence_hint,
     is_readonly_tool_call,
+    time_budget_hint,
 )
 from dashscope.acli.platforms.base import MemoryProvider
 from dashscope.acli.prompt_pipeline import PromptContext, default_pipeline
@@ -253,6 +254,34 @@ class Agent:
             )
         except ValueError:
             self.converge_hard_ratio = 0.85
+        # Wall-clock budget nudge (oneshot only): the turn-count convergence
+        # hint never fires when a run is few-but-huge generations, yet the
+        # harness kills the run on wall time all the same — and the hard-set
+        # tasks that died so (dna-assembly, write-compressor) all died with
+        # their deliverable never written. The bench adapter injects the
+        # in-container `timeout` value as ACLI_TIME_BUDGET_SEC; unset/<=0
+        # disables. Ratios: ACLI_TIME_SOFT / ACLI_TIME_HARD.
+        try:
+            self.time_budget_sec = float(
+                os.environ.get("ACLI_TIME_BUDGET_SEC", "0"),
+            )
+        except ValueError:
+            self.time_budget_sec = 0.0
+        try:
+            self.time_soft_ratio = float(
+                os.environ.get("ACLI_TIME_SOFT", "0.5"),
+            )
+        except ValueError:
+            self.time_soft_ratio = 0.5
+        try:
+            self.time_hard_ratio = float(
+                os.environ.get("ACLI_TIME_HARD", "0.8"),
+            )
+        except ValueError:
+            self.time_hard_ratio = 0.8
+        # Monotonic anchor for the budget above, set on the first turn: a
+        # wall clock would credit host-suspend time the process never had.
+        self._run_started: float | None = None
         # Silence nudge: one reminder per turn after N tool calls have gone by
         # without any prose reaching the user. Mode-independent on purpose —
         # the shape this exists for is an interactive turn of *distinct*
@@ -289,6 +318,14 @@ class Agent:
         if self.oneshot:
             self.system_prompt = (self.system_prompt or SYSTEM_PROMPT) + (
                 "\n\nTask execution policy (autonomous mode):\n"
+                "- Work from a written plan, not from memory: early in the "
+                "run, write a short plan file (goal, acceptance check, "
+                "ordered steps); after each step, record in it what is done "
+                "and what remains; before reporting completion, re-read it "
+                "and verify each item. Sketch the deliverable itself first, "
+                "then iterate on it. Never spend a whole turn only "
+                "thinking — every turn must land something on disk: a file, "
+                "a measurement, or an updated plan.\n"
                 "- If the request has a measurable acceptance criterion "
                 "(numeric threshold, size/time limit, test suite, "
                 "similarity/accuracy target), iterate until it is met: "
@@ -297,10 +334,16 @@ class Agent:
                 "toward the target — but once the criterion is met, lock it "
                 "in and finish rather than risk regressing a passing result. "
                 "Heed any budget-check hint: it tells you when to converge "
-                "or switch to a different approach.\n"
-                "- Before reporting completion, self-verify with the same "
-                "check the requester will apply (run the tests, recompute "
-                "the metric, validate the format). Fix what fails instead "
+                "or switch to a different approach. A wall-clock hint means "
+                "the run is killed when time runs out: get the required "
+                "deliverable written early, then keep improving it.\n"
+                "- Before reporting completion, turn every stated "
+                "requirement into its own executable check and run them "
+                "all — the measurable criterion, the format rules, and "
+                "any constraint that mentions components the deliverable "
+                "must contain. Where a check depends on domain facts, "
+                "state the fact explicitly first (a wrong assumption is "
+                "worse than a flagged unknown). Fix what fails instead "
                 "of handing back a near miss.\n"
                 "- When a check fails close to the target, treat it as "
                 "actionable feedback: change the approach based on what "
@@ -593,6 +636,17 @@ class Agent:
             self.converge_hard_ratio,
         )
 
+    def _time_budget_section(self) -> str:
+        """Wall-clock budget nudge; see time_budget_hint for the rationale."""
+        if not self.oneshot or self._run_started is None:
+            return ""
+        return time_budget_hint(
+            time.monotonic() - self._run_started,
+            self.time_budget_sec,
+            self.time_soft_ratio,
+            self.time_hard_ratio,
+        )
+
     def _silence_section(self) -> str:
         """Inject one reminder when tool calls stop producing prose.
 
@@ -732,6 +786,8 @@ class Agent:
 
         # Clear tool tracking for new turn
         self._current_turn_tools = []
+        if self._run_started is None:
+            self._run_started = time.monotonic()
         self.turn_tool_calls = 0
         self.turn_subagents = 0
         self.turn_mcp_calls = 0
@@ -827,13 +883,14 @@ class Agent:
             # second one would replace the real prompt outright, and the Tongyi
             # converter only reads messages[0] as system.
             #
-            # All four sections are rebuilt every iteration because tracker
+            # All five sections are rebuilt every iteration because tracker
             # state changes as tools run; each returns "" when its condition
             # is not met, so an empty hint costs no message at all.
             hint_parts = {
                 "reflection": self._reflection_section(),
                 "stagnation": self._stagnation_section(),
                 "convergence": self._convergence_section(_loop_i),
+                "time_budget": self._time_budget_section(),
                 "silence": self._silence_section(),
             }
             hint = "".join(hint_parts.values()).strip()
@@ -869,6 +926,7 @@ class Agent:
             tool_calls: list[ToolCall] = []
             seen_tool_calls: set[tuple[str, str]] = set()
             last_chunk = None
+            finish_reason = ""
             llm_start = time.monotonic()
 
             # Turn-level retry around the streaming call, for providers that
@@ -888,6 +946,7 @@ class Agent:
                 tool_calls = []
                 seen_tool_calls = set()
                 last_chunk = None
+                finish_reason = ""
                 emitted = False
                 try:
                     async for chunk in self.provider.chat_stream(
@@ -931,6 +990,8 @@ class Agent:
                         if chunk.usage:
                             self.executor.record_api_call(chunk.usage)
                             last_chunk = chunk
+                        if chunk.finish_reason:
+                            finish_reason = chunk.finish_reason
                     break
                 except Exception as e:
                     if (
@@ -1024,6 +1085,38 @@ class Agent:
                     self.turn_mcp_calls += 1
 
             if not tool_calls:
+                if finish_reason == "length":
+                    # Output cap cut the generation mid-turn: this is not a
+                    # final answer, so skip the gate and do not break. The
+                    # partial goes into history and the loop continues with
+                    # a shorter-chunks demand — which is also what makes
+                    # every between-iteration mechanism (time budget,
+                    # convergence, reflection) reachable again on the
+                    # monolithic-generation failure shape (2 requests per
+                    # 1800s in run 2026-10-12__time-069).
+                    partial = full_content or (
+                        "[response cut off by the output-length limit "
+                        "during planning, before any visible output]"
+                    )
+                    cut_msg: dict = {"role": "assistant", "content": partial}
+                    if full_reasoning:
+                        cut_msg["reasoning_content"] = full_reasoning
+                    self.messages.append(cut_msg)
+                    messages_with_system.append(cut_msg)
+                    nudge = (
+                        "[Output-length limit reached — your response was "
+                        "cut off. Continue working, but keep each response "
+                        "short: put plans and intermediate results into "
+                        "files with write_file in small pieces instead of "
+                        "one long response; if you were composing the "
+                        "deliverable, write it now in several smaller "
+                        "calls.]"
+                    )
+                    yield f"\n{nudge}\n"
+                    nudge_msg = {"role": "user", "content": nudge}
+                    self.messages.append(nudge_msg)
+                    messages_with_system.append(nudge_msg)
+                    continue
                 # Acceptance gate. This branch is the loop's only voluntary
                 # exit, so it is the one place where "the model is done" can
                 # be checked against something other than the model's own
