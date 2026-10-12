@@ -259,12 +259,14 @@ class EnvironmentListParams(BaseModel):
 class SessionCreateParams(BaseModel):
     """Request body for ``POST /sessions``.
 
-    ``agent`` is the agent ID string (not the full agent object).
-    ``resources`` is an optional list of file mounts; each item is a
-    mapping with ``type``, ``file_id`` and ``mount_path`` keys.
-    ``vault_ids`` is create-only — attach vaults (``vlt_*``) whose
-    credentials are substituted at egress; the session update path does
-    not accept it.
+    ``agent`` accepts the Agent ID string (backward compatible) **or** an
+    Agent reference/override object (a mapping with
+    ``type="agent_with_overrides"``) that establishes Session-level
+    overrides for ``system``/``tools``/``mcp_servers``/``skills``.
+
+    ``environment_variables`` and ``mcp_configs`` are Session-level
+    settings independent of the agent. ``resources`` is create-only — it
+    cannot be modified via ``updateSession``.
     """
 
     _fields = (
@@ -273,45 +275,92 @@ class SessionCreateParams(BaseModel):
         "title",
         "resources",
         "vault_ids",
+        "environment_variables",
+        "mcp_configs",
         "metadata",
     )
 
     def __init__(  # pylint: disable=useless-parent-delegation
         self,
         *,
-        agent: str,
+        agent: Any,
         environment_id: Optional[str] = None,
         title: Optional[str] = None,
         resources: Optional[Sequence[Mapping[str, Any]]] = None,
         vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
+        mcp_configs: Optional[Sequence[Mapping[str, Any]]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> None:
         super().__init__(
-            agent=agent,
+            agent=_to_mapping(agent),
             environment_id=environment_id,
             title=title,
             resources=(
                 [dict(r) for r in resources] if resources is not None else None
             ),
             vault_ids=(list(vault_ids) if vault_ids is not None else None),
+            environment_variables=(
+                dict(environment_variables)
+                if environment_variables is not None
+                else None
+            ),
+            mcp_configs=(
+                [_to_mapping(m) for m in mcp_configs]
+                if mcp_configs is not None
+                else None
+            ),
             metadata=(dict(metadata) if metadata is not None else None),
         )
 
 
 class SessionUpdateParams(BaseModel):
-    """Request body for ``POST /sessions/{id}``."""
+    """Request body for ``POST /sessions/{id}``.
 
-    _fields = ("title", "metadata")
+    Omitted (``None``) fields are not sent — the existing value is kept;
+    ``[]`` / ``{}`` explicitly clear the value. ``agent`` is a Session-level
+    Agent config patch (a plain mapping carrying only ``system``/``tools``/
+    ``mcp_servers``/``skills``); the mapping is passed through verbatim so
+    an explicit ``None`` sub-field serializes to JSON ``null`` (delete the
+    override and re-inherit), an omitted sub-field stays absent (keep the
+    override), and ``[]`` / ``""`` override to empty. The server enforces
+    the override principle; the SDK does not read or merge the agent source.
+    """
+
+    _fields = (
+        "title",
+        "metadata",
+        "vault_ids",
+        "environment_variables",
+        "agent",
+        "mcp_configs",
+    )
 
     def __init__(  # pylint: disable=useless-parent-delegation
         self,
         *,
         title: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
+        vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
+        agent: Any = None,
+        mcp_configs: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> None:
         super().__init__(
             title=title,
             metadata=(dict(metadata) if metadata is not None else None),
+            vault_ids=(list(vault_ids) if vault_ids is not None else None),
+            environment_variables=(
+                dict(environment_variables)
+                if environment_variables is not None
+                else None
+            ),
+            agent=(_to_mapping(agent) if agent is not None else None),
+            mcp_configs=(
+                [_to_mapping(m) for m in mcp_configs]
+                if mcp_configs is not None
+                else None
+            ),
         )
 
 

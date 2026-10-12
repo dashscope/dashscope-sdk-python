@@ -49,11 +49,13 @@ class Sessions:
     def create(
         self,
         *,
-        agent: str,
+        agent: Any,
         environment_id: Optional[str] = None,
         title: Optional[str] = None,
         resources: Optional[Sequence[Mapping[str, Any]]] = None,
         vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
+        mcp_configs: Optional[Sequence[Mapping[str, Any]]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> Session:
         body = SessionCreateParams(
@@ -62,6 +64,8 @@ class Sessions:
             title=title,
             resources=resources,
             vault_ids=vault_ids,
+            environment_variables=environment_variables,
+            mcp_configs=mcp_configs,
             metadata=metadata,
         ).to_dict()
         resp = self._client.transport.request(
@@ -90,10 +94,18 @@ class Sessions:
         *,
         title: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
+        vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
+        agent: Any = None,
+        mcp_configs: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> Session:
         body = SessionUpdateParams(
             title=title,
             metadata=metadata,
+            vault_ids=vault_ids,
+            environment_variables=environment_variables,
+            agent=agent,
+            mcp_configs=mcp_configs,
         ).to_dict()
         resp = self._client.transport.request(
             "POST",
@@ -176,11 +188,13 @@ class AsyncSessions:
     async def create(
         self,
         *,
-        agent: str,
+        agent: Any,
         environment_id: Optional[str] = None,
         title: Optional[str] = None,
         resources: Optional[Sequence[Mapping[str, Any]]] = None,
         vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
+        mcp_configs: Optional[Sequence[Mapping[str, Any]]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> Session:
         body = SessionCreateParams(
@@ -189,6 +203,8 @@ class AsyncSessions:
             title=title,
             resources=resources,
             vault_ids=vault_ids,
+            environment_variables=environment_variables,
+            mcp_configs=mcp_configs,
             metadata=metadata,
         ).to_dict()
         resp = await self._client.transport.request(
@@ -217,10 +233,18 @@ class AsyncSessions:
         *,
         title: Optional[str] = None,
         metadata: Optional[Mapping[str, Any]] = None,
+        vault_ids: Optional[Sequence[str]] = None,
+        environment_variables: Optional[Mapping[str, str]] = None,
+        agent: Any = None,
+        mcp_configs: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> Session:
         body = SessionUpdateParams(
             title=title,
             metadata=metadata,
+            vault_ids=vault_ids,
+            environment_variables=environment_variables,
+            agent=agent,
+            mcp_configs=mcp_configs,
         ).to_dict()
         resp = await self._client.transport.request(
             "POST",

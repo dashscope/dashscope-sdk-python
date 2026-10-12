@@ -558,6 +558,8 @@ class Session(BaseModel):
         "stats",
         "usage",
         "vault_ids",
+        "environment_variables",
+        "mcp_configs",
         "archived_at",
         "created_at",
         "updated_at",
