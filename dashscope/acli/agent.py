@@ -347,7 +347,14 @@ class Agent:
                 "of handing back a near miss.\n"
                 "- When a check fails close to the target, treat it as "
                 "actionable feedback: change the approach based on what "
-                "the measurement shows, then re-measure."
+                "the measurement shows, then re-measure.\n"
+                "- Do not stake a large share of the remaining budget on "
+                "one long unverified command: before an install, compile "
+                "or download that could run for minutes, spend seconds "
+                "probing that the path can succeed at all (package "
+                "available, toolchain present); give long commands an "
+                "explicit timeout so a stuck one fails fast and frees "
+                "the rest of the budget."
             )
             if self._acceptance_gate.active:
                 # An armed gate implies oneshot — from_env hands back an empty
@@ -645,6 +652,68 @@ class Agent:
             self.time_budget_sec,
             self.time_soft_ratio,
             self.time_hard_ratio,
+        )
+
+    # Seconds of wall-clock budget a single run_command may never consume:
+    # the remainder minus a reserve for writing/finalizing the deliverable.
+    # Run 2026-10-12__reqenum-0612 lost 720s of an 1800s budget to two
+    # run_command timeouts (a 600s pip compile that could never succeed
+    # offline plus a 120s follow-up) and died with the deliverable never
+    # written; the hint alone can only ask, this enforces.
+    _CMD_TIMEOUT_RESERVE_SEC = 180
+    _CMD_TIMEOUT_MIN_SEC = 30
+
+    def _command_timeout_ceiling(self) -> int | None:
+        """Max seconds one run_command may take, or None when unbudgeted."""
+        if (
+            not self.oneshot
+            or self.time_budget_sec <= 0
+            or self._run_started is None
+        ):
+            return None
+        remaining = self.time_budget_sec - (
+            time.monotonic() - self._run_started
+        )
+        return max(
+            self._CMD_TIMEOUT_MIN_SEC,
+            int(remaining - self._CMD_TIMEOUT_RESERVE_SEC),
+        )
+
+    def _clamp_run_command_timeout(self, tool_call) -> str:
+        """Clamp run_command's timeout to the budget ceiling.
+
+        Mutates tool_call.arguments and returns a note for the tool
+        result when it clamped, "" otherwise. The note must ride the
+        result: the assistant's own tool_call entry in history keeps the
+        model's original arguments, so without it the model cannot see
+        why its 600s command died at 120s.
+        """
+        if tool_call.name != "run_command":
+            return ""
+        ceiling = self._command_timeout_ceiling()
+        if ceiling is None:
+            return ""
+        from dashscope.acli.tools.shell import default_timeout
+
+        raw = tool_call.arguments.get("timeout")
+        try:
+            current = (
+                int(raw) if raw not in (None, "", 0) else default_timeout()
+            )
+        except (TypeError, ValueError):
+            current = default_timeout()
+        if current <= ceiling:
+            return ""
+        tool_call.arguments["timeout"] = ceiling
+        remaining = self.time_budget_sec - (
+            time.monotonic() - self._run_started
+        )
+        return (
+            f"[timeout clamped from {current}s to {ceiling}s: "
+            f"{int(remaining)}s of wall-clock budget remain, "
+            f"{self._CMD_TIMEOUT_RESERVE_SEC}s reserved for finalizing. "
+            "Break the work into commands that fit, or pick a path that "
+            "does not need the long step at all.]\n"
         )
 
     def _silence_section(self) -> str:
@@ -1400,6 +1469,10 @@ class Agent:
         if not tool_def:
             return f"Error: unknown tool '{tool_call.name}'"
 
+        # Budget back-pressure on the one tool that can burn minutes of
+        # wall clock in a single call; see _clamp_run_command_timeout.
+        budget_note = self._clamp_run_command_timeout(tool_call)
+
         # Track tool usage for experience recording (deduped, keep
         # first-use order)
         if tool_call.name not in self._current_turn_tools:
@@ -1487,6 +1560,8 @@ class Agent:
         )
         duration_ms = int((time.time() - start_time) * 1000)
         result = outcome.text
+        if budget_note:
+            result = budget_note + result
         success = outcome.ok
         self.trace_logger.log_tool_execution(
             tool_call.name,
