@@ -691,7 +691,7 @@ class Agent:
         if tool_call.name != "run_command":
             return ""
         ceiling = self._command_timeout_ceiling()
-        if ceiling is None:
+        if ceiling is None or self._run_started is None:
             return ""
         from dashscope.acli.tools.shell import default_timeout
 

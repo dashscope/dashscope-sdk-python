@@ -371,7 +371,9 @@ def test_reasoning_content_is_stripped_from_the_wire():
 
 
 def test_max_output_tokens_sent_when_configured():
-    body = _provider(max_output_tokens=4096)._build_request_body(  # pylint: disable=protected-access
+    body = _provider(
+        max_output_tokens=4096,
+    )._build_request_body(  # pylint: disable=protected-access
         MESSAGES,
         None,
     )
@@ -398,7 +400,9 @@ def test_max_output_tokens_env_override(monkeypatch):
 
 
 def test_thinking_budget_sent_when_configured():
-    body = _provider(thinking_budget=4096)._build_request_body(  # pylint: disable=protected-access
+    body = _provider(
+        thinking_budget=4096,
+    )._build_request_body(  # pylint: disable=protected-access
         MESSAGES,
         None,
     )
