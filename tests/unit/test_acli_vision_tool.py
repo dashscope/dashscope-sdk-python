@@ -213,7 +213,9 @@ class TestPickVisionModel:
             "dashscope.acli.extensions.find_provider",
             lambda name: None,
         )
-        assert vision.pick_vision_model(_config()) == "qwen-vl-max"
+        # qwen-vl-max is retired on the public DashScope endpoint (404);
+        # the tongyi fallback must be a currently-served VL model.
+        assert vision.pick_vision_model(_config()) == "qwen3-vl-plus"
         cfg = _config()
         cfg.provider = "openai"
         assert vision.pick_vision_model(cfg) == "gpt-4o"

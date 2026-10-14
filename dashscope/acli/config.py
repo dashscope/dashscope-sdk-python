@@ -32,6 +32,7 @@ PROVIDER_MODELS = {
         "qwen-max",
         "qwen-plus",
         "qwen-turbo",
+        "qwen3-vl-plus",
         "qwen-vl-max",
         "qwen-vl-plus",
         "qwen-omni-turbo",

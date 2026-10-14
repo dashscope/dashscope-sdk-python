@@ -745,8 +745,10 @@ def time_budget_hint(
     these runs lack.
 
     Returns "" below ``soft_ratio`` or when ``budget_sec`` is unset/<=0;
-    a secure-the-deliverable nudge in the soft band; a best-version-on-disk
-    finalize nudge at/after ``hard_ratio``.
+    a secure-the-deliverable nudge in the soft band; a finalize nudge
+    at/after ``hard_ratio`` that forces a partial write when the disk is
+    still empty — "best version on disk" means nothing to a run that has
+    written nothing (solve-sudoku in 2026-10-12__medium12 died that way).
     """
     if budget_sec <= 0 or elapsed_sec < 0:
         return ""
@@ -762,9 +764,12 @@ def time_budget_hint(
             f"({remaining_i}s left).\n"
             "Do NOT start a new approach — there is no time left to debug "
             "it. Right now:\n"
-            "1. Make sure the deliverable file on disk is the best version "
-            "you have produced (overwrite a broken draft with an older "
-            "working one if needed).\n"
+            "1. If the required deliverable file is not on disk yet, write "
+            "your current best partial answer to it immediately — an "
+            "incomplete or placeholder version can still score; an empty "
+            "path scores zero. If one is on disk, make sure it is the best "
+            "version you have produced (overwrite a broken draft with an "
+            "older working one if needed).\n"
             "2. Run ONE final verification against the acceptance "
             "criterion.\n"
             "3. Finish.\n"

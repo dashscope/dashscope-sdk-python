@@ -163,7 +163,22 @@ Rules:
     never claim a change works without having executed it. When the output
     transforms or joins data (ETL, CSV/JSON, migrations), also assert every
     cross-reference resolves — schema-valid output with dangling IDs still
-    fails
+    fails. When the task names a ground-truth tool or command for a check,
+    run the final verification with that exact tool and its stated
+    parameters — a calibrated substitute proves nothing about the grade
+18. **Snapshot a fragile artifact before inspecting it.** A tool meant to
+    read can still mutate what it opens — SQLite deletes an invalid WAL
+    when the connection closes, and destroyed evidence cannot be
+    re-downloaded. Copy the file to scratch space first (cp to /tmp), or
+    open it immutably (e.g. sqlite3 'file:...?immutable=1')
+19. **Read images with the vision model, not by proxy.** When a task
+    hinges on perceiving an image — text or digits in a picture, a chart,
+    a rendered layout — call view_image on the file itself; reading it
+    back through terminal-resolution ASCII art or hand-rolled pixel
+    scripts throws away exactly the detail the answer depends on. If the
+    artifact is data rather than an image (geometry, toolpaths, a
+    waveform), render it to a PNG first and then look at it with
+    view_image
 
 Reply style:
 - **Concise**. No filler like "let me see / let me help you / I'll analyze
@@ -236,6 +251,14 @@ class Agent:
             self.turn_retry_max = 2
         self.turn_retry_delay = 5.0
         self.turn_retry_backoff_cap = 30.0
+        # Empty-turn backstop (oneshot only): a turn that ends with no tool
+        # calls and no content is a provider failure shape, not "done". An
+        # autonomous run must not exit on it while budget remains — nudge
+        # and continue, bounded so a persistently empty endpoint still
+        # terminates. Interactive keeps the historical break: there the
+        # user sees the notice and simply speaks again.
+        self._empty_turns = 0
+        self._empty_turn_max = 2
         # Budget-aware convergence nudge (oneshot only): as the turn budget is
         # consumed, tell the agent to switch approach if plateaued, lock in an
         # already-passing result, then finalize. Covers productive-but-stuck
@@ -1005,9 +1028,14 @@ class Agent:
             # by turn_retry_max, which against a stalled endpoint measured
             # 819s of silent wall clock from a 60s configured timeout. A
             # budget spent failing fast is still re-attempted — see
-            # _budget_burned_slowly. We only retry when nothing has been
-            # streamed yet; once content is yielded, a retry would duplicate
-            # output, so that case degrades to a partial turn instead.
+            # _budget_burned_slowly. We only retry when nothing user-visible
+            # was streamed yet; once content is yielded, a retry would
+            # duplicate output, so that case degrades to a partial turn
+            # instead. Reasoning chunks do not count as emitted: they are
+            # never yielded to the user, so retrying a stream that carried
+            # only thinking duplicates nothing. A stalled stream of pure
+            # reasoning otherwise slipped past both retry layers and ended
+            # the run as an empty turn (dna-insert, 2026-10-12__fix-071).
             turn_attempt = 0
             while True:
                 full_content = ""
@@ -1035,7 +1063,6 @@ class Agent:
                             yield chunk.delta_content
 
                         if chunk.delta_reasoning_content:
-                            emitted = True
                             full_reasoning += chunk.delta_reasoning_content
 
                         if chunk.tool_calls:
@@ -1142,6 +1169,8 @@ class Agent:
                 self._silent_tool_calls = 0
             else:
                 self._silent_tool_calls += len(tool_calls)
+            if full_content.strip() or tool_calls:
+                self._empty_turns = 0
             for tc in tool_calls:
                 if tc.name in ("delegate", "subagent_invoke"):
                     self.turn_subagents += 1
@@ -1242,6 +1271,28 @@ class Agent:
                     self.messages.append(final_msg)
                     last_content = full_content
                 else:
+                    if (
+                        self.oneshot
+                        and self._empty_turns < self._empty_turn_max
+                    ):
+                        # A stall that slipped both retry layers (reasoning-
+                        # only stream, then a clean-but-empty stop) must not
+                        # pass for "done": with budget left, exiting here is
+                        # how dna-insert died at 562/1800s with the
+                        # deliverable never written (2026-10-12__fix-071).
+                        self._empty_turns += 1
+                        nudge = (
+                            "[Empty response: the model returned no content "
+                            "and no tool calls. The task is not finished — "
+                            "keep working: re-read your plan file and take "
+                            "the next step; if a deliverable file is "
+                            "required, make sure it exists on disk.]"
+                        )
+                        yield f"\n{nudge}\n"
+                        nudge_msg = {"role": "user", "content": nudge}
+                        self.messages.append(nudge_msg)
+                        messages_with_system.append(nudge_msg)
+                        continue
                     yield (
                         "\n[Model returned no content; the model name "
                         "may not exist or the service is unresponsive]\n"

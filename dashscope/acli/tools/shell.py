@@ -28,6 +28,157 @@ IS_WINDOWS = os.name == "nt"
 # POSIX, hence getattr.
 _NEW_GROUP_FLAGS = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
+# Moment-of-relevance tool discovery: when a command touches an image
+# file, or its output is a terminal approximation of something visual
+# (ASCII-art render), a tip reminds the model that perception belongs to
+# view_image. A static system-prompt rule is invisible once the model
+# has framed the task as hand-rolled CV — solve-sudoku and gcode-to-text
+# burned five runs between them on terminal ASCII cell/glyph extraction
+# with view_image in the schema the whole time (zero mentions of it in
+# the transcripts).
+_IMAGE_PATH_RE = re.compile(
+    r"\.(?:png|jpe?g|gif|bmp|webp|tiff?|svg|heic)\b",
+    re.IGNORECASE,
+)
+_VISION_TIP_MAX = 3
+_vision_tip_count = 0
+
+# Escalating wording by sighting ordinal: a soft pointer first, then a
+# directive with the evidence, then blunt. solve-sudoku (071e) saw the
+# soft tip at t=6s — before any route commitment — and still spent the
+# run on read_file binary dumps and pixel scripts, so repetition alone
+# is not the lever; the tone has to change.
+# Escalating wording by sighting ordinal — but the first sighting is
+# already directive. solve-sudoku (071e/071g) ignored the soft opener at
+# t=6s twice and committed to hand-rolled extraction; the directive tone
+# that later tips carried moved tooling within minutes (tesseract
+# installed), just too late to rebuild the route around it. The verdict
+# has to arrive before the route does.
+_VISION_TIPS = (
+    "this looks like image-perception work, and terminal/pixel "
+    "approximations lose exactly the detail the answer depends on — "
+    "use a purpose-built tool from the start: call view_image on the "
+    "image (for data you rendered, render a PNG first and call it on "
+    "that); for exact digit-level text, run a local OCR engine such "
+    "as tesseract on the image file",
+    "the proxy route has already started, and hand-rolled pixel "
+    "extraction has produced wrong answers in practice — stop and "
+    "switch: view_image on the image (or a PNG render), or tesseract "
+    "OCR for exact text",
+    "if you keep your own extraction, cross-check it with an "
+    "independent method (view_image, or tesseract for exact text) — "
+    "one misread value quietly invalidates everything built on it",
+)
+
+
+def _looks_like_ascii_art(output: str) -> bool:
+    """Grid of low-alphabet lines: the signature of rendering to text.
+
+    A binary numpy matrix print qualifies too — and should, since
+    eyeballing a bitmap in text form is the same failure shape. Hex
+    dumps (rich per-line alphabet) and markdown tables (short lines or
+    rich alphabet) stay out.
+
+    Judged on the grid lines alone: the truncation notice and [stderr]
+    marker this tool appends are prose, and counting them in the alphabet
+    silenced the detector on every large render (gcode-to-text,
+    2026-10-13__fix-071d). Renderers also rstrip rows, so sparse art
+    comes in under 40 chars a line — the floor is 30, plus an absolute
+    grid-line count so progress-bar spam and `seq` output stay out.
+    """
+    lines = [ln for ln in output.split("\n") if ln.strip()]
+    if len(lines) < 10:
+        return False
+    grid = [ln for ln in lines if len(ln) >= 30 and len(set(ln)) <= 8]
+    if len(grid) < 10 or len(grid) < 0.5 * len(lines):
+        return False
+    return len(set("".join(grid))) <= 12
+
+
+def _vision_inject(command: str) -> str:
+    """Perception delivered into the command result itself.
+
+    read_file's auto-perceive only fires when the model opens the image
+    with read_file — but the bench evidence (071j) is that the model's
+    perception channel is run_command: `file sudoku.jpeg` at t=0s, then
+    heredoc pixel scripts for the rest of the budget, never a read_file.
+    When a command references an image file, resolve it (absolute,
+    process cwd, or a `cd` target earlier in the command) and inject the
+    auto-perception inline. SVG is excluded: it is XML markup the model
+    reads fine as text. Falls back to the tip when no image resolves or
+    the hook is unavailable.
+    """
+    if os.environ.get("ACLI_AUTO_VISION", "1") == "0":
+        return ""
+    if not _IMAGE_PATH_RE.search(command):
+        return ""
+    from dashscope.acli.tools import vision
+
+    if not vision.perception_available():
+        return ""
+
+    tokens = re.split(r"[\s\"'()=<>]+", command)
+    candidates = []
+    for tok in tokens:
+        tok = tok.strip(";,:")
+        if (
+            _IMAGE_PATH_RE.search(tok)
+            and not tok.lower().endswith(".svg")
+            and tok not in candidates
+        ):
+            candidates.append(tok)
+    if not candidates:
+        return ""
+
+    bases = [os.getcwd()]
+    bases += re.findall(r"(?:^|&&|\|\||;)\s*cd\s+([^\s;&|]+)", command)
+    for cand in candidates:
+        if os.path.isabs(cand):
+            trials = [cand]
+        else:
+            trials = [os.path.join(b, cand) for b in bases]
+        for p in trials:
+            if os.path.isfile(p):
+                perceived = vision.auto_perceive(p, via="command")
+                if perceived is not None:
+                    return "\n" + perceived
+                break
+    return ""
+
+
+def _vision_tip(command: str, output: str) -> str:
+    """Pointer at view_image, fired at the moment perception is on the
+    table. Covers reading an existing image, writing one (perceive your
+    own render), and the ASCII-art fallback shape. ACLI_VISION_TIP=0
+    disables. Once perception has actually happened — a view_image call,
+    or a read_file auto-perception — the tool-choice battle is over:
+    tips stop instead of nagging a model that already has the image
+    content (and may be rendering PNGs for it)."""
+    global _vision_tip_count
+    if _vision_tip_count >= _VISION_TIP_MAX:
+        return ""
+    if os.environ.get("ACLI_VISION_TIP", "1") == "0":
+        return ""
+    from dashscope.acli.tools import vision
+
+    if vision.view_image_call_count() > 0 or vision.auto_perceive_count() > 0:
+        return ""
+    if _IMAGE_PATH_RE.search(command):
+        reason = "this command references an image file"
+    elif _looks_like_ascii_art(output):
+        reason = "this output is a terminal approximation of something visual"
+    else:
+        return ""
+    text = _VISION_TIPS[min(_vision_tip_count, len(_VISION_TIPS) - 1)]
+    _vision_tip_count += 1
+    return f"\n[tip: {reason} — {text}]"
+
+
+def _reset_vision_tip() -> None:
+    """Test hook: the tip budget is per-process, suites need a clean slate."""
+    global _vision_tip_count
+    _vision_tip_count = 0
+
 
 def default_timeout() -> int:
     """Seconds a run_command call gets before it is killed.
@@ -792,4 +943,8 @@ async def run_command(command: str, timeout: int | None = None) -> str:
         )
 
     exit_info = f"\n[exit code: {proc.returncode}]"
-    return output.strip() + exit_info
+    return (
+        output.strip()
+        + exit_info
+        + (_vision_inject(command) or _vision_tip(command, output))
+    )

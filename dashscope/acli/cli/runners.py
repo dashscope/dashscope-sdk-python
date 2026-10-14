@@ -230,6 +230,13 @@ async def _run_oneshot(config: Config, prompt: str):
         get_mcp_clients_fn=lambda: _mcp_clients,
     )
 
+    # Vision too: without it, oneshot (every bench run 071c–071k) offered
+    # no view_image at all — the prompt named a tool the model could not
+    # see — and read_file/run_command auto-perceive had no context.
+    from dashscope.acli.tools.vision import register_vision_tools
+
+    register_vision_tools(config, get_provider_fn=get_provider)
+
     from dashscope.acli.tools.evolution import register_evolution_tools
 
     register_evolution_tools(get_agent=lambda: agent)

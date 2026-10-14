@@ -28,6 +28,26 @@ _READ_DEFAULT_LINES = 200
 # blow up the context on its own.
 _READ_MAX_CHARS = 100_000
 
+# Binary image formats read_file redirects to view_image: decoding them as
+# text returns replacement-char noise that is never what the caller wants
+# (solve-sudoku, 2026-10-13__fix-071e, read the 23KB jpeg this way and
+# perceived none of it). The redirect alone proved ignorable — 071i read
+# it at t=136s and was back to pixel scripting 3s later — so read_file now
+# auto-perceives the image inline when a vision context is registered, and
+# only prints the redirect when perception is unavailable. SVG stays
+# readable — it is XML markup, not binary.
+_IMAGE_BINARY_EXTS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".bmp",
+    ".webp",
+    ".tif",
+    ".tiff",
+    ".heic",
+}
+
 
 # ---------------------------------------------------------------------------
 # Tools
@@ -55,6 +75,21 @@ def read_file(
         return f"Error: {e}"
     if not os.path.isfile(path):
         return f"Error: file not found - {path}"
+
+    if os.path.splitext(path)[1].lower() in _IMAGE_BINARY_EXTS:
+        from dashscope.acli.tools import vision
+
+        perceived = vision.auto_perceive(path)
+        if perceived is not None:
+            return perceived
+        return (
+            f"[{path} is an image; reading it as text returns binary "
+            "noise, not its content. To perceive what the image shows — "
+            "text, digits, a chart, geometry — call view_image on this "
+            "path, or run tesseract OCR when exact text matters. For "
+            "metadata only (format, dimensions), run_command with "
+            "file/identify instead.]"
+        )
 
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
