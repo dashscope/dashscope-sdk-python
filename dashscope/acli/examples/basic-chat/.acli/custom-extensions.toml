@@ -24,7 +24,7 @@ models = [
     "qwen3.8-max",
     "qwen3.7-max",
     "qwen3.7-plus",
-    "qwen3.8-32b",
+    "qwen3.8-flash",
     "qwen3-vl-flash",
     "qwen3-vl-plus",
 ]
@@ -49,8 +49,8 @@ protocol = "openai"
 # [[providers]]
 # name = "ollama"
 # base_url = "http://localhost:11434/v1"
-# default_model = "qwen3.8-27b"
-# models = ["qwen3.8-27b", "mistral"]
+# default_model = "qwen3.8-flash"
+# models = ["qwen3.8-flash", "mistral"]
 # protocol = "openai"
 # auth = false   # local service, no API key needed
 

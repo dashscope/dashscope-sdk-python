@@ -55,7 +55,7 @@ else:
 from dashscope.agentstudio import Client
 from dashscope.agentstudio.types import user_message
 client = Client(api_key="sk-xxx", workspace="my-ws")
-agent = client.agents.create(name="demo", model="qwen3-235b-a22b-instruct-2507")
+agent = client.agents.create(name="demo", model="qwen3.8-flash")
 session = client.sessions.create(agent=agent.id)
 client.sessions.events.send(session.id, [user_message("Hello!")])
 with client.sessions.events.stream(session.id) as stream:

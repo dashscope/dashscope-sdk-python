@@ -10,7 +10,7 @@ Before answering, verify the user's SDK version and signature: `python -c "impor
 ## Applicable Models and Scenarios
 
 - Entry point `dashscope.Generation` (sync) / `dashscope.AioGeneration` (async, both top-level exports in `dashscope/__init__.py`), `task = "text-generation"`.
-- Plain text chat/continuation: qwen series (e.g. `qwen-plus`, `qwen3.8-32b`). `Generation.Models` only carries a few legacy constants; pass the current model name as a plain string.
+- Plain text chat/continuation: qwen series (e.g. `qwen3.7-plus`, `qwen3.8-flash`). `Generation.Models` only carries a few legacy constants; pass the current model name as a plain string.
 - The `model` parameter is just a `str`; the SDK does not validate against a whitelist. For new models like qwen3, pass the model name string directly; refer to the console/docs for exact names.
 - `enable_search` is only supported when `model` starts with `"qwen"`; when it starts with `"bailian"` you must pass `customized_model_id`, otherwise `InputRequired` is raised.
 - Do not use this API for multimodal; use `MultiModalConversation`.
@@ -75,7 +75,7 @@ from dashscope import Generation
 dashscope.api_key = "sk-xxx"  # or set env var DASHSCOPE_API_KEY
 
 # Non-streaming
-resp = Generation.call(model="qwen-plus",
+resp = Generation.call(model="qwen3.7-plus",
                        messages=[{"role": "user", "content": "Hello"}],
                        result_format="message")
 if resp.status_code == HTTPStatus.OK:
@@ -84,7 +84,7 @@ else:
     print(resp.request_id, resp.code, resp.message)
 
 # Streaming (incremental output)
-for r in Generation.call(model="qwen-plus",
+for r in Generation.call(model="qwen3.7-plus",
                          messages=[{"role": "user", "content": "Write a short poem"}],
                          result_format="message", stream=True,
                          incremental_output=True):
@@ -96,7 +96,7 @@ for r in Generation.call(model="qwen-plus",
 # OpenAI-compatible
 from openai import OpenAI
 client = OpenAI(api_key=dashscope.api_key, base_url=dashscope.base_compatible_api_url)
-print(client.chat.completions.create(model="qwen-plus",
+print(client.chat.completions.create(model="qwen3.7-plus",
       messages=[{"role": "user", "content": "Hello"}]).choices[0].message.content)
 ```
 
@@ -132,7 +132,7 @@ import com.alibaba.dashscope.aigc.generation.*;
 
 Generation gen = new Generation();
 GenerationParam param = GenerationParam.builder()
-        .model("qwen-plus")
+        .model("qwen3.7-plus")
         .messages(java.util.Arrays.asList(
             Message.builder().role("user").content("Hello").build()))
         .resultFormat("message")

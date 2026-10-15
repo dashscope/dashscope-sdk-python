@@ -15,7 +15,7 @@ models = [
     "qwen3.8-max",
     "qwen3.7-max",
     "qwen3.7-plus",
-    "qwen3.8-32b",
+    "qwen3.8-flash",
     "qwen3-vl-flash",
     "qwen3-vl-plus",
 ]

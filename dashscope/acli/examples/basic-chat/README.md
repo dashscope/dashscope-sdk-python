@@ -52,7 +52,7 @@ name = "tongyi"
 base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 api_key_env = "DASHSCOPE_API_KEY"      # ← stores only the env var name; the shell provides sk-xxx
 default_model = "qwen3.8-max"
-models = ["qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.8-32b", "qwen3-vl-flash"]
+models = ["qwen3.8-max", "qwen3.7-max", "qwen3.7-plus", "qwen3.8-flash", "qwen3-vl-flash"]
 vision_models = ["qwen3-vl-flash"]        # ← tells acli these models accept image input
 protocol = "openai"                     # ← openai / anthropic / dashscope
 ```

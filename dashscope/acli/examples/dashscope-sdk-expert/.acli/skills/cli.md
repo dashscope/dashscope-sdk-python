@@ -41,14 +41,14 @@ Prerequisite: `export DASHSCOPE_API_KEY=sk-xxx` (or pass the global `-k/--api-ke
 dashscope auth whoami                 # verify the active key against the API and show its source
 dashscope auth login --key sk-xxx     # save a key to ~/.dashscope/api_key
 dashscope auth logout                 # remove the saved key file
-dashscope generation create -m qwen-plus -p "Hello" -s --temperature 0.7
+dashscope generation create -m qwen3.7-plus -p "Hello" -s --temperature 0.7
 dashscope ft create -m qwen3.8-32b -t file-xxx -v file-yyy -e 2 -b 16 -l 1e-5
 dashscope files upload -f train.jsonl -p fine-tune -d "training set"
 dashscope deployments create -m qwen3.8-32b -s demo -c 1
-dashscope oss upload -m qwen-plus -f ./pic.png
+dashscope oss upload -m qwen3.7-plus -f ./pic.png
 dashscope rerank create -m gte-rerank -q "query" -d doc1 -d doc2 -n 3
 dashscope embeddings create -m text-embedding-v3 -i "text1" -i "text2"
-dashscope tokenization create -m qwen3.8-32b -p "text to count"
+dashscope tokenization create -m qwen3.8-flash -p "text to count"
 dashscope models list -p 1 -s 20
 dashscope application create -a APP_ID -p "question" --has-thoughts
 dashscope image-synthesis create -m qwen-image-3.0 -p "a cat" -n 2 --size 1024*1024
