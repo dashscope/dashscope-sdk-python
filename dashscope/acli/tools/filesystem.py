@@ -278,7 +278,8 @@ def delete_file(path: str) -> str:
 @tool(
     name="delete_directory",
     description=(
-        "Delete a directory and all its contents. " "This cannot be undone."
+        "Delete a directory and all its contents. The tree is checkpointed "
+        "first, so /undo can restore it within the checkpoint size budget."
     ),
     permission=PermissionLevel.DANGEROUS,
 )
@@ -294,6 +295,11 @@ def delete_directory(path: str) -> str:
     cwd = os.path.abspath(".")
     if abs_path == cwd:
         return "Error: cannot delete the current working directory"
+    # Checkpoint so /undo can restore the tree; oversized trees are recorded
+    # without a backup and undo will say so.
+    from dashscope.acli.tools import checkpoint
+
+    checkpoint.snapshot(path, "delete_dir")
     shutil.rmtree(path)
     return f"Deleted directory: {path}"
 

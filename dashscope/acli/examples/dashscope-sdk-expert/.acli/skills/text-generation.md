@@ -10,7 +10,7 @@ Before answering, verify the user's SDK version and signature: `python -c "impor
 ## Applicable Models and Scenarios
 
 - Entry point `dashscope.Generation` (sync) / `dashscope.AioGeneration` (async, both top-level exports in `dashscope/__init__.py`), `task = "text-generation"`.
-- Plain text chat/continuation: qwen series. Built-in constants in `Generation.Models`: `qwen_turbo="qwen-turbo"`, `qwen_plus="qwen-plus"`, `qwen_max="qwen-max"`; `qwen_v1` and `qwen_plus_v1` are deprecated (calls only warn).
+- Plain text chat/continuation: qwen series (e.g. `qwen-plus`, `qwen3.8-32b`). `Generation.Models` only carries a few legacy constants; pass the current model name as a plain string.
 - The `model` parameter is just a `str`; the SDK does not validate against a whitelist. For new models like qwen3, pass the model name string directly; refer to the console/docs for exact names.
 - `enable_search` is only supported when `model` starts with `"qwen"`; when it starts with `"bailian"` you must pass `customized_model_id`, otherwise `InputRequired` is raised.
 - Do not use this API for multimodal; use `MultiModalConversation`.
@@ -49,7 +49,7 @@ Returns: `Generator[GenerationResponse, None, None]` when `stream=True` (AsyncGe
 | enable_thinking / thinking_budget | bool/int | None | Hybrid thinking models: enable thinking / thinking token budget |
 | n / logprobs / top_logprobs | int/bool/int | None | Number of generations 1-4 / return log probabilities and candidates per position |
 | response_format | dict | None | e.g. `{"type": "json_object"}` (JSON mode) |
-| output_format | str | None | qwen-deep-research only: "model_detailed_report" (default) / "model_summary_report" |
+| output_format | str | None | Deep-research models only: "model_detailed_report" (default) / "model_summary_report" |
 | workspace / plugins | str/str\|dict | None | Workspace id / plugins (sent via `X-DashScope-Plugin` header) |
 
 ## Input/Output

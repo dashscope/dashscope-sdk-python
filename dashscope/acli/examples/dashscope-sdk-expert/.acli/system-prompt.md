@@ -63,6 +63,24 @@ When verification is needed, use `run_command` to inspect the installed `dashsco
 - **Find source**: `python -c 'import dashscope; import os; print(os.path.dirname(dashscope.__file__))'`
 - Then use `read_file` on the specific source file if needed.
 
+### Cookbook examples (examples/ directory)
+
+The Python SDK repo ships runnable cookbook scripts under `examples/`, organized by API generation. When the user asks you to implement a task, start from the matching script instead of writing from scratch:
+
+- `examples/v1/` — 1.x SDK (`dashscope.Generation`, `dashscope.MultiModalConversation`, ...): text generation (`generation/`, `aio_generation/`), multimodal chat (`multimodal_conversation/`, `aio_multimodal_conversation/`), image/video synthesis, application / agentstudio / assistants, speech (`qwen_tts.py`, `qwen_asr.py`), tingwu, rerank, embeddings.
+- `examples/v2/` — 2.0 SDK (resource-style `dashscope.Client()`): `chat.py`, `multimodal_chat.py`, `embeddings.py`, `images.py` / `videos.py` (one-shot generate + manual jobs flow), `rerank.py`, `models.py`, `files.py`, `apps.py`, `tokenization.py`, `audio_tts.py` / `audio_asr.py`, `tingwu.py`, `fine_tunes.py`.
+- Java cookbook samples are not in this repo; they live in the Java SDK repo (https://github.com/dashscope/dashscope-sdk-java) and are referenced by class name in the skills.
+
+### Python repo layout: v1.x vs 2.0 (V2)
+
+In the Python SDK repo the 2.0 API is isolated by directory. Only these paths are V2:
+
+- `dashscope/v2/` — the 2.0 client and resources
+- `tests/v2/` — V2 tests
+- `examples/v2/` — V2 cookbook
+
+Everything else (`dashscope/` top-level modules, the rest of `tests/`, `examples/v1/`) is v1.x code. Match the tree to the user's API generation before reading source or quoting examples: resource-style `dashscope.Client` calls → V2 paths; module-level `dashscope.Generation.call(...)` style → v1.x paths.
+
 ### Workflow
 
 1. Identify the question type (question about you / issue analysis / API question / example).

@@ -22,6 +22,12 @@ console = Console()
 # Maximum number of checkpoint entries kept in the index.
 _MAX_ENTRIES = 50
 
+# Size ceiling for backing up a directory tree: a node_modules-scale delete
+# would otherwise copy gigabytes into the checkpoint store on every call.
+# Oversized trees are recorded with no backup, so undo reports the gap
+# instead of pretending the delete is reversible.
+_MAX_DIR_BACKUP_BYTES = 256 * 1024 * 1024
+
 _INDEX_NAME = "index.jsonl"
 
 # Maps a checkpoint action to the tool name shown in undo messages.
@@ -29,7 +35,32 @@ _TOOL_BY_ACTION = {
     "overwrite": "write_file",
     "create": "write_file",
     "delete": "delete_file",
+    "delete_dir": "delete_directory",
 }
+
+
+def _remove_backup(cp_dir: Path, name: str) -> None:
+    """Drop one backup payload, file (``.bak``) or tree (``.bakdir``)."""
+    victim = cp_dir / name
+    try:
+        if name.endswith(".bakdir"):
+            shutil.rmtree(victim)
+        else:
+            os.remove(victim)
+    except OSError:
+        pass
+
+
+def _tree_size(path: str) -> int:
+    """Total bytes of every file under *path*; unreadable files count 0."""
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                continue
+    return total
 
 
 def _checkpoint_dir() -> Path:
@@ -88,9 +119,16 @@ def _snapshot(path: str, action: str) -> None:
     cp_dir.mkdir(parents=True, exist_ok=True)
     entry_id = uuid.uuid4().hex
     backup = None
+    note = None
     if os.path.isfile(abs_path):
         backup = entry_id + ".bak"
         shutil.copy2(abs_path, cp_dir / backup)
+    elif os.path.isdir(abs_path):
+        if _tree_size(abs_path) <= _MAX_DIR_BACKUP_BYTES:
+            backup = entry_id + ".bakdir"
+            shutil.copytree(abs_path, cp_dir / backup)
+        else:
+            note = "directory too large to back up"
     entry = {
         "id": entry_id,
         "path": abs_path,
@@ -98,6 +136,8 @@ def _snapshot(path: str, action: str) -> None:
         "action": action,
         "ts": time.time(),
     }
+    if note:
+        entry["note"] = note
     entries = _read_entries(cp_dir)
     entries.append(entry)
     overflow = len(entries) - _MAX_ENTRIES
@@ -107,10 +147,7 @@ def _snapshot(path: str, action: str) -> None:
         name = old.get("backup")
         if not name:
             continue
-        try:
-            os.remove(cp_dir / name)
-        except OSError:
-            pass
+        _remove_backup(cp_dir, name)
 
 
 def undo() -> str:
@@ -122,6 +159,33 @@ def undo() -> str:
         return _undo()
     except Exception as e:
         return f"Error: undo failed - {e}"
+
+
+def _restore_backup(
+    cp_dir: Path,
+    backup: str,
+    path: str,
+    tool_name: str,
+) -> str:
+    """Restore one backup payload (file or tree) to *path*."""
+    src = cp_dir / backup
+    if backup.endswith(".bakdir"):
+        if not src.is_dir():
+            return f"Error: backup directory missing for {path}"
+        shutil.copytree(src, path)
+        shutil.rmtree(src)
+        return f"Undid {tool_name}: restored {path}"
+    if not src.is_file():
+        return f"Error: backup file missing for {path}"
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    shutil.copy2(src, path)
+    try:
+        os.remove(src)
+    except OSError:
+        pass
+    return f"Undid {tool_name}: restored {path}"
 
 
 def _undo() -> str:
@@ -139,18 +203,7 @@ def _undo() -> str:
     tool_name = _TOOL_BY_ACTION.get(action, action or "unknown")
 
     if backup:
-        src = cp_dir / backup
-        if not src.is_file():
-            return f"Error: backup file missing for {path}"
-        parent = os.path.dirname(path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        shutil.copy2(src, path)
-        try:
-            os.remove(src)
-        except OSError:
-            pass
-        return f"Undid {tool_name}: restored {path}"
+        return _restore_backup(cp_dir, backup, path, tool_name)
 
     if action == "create":
         try:

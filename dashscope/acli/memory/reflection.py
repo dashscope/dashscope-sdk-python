@@ -789,3 +789,51 @@ def time_budget_hint(
             "is your best attempt."
         )
     return ""
+
+
+def compression_hint(
+    event: tuple[int, int] | None,
+    context_ratio: float,
+    warn_ratio: float = 0.40,
+) -> str:
+    """Context-window counterpart of the budget hints, persistence-first.
+
+    Auto-compression is silent by design at the UI layer (a dim console
+    line), but the *model* is never told its history was just rewritten —
+    it keeps referring to tool outputs and reasoning that no longer exist
+    in the prompt, and it gets no chance to move key state to disk while
+    the full text is still around. dsh's tracker shows the un-managed end
+    of this failure: a full window with no user-facing signal at all. The
+    window is shared with the soft compression trigger (50%), so the
+    pre-hint band sits just below it (40%) and the post-compression notice
+    fires once per event.
+
+    ``event`` is (old_count, new_count) when a compression just ran, else
+    None. Returns "" when nothing fired; ``warn_ratio >= SOFT`` would make
+    the pre-hint unreachable (compression fires first), so it is clamped
+    below the soft trigger by the caller passing a sane value.
+    """
+    if event is not None:
+        old_count, new_count = event
+        return (
+            "\n\n## 🗜 Context was just compressed\n"
+            f"History shrank from {old_count} to {new_count} messages; "
+            "earlier tool outputs and reasoning may be gone from your "
+            "context now.\n"
+            "- Re-read any file you still need instead of assuming you "
+            "remember its contents.\n"
+            "- If a finding or deliverable existed only in messages, write "
+            "it to disk now — the next compression will take what this one "
+            "left.\n"
+        )
+    if 0.0 < warn_ratio <= context_ratio:
+        pct = int(context_ratio * 100)
+        return (
+            "\n\n## 🗜 Context filling up\n"
+            f"About {pct}% of the context window is in use; automatic "
+            "compression is approaching.\n"
+            "Persist key findings and any deliverable to disk NOW, while "
+            "the full text is still in front of you. After compression, "
+            "only what is on disk is guaranteed to survive verbatim.\n"
+        )
+    return ""

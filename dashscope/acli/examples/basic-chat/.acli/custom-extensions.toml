@@ -24,11 +24,11 @@ models = [
     "qwen3.8-max",
     "qwen3.7-max",
     "qwen3.7-plus",
-    "qwen-turbo",
-    "qwen-vl-max",
-    "qwen-vl-plus",
+    "qwen3.8-32b",
+    "qwen3-vl-flash",
+    "qwen3-vl-plus",
 ]
-vision_models = ["qwen-vl-max", "qwen-vl-plus"]
+vision_models = ["qwen3-vl-flash", "qwen3-vl-plus"]
 protocol = "openai"
 
 # ============================================================================
@@ -49,8 +49,8 @@ protocol = "openai"
 # [[providers]]
 # name = "ollama"
 # base_url = "http://localhost:11434/v1"
-# default_model = "llama3"
-# models = ["llama3", "mistral"]
+# default_model = "qwen3.8-27b"
+# models = ["qwen3.8-27b", "mistral"]
 # protocol = "openai"
 # auth = false   # local service, no API key needed
 
@@ -68,42 +68,42 @@ protocol = "openai"
 #   - type = "vision"         — calls a vision LLM to read images; requires provider + model
 # ============================================================================
 
-# ---- Example 1: Tongyi Wanxiang image generation (HTTP tool, reuses DASHSCOPE_API_KEY) ----
+# ---- Example 1: Qwen-Image generation (HTTP tool, reuses DASHSCOPE_API_KEY) ----
 # export DASHSCOPE_API_KEY="xxx"
 # /capability enable dashscope.image
 # Say in chat: "draw a bicycle parked by a lake"
 # [[capabilities]]
 # key = "dashscope.image"
-# display = "Tongyi Wanxiang Image Generation"
+# display = "Qwen-Image Generation"
 # api_key_env = "DASHSCOPE_API_KEY"
 #
 # [[capabilities.tools]]
-# name = "generate_wan_image"
-# description = "Generate an image from a text description with the Tongyi Wanxiang Wan2.6 / Wanx models"
+# name = "generate_image"
+# description = "Generate an image from a text description with the open-source Qwen-Image model"
 # endpoint = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis"
 # http_method = "POST"
 # permission = "confirm"
 # params = [
 #   {name = "prompt", type = "string", required = true, description = "Image description"},
-#   {name = "model", type = "string", required = false, default = "wanx2.1-t2i-turbo", description = "Image generation model name"},
+#   {name = "model", type = "string", required = false, default = "qwen-image-3.0", description = "Image generation model name"},
 #   {name = "size", type = "string", required = false, default = "1024x1024", description = "Output image size"},
 # ]
 # body_template = '{"model": {{model}}, "input": {"prompt": {{prompt}}}, "parameters": {"size": {{size}}}}'
 
-# ---- Example 2: Tongyi vision understanding (vision tool, calls qwen-vl-max to read images) ----
+# ---- Example 2: Tongyi vision understanding (vision tool, calls qwen3-vl-flash to read images) ----
 # Lets the text agent call a vision model on demand to understand images; no need to switch the main model.
 # Usage: /capability enable tongyi.vision, then say "look at this image @photo.png and describe it"
 # export DASHSCOPE_API_KEY="xxx"
 # [[capabilities]]
 # key = "tongyi.vision"
-# display = "Tongyi Vision Understanding (qwen-vl-max)"
+# display = "Tongyi Vision Understanding (qwen3-vl-flash)"
 # api_key_env = "DASHSCOPE_API_KEY"
 #
 # [[capabilities.tools]]
 # name = "understand_image"
 # type = "vision"
 # provider = "tongyi"
-# model = "qwen-vl-max"
+# model = "qwen3-vl-flash"
 # description = "Understand image content with a vision model and return a text description. No need to switch the main model."
 # permission = "auto"
 # params = [

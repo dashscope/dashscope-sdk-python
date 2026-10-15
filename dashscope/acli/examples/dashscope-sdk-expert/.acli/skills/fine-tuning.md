@@ -78,7 +78,7 @@ up = Files.upload("train.jsonl", purpose="fine_tune")  # validates JSONL locally
 file_id = up.output["uploaded_files"][0]["file_id"]
 
 job = FineTunes.call(
-    model="qwen-turbo",
+    model="qwen3.8-32b",
     training_file_ids=[file_id],
     hyper_parameters={"n_epochs": 3},
 )

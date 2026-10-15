@@ -8,9 +8,9 @@ Locate before answering: understanding tasks use `MultiModalConversation` (sync/
 
 ## Applicable Models and Scenarios
 
-- Understanding (image/video understanding, OCR, function calling): `qwen-vl-max`, `qwen-vl-plus`, qwen-ocr series, etc. (the `Models` class in source only has the constant `qwen_vl_chat_v1`; pass others as strings).
-- Text-to-image / image editing (`ImageSynthesis`, task=`text2image`): `wanx-v1`, `wanx-sketch-to-image-v1` (sketch coloring), `wanx2.1-imageedit` (image editing, automatically switches to image2image task).
-- Video generation (`VideoSynthesis`, task=`video-generation`): `wanx2.1-t2v-turbo/plus` (text-to-video), `wanx2.1-i2v-turbo/plus` (image-to-video), `wanx2.1-kf2v-plus`/`wanx-kf2v` (first/last frame). `wanx-txt2video-pro` and `wanx-img2video-pro` are deprecated.
+- Understanding (image/video understanding, OCR, function calling): `qwen3-vl-flash`, `qwen3-vl-plus`, qwen-ocr series, etc. (the `Models` class in source only has the constant `qwen_vl_chat_v1`; pass others as strings).
+- Text-to-image / image editing (`ImageSynthesis`, task=`text2image`): `qwen-image-3.0`, `qwen-image-edit-plus` (image editing, automatically switches to image2image task).
+- Video generation (`VideoSynthesis`, task=`video-generation`): `wan2.2-t2v-plus` (text-to-video), `wan2.2-i2v-plus` (image-to-video), `wan2.2-kf2v-flash` (first/last frame).
 
 ## SDK Interfaces
 
@@ -53,7 +53,7 @@ Image-text understanding:
 from http import HTTPStatus
 from dashscope import MultiModalConversation
 
-rsp = MultiModalConversation.call(model="qwen-vl-max", messages=messages)
+rsp = MultiModalConversation.call(model="qwen3-vl-flash", messages=messages)
 if rsp.status_code == HTTPStatus.OK:
     print(rsp.output.choices[0].message.content[0]["text"])
 ```
@@ -64,7 +64,7 @@ Text-to-image async task:
 from dashscope import ImageSynthesis
 
 rsp = ImageSynthesis.async_call(
-    model=ImageSynthesis.Models.wanx_v1,
+    model="qwen-image-3.0",
     prompt="A cat running under the moonlight", n=2, size="1024*1024",
 )
 rsp = ImageSynthesis.wait(rsp)          # poll until SUCCEEDED/FAILED
@@ -100,7 +100,7 @@ import com.alibaba.dashscope.aigc.multimodalconversation.*;
 
 MultiModalConversation conv = new MultiModalConversation();
 MultiModalConversationParam param = MultiModalConversationParam.builder()
-        .model("qwen-vl-max")
+        .model("qwen3-vl-flash")
         .messages(java.util.Arrays.asList(userMessage))
         .build();
 MultiModalConversationResult result = conv.call(param);

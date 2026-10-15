@@ -25,6 +25,7 @@ from dashscope.acli.executor import Executor
 from dashscope.acli.hooks import HookBus, HookContext, create_hook_bus
 from dashscope.acli.memory.manager import MemoryManager
 from dashscope.acli.memory.reflection import (
+    compression_hint,
     convergence_hint,
     is_readonly_tool_call,
     time_budget_hint,
@@ -453,6 +454,11 @@ class Agent:
         # silence nudge has already been spent this turn.
         self._silent_tool_calls = 0
         self._silent_nudge_injected = False
+        # Compression observability toward the model: the event is set by
+        # either compression path and spent once by _compression_section;
+        # the ratio is refreshed by the mid-turn guard's estimate.
+        self._compression_event: tuple[int, int] | None = None
+        self._context_ratio = 0.0
         # Explicit /skill invocations to count on the next turn
         self._pending_skill_names: list[str] = []
 
@@ -676,6 +682,20 @@ class Agent:
             self.time_soft_ratio,
             self.time_hard_ratio,
         )
+
+    def _compression_section(self) -> str:
+        """Tell the model about compression it would otherwise never see.
+
+        The compression event is spent once — after a compression the ratio
+        drops below the warn band anyway, so the state-based pre-hint alone
+        cannot double-fire. The ratio is refreshed by the mid-turn guard, so
+        the pre-hint can only fire from the second loop iteration on; the
+        first iteration of a turn is covered by the event path instead
+        (``_auto_compress`` runs just before the loop).
+        """
+        event = self._compression_event
+        self._compression_event = None
+        return compression_hint(event, self._context_ratio)
 
     # Seconds of wall-clock budget a single run_command may never consume:
     # the remainder minus a reserve for writing/finalizing the deliverable.
@@ -938,10 +958,19 @@ class Agent:
                 shrink_old_tool_messages(self.messages)
             # Mid-turn guard: a long tool loop can overflow the window within
             # a single user turn. Estimate-only check; compress and rebuild
-            # the request list only past the hard threshold.
+            # the request list only past the hard threshold. The estimate is
+            # kept as the context-fill ratio for the compression hint below.
+            if _loop_i > 0:
+                used_tokens = (
+                    estimate_message_tokens(self.messages) + overhead_tokens
+                )
+                self._context_ratio = (
+                    used_tokens / self._context_window
+                    if self._context_window > 0
+                    else 0.0
+                )
             if _loop_i > 0 and (
-                estimate_message_tokens(self.messages) + overhead_tokens
-                >= int(self._context_window * HARD_THRESHOLD_RATIO)
+                used_tokens >= int(self._context_window * HARD_THRESHOLD_RATIO)
             ):
                 compressed = await safety_compress_if_needed(
                     self.messages,
@@ -952,6 +981,7 @@ class Agent:
                 if compressed is not None:
                     old_count = len(self.messages)
                     self.messages = compressed
+                    self._compression_event = (old_count, len(self.messages))
                     messages_with_system = [
                         {"role": "system", "content": system_prompt},
                         *self.messages,
@@ -983,6 +1013,7 @@ class Agent:
                 "stagnation": self._stagnation_section(),
                 "convergence": self._convergence_section(_loop_i),
                 "time_budget": self._time_budget_section(),
+                "compression": self._compression_section(),
                 "silence": self._silence_section(),
             }
             hint = "".join(hint_parts.values()).strip()
@@ -1131,6 +1162,21 @@ class Agent:
             ) + estimate_tokens(json.dumps(tools_schema, ensure_ascii=False))
             if hint_chars:
                 prompt_stats["hint_chars"] = hint_chars
+            # Size of the cacheable request prefix: every bucket except the
+            # volatile trailing hint. A drop between consecutive llm_call
+            # events means the prefix changed byte-for-byte and the
+            # provider's prompt cache was defeated — this makes drift
+            # measurable from traces instead of guessed (dsh's tracker has
+            # the same lesson measured: 42% vs 99.8% cache hits).
+            prompt_stats["prefix_chars"] = (
+                prompt_stats["system_chars"]
+                + prompt_stats["user_chars"]
+                + prompt_stats["assistant_chars"]
+                + prompt_stats["tool_result_chars"]
+                + prompt_stats["tool_call_args_chars"]
+                + prompt_stats["tools_schema_chars"]
+                - len(hint)
+            )
             self.trace_logger.log_llm_call(
                 messages=request_messages,
                 tools=tools_schema,
@@ -1746,6 +1792,7 @@ class Agent:
 
         old_count = len(self.messages)
         self.messages = compressed
+        self._compression_event = (old_count, len(self.messages))
         console.print(
             f"[dim]auto-compression: {old_count} messages → "
             f"{len(self.messages)}[/dim]",
