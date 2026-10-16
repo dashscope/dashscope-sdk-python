@@ -68,6 +68,8 @@ from dashscope.tokenizers import (
     list_tokenizers,
 )
 
+# dashscope 2.0 public surface (implementation lives in dashscope/v2/).
+from dashscope.v2 import AsyncClient, Client, WsConnection, chat, settings
 
 # cn-beijing defaults to the legacy dashscope.aliyuncs.com endpoints;
 # its MaaS URLs are only reachable via an explicit set_region() call.
@@ -160,6 +162,7 @@ __all__ = [
     "api_key",
     "api_key_file_path",
     "save_api_key",
+    "settings",
     "close_shared_aio_session",
     "close_shared_sync_session",
     "AioGeneration",
@@ -212,6 +215,11 @@ __all__ = [
     "MessageFile",
     "AssistantFile",
     "VideoSynthesis",
+    # dashscope 2.0
+    "AsyncClient",
+    "Client",
+    "WsConnection",
+    "chat",
     "set_region",
 ]
 

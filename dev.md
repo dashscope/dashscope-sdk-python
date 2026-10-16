@@ -3,27 +3,41 @@
 ## 1. Code Style
 We adopt [PEP8](https://www.python.org/dev/peps/pep-0008/) as the preferred code style.
 
-We use the following toolsseed isortseed isortseed isort for linting and formatting:
-- [flake8](http://flake8.pycqa.org/en/latest/): linter
-- [yapf](https://github.com/google/yapf): formatter
-- [isort](https://github.com/timothycrosley/isort): sort imports
+We use [pre-commit](https://pre-commit.com/) to check and format code
+automatically on every commit. The hook suite is defined in
+[.pre-commit-config.yaml](.pre-commit-config.yaml) and includes:
 
-Style configurations of yapf and isort can be found in [setup.cfg](../../setup.cfg).
-We use [pre-commit hook](https://pre-commit.com/) that checks and formats for `flake8`, `yapf`, `seed-isort-config`, `isort`, `trailing whitespaces`,
-fixes `end-of-files`, sorts `requirements.txt` automatically on every commit.
-The config for a pre-commit hook is stored in [.pre-commit-config](../../.pre-commit-config.yaml).
-After you clone the repository, you will need to install initialize pre-commit hook.
+- [black](https://github.com/psf/black) (line length 79): formatter
+- [flake8](http://flake8.pycqa.org/en/latest/): linter
+- [pylint](https://pylint.readthedocs.io/): linter
+- [mypy](https://mypy.readthedocs.io/): type checker
+- pre-commit-hooks: trailing whitespace, encoding pragma, YAML/JSON/TOML
+  checks, private key detection, etc.
+
+Flake8 configuration lives in [setup.cfg](setup.cfg).
+
+### Setup (one time after clone)
+
+Install the development/test dependencies, then install the git hooks:
+
 ```bash
-pip install -r requirements/tests.txt
-```
-From the repository folder
-```bash
+pip install pre-commit
+pip install -r requirements-test.txt
 pre-commit install
 ```
 
-After this on every commit check code linters and formatter will be enforced.
+After this, every `git commit` runs the checks automatically; commits that
+fail the hooks are rejected (auto-fixing hooks such as black will rewrite
+files — review and re-stage, then commit again).
 
-If you want to use pre-commit to check all the files, you can run
+To check the whole repository manually:
+
 ```bash
 pre-commit run --all-files
 ```
+
+### CI
+
+`.github/workflows/pre-commit.yml` runs `pre-commit run --all-files` on
+every push and pull request, so code that bypasses the local hooks is still
+blocked in CI.

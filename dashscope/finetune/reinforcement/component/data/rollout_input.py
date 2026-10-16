@@ -7,7 +7,7 @@ Corresponds to the RolloutInput structure in protocol.py.
 """
 
 from typing import Any, Dict, List, Optional
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from dashscope.finetune.reinforcement.common.model_types import (
     FunctionType as FuncType,
@@ -74,5 +74,4 @@ class RolloutInput(BaseDataModel):
         description="The metadata for the request.",
     )
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")

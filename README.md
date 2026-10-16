@@ -36,7 +36,7 @@ from http import HTTPStatus
 from dashscope import Generation
 
 responses = Generation.call(
-    model="qwen-plus",
+    model="qwen3.7-plus",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Who are you?"},
@@ -160,7 +160,7 @@ from dashscope.aigc.chat_completion import Completions
 dashscope.set_region(region="cn-hongkong", workspace_id="ws-hk-789")
 
 response = Completions.create(
-    model="qwen-max",
+    model="qwen3.8-max",
     messages=[{"role": "user", "content": "Hello"}],
     api_key="YOUR-DASHSCOPE-API-KEY",
     stream=False,  # set True to get a generator of ChatCompletionChunk
@@ -168,7 +168,7 @@ response = Completions.create(
 print(response)
 ```
 
-A complete runnable example is available in [`samples/set_region_example.py`](samples/set_region_example.py).
+A complete runnable example is available in [`examples/legacy_1x/set_region_example.py`](examples/legacy_1x/set_region_example.py).
 
 ## AI Assistant: DashScope SDK Expert
 
@@ -184,9 +184,9 @@ The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built 
 |----------|-------------------|-----------|
 | Text Generation | qwen3.8-max, qwen3.7-max, qwen3.7-plus, qwen3.6-flash | `Generation` |
 | Multi-Modal Understanding | qwen3.5-omni-plus, qwen3.7-plus (vision) | `MultiModalConversation` |
-| Text Embedding | text-embedding-v4, text-embedding-v3 | `TextEmbedding` |
+| Text Embedding | qwen3.7-text-embedding, text-embedding-v4 | `TextEmbedding` |
 | Multi-Modal Embedding | tongyi-embedding-vision-plus, qwen3-vl-embedding | `MultiModalEmbedding` |
-| Text ReRank | qwen3-rerank, gte-rerank-v2 | `TextReRank` |
+| Text ReRank | qwen3.7-text-rerank, qwen3-rerank | `TextReRank` |
 | Image Generation | wan2.7-image-pro, qwen-image-2.0-pro | `ImageSynthesis` |
 | Video Generation | wan2.7-t2v, wan2.7-i2v, happyhorse-1.0-t2v/i2v | `VideoSynthesis` |
 | Speech Synthesis (TTS) | cosyvoice-v3.5-plus, cosyvoice-v1 | `SpeechSynthesizer`, `HttpSpeechSynthesizer` |

@@ -35,7 +35,7 @@ from http import HTTPStatus
 from dashscope import Generation
 
 responses = Generation.call(
-    model="qwen-plus",
+    model="qwen3.7-plus",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Who are you?"},
@@ -159,7 +159,7 @@ from dashscope.aigc.chat_completion import Completions
 dashscope.set_region(region="cn-hongkong", workspace_id="ws-hk-789")
 
 response = Completions.create(
-    model="qwen-max",
+    model="qwen3.8-max",
     messages=[{"role": "user", "content": "你好"}],
     api_key="YOUR-DASHSCOPE-API-KEY",
     stream=False,  # 设为 True 则返回 ChatCompletionChunk 生成器
@@ -167,7 +167,7 @@ response = Completions.create(
 print(response)
 ```
 
-完整可运行示例见 [`samples/set_region_example.py`](samples/set_region_example.py)。
+完整可运行示例见 [`examples/legacy_1x/set_region_example.py`](examples/legacy_1x/set_region_example.py)。
 
 ## AI 助手：DashScope SDK Expert
 

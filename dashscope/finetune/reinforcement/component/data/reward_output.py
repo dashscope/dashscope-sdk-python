@@ -6,7 +6,7 @@ Data model definitions for Reward processor output results.
 """
 
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dashscope.finetune.reinforcement.component.data.base_data_model import (
     TaskStatus,
@@ -67,5 +67,4 @@ class RewardOutput(BaseModel):
         """Normalize int error codes to str (protocol stays string)."""
         return _normalize_error_code(v)
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")

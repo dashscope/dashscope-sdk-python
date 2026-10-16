@@ -17,6 +17,7 @@ class TextEmbedding(BaseApi):
         text_embedding_v2 = "text-embedding-v2"
         text_embedding_v3 = "text-embedding-v3"
         text_embedding_v4 = "text-embedding-v4"
+        qwen3_7_text_embedding = "qwen3.7-text-embedding"
 
     @classmethod
     def call(  # type: ignore[override]  # pylint: disable=arguments-renamed

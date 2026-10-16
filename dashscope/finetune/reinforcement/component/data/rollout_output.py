@@ -7,7 +7,7 @@ Corresponds to the RolloutOutput structure in protocol.py.
 """
 
 from typing import Any, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from dashscope.finetune.reinforcement.component.data.base_data_model import (
     TaskStatus,
@@ -52,5 +52,4 @@ class RolloutOutput(BaseModel):
         """Normalize int error codes to str (protocol stays string)."""
         return _normalize_error_code(v)
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")

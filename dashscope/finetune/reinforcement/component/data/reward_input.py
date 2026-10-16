@@ -7,7 +7,7 @@ Corresponds to the RewardInput structure in protocol.py.
 """
 
 from typing import Any, Optional
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from dashscope.finetune.reinforcement.common.model_types import (
     FunctionType as FuncType,
@@ -49,5 +49,4 @@ class RewardInput(BaseDataModel):
         description="The agent output for the reward calculation.",
     )
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")

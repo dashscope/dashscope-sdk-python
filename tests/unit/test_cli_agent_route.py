@@ -572,10 +572,20 @@ class TestBundledExample:
         assert (expert / ".acli" / "config.toml").is_file()
         assert (expert / "README.md").is_file()
 
-    def test_example_download_merges_into_workspace(self, tmp_path):
-        from dashscope.acli.cli.examples import _handle_example_command
+    def test_example_download_merges_into_workspace(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        from dashscope.acli.cli import examples as examples_cli
 
-        _handle_example_command(
+        # The vendored acli prefers <repo-root>/examples (upstream dev-mode
+        # layout); in this repo that tree holds the SDK examples, not the
+        # bundled acli ones, so pin the lookup to the packaged directory.
+        bundled = Path(dashscope.acli.__file__).resolve().parent / "examples"
+        monkeypatch.setattr(examples_cli, "_get_examples_dir", lambda: bundled)
+
+        examples_cli._handle_example_command(
             ["download", "dashscope-sdk-expert", "--target", str(tmp_path)],
         )
 

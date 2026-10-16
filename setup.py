@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
+import shutil
 
 import setuptools
+from setuptools.command.build_py import build_py as _build_py
 
 package_root = os.path.abspath(os.path.dirname(__file__))
 
@@ -35,6 +37,37 @@ def readme():
     with open(os.path.join(package_root, "README.md"), encoding="utf-8") as f:
         content = f.read()
     return content
+
+
+class build_py(_build_py):
+    """Ship the top-level ``examples/`` tree inside the wheel.
+
+    ``examples/`` lives at the repository root (a sibling of
+    ``dashscope/``) for visibility, but a wheel can only bundle files
+    that sit inside a package directory. Copy the tree into
+    ``<build_lib>/dashscope/examples`` so an installed wheel exposes
+    ``site-packages/dashscope/examples/``.
+    """
+
+    def run(self):
+        super().run()
+        src = os.path.join(package_root, "examples")
+        dst = os.path.join(self.build_lib, "dashscope", "examples")
+        if not os.path.isdir(src):
+            return
+        if os.path.exists(dst):
+            shutil.rmtree(dst)
+        shutil.copytree(
+            src,
+            dst,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+
+
+# Hoisted to a module-level name (like ``name``/``url`` above) so the
+# static packaging audit in tests/unit/test_packaging_metadata.py keeps
+# seeing only literal-evaluable setup() kwargs.
+cmdclass = {"build_py": build_py}
 
 
 setuptools.setup(
@@ -102,5 +135,6 @@ setuptools.setup(
         ],
     },
     zip_safe=False,
+    cmdclass=cmdclass,
     entry_points={"console_scripts": ["dashscope = dashscope.cli:main"]},
 )

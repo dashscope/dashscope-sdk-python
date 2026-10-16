@@ -7,7 +7,7 @@ Corresponds to the GroupRewardInput structure in protocol.py.
 """
 
 from typing import Any, List, Optional
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from dashscope.finetune.reinforcement.common.model_types import (
     FunctionType as FuncType,
@@ -49,5 +49,4 @@ class GroupRewardInput(BaseDataModel):
         "calculation or automated evaluation.",
     )
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")

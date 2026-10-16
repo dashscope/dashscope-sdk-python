@@ -4,4 +4,5 @@ include dashscope/__init__.pyi
 include NOTICE
 include LICENSE.certifi
 recursive-include dashscope/acli/examples *.md *.toml *.py
+recursive-include examples *.md *.py
 include requirements.txt

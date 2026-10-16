@@ -7,7 +7,6 @@ import os
 import platform
 import queue
 import threading
-import uuid
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Dict
@@ -17,12 +16,16 @@ import aiohttp
 import requests
 
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
+from dashscope.common._sdk_session import sdk_session_id
 from dashscope.common.api_key import get_default_api_key
 from dashscope.common.constants import SSE_CONTENT_TYPE
 from dashscope.common.logging import logger
 from dashscope.version import __version__
 
-_SDK_SESSION_ID = uuid.uuid4().hex
+# Shared with the 2.0 transport so one process reports one
+# x-dashscope-sdk-session-id across both stacks (see _sdk_session;
+# acli deliberately keeps its own, it is a one-way sync copy).
+_SDK_SESSION_ID = sdk_session_id()
 
 
 def is_validate_fine_tune_file(file_path):

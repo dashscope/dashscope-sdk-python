@@ -35,7 +35,7 @@ FC_API_KEY = os.environ.get("FC_API_KEY", DASHSCOPE_API_KEY)
 # --------------------------
 # Logging Configuration
 # --------------------------
-LOGGER_NAME = os.environ.get("LOGGER_NAME", "dashscope")
+LOGGER_NAME = os.environ.get("LOGGER_NAME", "dashscope.finetune.reinforcement")
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "info").upper()
 LOGGER_FILTER_FIELDS = {
     "trigger_token",

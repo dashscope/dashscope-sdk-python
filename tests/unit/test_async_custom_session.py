@@ -84,7 +84,7 @@ class TestAsyncSessionUsage:
     async def test_custom_aio_session_is_used_for_request(self):
         """测试自定义 aio_session 被实际用于请求"""
         # 创建 mock session
-        mock_session = AsyncMock()
+        mock_session = AsyncMock(spec=aiohttp.ClientSession)
         mock_response = AsyncMock()
         mock_response.status = 200
         mock_response.headers = {"content-type": "application/json"}
@@ -429,7 +429,7 @@ class TestAsyncSessionWithDifferentMethods:
     @pytest.mark.asyncio
     async def test_custom_aio_session_with_post_request(self):
         """测试 POST 请求使用自定义 session"""
-        mock_session = AsyncMock()
+        mock_session = AsyncMock(spec=aiohttp.ClientSession)
         mock_response = AsyncMock()
         mock_response.status = 200
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)
@@ -476,7 +476,7 @@ class TestAsyncSessionWithDifferentMethods:
     @pytest.mark.asyncio
     async def test_custom_aio_session_with_get_request(self):
         """测试 GET 请求使用自定义 session"""
-        mock_session = AsyncMock()
+        mock_session = AsyncMock(spec=aiohttp.ClientSession)
         mock_response = AsyncMock()
         mock_response.status = 200
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)
@@ -596,7 +596,7 @@ class TestAsyncSessionLifecycle:
     @pytest.mark.asyncio
     async def test_multiple_requests_with_same_custom_session(self):
         """测试使用同一个自定义 session 进行多次请求"""
-        mock_session = AsyncMock()
+        mock_session = AsyncMock(spec=aiohttp.ClientSession)
         mock_response = AsyncMock()
         mock_response.status = 200
         mock_response.__aenter__ = AsyncMock(return_value=mock_response)

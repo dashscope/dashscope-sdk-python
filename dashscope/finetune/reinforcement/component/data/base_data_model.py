@@ -9,7 +9,7 @@ import hashlib
 import uuid
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from dashscope.finetune.reinforcement.common.model_types import (
     FunctionType as FuncType,
@@ -70,8 +70,7 @@ class BaseDataModel(BaseModel):
 
     func_type: FuncType
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 # ========================================================================== #

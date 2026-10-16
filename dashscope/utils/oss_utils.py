@@ -176,6 +176,7 @@ def check_and_upload_local(
     content: str,
     api_key: str,
     upload_certificate: dict = None,
+    **kwargs,
 ):
     """Check the content is local file path, upload and return the url
 
@@ -185,6 +186,10 @@ def check_and_upload_local(
         api_key (_type_): The api key.
         upload_certificate (dict, optional): Reusable upload certificate.
             Defaults to None.
+        **kwargs: Forwarded to the certificate fetch when a new upload
+            certificate is needed, e.g. ``base_address`` (endpoint the
+            ``getPolicy`` request is sent to) and ``workspace``. Callers
+            that omit them keep the default endpoint resolution.
 
     Raises:
         UploadFileException: Upload failed.
@@ -204,6 +209,7 @@ def check_and_upload_local(
                 file_path=file_path,
                 api_key=api_key,
                 upload_certificate=upload_certificate,
+                **kwargs,
             )
             if file_url is None:
                 raise UploadFileException(
@@ -221,6 +227,7 @@ def check_and_upload_local(
                 file_path=content,
                 api_key=api_key,
                 upload_certificate=upload_certificate,
+                **kwargs,
             )
             if file_url is None:
                 raise UploadFileException(

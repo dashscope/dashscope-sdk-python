@@ -53,6 +53,7 @@ class TextReRank(BaseApi):
         gte_rerank_v2 = "gte-rerank-v2"
         qwen3_rerank = "qwen3-rerank"
         qwen3_vl_rerank = "qwen3-vl-rerank"
+        qwen3_7_text_rerank = "qwen3.7-text-rerank"
 
     @classmethod
     def call(  # type: ignore[override]  # pylint: disable=arguments-renamed

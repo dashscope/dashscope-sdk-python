@@ -1,0 +1,314 @@
+# DashScope 2.0 API metadata — chat.completions (prototype, M1 task 1.10).
+#
+# Format: OpenAPI 3 core + vendor extensions. Core fields are language-agnostic;
+# language-specific generation hints live in x-python / x-java / x-node
+# namespaces (only x-python is populated for now). Consumed by the codegen
+# pipeline (M6) to emit SDK resource methods, CLI commands, docs and smoke tests.
+openapi: 3.0.3
+info:
+  title: DashScope Chat Completions
+  version: "2.0"
+  description: Text generation (chat) API expressed over the native wire format.
+  x-dashscope:
+    spec_version: "0.1.0"
+    resource_path: chat.completions.create   # SDK resource tree location
+    sdk_convenience:
+      output_text: choices[0].message.content   # resp.output_text shortcut
+      module_quickstart: dashscope.chat          # dashscope.chat(model, prompt)
+
+servers:
+  - url: https://dashscope.aliyuncs.com/api/v1
+    description: DashScope native endpoint
+
+paths:
+  /services/aigc/text-generation/generation:
+    post:
+      operationId: chat_completions_create
+      summary: Create a chat completion (plain or SSE streaming).
+      x-dashscope:
+        # Operation form: plain | stream | task (async long-running job).
+        # chat is "plain" with an optional streaming mode described below.
+        form: plain
+        stream:
+          enabled: true
+          trigger_parameter: stream            # SDK parameter that enables it
+          request_headers:
+            X-DashScope-SSE: enable
+          forced_parameters:
+            incremental_output: true           # deltas, merged by SDK helpers
+          media_type: text/event-stream
+          chunk_schema:
+            $ref: "#/components/schemas/ChatCompletionChunk"
+          in_stream_errors: raise              # never yield error objects
+          helpers:
+            - text_stream                      # plain-text iterator
+            - get_final_message                # aggregate into ChatCompletion
+        # Protocol-compatibility mapping (design §3): same capability expressed
+        # in OpenAI / Anthropic wire protocols. Field maps are direction
+        # native -> foreign.
+        protocols:
+          openai:
+            path: /chat/completions
+            field_map:
+              input.messages: messages
+              parameters.temperature: temperature
+              parameters.top_p: top_p
+              parameters.max_tokens: max_tokens
+              parameters.stop: stop
+              parameters.seed: seed
+              parameters.tools: tools
+              parameters.result_format: null   # implicit in openai protocol
+              output.choices: choices
+              usage.input_tokens: prompt_tokens
+              usage.output_tokens: completion_tokens
+          anthropic:
+            path: /v1/messages
+            field_map:
+              input.messages: messages
+              parameters.max_tokens: max_tokens
+              parameters.temperature: temperature
+              parameters.top_p: top_p
+              parameters.stop: stop_sequences
+              output.choices[0].message.content: content
+              output.choices[0].message.reasoning_content: null  # no 1:1 field
+        # CLI generation hints (language-agnostic command tree).
+        cli:
+          command: dashscope chat completions create
+          examples:
+            - 'dashscope chat completions create --model qwen-plus --message user:"Hello"'
+            - 'dashscope chat completions create --model qwen-plus --message user:"Tell me a joke" --stream'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model, input]
+              properties:
+                model:
+                  type: string
+                  description: Model name, e.g. qwen-plus.
+                  example: qwen-plus
+                input:
+                  type: object
+                  required: [messages]
+                  properties:
+                    messages:
+                      type: array
+                      minItems: 1
+                      items:
+                        $ref: "#/components/schemas/Message"
+                parameters:
+                  type: object
+                  properties:
+                    result_format:
+                      type: string
+                      enum: [message, text]
+                      default: message
+                      description: SDK always sends "message".
+                    incremental_output:
+                      type: boolean
+                      description: Only meaningful with SSE; forced true when streaming.
+                    temperature:
+                      type: number
+                      minimum: 0
+                      maximum: 2
+                    top_p:
+                      type: number
+                      minimum: 0
+                      maximum: 1
+                    max_tokens:
+                      type: integer
+                      minimum: 1
+                    stop:
+                      oneOf:
+                        - type: string
+                        - type: array
+                          items:
+                            type: string
+                    seed:
+                      type: integer
+                    repetition_penalty:
+                      type: number
+                    presence_penalty:
+                      type: number
+                      minimum: -2
+                      maximum: 2
+                    enable_thinking:
+                      type: boolean
+                      description: Emit reasoning_content for thinking models.
+                    response_format:
+                      type: object
+                      description: 'e.g. {"type": "json_object"}.'
+                    tools:
+                      type: array
+                      items:
+                        type: object
+      responses:
+        "200":
+          description: Completion (plain) or SSE event stream.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatCompletion"
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/ChatCompletionChunk"
+        default:
+          description: Error envelope with machine-readable code.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    Message:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          description: Plain text or multimodal part list.
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                $ref: "#/components/schemas/ContentPart"
+        reasoning_content:
+          type: string
+          nullable: true
+        tool_calls:
+          type: array
+          items:
+            type: object
+
+    ContentPart:
+      type: object
+      required: [type]
+      discriminator:
+        propertyName: type
+      properties:
+        type:
+          type: string
+          enum: [text, image, audio, video]
+
+    Usage:
+      type: object
+      properties:
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+
+    Choice:
+      type: object
+      required: [index]
+      properties:
+        index:
+          type: integer
+        finish_reason:
+          type: string
+          nullable: true
+        message:
+          $ref: "#/components/schemas/Message"
+
+    ChatCompletion:
+      type: object
+      properties:
+        request_id:
+          type: string
+        model:
+          type: string
+        output:
+          type: object
+          properties:
+            choices:
+              type: array
+              items:
+                $ref: "#/components/schemas/Choice"
+        usage:
+          $ref: "#/components/schemas/Usage"
+      x-python:
+        class: ChatCompletion
+        module: dashscope.v2.types.completions
+        convenience:
+          output_text: output.choices[0].message.content
+
+    StreamDelta:
+      type: object
+      properties:
+        role:
+          type: string
+        content:
+          type: string
+        reasoning_content:
+          type: string
+        tool_calls:
+          type: array
+          items:
+            type: object
+
+    StreamChoice:
+      type: object
+      required: [index]
+      properties:
+        index:
+          type: integer
+        finish_reason:
+          type: string
+          nullable: true
+        delta:
+          $ref: "#/components/schemas/StreamDelta"
+
+    ChatCompletionChunk:
+      type: object
+      properties:
+        request_id:
+          type: string
+        model:
+          type: string
+        output:
+          type: object
+          properties:
+            choices:
+              type: array
+              items:
+                $ref: "#/components/schemas/StreamChoice"
+        usage:
+          $ref: "#/components/schemas/Usage"
+      x-python:
+        class: ChatCompletionChunk
+        module: dashscope.v2.types.completions
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable business error code.
+          enum:
+            - InvalidApiKey
+            - AccessDenied
+            - AccessDenied.Unpurchased
+            - InvalidParameter
+            - Model.NotExist
+            - DataInspectionFailed
+            - Throttling
+            - Throttling.RateQuota
+            - Throttling.AllocationQuota
+            - InternalError
+            - ServiceUnavailable
+            - GatewayTimeout
+            - Arrearage
+        message:
+          type: string
+        request_id:
+          type: string
+      x-python:
+        maps_to: dashscope.v2.errors.ErrorCode

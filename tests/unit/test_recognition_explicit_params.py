@@ -3,6 +3,10 @@
 """Test explicit parameters for Recognition class."""
 
 # pylint: disable=protected-access
+import threading
+from contextlib import contextmanager
+from unittest import mock
+
 from dashscope.audio.asr.recognition import Recognition, RecognitionCallback
 
 
@@ -20,6 +24,39 @@ class MockRecognitionCallback(RecognitionCallback):
 
     def on_close(self):
         pass
+
+
+@contextmanager
+def _stubbed_worker():
+    """Stub out the receive worker so start() makes no network call.
+
+    The fake worker must block until released: start() checks is_alive()
+    right after starting the thread, and an instantly exiting thread is
+    reported as InvalidTask("Invalid task, task create failed.").
+    """
+    release = threading.Event()
+
+    def _fake_worker(self):
+        release.wait(timeout=10)
+
+    with mock.patch.object(
+        Recognition,
+        "_Recognition__receive_worker",
+        _fake_worker,
+    ):
+        yield release
+
+
+def _stop_recognition(recognition, release):
+    recognition._running = False
+    release.set()
+    if recognition._worker is not None and recognition._worker.is_alive():
+        recognition._worker.join(timeout=1)
+    if (
+        recognition._silence_timer is not None
+        and recognition._silence_timer.is_alive()
+    ):
+        recognition._silence_timer.cancel()
 
 
 class TestRecognitionExplicitParams:
@@ -106,30 +143,16 @@ class TestRecognitionExplicitParams:
             sample_rate=16000,
         )
 
-        # Mock the thread and timer to avoid actual execution
-        recognition._running = False
-        recognition._callback = MockRecognitionCallback()
-
-        # Call start with explicit parameters
-        # Note: This will fail at thread creation, but we can verify params
-        try:
-            recognition.start(
-                phrase_id="test_phrase",
-                disfluency_removal_enabled=True,
-                diarization_enabled=True,
-                speaker_count=2,
-            )
-        except Exception:
-            # Expected to fail at thread creation
-            pass
-        finally:
-            # Clean up to stop any background threads
-            recognition._running = False
-            if (
-                recognition._worker is not None
-                and recognition._worker.is_alive()
-            ):
-                recognition._worker.join(timeout=1)
+        with _stubbed_worker() as release:
+            try:
+                recognition.start(
+                    phrase_id="test_phrase",
+                    disfluency_removal_enabled=True,
+                    diarization_enabled=True,
+                    speaker_count=2,
+                )
+            finally:
+                _stop_recognition(recognition, release)
 
         # Verify parameters are updated in _kwargs
         assert recognition._kwargs.get("disfluency_removal_enabled") is True
@@ -151,26 +174,15 @@ class TestRecognitionExplicitParams:
         assert recognition._kwargs["disfluency_removal_enabled"] is False
         assert recognition._kwargs["speaker_count"] == 1
 
-        # Mock the thread and timer to avoid actual execution
-        recognition._running = False
-
         # Override parameters in start
-        try:
-            recognition.start(
-                disfluency_removal_enabled=True,
-                speaker_count=3,
-            )
-        except Exception:
-            # Expected to fail at thread creation
-            pass
-        finally:
-            # Clean up to stop any background threads
-            recognition._running = False
-            if (
-                recognition._worker is not None
-                and recognition._worker.is_alive()
-            ):
-                recognition._worker.join(timeout=1)
+        with _stubbed_worker() as release:
+            try:
+                recognition.start(
+                    disfluency_removal_enabled=True,
+                    speaker_count=3,
+                )
+            finally:
+                _stop_recognition(recognition, release)
 
         # Verify parameters are overridden
         assert recognition._kwargs.get("disfluency_removal_enabled") is True

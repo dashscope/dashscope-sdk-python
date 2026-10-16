@@ -6,7 +6,7 @@ Data model definitions for GroupReward processor output results.
 """
 
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from dashscope.finetune.reinforcement.component.data.base_data_model import (
     TaskStatus,
@@ -53,5 +53,4 @@ class GroupRewardOutput(BaseModel):
         description="Error details if the reward computation failed.",
     )
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
