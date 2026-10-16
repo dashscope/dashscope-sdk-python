@@ -13,13 +13,18 @@ from dashscope.api_entities.base_request import AioBaseRequest
 from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
 from dashscope.common.constants import (
     DEFAULT_REQUEST_TIMEOUT_SECONDS,
-    SERVICE_503_MESSAGE,
     WEBSOCKET_ERROR_CODE,
 )
 from dashscope.common.error import (
     RequestFailure,
     UnexpectedMessageReceived,
     UnknownMessageReceived,
+)
+from dashscope.common.error_registry import (
+    SERVICE_UNAVAILABLE,
+    AUTH_FAILED,
+    INTERNAL_ERROR,
+    PERMISSION_DENIED,
 )
 from dashscope.common.logging import logger
 from dashscope.common.utils import async_to_sync
@@ -34,6 +39,46 @@ from dashscope.protocol.websocket import (
     EventType,
     WebsocketStreamingMode,
 )
+
+
+def _is_service_unavailable(exc: BaseException) -> bool:
+    """Decide whether a failed connect means the service is unavailable.
+
+    A connect failure never receives an HTTP status, so only an explicit
+    phrase qualifies. Matching a bare "503" also fires on addresses such as
+    ``host:5030`` or ``10.50.30.1``.
+    """
+    return "service unavailable" in str(exc).lower()
+
+
+def _handshake_error(status):
+    """Map a WebSocket handshake status to the public error to report.
+
+    ``None`` means the status is not one this SDK classifies, and the caller
+    re-raises rather than inventing a response.
+    """
+    if status == HTTPStatus.UNAUTHORIZED:
+        return AUTH_FAILED
+    if status == HTTPStatus.FORBIDDEN:
+        # The credentials worked but lack permission. Reporting a 403 as a 401
+        # sends the caller to rotate an API key that is actually valid.
+        return PERMISSION_DENIED
+    if status == HTTPStatus.SERVICE_UNAVAILABLE:
+        return SERVICE_UNAVAILABLE
+    if status == HTTPStatus.INTERNAL_SERVER_ERROR:
+        return INTERNAL_ERROR
+    return None
+
+
+def _internal_error_message(exc: BaseException, detail: str = "") -> str:
+    """Compose the user-visible message for a 500 surfaced over WebSocket.
+
+    The registry text alone says nothing about which failure happened, so the
+    originating detail is appended. ``detail`` wins when the caller has a more
+    specific string than ``str(exc)``, such as a handshake error message.
+    """
+    suffix = detail or f"{type(exc).__name__}: {exc}"
+    return f"{INTERNAL_ERROR.error_msg} (SDK Internal Error: {suffix})"
 
 
 class WebSocketRequest(AioBaseRequest):
@@ -215,34 +260,53 @@ class WebSocketRequest(AioBaseRequest):
             )
         except aiohttp.ClientConnectorError as e:
             logger.exception(e)
+            if _is_service_unavailable(e):
+                yield DashScopeAPIResponse(
+                    request_id=task_id if task_id else "",
+                    status_code=SERVICE_UNAVAILABLE.status_code,
+                    code=SERVICE_UNAVAILABLE.error_code,
+                    message=SERVICE_UNAVAILABLE.error_msg,
+                )
+                return
+
             yield DashScopeAPIResponse(
-                request_id="",
-                status_code=-1,
-                code="ClientConnectorError",
-                message=str(e),
+                request_id=task_id if task_id else "",
+                status_code=INTERNAL_ERROR.status_code,
+                code=INTERNAL_ERROR.error_code,
+                message=_internal_error_message(e),
             )
         except aiohttp.WSServerHandshakeError as e:
-            code = e.status
-            msg = e.message
-            if e.status in [HTTPStatus.FORBIDDEN, HTTPStatus.UNAUTHORIZED]:
-                msg = "Unauthorized, your api-key is invalid!"
-            elif e.status == HTTPStatus.SERVICE_UNAVAILABLE:
-                msg = SERVICE_503_MESSAGE
-            else:
-                pass
+            original_msg = e.message or ""
+            handshake_error = _handshake_error(e.status)
+
+            if handshake_error is None:
+                # Log unexpected status codes for debugging
+                logger.warning(
+                    "WebSocket handshake failed with unexpected "
+                    "status %s: %s",
+                    e.status,
+                    original_msg,
+                )
+                raise e
+
+            message = (
+                _internal_error_message(e, original_msg)
+                if handshake_error is INTERNAL_ERROR
+                else handshake_error.error_msg
+            )
             yield DashScopeAPIResponse(
-                request_id=task_id,
-                status_code=code,
-                code=code,
-                message=msg,
+                request_id=task_id if task_id else "",
+                status_code=handshake_error.status_code,
+                code=handshake_error.error_code,
+                message=message,
             )
         except Exception as e:
             logger.exception(e)
             yield DashScopeAPIResponse(
-                request_id="",
-                status_code=-1,
-                code="Unknown",
-                message=f"Error type: {type(e)}, message: {e}",
+                request_id=task_id if task_id else "",
+                status_code=INTERNAL_ERROR.status_code,
+                code=INTERNAL_ERROR.error_code,
+                message=_internal_error_message(e),
             )
 
     def _to_DashScopeAPIResponse(self, task_id, is_binary, result):

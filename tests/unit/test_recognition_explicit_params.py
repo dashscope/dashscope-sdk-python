@@ -3,6 +3,10 @@
 """Test explicit parameters for Recognition class."""
 
 # pylint: disable=protected-access
+import threading
+from contextlib import contextmanager
+from unittest.mock import patch
+
 from dashscope.audio.asr.recognition import Recognition, RecognitionCallback
 
 
@@ -20,6 +24,31 @@ class MockRecognitionCallback(RecognitionCallback):
 
     def on_close(self):
         pass
+
+
+@contextmanager
+def _stubbed_worker(recognition):
+    """Let ``start()`` run without its worker opening a real WebSocket.
+
+    The worker has to stay alive until released: ``start()`` checks
+    ``is_alive()`` immediately after spawning it and raises ``InvalidTask``
+    if the thread has already finished.
+    """
+    release = threading.Event()
+    try:
+        with patch.object(
+            Recognition,
+            "_Recognition__receive_worker",
+            lambda self: release.wait(10),
+        ):
+            yield recognition
+    finally:
+        recognition._running = False
+        if recognition._silence_timer is not None:
+            recognition._silence_timer.cancel()
+        release.set()
+        if recognition._worker is not None:
+            recognition._worker.join(timeout=5)
 
 
 class TestRecognitionExplicitParams:
@@ -106,30 +135,16 @@ class TestRecognitionExplicitParams:
             sample_rate=16000,
         )
 
-        # Mock the thread and timer to avoid actual execution
         recognition._running = False
         recognition._callback = MockRecognitionCallback()
 
-        # Call start with explicit parameters
-        # Note: This will fail at thread creation, but we can verify params
-        try:
+        with _stubbed_worker(recognition):
             recognition.start(
                 phrase_id="test_phrase",
                 disfluency_removal_enabled=True,
                 diarization_enabled=True,
                 speaker_count=2,
             )
-        except Exception:
-            # Expected to fail at thread creation
-            pass
-        finally:
-            # Clean up to stop any background threads
-            recognition._running = False
-            if (
-                recognition._worker is not None
-                and recognition._worker.is_alive()
-            ):
-                recognition._worker.join(timeout=1)
 
         # Verify parameters are updated in _kwargs
         assert recognition._kwargs.get("disfluency_removal_enabled") is True
@@ -151,26 +166,14 @@ class TestRecognitionExplicitParams:
         assert recognition._kwargs["disfluency_removal_enabled"] is False
         assert recognition._kwargs["speaker_count"] == 1
 
-        # Mock the thread and timer to avoid actual execution
         recognition._running = False
 
         # Override parameters in start
-        try:
+        with _stubbed_worker(recognition):
             recognition.start(
                 disfluency_removal_enabled=True,
                 speaker_count=3,
             )
-        except Exception:
-            # Expected to fail at thread creation
-            pass
-        finally:
-            # Clean up to stop any background threads
-            recognition._running = False
-            if (
-                recognition._worker is not None
-                and recognition._worker.is_alive()
-            ):
-                recognition._worker.join(timeout=1)
 
         # Verify parameters are overridden
         assert recognition._kwargs.get("disfluency_removal_enabled") is True

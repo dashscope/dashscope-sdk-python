@@ -115,11 +115,11 @@ def _stream_events(job_id: str):
         )
         return
 
-    status = (
-        rsp.output.get("status")
-        if isinstance(rsp.output, dict)
-        else getattr(rsp.output, "status", None)
-    )
+    # Support both dictionary and object formats
+    if isinstance(rsp.output, dict):
+        status = rsp.output.get("status")
+    else:
+        status = getattr(rsp.output, "status", None)
     if status in (
         TaskStatus.FAILED,
         TaskStatus.CANCELED,
@@ -252,7 +252,11 @@ def create(
     if output is None:
         error("Fine-tune creation returned empty response")
 
-    job_id = getattr(output, "job_id", None)
+    job_id = (
+        output.get("job_id")
+        if isinstance(output, dict)
+        else getattr(output, "job_id", None)
+    )
     if not job_id:
         error(
             "Fine-tune creation succeeded but missing job_id in response. "
