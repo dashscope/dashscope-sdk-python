@@ -91,12 +91,12 @@ class TestAgentStudio:
         # Directory nodes ride the page's prefixes field (per page):
         print(f"   prefixes={page.prefixes}")
 
-        print("==> updating with optimistic lock")
+        print("==> updating with optimistic lock (precondition)")
         updated = client.memory_stores.memories.update(
             store.id,
             mem.id,
             content="All reports use GAAP formatting. ISO-8601 dates.",
-            content_sha256=mem.content_sha256,
+            precondition=mem.content_sha256,
         )
         print(f"   new sha={updated.content_sha256[:12]}...")
 

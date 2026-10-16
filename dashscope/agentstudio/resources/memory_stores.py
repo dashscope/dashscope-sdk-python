@@ -221,14 +221,14 @@ class Memories:
         *,
         path: Optional[str] = None,
         content: Optional[str] = None,
-        content_sha256: Optional[str] = None,
+        precondition: Optional[Any] = None,
     ) -> Memory:
         """Update a memory (``POST .../memories/{id}``).
 
         Mutate ``content``, rename via ``path``, or both — at least one
         must be given.  Pass the sha from the previously retrieved
-        memory as ``content_sha256`` for optimistic concurrency; a
-        mismatch returns 409 ``memory_precondition_failed_error``.
+        memory as ``precondition`` for optimistic concurrency (a
+        mismatch returns 409 ``memory_precondition_failed_error``).
         """
         if path is None and content is None:
             raise TypeError(
@@ -238,7 +238,7 @@ class Memories:
         body = MemoryUpdateParams(
             path=path,
             content=content,
-            content_sha256=content_sha256,
+            precondition=precondition,
         ).to_dict()
         resp = self._client.transport.request(
             "POST",
@@ -576,7 +576,7 @@ class AsyncMemories:
         *,
         path: Optional[str] = None,
         content: Optional[str] = None,
-        content_sha256: Optional[str] = None,
+        precondition: Optional[Any] = None,
     ) -> Memory:
         if path is None and content is None:
             raise TypeError(
@@ -586,7 +586,7 @@ class AsyncMemories:
         body = MemoryUpdateParams(
             path=path,
             content=content,
-            content_sha256=content_sha256,
+            precondition=precondition,
         ).to_dict()
         resp = await self._client.transport.request(
             "POST",
