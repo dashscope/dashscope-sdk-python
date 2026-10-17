@@ -382,18 +382,35 @@ def test_store_list_page_extra_defaults_empty(client):
     assert page.prefixes == []
 
 
-def test_memory_update_sends_flattened_precondition(client):
+def test_memory_update_sends_precondition_object(client):
     mem = client.memory_stores.memories.update(
         "memstore_01Hx",
         "mem_01Hy",
         content="CORRECTED",
-        content_sha256="abc123",
+        precondition="abc123",
     )
+    # A sha string wraps into the documented precondition object.
     assert client.transport.calls[0]["json"] == {
         "content": "CORRECTED",
-        "content_sha256": "abc123",
+        "precondition": {
+            "type": "content_sha256",
+            "content_sha256": "abc123",
+        },
     }
     assert isinstance(mem, Memory)
+
+
+def test_memory_update_accepts_precondition_object(client):
+    client.memory_stores.memories.update(
+        "memstore_01Hx",
+        "mem_01Hy",
+        content="CORRECTED",
+        precondition={"type": "content_sha256", "content_sha256": "abc"},
+    )
+    assert client.transport.calls[0]["json"]["precondition"] == {
+        "type": "content_sha256",
+        "content_sha256": "abc",
+    }
 
 
 def test_memory_update_requires_path_or_content(client):
@@ -401,7 +418,7 @@ def test_memory_update_requires_path_or_content(client):
         client.memory_stores.memories.update(
             "memstore_01Hx",
             "mem_01Hy",
-            content_sha256="abc123",
+            precondition="abc123",
         )
 
 

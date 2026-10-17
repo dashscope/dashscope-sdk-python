@@ -983,13 +983,29 @@ class MemoryCreateParams(BaseModel):
 class MemoryUpdateParams(BaseModel):
     """Request body for ``POST /memory_stores/{store_id}/memories/{memory_id}``.
 
-    At least one of ``path`` / ``content`` must be given.  Passing the
-    current ``content_sha256`` (from the retrieved memory) enables
-    optimistic concurrency — a mismatch returns 409
+    At least one of ``path`` / ``content`` must be given.  ``precondition``
+    is the optimistic lock: the sha string from the retrieved memory
+    (wrapped into the documented ``{"type": "content_sha256", ...}``
+    object) or the object itself — a mismatch returns 409
     ``memory_precondition_failed_error``.
     """
 
-    _fields = ("path", "content", "content_sha256")
+    _fields = ("path", "content", "precondition")
+
+    def __init__(
+        self,
+        *,
+        precondition: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> None:
+        if precondition is not None:
+            if isinstance(precondition, str):
+                precondition = {
+                    "type": "content_sha256",
+                    "content_sha256": precondition,
+                }
+            kwargs["precondition"] = precondition
+        super().__init__(**kwargs)
 
 
 class MemoryListParams(BaseModel):
