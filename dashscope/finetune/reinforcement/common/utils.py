@@ -92,7 +92,6 @@ async def async_http_request(
                 # Logical error – do not retry
                 raise InputError(
                     f"Unsupported method: {method}",
-                    error_code=4001,
                 )
 
             # Treat server 5xx responses as transient failures and trigger a
@@ -128,22 +127,19 @@ async def async_http_request(
     except InputError:
         raise
     except asyncio.TimeoutError as e:
-        raise RuntimeErrorWithCode(
+        raise TimeoutError(
             f"Request timeout ({timeout}s)",
-            error_code=4003,
         ) from e
     except aiohttp.ClientError as e:
         raise RuntimeErrorWithCode(
             f"Client error: {e}",
-            error_code=4002,
         ) from e
     except Exception as e:
         raise RuntimeErrorWithCode(
             f"Unexpected error: {e}",
-            error_code=4004,
         ) from e
 
-    raise RuntimeErrorWithCode("Unexpected control flow", error_code=4005)
+    raise RuntimeErrorWithCode("Unexpected control flow")
 
 
 async def _handle_response(response) -> Dict[str, Any]:
@@ -186,13 +182,12 @@ async def client_fc(
 def check_file(file: str) -> None:
     """Validate file existence and accessibility."""
     if not os.path.exists(file):
-        raise InputError(f"File {file} not found", error_code=4011)
+        raise InputError(f"File {file} not found")
     if not os.path.isfile(file):
-        raise InputError(f"{file} is not a file", error_code=4012)
+        raise InputError(f"{file} is not a file")
     if not os.access(file, os.R_OK):
         raise InputError(
             f"No read access to file: {file}",
-            error_code=4013,
         )
 
 
@@ -393,7 +388,6 @@ def create_deployment_files(
     except Exception as e:
         raise RuntimeErrorWithCode(
             "Deployment file creation error",
-            error_code=4021,
         ) from e
 
 
@@ -511,7 +505,6 @@ def zip_dir(
     except Exception as e:
         raise RuntimeErrorWithCode(
             "Directory compression error",
-            error_code=4022,
         ) from e
 
 
@@ -566,7 +559,6 @@ def _sync_upload_to_oss(signed_url: str, zip_path: str) -> int:
     except Exception as e:
         raise RuntimeErrorWithCode(
             "OSS upload error",
-            error_code=4023,
         ) from e
 
 
@@ -599,7 +591,6 @@ async def upload_zip_to_oss_and_by_signed_url(
         if "403" in str(e):
             raise BasePermissionError(
                 "OSS access denied (403)",
-                error_code=4024,
             ) from e
         raise
 
@@ -646,7 +637,6 @@ async def to_bailian_data(files: List[FileSpec]) -> List[str]:
                     f"max allowed "
                     f"{DATASETS_FILE_SIZE_WARNING / (1024 * 1024):.0f}MB. "
                     f"Adjust via env var DATASETS_FILE_SIZE_WARNING.",
-                    error_code=4035,
                 )
 
             # Add file to form data
@@ -668,7 +658,6 @@ async def to_bailian_data(files: List[FileSpec]) -> List[str]:
         if valid_file_count == 0:
             raise InputError(
                 "No valid files found to upload. All files failed validation.",
-                error_code=4031,
             )
 
         # Execute upload request
@@ -686,7 +675,6 @@ async def to_bailian_data(files: List[FileSpec]) -> List[str]:
         if result.get("status", {}).get("code", 200) != 200:
             raise OutputError(
                 f"File upload failed: {result}",
-                error_code=4032,
             )
 
         data = result.get("data", {})
@@ -696,7 +684,6 @@ async def to_bailian_data(files: List[FileSpec]) -> List[str]:
             )
             raise OutputError(
                 f"Partial upload failed: {failed_files}",
-                error_code=4033,
             )
 
         # Collect uploaded file IDs
@@ -710,7 +697,6 @@ async def to_bailian_data(files: List[FileSpec]) -> List[str]:
     except Exception as e:
         raise OutputError(
             "File upload error",
-            error_code=4034,
         ) from e
 
 
@@ -780,7 +766,6 @@ def set_api_key(api_key: Optional[str] = None) -> None:
             "DashScope API key is missing. "
             "Please provide 'api_key' argument or set the "
             "'DASHSCOPE_API_KEY' environment variable.",
-            error_code=4035,
         )
 
     # 3. If env var exists, just log that we are using it (optional)
@@ -811,13 +796,11 @@ def get_filepath_classname(full_path: str) -> Tuple[str, str]:
             raise InputError(
                 f"Invalid format '{full_path}'. Expected "
                 f"'path/to/file.py:ClassName'",
-                error_code=4041,
             )
         if ":" in parts[1]:
             raise InputError(
                 f"Invalid class name format '{parts[1]}'. "
                 f"Class name cannot contain colon.",
-                error_code=4042,
             )
 
         filepath, classname = parts[0].strip(), parts[1].strip()
@@ -830,7 +813,6 @@ def get_filepath_classname(full_path: str) -> Tuple[str, str]:
             raise InputError(
                 f"Invalid format '{full_path}'. Expected "
                 f"'module.path.ClassName' or 'path/to/file.py:ClassName'",
-                error_code=4043,
             )
         classname = parts[-1]
         module_path = ".".join(parts[:-1])
