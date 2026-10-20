@@ -265,7 +265,7 @@ class Jobs:
     ) -> Job:
         """Submit a task; returns immediately with a PENDING/RUNNING Job."""
         body: Dict[str, Any] = {"model": model, "input": input}
-        if parameters:
+        if parameters is not None:
             body["parameters"] = parameters
         if resources is not None:
             body["resources"] = resources
@@ -463,7 +463,7 @@ class AsyncJobs:
         workspace: Optional[str] = None,
     ) -> Job:
         body: Dict[str, Any] = {"model": model, "input": input}
-        if parameters:
+        if parameters is not None:
             body["parameters"] = parameters
         if resources is not None:
             body["resources"] = resources

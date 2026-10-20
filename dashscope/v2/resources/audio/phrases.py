@@ -3,9 +3,10 @@
 """Paraformer hot-phrase management (1.x ``AsrPhraseManager``).
 
 A compile job in disguise: ``create``/``update`` POST ``/fine-tunes``
-with ``mode=compile_asr_phrase`` and an empty file set; ``get``/
-``list``/``delete`` hit ``/fine-tunes/outputs``. The resulting job id
-doubles as the ``phrase_id`` that ``asr.recognize`` consumes. 1.x
+with ``training_type=compile_asr_phrase`` and an empty file set; ``get``/
+``list``/``delete`` hit ``/fine-tunes/outputs``. ``finetuned_output`` is
+the compiled resource ID that ``asr.recognize`` consumes as ``phrase_id``;
+``job_id`` identifies the compile job and is only a legacy fallback. 1.x
 ``list_phrases`` accepted ``page=`` but dropped it in ``**kwargs``
 before it reached the wire; v2 sends the documented ``page_no``.
 """
@@ -16,11 +17,11 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from pydantic import AliasChoices, Field
 
-from dashscope.v2.errors import check_response
 from dashscope.v2.types.common import (
     JobStatus,
     ResponseBase,
     flatten_envelope,
+    response_body,
     with_headers,
 )
 
@@ -66,14 +67,14 @@ def _compile_body(
 
 
 class Phrase(ResponseBase):
-    """One compiled hot-phrase set; the job id doubles as ``phrase_id``."""
+    """One compiled phrase set; prefer its resource ID over the compile job ID."""
 
     phrase_id: Optional[str] = Field(
         None,
         validation_alias=AliasChoices(
             "phrase_id",
-            "job_id",
             "finetuned_output",
+            "job_id",
         ),
     )
     status: Optional[str] = None
@@ -88,7 +89,12 @@ class PhraseList(ResponseBase):
     )
     phrases: List[Phrase] = Field(
         default_factory=list,
-        validation_alias=AliasChoices("phrases", "jobs", "outputs"),
+        validation_alias=AliasChoices(
+            "phrases",
+            "jobs",
+            "outputs",
+            "finetuned_outputs",
+        ),
     )
 
 
@@ -126,11 +132,11 @@ class Phrases:
             api_key=api_key,
             workspace=workspace,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            Phrase(**flatten_envelope(response.json())),
+        body = response_body(
             response,
+            raise_on_error=self._client.raise_on_error,
         )
+        return with_headers(Phrase(**flatten_envelope(body)), response)
 
     def update(
         self,
@@ -162,11 +168,11 @@ class Phrases:
             api_key=api_key,
             workspace=workspace,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            Phrase(**flatten_envelope(response.json())),
+        body = response_body(
             response,
+            raise_on_error=self._client.raise_on_error,
         )
+        return with_headers(Phrase(**flatten_envelope(body)), response)
 
     def get(
         self,
@@ -188,11 +194,11 @@ class Phrases:
             api_key=api_key,
             workspace=workspace,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            Phrase(**flatten_envelope(response.json())),
+        body = response_body(
             response,
+            raise_on_error=self._client.raise_on_error,
         )
+        return with_headers(Phrase(**flatten_envelope(body)), response)
 
     def list(
         self,
@@ -215,11 +221,11 @@ class Phrases:
             api_key=api_key,
             workspace=workspace,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            PhraseList(**flatten_envelope(response.json())),
+        body = response_body(
             response,
+            raise_on_error=self._client.raise_on_error,
         )
+        return with_headers(PhraseList(**flatten_envelope(body)), response)
 
     def delete(
         self,
@@ -241,8 +247,8 @@ class Phrases:
             api_key=api_key,
             workspace=workspace,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            JobStatus(**flatten_envelope(response.json())),
+        body = response_body(
             response,
+            raise_on_error=self._client.raise_on_error,
         )
+        return with_headers(JobStatus(**flatten_envelope(body)), response)

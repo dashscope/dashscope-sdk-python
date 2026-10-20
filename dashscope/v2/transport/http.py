@@ -102,9 +102,10 @@ def _merge_auth_headers(
     """
     if api_key is None and workspace is None:
         return headers
-    merged = dict(headers or {})
-    merged.update(_build_headers(api_key, workspace, None))
-    return merged
+    return _with_sdk_headers(
+        headers or {},
+        _build_headers(api_key, workspace, None),
+    )
 
 
 def _abs_url(base_url: Optional[str], path: str) -> str:
@@ -276,9 +277,11 @@ class SyncTransport:
         except httpx.TransportError as exc:
             raise _map_transport_error(exc) from exc
         if response.status_code >= 400:
-            response.read()
-            response.close()
-            check_response(response)
+            try:
+                response.read()
+                check_response(response)
+            finally:
+                response.close()
         logger.debug(
             "stream %s %s -> %d (request_id=%s)",
             method,
@@ -436,9 +439,11 @@ class AsyncTransport:
         except httpx.TransportError as exc:
             raise _map_transport_error(exc) from exc
         if response.status_code >= 400:
-            await response.aread()
-            await response.aclose()
-            check_response(response)
+            try:
+                await response.aread()
+                check_response(response)
+            finally:
+                await response.aclose()
         logger.debug(
             "stream %s %s -> %d (request_id=%s)",
             method,

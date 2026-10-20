@@ -170,7 +170,7 @@ class SynthesisSession:
                 input={},
             )
             self._record_response(response)
-        except Exception as error:
+        except BaseException as error:
             self._record_response(getattr(error, "body", None))
             self.close()
             raise
@@ -229,11 +229,9 @@ class SynthesisSession:
     def events(self) -> Generator[Union[Dict[str, Any], bytes], None, None]:
         """Yield JSON and audio through task-finished, raising on failure."""
         session = self.session
-        # The lock guards the iterator's whole lifetime and is released in
-        # its finally block, so a ``with`` scope cannot express it.
-        if not self._reader_lock.acquire(  # pylint: disable=consider-using-with
-            blocking=False,
-        ):
+        # Non-blocking acquire, released in the finally below — no ``with``.
+        # pylint: disable=consider-using-with
+        if not self._reader_lock.acquire(blocking=False):
             raise RuntimeError(
                 "only one events() or audio_chunks() iterator may read "
                 "the synthesis session",

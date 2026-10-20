@@ -12,6 +12,15 @@ from typing import (
 )
 
 # ---------------------------------------------------------------------------
+# dashscope 2.0
+# ---------------------------------------------------------------------------
+from dashscope.v2 import AsyncClient as AsyncClient
+from dashscope.v2 import Client as Client
+from dashscope.v2 import WsConnection as WsConnection
+from dashscope.v2 import chat as chat
+from dashscope.v2 import settings as settings
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 api_key: str

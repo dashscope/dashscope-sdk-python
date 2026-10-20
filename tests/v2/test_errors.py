@@ -13,9 +13,12 @@ instead of silent drift.
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
+from dashscope.v2 import AsyncClient, Client
 from dashscope.v2 import _error_registry as registry
 from dashscope.v2 import errors
 from dashscope.v2.errors import (
@@ -44,7 +47,7 @@ from dashscope.v2.errors import (
     _STATUS_MAP,
     _WIRE_TO_PUBLIC,
 )
-from dashscope.v2.types.common import JobStatus, ResponseBase
+from dashscope.v2.types.common import JobStatus, ResponseBase, response_body
 
 
 def _resp(status, body=None, headers=None):
@@ -227,6 +230,45 @@ def test_response_base_subclasses_inherit_the_flag():
     assert not JobStatus(status="SUCCEEDED").is_error
 
 
+@pytest.mark.parametrize("model", [ResponseBase, JobStatus])
+@pytest.mark.parametrize("status", [None, 0, 199, 200, 302, 400, 503])
+def test_response_base_does_not_infer_http_failure_from_body_status(
+    model,
+    status,
+):
+    assert not model(status_code=status).is_error
+    assert model(status_code=status, code="Throttling").is_error
+    assert model(status_code=status, is_error=True).is_error
+
+
+@pytest.mark.parametrize("status", [200, 400])
+@pytest.mark.parametrize(
+    "outer_id, header_id, expected_id",
+    [
+        ("outer-id", "header-id", "outer-id"),
+        (None, "header-id", "header-id"),
+        (None, None, None),
+    ],
+)
+def test_shared_error_request_id_ignores_nested_output(
+    status,
+    outer_id,
+    header_id,
+    expected_id,
+):
+    body = {
+        "code": "InvalidParameter",
+        "message": "rejected",
+        "request_id": outer_id,
+        "output": {"request_id": "inner-id"},
+    }
+    headers = {"x-request-id": header_id} if header_id is not None else {}
+    with pytest.raises(BadRequestError) as caught:
+        check_response(_resp(status, body, headers))
+    assert caught.value.request_id == expected_id
+    assert caught.value.body == body
+
+
 def test_non_json_body():
     resp = httpx.Response(
         502,
@@ -304,6 +346,284 @@ def test_sse_body_without_decodable_frame_keeps_raw_text():
     assert ei.value.code is None
     assert ei.value.body is None
     assert ei.value.message == "event:error\ndata:oops"
+
+
+_SSE_ERROR_PAYLOAD = {
+    "code": "DataInspectionFailed",
+    "message": "blocked\n请稍后",
+    "request_id": "sse-body-id",
+    "output": {"request_id": "ignored-inner-id"},
+}
+
+
+def _multiline_sse_error(newline="\n", terminated=False):
+    lines = [": keepalive", "event: error", "id: ignored-event-id"]
+    lines.extend(
+        f"data: {line}"
+        for line in json.dumps(
+            _SSE_ERROR_PAYLOAD,
+            indent=2,
+            ensure_ascii=False,
+        ).splitlines()
+    )
+    return newline.join(lines) + (newline * 2 if terminated else "")
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+@pytest.mark.parametrize("terminated", [False, True])
+def test_sse_error_body_accumulates_event_data(newline, terminated):
+    text = _multiline_sse_error(newline, terminated)
+    if terminated:
+        text += 'data: {"code":"InvalidParameter","message":"later"}'
+    response = httpx.Response(
+        400,
+        text=text,
+        headers={
+            "content-type": "application/json",
+            "x-request-id": "header-id",
+        },
+    )
+    with pytest.raises(ContentFilterError) as caught:
+        check_response(response)
+    assert caught.value.body == _SSE_ERROR_PAYLOAD
+    assert caught.value.code == "DataInspectionFailed"
+    assert caught.value.message == _SSE_ERROR_PAYLOAD["message"]
+    assert caught.value.request_id == "sse-body-id"
+    assert caught.value.status_code == 400
+    assert caught.value.headers["x-request-id"] == "header-id"
+
+
+@pytest.mark.parametrize("separator", ["\n", "\n\n", "\r\n\r\n"])
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "data: {}",
+        'event: ping\ndata: {"type":"ping"}',
+        'event: ping\ndata: {"message":"keepalive"}',
+        'data: {"output":{"text":"ok"}}',
+        'data: {"type":"message_start","message":{"id":"msg"}}',
+        "data: not-json",
+        "data: [DONE]",
+    ],
+)
+def test_sse_error_body_skips_non_error_frames(prefix, separator):
+    text = (
+        prefix
+        + separator
+        + "event: error\ndata: "
+        + json.dumps(
+            _SSE_ERROR_PAYLOAD,
+        )
+    )
+    with pytest.raises(ContentFilterError) as caught:
+        check_response(httpx.Response(400, text=text))
+    assert caught.value.body == _SSE_ERROR_PAYLOAD
+    assert caught.value.message == _SSE_ERROR_PAYLOAD["message"]
+    assert caught.value.request_id == "sse-body-id"
+
+
+@pytest.mark.parametrize(
+    "payload, expected_code",
+    [
+        ({"message": "rejected"}, None),
+        ({"error": {"message": "rejected", "code": "bad_key"}}, "bad_key"),
+        (
+            {
+                "type": "error",
+                "error": {"message": "rejected", "type": "bad_key"},
+            },
+            "bad_key",
+        ),
+    ],
+)
+def test_sse_error_body_preserves_message_and_nested_envelopes(
+    payload,
+    expected_code,
+):
+    text = "data: {}\n\nevent: error\n" + "\n".join(
+        f"data: {line}" for line in json.dumps(payload, indent=2).splitlines()
+    )
+    with pytest.raises(AuthenticationError) as caught:
+        check_response(httpx.Response(401, text=text))
+    assert caught.value.body == payload
+    assert caught.value.message == "rejected"
+    assert caught.value.code == expected_code
+
+
+@pytest.mark.parametrize("status", [200, 400])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "event: error\ndata: not-json\n\n",
+        'event: error\ndata: {"code":\ndata: invalid}\n\n',
+        "data: {}\n\ndata: [DONE]\n\n",
+        'event: ping\ndata: {"type":"ping"}\n\n',
+        'data: {"output":{"text":"ok"}}',
+        'data: {"message":{"id":"msg"},"error":{}}',
+        'data: [\ndata: {"code":"InvalidParameter"}\ndata: ]\n\n',
+        "data:\n\ndata\n\n",
+    ],
+)
+def test_sse_body_without_business_error_keeps_raw_fallback(status, text):
+    response = httpx.Response(status, text=text)
+    error = errors.response_error(response)
+    if status == 200:
+        assert error is None
+    else:
+        assert type(error) is BadRequestError
+        assert error.body is None
+        assert error.code is None
+        assert error.message == text
+        assert error.status_code == 400
+
+
+def test_normal_json_error_body_is_not_reinterpreted_as_sse():
+    payload = {
+        "code": "InvalidParameter",
+        "message": 'event: error\ndata: {"code":"DataInspectionFailed"}',
+        "request_id": "json-body-id",
+    }
+    with pytest.raises(BadRequestError) as caught:
+        check_response(_resp(400, payload))
+    assert type(caught.value) is BadRequestError
+    assert caught.value.body == payload
+    assert caught.value.message == payload["message"]
+    assert caught.value.request_id == "json-body-id"
+
+
+class _ErrorBodyStream(httpx.SyncByteStream, httpx.AsyncByteStream):
+    def __init__(self, text):
+        self.content = text.encode("utf-8")
+        self.closed = False
+
+    def __iter__(self):
+        for offset in range(0, len(self.content), 7):
+            yield self.content[offset : offset + 7]
+
+    async def __aiter__(self):
+        for chunk in self:
+            yield chunk
+
+    def close(self):
+        self.closed = True
+
+    async def aclose(self):
+        self.closed = True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize(
+    "text, payload",
+    [
+        (_multiline_sse_error("\r\n"), _SSE_ERROR_PAYLOAD),
+        (_multiline_sse_error("\n", True), _SSE_ERROR_PAYLOAD),
+        ("data: {}\n\n" + _multiline_sse_error(), _SSE_ERROR_PAYLOAD),
+        (
+            "data: {}\ndata: " + json.dumps(_SSE_ERROR_PAYLOAD),
+            _SSE_ERROR_PAYLOAD,
+        ),
+        ("event: error\ndata: broken-json", None),
+        ('data: {"type":"ping"}\n\n', None),
+        (json.dumps(_SSE_ERROR_PAYLOAD), _SSE_ERROR_PAYLOAD),
+    ],
+)
+async def test_public_http_error_propagates_and_closes(
+    monkeypatch,
+    asynchronous,
+    streaming,
+    text,
+    payload,
+):
+    monkeypatch.setattr("dashscope.v2._config._load_config_file", lambda _: {})
+    monkeypatch.setattr(
+        "dashscope.v2._config._api_key_from_file",
+        lambda: None,
+    )
+    wire = _ErrorBodyStream(text)
+    response = httpx.Response(
+        400,
+        stream=wire,
+        headers={
+            "content-type": "text/event-stream",
+            "x-request-id": "header-id",
+        },
+    )
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return response
+
+    base_url = "https://errors.test.local"
+    http_client = (httpx.AsyncClient if asynchronous else httpx.Client)(
+        transport=httpx.MockTransport(handler),
+        base_url=base_url,
+    )
+    client = (AsyncClient if asynchronous else Client)(
+        api_key="sk-test-only",
+        base_url=base_url,
+        protocol="native",
+        max_retries=0,
+        http_client=http_client,
+    )
+    expected_class = ContentFilterError if payload else BadRequestError
+    try:
+        assert not wire.closed and not response.is_closed
+        with pytest.raises(expected_class) as caught:
+            result = client.chat.completions.create(
+                model="test-model",
+                messages="hi",
+                stream=streaming,
+            )
+            if asynchronous:
+                await result
+        error = caught.value
+        assert type(error) is expected_class
+        assert error.body == payload
+        assert error.status_code == 400
+        assert error.code == (payload["code"] if payload else None)
+        assert error.message == (payload["message"] if payload else text)
+        assert error.request_id == (
+            payload["request_id"] if payload else "header-id"
+        )
+        assert error.headers["x-request-id"] == "header-id"
+        assert len(requests) == 1
+        assert requests[0].url.host == "errors.test.local"
+        assert wire.closed and response.is_closed
+    finally:
+        if asynchronous:
+            await client.aclose()
+            await http_client.aclose()
+        else:
+            client.close()
+            http_client.close()
+
+
+@pytest.mark.parametrize("raw", [None, [], "gateway failed", 0])
+@pytest.mark.parametrize("raise_on_error", [False, True])
+def test_strict_http_envelope_retains_non_object_failures(raw, raise_on_error):
+    response = _resp(503, raw, {"x-request-id": "header-id"})
+    if raise_on_error:
+        with pytest.raises(ServiceUnavailableError) as caught:
+            response_body(response)
+        assert caught.value.body == raw
+        assert caught.value.request_id == "header-id"
+    else:
+        result = ResponseBase(**response_body(response, raise_on_error=False))
+        assert result.is_error
+        assert result.status_code == 503
+        assert result.code is None
+        assert result.message == response.text
+        assert result.request_id == "header-id"
+
+
+@pytest.mark.parametrize("raw", [None, [], "not an envelope", 0])
+@pytest.mark.parametrize("raise_on_error", [False, True])
+def test_strict_http_envelope_rejects_non_object_success(raw, raise_on_error):
+    with pytest.raises(ValueError):
+        response_body(_resp(200, raw), raise_on_error=raise_on_error)
 
 
 def test_error_code_enum():

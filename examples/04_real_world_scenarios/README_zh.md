@@ -145,7 +145,7 @@ MEETING_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/realtime_audio_m
 ### 改造成你自己的会议平台
 
 1. **换音频源**：`_read_pcm` 目前读本地 16 kHz PCM/WAV；生产环境从麦克风 / RTC 下行 / 消息队列字节流向 `_pump_audio` 喂帧，保持 `pace=True` 的实时节奏。
-2. **真正的边说边转写**：演示是"发完全部音频 → stop → 读事件"（与 `01_atomic_capabilities/audio_speech/tingwu.py` 一致，为了离线确定性）；实时字幕风格需要在发送的同时用读线程排空 `realtime.events()`——socket 本身是全双工的。
+2. **真正的边说边转写**：演示是"发完全部音频 → stop → 读事件"（与 `01_atomic_capabilities/audio/tingwu.py` 一致，为了离线确定性）；实时字幕风格需要在发送的同时用读线程排空 `realtime.events()`——socket 本身是全双工的。
 3. **调并发与准入**：`MAX_CONCURRENT` 是活跃 socket 上限——按你机器的 fd / 线程预算设定；`RECONNECT_ATTEMPTS` 和 `BASE_DELAY`（生产建议 ≈0.5s）控制重连激进程度。
 4. **接持久化与可观测性**：`MeetingSession.transition` 是状态的唯一出口；生产环境接到日志 / 指标 / 会议记录存储上，按 `meeting_id` 持久化转写稿与状态。
 

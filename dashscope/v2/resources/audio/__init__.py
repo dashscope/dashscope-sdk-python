@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-"""client.audio resource group (asr/tts/realtime/translation, design doc
-M3 3.4/3.5).
+"""client.audio resource group (asr/tts/realtime, design doc M3 3.4/3.5).
 
 Assembly only — each sub-resource lives in its own module, so the tree
 here is two levels deep at most: ``client.audio.asr.transcribe``,
 ``client.audio.asr.recognize``, ``client.audio.tts.synthesize``,
 ``client.audio.tts.http.synthesize``, ``client.audio.realtime.connect``,
-``client.audio.translation.recognize``, and the management plane
-``client.audio.vocabularies`` / ``phrases`` / ``voices`` /
-``voice_design``.
+and the management plane ``client.audio.vocabularies`` / ``phrases`` /
+``voices`` / ``voice_design``.
 """
 
 from dashscope.v2.resources.audio.asr import (
@@ -40,10 +38,6 @@ from dashscope.v2.resources.audio.phrases import (
     Phrases,
 )
 from dashscope.v2.resources.audio.realtime import Realtime, RealtimeSession
-from dashscope.v2.resources.audio.translation import (
-    Translation,
-    TranslationSession,
-)
 from dashscope.v2.resources.audio.tts import SynthesisSession, Tts
 
 __all__ = [
@@ -64,8 +58,6 @@ __all__ = [
     "RealtimeSession",
     "Recognition",
     "SynthesisSession",
-    "Translation",
-    "TranslationSession",
     "Tts",
     "Vocabularies",
     "Vocabulary",
@@ -78,17 +70,12 @@ __all__ = [
 
 
 class Audio:
-    """Sync audio surface.
-
-    Preview: the 2.0 audio API surface is not final and may change in
-    a future release.
-    """
+    """Sync audio surface."""
 
     def __init__(self, client) -> None:
         self.asr = Asr(client)
         self.tts = Tts(client)
         self.realtime = Realtime(client)
-        self.translation = Translation(client)
         self.vocabularies = Vocabularies(client)
         self.phrases = Phrases(client)
         self.voices = Voices(client)
@@ -101,9 +88,6 @@ class AsyncAudio:
     Only batch transcription is exposed here; the ws realtime resources
     (``asr.recognize``, ``tts``, ``realtime``) are sync-only by design
     (design doc M3 3.5).
-
-    Preview: the 2.0 audio API surface is not final and may change in
-    a future release.
     """
 
     def __init__(self, client) -> None:

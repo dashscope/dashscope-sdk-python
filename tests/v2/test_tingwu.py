@@ -57,7 +57,16 @@ class FakeWebSocket:
     def recv(self):
         if not self.inbox:
             return None
-        return self.inbox.pop(0)
+        raw = self.inbox.pop(0)
+        if isinstance(raw, str):
+            event = json.loads(raw)
+            header = event.get("header")
+            if isinstance(header, dict) and header.get("task_id") == "t":
+                header["task_id"] = json.loads(self.sent[0])["header"][
+                    "task_id"
+                ]
+                return json.dumps(event)
+        return raw
 
     def close(self):
         self.closed = True

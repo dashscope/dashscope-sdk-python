@@ -374,28 +374,52 @@ def error_from_sdk_exception(
 
 
 def _sse_error_body(text: str) -> Any:
-    """Decode an SSE error body into its first ``data:`` JSON payload.
+    """Decode an SSE error payload, preferring codes over message-only frames."""
+    data_lines = []
+    fallback = None
 
-    A streaming request the gateway rejects before any output arrives
-    as a non-2xx response whose body is the error frame itself --
-    ``event:error`` plus a ``data:`` JSON line -- instead of a plain
-    JSON document. 1.x parses the same shape in
-    ``common.utils._handle_http_failed_response``; like
-    ``resources/_sse.py``, the frame is detected by line shape rather
-    than content-type, so a mislabeled header still maps. Bodies with
-    no decodable frame yield None, leaving the raw-text fallback
-    intact.
-    """
-    for line in text.splitlines():
-        if not line.startswith("data:"):
-            continue
+    def flush() -> Any:
+        nonlocal fallback
+        if not data_lines:
+            return None
         try:
-            body = json.loads(line[len("data:") :])
+            bodies = [json.loads("\n".join(data_lines))]
         except json.JSONDecodeError:
-            continue
-        if isinstance(body, dict):
-            return body
-    return None
+            # Older gateways omit blank lines between complete JSON frames.
+            bodies = []
+            for data in data_lines:
+                try:
+                    bodies.append(json.loads(data))
+                except json.JSONDecodeError:
+                    continue
+        for body in bodies:
+            if not isinstance(body, dict):
+                continue
+            error = _extract(body.get("error"))
+            if body.get("code") or any(
+                error.get(key) for key in ("code", "type", "message")
+            ):
+                return body
+            if (
+                fallback is None
+                and isinstance(body.get("message"), str)
+                and body["message"]
+            ):
+                fallback = body
+        return None
+
+    for line in text.splitlines():
+        if line.startswith("data:"):
+            data_lines.append(line[len("data:") :])
+        elif line == "data":
+            data_lines.append("")
+        elif not line:
+            body = flush()
+            data_lines.clear()
+            if body is not None:
+                return body
+    body = flush()
+    return body if body is not None else fallback
 
 
 def _parse_body(response: httpx.Response) -> Any:

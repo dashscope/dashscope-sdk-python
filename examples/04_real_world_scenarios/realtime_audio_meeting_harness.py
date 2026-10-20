@@ -174,7 +174,7 @@ def _pump_audio(session, realtime):
     Production variant: to transcribe *live* rather than after stop,
     drain ``realtime.events()`` on a reader thread while frames are still
     being sent -- the socket is duplex. The sequential shape here matches
-    01_atomic_capabilities/audio_speech/tingwu.py and keeps the offline
+    01_atomic_capabilities/audio/tingwu.py and keeps the offline
     mock deterministic.
     """
     for frame in session.frames:

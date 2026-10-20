@@ -23,10 +23,9 @@ The realtime family is not multiplexable: its protocol has no task id
 opening a dedicated connection per session.
 """
 
-# pylint: disable=redefined-builtin
-# WsTask and WsConnection are one protocol split across two classes; the
-# cross-class private access is intra-module by design.
-# pylint: disable=protected-access
+# WsConnection and WsTask deliberately share the owning client's
+# internals (send/claim/detach) — they are one transport layer.
+# pylint: disable=redefined-builtin,protected-access
 
 from __future__ import annotations
 
@@ -43,6 +42,8 @@ from dashscope.v2._config import (
 )
 from dashscope.v2.errors import APIConnectionError
 from dashscope.v2.transport.ws import (
+    EVENT_FAILED,
+    EVENT_FINISHED,
     EVENT_STARTED,
     Connector,
     WsEventError,
@@ -86,6 +87,10 @@ class WsTask(_EventProcessor):
         self._cancel_sent = False
         self._finished = False
         self._closed = False
+        # Reader-side routing uses the connection lock, not the send lock.
+        self._routing_active = False
+        self._routing_finished = False
+        self._error: Optional[BaseException] = None
 
     @property
     def task_id(self) -> str:
@@ -100,7 +105,10 @@ class WsTask(_EventProcessor):
         return self._finished
 
     def _enqueue(self, item: _QueueItem) -> None:
-        if not self._closed:
+        """Called with the connection lock held; the first error ends input."""
+        if not self._closed and self._error is None:
+            if item[0] == _ERROR:
+                self._error = item[1]
             self._queue.put(item)
 
     def _frame(self, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -212,11 +220,9 @@ class WsTask(_EventProcessor):
                 return frame
 
     def recv(self) -> Union[Dict[str, Any], bytes, None]:
-        """Read the next demuxed frame for this task."""
+        """Read queued frames before surfacing a persistent close/error."""
         if self._finished:
             return None
-        if self._closed:
-            raise RuntimeError("websocket task is closed")
         try:
             kind, payload = self._queue.get(timeout=self._timeout)
         except queue.Empty:
@@ -224,20 +230,16 @@ class WsTask(_EventProcessor):
                 "timed out waiting for a websocket event",
             ) from None
         if kind == _ERROR:
+            # Requeue the terminal marker so subsequent readers also fail.
+            self._queue.put((kind, payload))
             raise payload
         if isinstance(payload, (bytes, bytearray)):
             return bytes(payload)
-        try:
-            return self._process_event(payload)
-        finally:
-            if self._finished:
-                self._conn._release_binary(self)
+        return self._process_event(payload)
 
     def close(self) -> None:
-        """Detach from the connection; the shared socket stays open."""
-        if not self._closed:
-            self._closed = True
-            self._conn._detach(self)
+        """Detach and wake receivers; the shared socket stays open."""
+        self._conn._detach(self)
 
 
 class WsConnection:
@@ -284,15 +286,19 @@ class WsConnection:
         # are enforced on the demux queues, so the socket itself must
         # block forever -- a socket read timeout would kill the reader
         # during any quiet period longer than the timeout.
-        settimeout = getattr(self._ws, "settimeout", None)
-        if callable(settimeout):
-            settimeout(None)
-        self._reader = threading.Thread(
-            target=self._reader_main,
-            name="dashscope-ws-reader",
-            daemon=True,
-        )
-        self._reader.start()
+        try:
+            settimeout = getattr(self._ws, "settimeout", None)
+            if callable(settimeout):
+                settimeout(None)
+            self._reader = threading.Thread(
+                target=self._reader_main,
+                name="dashscope-ws-reader",
+                daemon=True,
+            )
+            self._reader.start()
+        except BaseException:
+            self.close()
+            raise
 
     @property
     def closed(self) -> bool:
@@ -325,8 +331,21 @@ class WsConnection:
                 self.close()
                 raise
 
+    def _check_binary_owner(self, task: WsTask) -> None:
+        """Validate under the connection lock; pre-start claims are allowed."""
+        if self._closed:
+            raise RuntimeError("websocket connection is closed")
+        if (
+            self._tasks.get(task.task_id) is not task
+            or task._closed
+            or task._finished
+            or task._routing_finished
+        ):
+            raise RuntimeError("websocket task is not active")
+
     def _claim_binary_uplink(self, task: WsTask) -> None:
         with self._lock:
+            self._check_binary_owner(task)
             owner = self._binary_uplink_owner
             if owner is not None and owner is not task:
                 raise RuntimeError(
@@ -336,6 +355,7 @@ class WsConnection:
 
     def _claim_binary_downlink(self, task: WsTask) -> None:
         with self._lock:
+            self._check_binary_owner(task)
             owner = self._binary_downlink_owner
             if owner is not None and owner is not task:
                 raise RuntimeError(
@@ -344,16 +364,20 @@ class WsConnection:
             self._binary_downlink_owner = task
 
     def _release_binary(self, task: WsTask) -> None:
-        with self._lock:
-            if self._binary_uplink_owner is task:
-                self._binary_uplink_owner = None
-            if self._binary_downlink_owner is task:
-                self._binary_downlink_owner = None
+        """Release both directions with the connection lock already held."""
+        if self._binary_uplink_owner is task:
+            self._binary_uplink_owner = None
+        if self._binary_downlink_owner is task:
+            self._binary_downlink_owner = None
 
     def _detach(self, task: WsTask) -> None:
         with self._lock:
-            self._tasks.pop(task.task_id, None)
-        self._release_binary(task)
+            task._enqueue((_ERROR, RuntimeError("websocket task is closed")))
+            task._closed = True
+            task._routing_active = False
+            if self._tasks.get(task.task_id) is task:
+                self._tasks.pop(task.task_id)
+            self._release_binary(task)
 
     def _reader_main(self) -> None:
         try:
@@ -372,37 +396,47 @@ class WsConnection:
 
     def _route_event(self, event: Any) -> None:
         header = event.get("header") if isinstance(event, dict) else None
-        task_id = header.get("task_id") if isinstance(header, dict) else None
+        if not isinstance(header, dict):
+            raise WsEventError("expected a websocket event header")
+        task_id = header.get("task_id")
+        if not isinstance(task_id, str) or not task_id:
+            raise WsEventError("expected a non-empty websocket task_id")
         with self._lock:
             task = self._tasks.get(task_id)
-        if task is None:
-            # Late event for a detached task; the task is gone, so drop it.
-            return
-        task._enqueue((_FRAME, event))
+            if self._closed or task is None or task._routing_finished:
+                # Late events for detached or terminal tasks are harmless.
+                return
+            name = header.get("event")
+            if name == EVENT_STARTED:
+                task._routing_active = True
+            elif name in (EVENT_FINISHED, EVENT_FAILED):
+                task._routing_active = False
+                task._routing_finished = True
+                self._release_binary(task)
+            task._enqueue((_FRAME, event))
 
     def _route_binary(self, data: bytes) -> None:
         with self._lock:
+            if self._closed:
+                return
             owner = self._binary_downlink_owner
             if owner is None:
                 active = [
                     task
                     for task in self._tasks.values()
-                    if task._started
-                    and not task._finished
-                    and not task._closed
+                    if task._routing_active
                 ]
-                if len(active) == 1:
-                    owner = active[0]
-                    self._binary_downlink_owner = owner
-        if owner is None:
-            if not active:
-                # Late or garbage binary with no task to receive it.
-                return
-            raise WsEventError(
-                "binary frame with multiple active tasks; claim the "
-                "downlink with claim_binary_downlink()",
-            )
-        owner._enqueue((_FRAME, data))
+                if not active:
+                    # Late or garbage binary with no task to receive it.
+                    return
+                if len(active) != 1:
+                    raise WsEventError(
+                        "binary frame with multiple active tasks; claim the "
+                        "downlink with claim_binary_downlink()",
+                    )
+                owner = active[0]
+                self._binary_downlink_owner = owner
+            owner._enqueue((_FRAME, data))
 
     def _fail(self, exc: BaseException) -> None:
         with self._lock:
@@ -411,24 +445,24 @@ class WsConnection:
                 # just the shutdown echo.
                 return
             self._closed = True
+            self._binary_uplink_owner = None
+            self._binary_downlink_owner = None
         _close_websocket(self._ws)
         self._broadcast(exc)
 
     def _broadcast(self, exc: BaseException) -> None:
         with self._lock:
-            tasks = list(self._tasks.values())
-        for task in tasks:
-            task._enqueue((_ERROR, exc))
+            for task in self._tasks.values():
+                task._routing_active = False
+                task._enqueue((_ERROR, exc))
 
     def close(self) -> None:
-        with self._lock:
-            if self._closed:
-                return
-            self._closed = True
-        _close_websocket(self._ws)
-        self._broadcast(APIConnectionError("websocket connection closed"))
+        self._fail(APIConnectionError("websocket connection closed"))
+        # Initialization may fail before the reader is created or started.
+        reader = getattr(self, "_reader", None)
         if (
-            self._reader.is_alive()
-            and threading.current_thread() is not self._reader
+            reader is not None
+            and reader.is_alive()
+            and threading.current_thread() is not reader
         ):
-            self._reader.join(timeout=2)
+            reader.join(timeout=2)

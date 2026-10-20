@@ -19,11 +19,11 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from pydantic import AliasChoices, Field
 
-from dashscope.v2.errors import check_response
 from dashscope.v2.types.common import (
     JobStatus,
     ResponseBase,
     flatten_envelope,
+    response_body,
     with_headers,
 )
 
@@ -113,11 +113,9 @@ class _CustomizationBase:
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> Any:
-        input_ = {"action": action}
-        input_.update(fields)
         body: Dict[str, Any] = {
             "model": model or self.DEFAULT_MODEL,
-            "input": input_,
+            "input": {**fields, "action": action},
         }
         if parameters is not None:
             body["parameters"] = parameters
@@ -131,8 +129,15 @@ class _CustomizationBase:
             api_key=api_key,
             workspace=workspace,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
         return response
+
+    def _parse_response(self, response: Any) -> Dict[str, Any]:
+        return flatten_envelope(
+            response_body(
+                response,
+                raise_on_error=self._client.raise_on_error,
+            ),
+        )
 
 
 class Vocabularies(_CustomizationBase):
@@ -170,7 +175,7 @@ class Vocabularies(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            Vocabulary(**flatten_envelope(response.json())),
+            Vocabulary(**self._parse_response(response)),
             response,
         )
 
@@ -203,7 +208,7 @@ class Vocabularies(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            VocabularyList(**flatten_envelope(response.json())),
+            VocabularyList(**self._parse_response(response)),
             response,
         )
 
@@ -229,7 +234,7 @@ class Vocabularies(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            Vocabulary(**flatten_envelope(response.json())),
+            Vocabulary(**self._parse_response(response)),
             response,
         )
 
@@ -256,7 +261,7 @@ class Vocabularies(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            JobStatus(**flatten_envelope(response.json())),
+            JobStatus(**self._parse_response(response)),
             response,
         )
 
@@ -282,7 +287,7 @@ class Vocabularies(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            JobStatus(**flatten_envelope(response.json())),
+            JobStatus(**self._parse_response(response)),
             response,
         )
 
@@ -330,7 +335,7 @@ class Voices(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            Voice(**flatten_envelope(response.json())),
+            Voice(**self._parse_response(response)),
             response,
         )
 
@@ -363,7 +368,7 @@ class Voices(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            VoiceList(**flatten_envelope(response.json())),
+            VoiceList(**self._parse_response(response)),
             response,
         )
 
@@ -389,7 +394,7 @@ class Voices(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            Voice(**flatten_envelope(response.json())),
+            Voice(**self._parse_response(response)),
             response,
         )
 
@@ -416,7 +421,7 @@ class Voices(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            JobStatus(**flatten_envelope(response.json())),
+            JobStatus(**self._parse_response(response)),
             response,
         )
 
@@ -442,7 +447,7 @@ class Voices(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            JobStatus(**flatten_envelope(response.json())),
+            JobStatus(**self._parse_response(response)),
             response,
         )
 
@@ -498,7 +503,7 @@ class VoiceDesign(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            DesignedVoice(**flatten_envelope(response.json())),
+            DesignedVoice(**self._parse_response(response)),
             response,
         )
 
@@ -524,7 +529,7 @@ class VoiceDesign(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            DesignedVoiceList(**flatten_envelope(response.json())),
+            DesignedVoiceList(**self._parse_response(response)),
             response,
         )
 
@@ -550,7 +555,7 @@ class VoiceDesign(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            DesignedVoice(**flatten_envelope(response.json())),
+            DesignedVoice(**self._parse_response(response)),
             response,
         )
 
@@ -576,6 +581,6 @@ class VoiceDesign(_CustomizationBase):
             workspace=workspace,
         )
         return with_headers(
-            JobStatus(**flatten_envelope(response.json())),
+            JobStatus(**self._parse_response(response)),
             response,
         )

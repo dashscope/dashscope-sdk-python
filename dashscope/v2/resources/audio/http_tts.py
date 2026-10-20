@@ -4,28 +4,39 @@
 
 V2 form of the two 1.x HTTP TTS families, sharing one entry:
 
-- sambert/cosyvoice (1.x ``HttpSpeechSynthesizer``) ->
-  ``services/audio/tts/SpeechSynthesizer``
+- qwen-audio / cosyvoice -> ``services/audio/tts/SpeechSynthesizer``
 - qwen-tts family (1.x qwen ``SpeechSynthesizer``: qwen-tts,
   qwen3-tts-flash) -> ``services/aigc/multimodal-generation/generation``
 
 Both POST the same ``{model, input}`` envelope and answer with
 ``output.audio``; streaming rides SSE via the ``X-DashScope-SSE: enable``
-header, framed exactly like the 1.x ``StreamEventMixin`` wire (see
-``resources/_sse.py``).
+header. Audio uses standard SSE framing and strict error handling locally,
+without changing the legacy job-event stream contract.
 """
 
 from __future__ import annotations
 
 import base64
 import json
-from typing import Any, Dict, Iterator, Mapping, Optional
+from typing import (
+    Any,
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+)
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from dashscope.v2.errors import DashScopeError, check_response
-from dashscope.v2.resources._sse import _iter_sse, _stream_error
-from dashscope.v2.types.common import with_headers
+from dashscope.v2.errors import (
+    APIStatusError,
+    DashScopeError,
+    error_from_business_code,
+    error_from_status,
+)
+from dashscope.v2.resources._sse import _try_json
+from dashscope.v2.types.common import ResponseBase, response_body, with_headers
 
 __all__ = [
     "HttpSynthesis",
@@ -41,9 +52,108 @@ _DEFAULT_PATH = "/services/audio/tts/SpeechSynthesizer"
 _QWEN_PATH = "/services/aigc/multimodal-generation/generation"
 
 
+_Frame = Tuple[bool, Optional[int], str]
+
+
+class _SSEDecoder:
+    """Standard SSE framing for synchronous HTTP audio only."""
+
+    def __init__(self) -> None:
+        self.is_error = False
+        self.status_code: Optional[int] = None
+        self.data: List[str] = []
+
+    def feed(self, line: str) -> Optional[_Frame]:
+        if not line:
+            frame = None
+            if self.data:
+                data = "\n".join(self.data)
+                body = _try_json(data)
+                is_error = self.is_error or (
+                    isinstance(body, dict) and bool(body.get("code"))
+                )
+                frame = (is_error, self.status_code, data)
+            self.is_error = False
+            self.status_code = None
+            self.data = []
+            return frame
+        field, _, value = line.partition(":")
+        if value.startswith(" "):
+            value = value[1:]
+        if field == "event":
+            self.is_error = value == "error"
+        elif field == "status":
+            self.status_code = int(value.strip())
+        elif field == "data":
+            self.data.append(value)
+        return None
+
+
+def _iter_audio_sse(response) -> Iterator[_Frame]:
+    # Non-2xx audio bodies can look like valid SSE but are still failures.
+    if not 200 <= response.status_code < 300:
+        response.read()
+        response_body(response)
+        return
+    media_type = response.headers.get("content-type", "").split(";", 1)[0]
+    media_type = media_type.strip().lower()
+    if media_type == "application/json" or media_type.endswith("+json"):
+        response.read()
+        response_body(response)
+        return
+    decoder = _SSEDecoder()
+    for line in response.iter_lines():
+        frame = decoder.feed(line)
+        if frame is not None:
+            yield frame
+            if frame[0]:
+                return
+    # Some services omit the final blank line; retain the final audio/error part.
+    frame = decoder.feed("")
+    if frame is not None:
+        yield frame
+
+
+def _with_audio_request_id(error: DashScopeError) -> DashScopeError:
+    """Keep audio's outer/output/header precedence out of shared errors."""
+    body = error.body if isinstance(error.body, dict) else {}
+    output = body.get("output")
+    output = output if isinstance(output, dict) else {}
+    error.request_id = (
+        body.get("request_id")
+        or output.get("request_id")
+        or error.headers.get("x-request-id")
+        or error.request_id
+    )
+    return error
+
+
+def _audio_stream_error(
+    status_code: Optional[int],
+    data: str,
+    headers: Mapping[str, str],
+) -> DashScopeError:
+    body = _try_json(data)
+    message = (body.get("message") or data) if isinstance(body, dict) else data
+    if status_code is None:
+        error = error_from_business_code(
+            message=message,
+            body=body,
+            headers=headers,
+        )
+    else:
+        error = error_from_status(
+            status_code,
+            message=message,
+            body=body,
+            headers=headers,
+        )
+    return _with_audio_request_id(error)
+
+
 def _path_for(model: str) -> str:
-    # qwen-tts / qwen3-tts-flash ride the multimodal-generation service;
-    # sambert/cosyvoice ride the audio tts service.
+    if model.startswith("qwen-audio-"):
+        return _DEFAULT_PATH
     if model.startswith("qwen"):
         return _QWEN_PATH
     return _DEFAULT_PATH
@@ -87,17 +197,12 @@ def _usage_dict(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return usage if isinstance(usage, dict) else None
 
 
-class HttpSynthesis(BaseModel):
+class HttpSynthesis(ResponseBase):
     """Non-streaming result: a URL reference to the rendered audio."""
-
-    model_config = ConfigDict(extra="allow")
 
     output: Dict[str, Any] = {}
     usage: Optional[Dict[str, Any]] = None
     request_id: str = ""
-    # Raw HTTP response headers, 1.x parity (``GenerationResponse.headers``);
-    # filled via ``with_headers`` like every other non-streaming success.
-    headers: Dict[str, str] = Field(default_factory=dict)
 
     @property
     def audio_url(self) -> Optional[str]:
@@ -114,10 +219,8 @@ class HttpSynthesis(BaseModel):
         return _audio_dict(self.output).get("expires_at")
 
 
-class HttpSynthesisChunk(BaseModel):
+class HttpSynthesisChunk(ResponseBase):
     """One SSE part of a streaming synthesis."""
-
-    model_config = ConfigDict(extra="allow")
 
     output: Dict[str, Any] = {}
     audio: Optional[bytes] = None
@@ -159,9 +262,12 @@ def _synthesis_from_body(
 ) -> HttpSynthesis:
     output = body.get("output")
     return HttpSynthesis(
-        output=output if isinstance(output, dict) else {},
-        usage=_usage_dict(body),
-        request_id=body.get("request_id") or header_request_id,
+        **{
+            **body,
+            "output": output if isinstance(output, dict) else {},
+            "usage": _usage_dict(body),
+            "request_id": body.get("request_id") or header_request_id,
+        },
     )
 
 
@@ -180,12 +286,20 @@ def _chunk_from_data(
     output = body.get("output")
     output = output if isinstance(output, dict) else {}
     payload = _audio_dict(output).get("data")
-    return HttpSynthesisChunk(
-        output=output,
-        audio=base64.b64decode(payload) if payload else None,
-        usage=_usage_dict(body),
-        request_id=body.get("request_id") or header_request_id,
+    chunk = HttpSynthesisChunk(
+        **{
+            **body,
+            "output": output,
+            "audio": base64.b64decode(payload, validate=True)
+            if payload
+            else None,
+            "usage": _usage_dict(body),
+            "request_id": body.get("request_id") or header_request_id,
+        },
     )
+    if chunk.status_code is not None and not 200 <= chunk.status_code < 300:
+        chunk.is_error = True
+    return chunk
 
 
 class HttpSynthesisStream:
@@ -193,14 +307,14 @@ class HttpSynthesisStream:
 
     def __init__(
         self,
-        inner: Iterator[HttpSynthesisChunk],
+        inner: Generator[HttpSynthesisChunk, None, None],
         response: Any,
     ) -> None:
         self._inner = inner
         self._response = response
 
-    def __iter__(self) -> Iterator[HttpSynthesisChunk]:
-        return iter(self._inner)
+    def __iter__(self) -> "HttpSynthesisStream":
+        return self
 
     def __next__(self) -> HttpSynthesisChunk:
         return next(self._inner)
@@ -211,7 +325,10 @@ class HttpSynthesisStream:
         return dict(self._response.headers)
 
     def close(self) -> None:
-        self._inner.close()
+        try:
+            self._inner.close()
+        finally:
+            self._response.close()
 
 
 class HttpTts:
@@ -256,10 +373,12 @@ class HttpTts:
             api_key=api_key,
             workspace=workspace,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
             _synthesis_from_body(
-                response.json(),
+                response_body(
+                    response,
+                    raise_on_error=self._client.raise_on_error,
+                ),
                 response.headers.get("x-request-id", ""),
             ),
             response,
@@ -291,33 +410,38 @@ class HttpTts:
         sse_headers = dict(_SSE_HEADER)
         if headers:
             sse_headers.update(headers)
-        response = self._client.transport.open_stream(
-            "POST",
-            _path_for(model),
-            json=_build_body(
-                text,
-                model=model,
-                voice=voice,
-                format=format,
-                sample_rate=sample_rate,
-                language_type=language_type,
-                parameters=parameters,
-                extra_input=extra_input,
-            ),
-            headers=sse_headers,
-            timeout=timeout,
-            sdk_module=MODULE,
-            api_key=api_key,
-            workspace=workspace,
-        )
+        try:
+            response = self._client.transport.open_stream(
+                "POST",
+                _path_for(model),
+                json=_build_body(
+                    text,
+                    model=model,
+                    voice=voice,
+                    format=format,
+                    sample_rate=sample_rate,
+                    language_type=language_type,
+                    parameters=parameters,
+                    extra_input=extra_input,
+                ),
+                headers=sse_headers,
+                timeout=timeout,
+                sdk_module=MODULE,
+                api_key=api_key,
+                workspace=workspace,
+            )
+        except APIStatusError as error:
+            # >=400 is raised (and closed) before open_stream returns a response.
+            _with_audio_request_id(error)
+            raise
         return HttpSynthesisStream(self._events(response), response)
 
-    def _events(self, response) -> Iterator[HttpSynthesisChunk]:
+    def _events(self, response) -> Generator[HttpSynthesisChunk, None, None]:
         header_request_id = response.headers.get("x-request-id", "")
         try:
-            for is_error, status, data in _iter_sse(response):
+            for is_error, status, data in _iter_audio_sse(response):
                 if is_error:
-                    raise _stream_error(status, data)
+                    raise _audio_stream_error(status, data, response.headers)
                 yield _chunk_from_data(data, header_request_id)
         finally:
             response.close()

@@ -793,3 +793,283 @@ async def test_async_business_code_reaches_list_and_logs_responses():
     deployments = await client.deployments.list()
     assert deployments.is_error and deployments.code == "Throttling"
     await client.aclose()
+
+
+_EVENT_CLIENT_CASES = [
+    pytest.param(
+        resource,
+        is_async,
+        raise_on_error,
+        id=f"{resource}-{'async' if is_async else 'sync'}-raise-{raise_on_error}",
+    )
+    for resource in ("fine_tunes", "deployments")
+    for is_async in (False, True)
+    for raise_on_error in (False, True)
+]
+
+
+class _EventStream(httpx.SyncByteStream, httpx.AsyncByteStream):
+    """Unbuffered mock shared by both APIs, with a read-ahead tripwire."""
+
+    def __init__(self, *parts, require_first_consumed=False, error=None):
+        self.parts = parts
+        self.require_first_consumed = require_first_consumed
+        self.first_consumed = False
+        self.error = error
+        self.reads = 0
+        self.closed = False
+
+    def __iter__(self):
+        for index, part in enumerate(self.parts):
+            if index and self.require_first_consumed:
+                assert (
+                    self.first_consumed
+                ), "read ahead before first data was consumed"
+            self.reads += 1
+            yield part
+        if self.error is not None:
+            raise self.error
+
+    async def __aiter__(self):
+        for part in self:
+            yield part
+
+    def close(self):
+        self.closed = True
+
+    async def aclose(self):
+        self.close()
+
+
+def _event_client(wire, resource, is_async, raise_on_error, content_type):
+    response = httpx.Response(
+        200,
+        stream=wire,
+        headers={"content-type": content_type, "x-request-id": "header-id"},
+    )
+
+    def handler(request):
+        assert (
+            request.url.path
+            == f"/api/v1/{resource.replace('_', '-')}/job-1/stream"
+        )
+        return response
+
+    factory = _make_async_client if is_async else _make_client
+    client = factory(handler, raise_on_error=raise_on_error, max_retries=0)
+    return client, response, getattr(client, resource).stream_events("job-1")
+
+
+async def _close_event_client(client, is_async):
+    # The injected HTTP client is caller-owned, so close that pool explicitly.
+    if is_async:
+        await client.transport.http_client.aclose()
+    else:
+        client.transport.http_client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "resource, is_async, raise_on_error",
+    _EVENT_CLIENT_CASES,
+)
+@pytest.mark.parametrize(
+    "content_type",
+    ["application/json", "application/problem+json"],
+)
+@pytest.mark.parametrize(
+    "body",
+    [
+        b'{"code":"Throttling","message":"slow down"}',
+        b'{"output":{"status":"SUCCEEDED"}}',
+        b'{"output":',
+    ],
+)
+async def test_job_events_http200_json_remains_empty(
+    resource,
+    is_async,
+    raise_on_error,
+    content_type,
+    body,
+):
+    wire = _EventStream(body)
+    client, response, stream = _event_client(
+        wire,
+        resource,
+        is_async,
+        raise_on_error,
+        content_type,
+    )
+    try:
+        events = (
+            [event async for event in stream] if is_async else list(stream)
+        )
+        assert events == []
+        assert wire.closed and response.is_closed
+    finally:
+        await _close_event_client(client, is_async)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "resource, is_async, raise_on_error",
+    _EVENT_CLIENT_CASES,
+)
+async def test_job_events_data_lines_are_immediate_and_code_is_not_error(
+    resource,
+    is_async,
+    raise_on_error,
+):
+    first_body = {"code": "Throttling", "message": "ordinary event"}
+    wire = _EventStream(
+        ("data: " + json.dumps(first_body) + "\n").encode(),
+        b'data: {"status":"SUCCEEDED"}\n',
+        require_first_consumed=True,
+    )
+    client, response, stream = _event_client(
+        wire,
+        resource,
+        is_async,
+        raise_on_error,
+        "text/event-stream",
+    )
+    try:
+        first = await stream.__anext__() if is_async else next(stream)
+        assert first.output == first_body
+        assert not first.is_error
+        assert wire.reads == 1 and not wire.closed
+        wire.first_consumed = True
+        rest = [event async for event in stream] if is_async else list(stream)
+        assert len(rest) == 1
+        assert rest[0].output == {"status": "SUCCEEDED"}
+        assert not rest[0].is_error
+        assert wire.closed and response.is_closed
+    finally:
+        await _close_event_client(client, is_async)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "resource, is_async, raise_on_error",
+    _EVENT_CLIENT_CASES,
+)
+@pytest.mark.parametrize(
+    "status, code, error_type",
+    [
+        (None, "Throttling", RateLimitError),
+        (400, "InvalidParameter", BadRequestError),
+        (429, "Throttling", RateLimitError),
+    ],
+)
+async def test_job_events_legacy_error_mapping_and_nonraising_event(
+    resource,
+    is_async,
+    raise_on_error,
+    status,
+    code,
+    error_type,
+):
+    body = {
+        "code": code,
+        "message": "rejected",
+        "output": {"request_id": "inner-id"},
+    }
+    status_line = "" if status is None else f"status: {status}\n"
+    wire = _EventStream(
+        b'data: {"status":"RUNNING"}\n\n',
+        (
+            "event:error\n"
+            + status_line
+            + "data: "
+            + json.dumps(body)
+            + "\n\n"
+        ).encode(),
+        b'data: {"status":"SHOULD_NOT_BE_READ"}\n\n',
+    )
+    client, response, stream = _event_client(
+        wire,
+        resource,
+        is_async,
+        raise_on_error,
+        "text/event-stream",
+    )
+    try:
+        first = await stream.__anext__() if is_async else next(stream)
+        assert first.output == {"status": "RUNNING"} and not first.is_error
+        if raise_on_error:
+            with pytest.raises(error_type, match="rejected") as caught:
+                if is_async:
+                    await stream.__anext__()
+                else:
+                    next(stream)
+            assert caught.value.status_code == (status or 200)
+            assert caught.value.code == code
+            assert caught.value.body == body
+            # Job events use only the top-level body request ID.
+            assert caught.value.request_id is None
+            assert caught.value.headers == {}
+        else:
+            rest = (
+                [event async for event in stream] if is_async else list(stream)
+            )
+            assert len(rest) == 1 and rest[0].is_error
+            assert rest[0].output == body
+        assert wire.reads == 2
+        assert wire.closed and response.is_closed
+    finally:
+        await _close_event_client(client, is_async)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "resource, is_async, raise_on_error",
+    _EVENT_CLIENT_CASES,
+)
+@pytest.mark.parametrize(
+    "failure",
+    ["invalid-status", "read-error", "early-close"],
+)
+async def test_job_events_close_on_original_exceptions_and_early_exit(
+    resource,
+    is_async,
+    raise_on_error,
+    failure,
+):
+    # Disabling error-event exceptions does not suppress parse or read failures.
+    wire = _EventStream(
+        b'data: {"status":"RUNNING"}\n',
+        b"status: invalid\ndata: value\n"
+        if failure == "invalid-status"
+        else b"",
+        error=httpx.ReadError("connection lost")
+        if failure == "read-error"
+        else None,
+    )
+    client, response, stream = _event_client(
+        wire,
+        resource,
+        is_async,
+        raise_on_error,
+        "text/event-stream",
+    )
+    try:
+        first = await stream.__anext__() if is_async else next(stream)
+        assert first.output == {"status": "RUNNING"}
+        assert not wire.closed
+        if failure == "early-close":
+            if is_async:
+                await stream.aclose()
+            else:
+                stream.close()
+        else:
+            error_type = (
+                ValueError if failure == "invalid-status" else httpx.ReadError
+            )
+            with pytest.raises(error_type):
+                if is_async:
+                    await stream.__anext__()
+                else:
+                    next(stream)
+        assert wire.closed and response.is_closed
+    finally:
+        await _close_event_client(client, is_async)

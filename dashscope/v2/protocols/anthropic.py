@@ -605,7 +605,10 @@ class AnthropicProtocol(ChatProtocol):
         # unchanged, so this converges both entry points and keeps the
         # hatch-wins precedence. Copy first: never mutate the caller's
         # dict.
-        if extra_parameters and "tool_choice" in extra_parameters:
+        if (
+            extra_parameters
+            and extra_parameters.get("tool_choice") is not None
+        ):
             extra_parameters = dict(extra_parameters)
             extra_parameters["tool_choice"] = _translate_tool_choice(
                 extra_parameters["tool_choice"],

@@ -22,8 +22,13 @@ Known intentional divergences (not covered here):
 # pylint: disable=protected-access
 
 import json
+from copy import deepcopy
+
+import httpx
+import pytest
 
 from dashscope.acli.providers.anthropic import AnthropicProvider
+from dashscope.v2 import AsyncClient, Client
 from dashscope.v2.protocols import AnthropicProtocol
 
 MODEL = "qwen3-max"
@@ -212,3 +217,110 @@ def test_text_content_parts():
     )
     request = _v2_request([{"role": "user", "content": list(parts)}])
     assert request.body["messages"] == acli_messages
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize(
+    "entry_point",
+    ["named", "parameters", "parameters_override"],
+)
+@pytest.mark.parametrize(
+    "tool_choice, expected",
+    [
+        (None, None),
+        ("auto", {"type": "auto"}),
+        ("none", {"type": "none"}),
+        ("required", {"type": "any"}),
+        (
+            {"type": "function", "function": {"name": "get_weather"}},
+            {"type": "tool", "name": "get_weather"},
+        ),
+        (
+            {"type": "tool", "name": "get_weather"},
+            {"type": "tool", "name": "get_weather"},
+        ),
+        (
+            {"type": "any", "disable_parallel_tool_use": True},
+            {"type": "any", "disable_parallel_tool_use": True},
+        ),
+    ],
+)
+async def test_public_tool_choice_translation_and_null_compatibility(
+    monkeypatch,
+    asynchronous,
+    entry_point,
+    tool_choice,
+    expected,
+):
+    monkeypatch.setattr("dashscope.v2._config._load_config_file", lambda _: {})
+    monkeypatch.setattr(
+        "dashscope.v2._config._api_key_from_file",
+        lambda: None,
+    )
+    via_parameters = entry_point != "named"
+    kwargs = {"tool_choice": deepcopy(tool_choice)}
+    if via_parameters:
+        kwargs = {
+            "parameters": {
+                "tool_choice": deepcopy(tool_choice),
+                "metadata": {"trace": "test-only"},
+            },
+        }
+        if entry_point == "parameters_override":
+            kwargs["tool_choice"] = "required"
+    original = deepcopy(kwargs)
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "id": "test-message",
+                "model": MODEL,
+                "role": "assistant",
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+            },
+        )
+
+    base_url = "https://anthropic.test.local"
+    http_client = (httpx.AsyncClient if asynchronous else httpx.Client)(
+        transport=httpx.MockTransport(handler),
+        base_url=base_url,
+    )
+    client = (AsyncClient if asynchronous else Client)(
+        api_key="sk-test-only",
+        base_url=base_url,
+        protocol="anthropic",
+        max_retries=0,
+        http_client=http_client,
+    )
+    try:
+        result = client.chat.completions.create(
+            model=MODEL,
+            messages="hi",
+            **kwargs,
+        )
+        if asynchronous:
+            result = await result
+        assert result.output_text == "ok"
+        assert len(requests) == 1
+        assert str(requests[0].url) == f"{base_url}/v1/messages"
+        body = json.loads(requests[0].content)
+        if via_parameters or tool_choice is not None:
+            assert "tool_choice" in body
+            assert body["tool_choice"] == expected
+        else:
+            assert "tool_choice" not in body
+        if via_parameters:
+            assert body["metadata"] == original["parameters"]["metadata"]
+        assert kwargs == original
+    finally:
+        if asynchronous:
+            await client.aclose()
+            await http_client.aclose()
+        else:
+            client.close()
+            http_client.close()

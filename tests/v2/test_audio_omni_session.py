@@ -511,26 +511,6 @@ def test_explicit_connect_rejects_duplicate_opens(client):
         session.close()
 
 
-def test_every_session_opens_its_own_socket(client):
-    # Contract relied on by examples/04_real_world_scenarios/
-    # realtime_audio_meeting_harness.py: realtime sessions never share a
-    # socket, so concurrent sessions need one dedicated connection each.
-    sockets = [FakeWebSocket(), FakeWebSocket()]
-    calls = []
-
-    def connector(url, headers):
-        calls.append((url, headers))
-        return sockets[len(calls) - 1]
-
-    first = client.audio.realtime.connect(model="omni", connector=connector)
-    second = client.audio.realtime.connect(model="omni", connector=connector)
-    with first, second:
-        assert len(calls) == 2
-        first.send_event({"type": "ping"})
-        assert len(sockets[0].sent) == 1
-        assert sockets[1].sent == []
-
-
 @pytest.mark.parametrize("timeout, expected", [(None, 12.5), (7, 7)])
 def test_default_connector_applies_timeout_during_handshake(
     client,
@@ -1067,7 +1047,12 @@ _LIVE38_MODELS = [
     "qwen3.8-livetranslate-flash-realtime" + suffix
     for suffix in ("", "-2026-09-01")
 ]
-_PATCH_MODELS = _QWEN_AUDIO_MODELS + _LIVE_MODELS + _LIVE38_MODELS
+_OMNI38_MODELS = [
+    "qwen3.8-omni-flash-realtime" + suffix for suffix in ("", "-2026-09-01")
+]
+_PATCH_MODELS = (
+    _QWEN_AUDIO_MODELS + _LIVE_MODELS + _LIVE38_MODELS + _OMNI38_MODELS
+)
 
 
 @pytest.fixture
@@ -1098,6 +1083,12 @@ def test_new_protocol_updates_are_incremental(model_opened, model):
                 "input": {"turn_detection": {"type": "speaker_detection"}},
                 "output": {"voice": "Cherry"},
             },
+        }
+    elif model in _OMNI38_MODELS:
+        configured = {
+            "modalities": ["text", "audio"],
+            "turn_detection": {"type": "server_vad"},
+            "audio": {"output": {"voice": "Cherry"}},
         }
     else:
         configured = {
@@ -1145,6 +1136,12 @@ def test_new_protocol_updates_preserve_falsey_values(model_opened, model):
                 "input": {"turn_detection": {}},
                 "output": {"voice": None},
             },
+        )
+    elif model in _OMNI38_MODELS:
+        expected.update(
+            modalities=[],
+            turn_detection={},
+            audio={"output": {"voice": None}},
         )
     else:
         expected.update(modalities=[], voice=None, turn_detection={})
@@ -1837,6 +1834,16 @@ def test_new_protocol_metrics_track_output_and_preserve_raw_events(
             "qwen-omni-turbo-realtime",
             _default_session(modalities=["text"], voice="Cherry"),
         ),
+        (
+            "qwen3.5-omni-flash-realtime",
+            "qwen3.8-omni-flash-realtime-2026-09-01",
+            {"modalities": ["text"], "audio": {"output": {"voice": "Cherry"}}},
+        ),
+        (
+            "qwen3.8-omni-flash-realtime",
+            "qwen3.5-omni-flash-realtime",
+            _default_session(modalities=["text"], voice="Cherry"),
+        ),
     ],
 )
 def test_url_model_selects_wire_protocol_without_changing_public_model(
@@ -1879,3 +1886,1228 @@ def test_url_model_selects_wire_protocol_without_changing_public_model(
             ws.inbox.append({"type": "session.finished"})
             assert list(session.events()) == [{"type": "session.finished"}]
         assert session.model == model
+
+
+@pytest.mark.parametrize("model", _OMNI38_MODELS)
+def test_omni38_manual_audio_and_response(model_opened):
+    session, ws = model_opened
+    input_format = {
+        "type": "pcm",
+        "sample_rate": 16000,
+        "sample_format": "s16le",
+        "channels": 1,
+        "packing": "interleaved",
+        "channel_layout": "mono",
+    }
+    output_format = {"type": "pcm", "sample_rate": 24000}
+    session.update_session(
+        ["text", "audio"],
+        voice="longanlingxin",
+        input_audio_config=input_format,
+        output_audio_config=output_format,
+        enable_turn_detection=False,
+    )
+    session.append_audio(b"audio")
+    session.commit()
+    session.create_response()
+    session.create_response(
+        modalities=["text"],
+        instructions="",
+        temperature=0,
+    )
+    assert _payloads(ws) == [
+        {
+            "type": "session.update",
+            "session": {
+                "modalities": ["text", "audio"],
+                "turn_detection": None,
+                "audio": {
+                    "input": {"format": input_format},
+                    "output": {
+                        "format": output_format,
+                        "voice": "longanlingxin",
+                    },
+                },
+            },
+        },
+        {"type": "input_audio_buffer.append", "audio": "YXVkaW8="},
+        {"type": "input_audio_buffer.commit"},
+        {"type": "response.create"},
+        {
+            "type": "response.create",
+            "response": {
+                "modalities": ["text"],
+                "instructions": "",
+                "temperature": 0,
+            },
+        },
+    ]
+
+
+@pytest.mark.parametrize("model", _OMNI38_MODELS)
+@pytest.mark.parametrize(
+    "raw_audio, expected_audio",
+    [
+        (
+            {"input": {"format": {"type": "wav"}}, "output": {"voice": ""}},
+            {
+                "input": {"format": {"type": "wav", "sample_rate": 16000}},
+                "output": {"format": {"type": "pcm"}, "voice": ""},
+            },
+        ),
+        ({"input": None, "output": None}, {"input": None, "output": None}),
+        (None, None),
+    ],
+)
+def test_omni38_nested_overrides_leave_vad_at_top_level(
+    model_opened,
+    raw_audio,
+    expected_audio,
+):
+    session, ws = model_opened
+    options = {
+        "input_audio_format": "pcm",
+        "sample_rate": 16000,
+        "output_audio_format": "pcm",
+        "voice": "longanlingxin",
+        "turn_detection_type": "semantic_vad",
+        "turn_detection_threshold": 0,
+        "audio": raw_audio,
+    }
+    original = copy.deepcopy(options)
+    session.update_session(**options)
+    assert _payloads(ws) == [
+        {
+            "type": "session.update",
+            "session": {
+                "turn_detection": {"type": "semantic_vad", "threshold": 0},
+                "audio": expected_audio,
+            },
+        },
+    ]
+    assert options == original
+
+
+@pytest.mark.parametrize("model", _OMNI38_MODELS)
+def test_omni38_multichannel_and_extensions_are_not_mutated(model_opened):
+    session, ws = model_opened
+    audio_format = {
+        "type": "pcm",
+        "sample_rate": 16000,
+        "sample_format": "s16le",
+        "channels": 2,
+        "packing": "interleaved",
+        "channel_layout": "raw_mic_array",
+    }
+    tools = [{"type": "function", "name": "get_weather", "parameters": {}}]
+    original = copy.deepcopy([audio_format, tools])
+    session.update_session(
+        input_audio_config=audio_format,
+        input_audio_format="wav",
+        sample_rate=8000,
+        input_video_representation_compact="normal",
+        tools=tools,
+    )
+    assert _payloads(ws) == [
+        {
+            "type": "session.update",
+            "session": {
+                "audio": {"input": {"format": audio_format}},
+                "video": {"input": {"representation_compact": "normal"}},
+                "tools": tools,
+            },
+        },
+    ]
+    assert [audio_format, tools] == original
+    approval = {
+        "type": "mcp_approval_request",
+        "id": "approval-1",
+        "server_label": "example",
+        "name": "get_weather",
+        "arguments": "{}",
+    }
+    ws.inbox.append({"type": "response.output_item.done", "item": approval})
+    assert session.recv_event()["item"] == approval
+    response = {
+        "type": "mcp_approval_response",
+        "approval_request_id": "approval-1",
+        "approve": False,
+    }
+    session.create_item(response)
+    assert _payloads(ws)[-1] == {
+        "type": "conversation.item.create",
+        "item": response,
+    }
+
+
+@pytest.mark.parametrize("model", _OMNI38_MODELS)
+@pytest.mark.parametrize(
+    "options, expected",
+    [
+        (
+            {"enable_input_audio_transcription": True},
+            {"model": "qwen3-asr-flash-realtime"},
+        ),
+        ({"enable_input_audio_transcription": False}, None),
+        ({"transcription_params": {}}, {}),
+        ({"input_audio_transcription_model": None}, {"model": None}),
+        (
+            {
+                "enable_input_audio_transcription": True,
+                "input_audio_transcription": None,
+            },
+            None,
+        ),
+    ],
+)
+def test_omni38_transcription_is_explicit(model_opened, options, expected):
+    session, ws = model_opened
+    session.update_session(**options)
+    assert _payloads(ws) == [
+        {
+            "type": "session.update",
+            "session": {"input_audio_transcription": expected},
+        },
+    ]
+
+
+@pytest.mark.parametrize("model", _OMNI38_MODELS)
+@pytest.mark.parametrize(
+    "eof",
+    [None, "", b"", WebSocketConnectionClosedException("closed")],
+)
+@pytest.mark.parametrize("completed", [False, True])
+def test_omni38_finish_needs_response_done_not_session_finished(
+    model_opened,
+    eof,
+    completed,
+):
+    session, ws = model_opened
+    ws.inbox.append({"type": "response.created", "response": {"id": "r1"}})
+    session.recv_event()
+    session.end_session()
+    session.end_session()
+    assert _payloads(ws) == [{"type": "session.finish"}]
+    assert ws.close_calls == 0
+    with pytest.raises(RuntimeError, match="finishing"):
+        session.append_audio(b"late")
+    if completed:
+        ws.inbox.append({"type": "response.done", "response": {"id": "r1"}})
+    ws.inbox.append(eof)
+    if completed:
+        assert len(list(session.events())) == 1
+        assert session.recv_event() is None
+    else:
+        with pytest.raises(APIConnectionError, match="before response.done"):
+            list(session.events())
+    assert ws.close_calls == 1
+
+
+# Audit cases assert the protocol and lifecycle contracts.
+# All sockets are local stubs; no credentials or cloud are used.
+_AUDIT_MODELS = [
+    "qwen3.5-omni-flash-realtime",
+    _OMNI38_MODELS[0],
+    _QWEN_AUDIO_MODELS[0],
+    _LIVE_MODELS[0],
+    _LIVE38_MODELS[0],
+]
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS[1:])
+def test_audit_patch_snapshot_survives_caller_mutation(model_opened, model):
+    session, ws = model_opened
+    options = {
+        "input_audio_config": {"type": "pcm", "sample_rate": 0},
+        "output_audio_config": {"type": "opus", "channels": 1},
+        "translation_params": {"language": "", "corpus": {"text": []}},
+        "transcription_params": {"language": None, "corpus_text": ""},
+        "turn_detection_param": {"threshold": 0, "create_response": False},
+        "tools": [{"name": "tool", "parameters": {"required": []}}],
+    }
+    original = copy.deepcopy(options)
+    session.update_session(**options)
+    assert options == original
+    expected = {
+        "audio": {
+            "input": {"format": original["input_audio_config"]},
+            "output": {"format": original["output_audio_config"]},
+        },
+        "translation": original["translation_params"],
+        "input_audio_transcription": {
+            "language": None,
+            "corpus": {"text": ""},
+        },
+        "tools": original["tools"],
+    }
+    if model in _LIVE38_MODELS:
+        expected["audio"]["input"]["turn_detection"] = original[
+            "turn_detection_param"
+        ]
+    else:
+        expected["turn_detection"] = original["turn_detection_param"]
+    options["input_audio_config"]["sample_rate"] = 48000
+    options["translation_params"]["corpus"]["text"].append("later")
+    options["tools"][0]["parameters"]["required"].append("later")
+    session.update_session(instructions="next")
+    assert _payloads(ws) == [
+        {"type": "session.update", "session": expected},
+        {"type": "session.update", "session": {"instructions": "next"}},
+    ]
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+@pytest.mark.parametrize(
+    "kind",
+    ["session.update", "response.create", "session.finish"],
+)
+def test_audit_serialization_failure_does_not_poison_session(
+    model_opened,
+    kind,
+):
+    session, ws = model_opened
+    event = {"type": kind, "extension": {"not-json": {"a", "b"}}}
+    original = copy.deepcopy(event)
+    with pytest.raises(TypeError):
+        session.send_event(event)
+    assert event == original
+    assert ws.sent == []
+    assert ws.close_calls == 0
+    session.commit()
+    assert _payloads(ws) == [{"type": "input_audio_buffer.commit"}]
+    assert session.recv_event() is None
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+@pytest.mark.parametrize(
+    "operation",
+    ["append_audio", "update_session", "create_response", "cancel_response"],
+)
+def test_audit_helper_send_failure_preserves_error_and_inputs(
+    model_opened,
+    operation,
+):
+    session, ws = model_opened
+    failure = ConnectionResetError("audit send failed")
+    ws.send_error = failure
+    ws.close_error = OSError("cleanup must not mask send")
+    options = {"metadata": {"values": [0, False, None]}}
+    original = copy.deepcopy(options)
+    with pytest.raises(ConnectionResetError) as caught:
+        if operation == "append_audio":
+            session.append_audio(b"audio")
+        elif operation == "update_session":
+            session.update_session(["text"], **options)
+        elif operation == "create_response":
+            session.create_response(**options)
+        else:
+            session.cancel_response()
+    assert caught.value is failure
+    assert options == original
+    assert ws.sent == []
+    assert ws.close_calls == 1
+    session.close()
+    assert ws.close_calls == 1
+    with pytest.raises(RuntimeError, match="not open"):
+        session.commit()
+
+
+@pytest.mark.parametrize("stage", ["send", "recv", "settimeout"])
+@pytest.mark.parametrize("failure_type", [KeyboardInterrupt, SystemExit])
+def test_audit_base_exception_cleanup_and_reconnect(
+    client,
+    stage,
+    failure_type,
+):
+    failed, fresh = FakeWebSocket(), FakeWebSocket()
+    failure = failure_type("interrupted")
+    if stage == "settimeout":
+        failed.timeout_error = failure
+    elif stage == "send":
+        failed.send_error = failure
+    else:
+        failed.inbox.append(failure)
+    sockets = iter([failed, fresh])
+    session = client.audio.realtime.connect(
+        model=_OMNI38_MODELS[0],
+        connector=lambda url, headers: next(sockets),
+    )
+    try:
+        with pytest.raises(failure_type) as caught:
+            session.connect()
+            if stage == "send":
+                session.commit()
+            elif stage == "recv":
+                session.recv_event()
+        assert caught.value is failure
+        assert failed.close_calls == 1
+        session.connect()
+        session.commit()
+        assert _payloads(fresh) == [{"type": "input_audio_buffer.commit"}]
+        assert session.last_message is None
+        assert session.last_response_id is None
+    finally:
+        session.close()
+    assert failed.close_calls == fresh.close_calls == 1
+
+
+@pytest.mark.parametrize("use_default", [False, True])
+def test_audit_settimeout_failure_after_previous_response_resets_state(
+    client,
+    monkeypatch,
+    use_default,
+):
+    first, failed, fresh = (FakeWebSocket() for _ in range(3))
+    failed.timeout_error = OSError("cannot set timeout")
+    failed.close_error = OSError("cleanup failed")
+    sockets = iter([first, failed, fresh])
+    options = {}
+    if use_default:
+        monkeypatch.setattr(
+            "websocket.create_connection",
+            lambda *a, **kw: next(sockets),
+        )
+    else:
+        options["connector"] = lambda url, headers: next(sockets)
+    session = client.audio.realtime.connect(model=_OMNI38_MODELS[0], **options)
+    try:
+        session.connect()
+        first.inbox.append(
+            {"type": "response.created", "response": {"id": "old"}},
+        )
+        session.recv_event()
+        session.end_session()
+        session.close()
+        with pytest.raises(OSError, match="cannot set timeout"):
+            session.connect()
+        assert failed.close_calls == 1
+        with pytest.raises(RuntimeError, match="not open"):
+            session.recv_event()
+        session.connect()
+        assert session.last_message is None
+        assert session.last_response_id is None
+        assert session.last_response_create_time is None
+        assert session.last_first_text_delay is None
+        assert session.last_first_audio_delay is None
+        session.commit()
+        assert session.recv_event() is None
+    finally:
+        session.close()
+    assert first.close_calls == failed.close_calls == fresh.close_calls == 1
+
+
+@pytest.mark.parametrize("active", [False, True])
+@pytest.mark.parametrize(
+    "raw, error_type",
+    [
+        ("null", ValueError),
+        ("false", ValueError),
+        ("0", ValueError),
+        ('"text"', ValueError),
+        ('[{"type": "response.done"}]', ValueError),
+        ('{"type": "response.done"} trailing', json.JSONDecodeError),
+        (" ", json.JSONDecodeError),
+        (bytearray(b"\xff"), UnicodeDecodeError),
+    ],
+)
+def test_audit_invalid_frames_close_without_masking_parse_error(
+    opened,
+    active,
+    raw,
+    error_type,
+):
+    session, ws = opened
+    previous = {"type": "response.created", "response": {"id": "r1"}}
+    if active:
+        ws.inbox.append(previous)
+        session.recv_event()
+    ws.inbox.append(raw)
+    ws.close_error = OSError("cleanup failed")
+    with pytest.raises(error_type):
+        session.recv_event()
+    assert ws.close_calls == 1
+    assert session.last_message == (previous if active else None)
+    session.close()
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("error", ["bad", ["bad"], 1, True, "", [], 0, False])
+def test_audit_malformed_error_object_is_rejected_and_closes(opened, error):
+    session, ws = opened
+    ws.inbox.append({"type": "error", "error": error})
+    ws.close_error = OSError("cleanup failed")
+    # Falsey non-objects are invalid too, not an absent error object.
+    with pytest.raises(ValueError, match="JSON error object"):
+        session.recv_event()
+    assert ws.close_calls == 1
+    with pytest.raises(RuntimeError, match="not open"):
+        session.commit()
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+@pytest.mark.parametrize("completed", [False, True])
+def test_audit_cancel_still_requires_matching_response_done(
+    model_opened,
+    completed,
+):
+    session, ws = model_opened
+    ws.inbox.append({"type": "response.created", "response": {"id": "r1"}})
+    session.recv_event()
+    session.cancel_response()
+    assert _payloads(ws) == [{"type": "response.cancel"}]
+    assert ws.close_calls == 0
+    ws.inbox.append({"type": "response.done", "response": {"id": "stale"}})
+    session.recv_event()
+    if completed:
+        done = {
+            "type": "response.done",
+            "response": {
+                "id": "r1",
+                "status": "cancelled",
+                "status_details": {
+                    "type": "cancelled",
+                    "reason": "client_cancelled",
+                },
+            },
+        }
+        ws.inbox.append(done)
+        assert session.recv_event() == done
+        assert session.recv_event() is None
+    else:
+        with pytest.raises(APIConnectionError, match="before response.done"):
+            session.recv_event()
+        with pytest.raises(APIConnectionError, match="before response.done"):
+            session.recv_event()
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+def test_audit_failed_response_done_remains_raw_terminal_event(model_opened):
+    session, ws = model_opened
+    done = {
+        "type": "response.done",
+        "response": {
+            "id": "r1",
+            "status": "failed",
+            "status_details": {
+                "type": "failed",
+                "error": {
+                    "code": "InternalError",
+                    "message": "generation failed",
+                },
+            },
+        },
+    }
+    ws.inbox.extend(
+        [
+            {"type": "response.created", "response": {"id": "r1"}},
+            done,
+        ],
+    )
+    assert list(session.events())[-1] == done
+    assert session.last_message == done
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+def test_audit_recoverable_error_keeps_active_response_tracking(model_opened):
+    session, ws = model_opened
+    ws.inbox.extend(
+        [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {
+                "type": "error",
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "InvalidParameter",
+                    "message": "cannot cancel this request",
+                },
+            },
+        ],
+    )
+    session.recv_event()
+    started = session.last_response_create_time
+    session.cancel_response()
+    with pytest.raises(BadRequestError, match="cannot cancel"):
+        session.recv_event()
+    assert ws.close_calls == 0
+    assert session.last_response_create_time == started
+    assert session.last_response_id == "r1"
+    session.commit()
+    with pytest.raises(APIConnectionError, match="before response.done"):
+        session.recv_event()
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+def test_audit_fatal_error_during_response_preserves_server_failure(
+    model_opened,
+):
+    session, ws = model_opened
+    failure = {
+        "type": "error",
+        "error": {
+            "type": "server_error",
+            "code": "Throttling",
+            "message": "busy",
+        },
+    }
+    ws.inbox.extend(
+        [
+            {"type": "response.created", "response": {"id": "r1"}},
+            failure,
+        ],
+    )
+    session.recv_event()
+    ws.close_error = OSError("cleanup failed")
+    with pytest.raises(RateLimitError, match="busy") as caught:
+        session.recv_event()
+    assert caught.value.body == failure
+    assert session.last_message == failure
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS[:3])
+@pytest.mark.parametrize("raw_send", [False, True])
+def test_audit_requested_response_cannot_disappear_before_created(
+    model_opened,
+    raw_send,
+):
+    session, ws = model_opened
+    if raw_send:
+        session.send_event({"type": "response.create"})
+    else:
+        session.create_response()
+    # A successful send followed by EOF is not a successful empty response.
+    with pytest.raises(APIConnectionError, match="response"):
+        session.recv_event()
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _OMNI38_MODELS)
+@pytest.mark.parametrize("request_finish", [False, True])
+def test_audit_omni38_optional_session_ack_cannot_replace_response_done(
+    model_opened,
+    request_finish,
+):
+    session, ws = model_opened
+    ws.inbox.append({"type": "response.created", "response": {"id": "r1"}})
+    session.recv_event()
+    if request_finish:
+        session.end_session()
+    ws.inbox.append({"type": "session.finished"})
+    with pytest.raises(APIConnectionError, match="before response.done"):
+        list(session.events())
+    assert ws.close_calls == 1
+    with pytest.raises(APIConnectionError, match="before response.done"):
+        session.recv_event()
+
+
+@pytest.mark.parametrize(
+    "wire_model, needs_ack",
+    [
+        ("qwen3.5-omni-flash-realtime", True),
+        (_OMNI38_MODELS[0], False),
+        (_LIVE_MODELS[0], True),
+        (_LIVE38_MODELS[0], True),
+    ],
+)
+def test_audit_finish_ack_uses_wire_protocol_even_without_response(
+    client,
+    wire_model,
+    needs_ack,
+):
+    ws = FakeWebSocket()
+    with client.audio.realtime.connect(
+        model=_QWEN_AUDIO_MODELS[0],
+        ws_url=f"wss://example.test/realtime?model={wire_model}",
+        connector=lambda url, headers: ws,
+    ) as session:
+        session.end_session()
+        session.end_session()
+        assert _payloads(ws) == [{"type": "session.finish"}]
+        if needs_ack:
+            with pytest.raises(
+                APIConnectionError,
+                match="before session.finished",
+            ):
+                session.recv_event()
+        else:
+            assert session.recv_event() is None
+        assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize(
+    "model",
+    [_AUDIT_MODELS[0], _OMNI38_MODELS[0], _LIVE38_MODELS[0]],
+)
+@pytest.mark.parametrize(
+    "operation",
+    ["commit", "cancel_response", "create_response", "clear_appended_audio"],
+)
+def test_audit_finish_rejects_other_sends_but_keeps_reader(
+    model_opened,
+    operation,
+):
+    session, ws = model_opened
+    session.end_session()
+    with pytest.raises(RuntimeError, match="finishing"):
+        getattr(session, operation)()
+    assert _payloads(ws) == [{"type": "session.finish"}]
+    assert ws.close_calls == 0
+    ws.inbox.append({"type": "session.finished"})
+    assert session.recv_event() == {"type": "session.finished"}
+    session.close()
+    session.close()
+    assert ws.close_calls == 1
+
+
+def _audit_start_call(call):
+    import threading
+    from concurrent.futures import Future
+
+    result = Future()
+
+    def run():
+        try:
+            result.set_result(call())
+        except BaseException as error:
+            result.set_exception(error)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread, result
+
+
+def test_audit_concurrent_connect_and_close_are_single_shot(client):
+    import threading
+
+    barrier = threading.Barrier(2, timeout=2)
+    ws = FakeWebSocket()
+    calls = []
+
+    def connector(url, headers):
+        calls.append(url)
+        return ws
+
+    session = client.audio.realtime.connect(
+        model=_OMNI38_MODELS[0],
+        connector=connector,
+    )
+
+    def connect():
+        barrier.wait()
+        return session.connect()
+
+    workers = [_audit_start_call(connect) for _ in range(2)]
+    try:
+        results = []
+        for thread, future in workers:
+            thread.join(2)
+            assert not thread.is_alive()
+            try:
+                results.append(future.result(timeout=0))
+            except RuntimeError as error:
+                assert "already open" in str(error)
+        assert results == [session]
+        assert len(calls) == 1
+        assert ws.close_calls == 0
+
+        def close():
+            barrier.wait()
+            session.close()
+
+        workers = [_audit_start_call(close) for _ in range(2)]
+        for thread, future in workers:
+            thread.join(2)
+            assert not thread.is_alive()
+            future.result(timeout=0)
+    finally:
+        session.close()
+    assert ws.close_calls == 1
+
+
+def test_audit_concurrent_receivers_cannot_reorder_response_tracking(
+    opened,
+    monkeypatch,
+):
+    import threading
+
+    session, ws = opened
+    entered, release = threading.Event(), threading.Event()
+    created = {"type": "response.created", "response": {"id": "r1"}}
+    done = {"type": "response.done", "response": {"id": "r1"}}
+    ws.inbox.extend([created, done])
+    track = session._track_event
+
+    def delayed_track(event):
+        if event["type"] == "response.created":
+            entered.set()
+            assert release.wait(2), "test did not release first reader"
+        track(event)
+
+    monkeypatch.setattr(session, "_track_event", delayed_track)
+    workers = [_audit_start_call(session.recv_event)]
+    second_started, second_finished = threading.Event(), threading.Event()
+
+    def second_read():
+        second_started.set()
+        try:
+            return session.recv_event()
+        finally:
+            second_finished.set()
+
+    try:
+        assert entered.wait(2)
+        workers.append(_audit_start_call(second_read))
+        assert second_started.wait(2)
+        assert not second_finished.wait(0.1)
+        assert ws.recv_calls == 1, "second reader read before first tracked"
+    finally:
+        release.set()
+        for thread, _ in workers:
+            thread.join(2)
+            assert not thread.is_alive()
+    assert workers[0][1].result(timeout=0) == created
+    assert workers[1][1].result(timeout=0) == done
+    assert session.last_message == done
+    assert session.recv_event() is None
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize(
+    "old_result",
+    [
+        None,
+        ConnectionResetError("old socket failed"),
+        "{invalid",
+        {"type": "session.created", "session": {"id": "stale"}},
+        {"type": "response.created", "response": {"id": "stale"}},
+        {"type": "session.finished"},
+        {
+            "type": "error",
+            "error": {
+                "type": "invalid_request_error",
+                "code": "InvalidParameter",
+                "event_id": "pending",
+            },
+        },
+    ],
+)
+@pytest.mark.parametrize("reuse_socket", [False, True])
+def test_audit_old_reader_cannot_close_or_contaminate_reconnected_session(
+    client,
+    old_result,
+    reuse_socket,
+):
+    import threading
+
+    entered, release = threading.Event(), threading.Event()
+
+    class DelayedSocket(FakeWebSocket):
+        def recv(self):
+            entered.set()
+            assert release.wait(2), "test did not release old socket"
+            return super().recv()
+
+    old = DelayedSocket([old_result])
+    # A custom connector may return the same wrapper on a new connection.
+    fresh = old if reuse_socket else FakeWebSocket()
+    sockets = iter([old, fresh])
+    session = client.audio.realtime.connect(
+        model=_OMNI38_MODELS[0],
+        connector=lambda url, headers: next(sockets),
+    )
+    session.connect()
+    thread, future = _audit_start_call(session.recv_event)
+    try:
+        assert entered.wait(2)
+        session.close()
+        session.connect()
+        session.send_event({"type": "response.create", "event_id": "pending"})
+        release.set()
+        thread.join(2)
+        assert not thread.is_alive()
+        # The retired read may report cancellation/transport/parse failure;
+        # none of these may act on the newly installed connection.
+        try:
+            future.result(timeout=0)
+        except (RuntimeError, APIConnectionError, OSError, ValueError):
+            pass
+        assert fresh.close_calls == int(reuse_socket)
+        assert session.session_id is None
+        assert session.last_message is None
+        assert session.last_response_id is None
+        session.commit()
+        assert (
+            json.loads(fresh.sent[-1])["type"] == "input_audio_buffer.commit"
+        )
+        # Neither a stale created nor a stale rejection may consume this.
+        with pytest.raises(APIConnectionError, match="before response.done"):
+            session.recv_event()
+    finally:
+        release.set()
+        thread.join(2)
+        session.close()
+    assert not thread.is_alive()
+    if reuse_socket:
+        assert old.close_calls == 2
+    else:
+        assert old.close_calls == fresh.close_calls == 1
+
+
+@pytest.mark.parametrize(
+    "code",
+    [["InvalidParameter"], {"bad": "code"}, [], {}, 0, False, 1, True],
+)
+def test_audit_malformed_recoverable_error_code_cannot_leak_socket(
+    opened,
+    code,
+):
+    session, ws = opened
+    ws.inbox.append(
+        {
+            "type": "error",
+            "error": {
+                "type": "invalid_request_error",
+                "code": code,
+                "message": "invalid wire code",
+            },
+        },
+    )
+    ws.close_error = OSError("cleanup failed")
+    with pytest.raises(ValueError, match="string error code"):
+        session.recv_event()
+    assert ws.close_calls == 1
+
+
+def test_audit_blocked_reader_does_not_block_sender_or_close(client):
+    import threading
+
+    entered, release = threading.Event(), threading.Event()
+
+    class DelayedSocket(FakeWebSocket):
+        def recv(self):
+            entered.set()
+            assert release.wait(2), "test did not release reader"
+            return super().recv()
+
+    ws = DelayedSocket()
+    session = client.audio.realtime.connect(
+        model=_OMNI38_MODELS[0],
+        connector=lambda url, headers: ws,
+    )
+    session.connect()
+    workers = [_audit_start_call(session.recv_event)]
+
+    def send_and_close():
+        session.commit()
+        session.close()
+
+    try:
+        assert entered.wait(2)
+        workers.append(_audit_start_call(send_and_close))
+        workers[1][1].result(timeout=1)
+        assert not release.is_set()
+        assert _payloads(ws) == [{"type": "input_audio_buffer.commit"}]
+        assert ws.close_calls == 1
+    finally:
+        release.set()
+        for thread, _ in workers:
+            thread.join(2)
+            assert not thread.is_alive()
+        session.close()
+    assert workers[0][1].result(timeout=0) is None
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+@pytest.mark.parametrize("raw_send", [False, True])
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_rejected_create_allows_another_response(
+    model_opened,
+    raw_send,
+    cancelled,
+):
+    session, ws = model_opened
+    if raw_send:
+        session.send_event(
+            {
+                "type": "response.create",
+                "event_id": "rejected-create",
+                "response": {"instructions": 123},
+            },
+        )
+    else:
+        session.create_response(instructions=123)
+    request_id = json.loads(ws.sent[-1])["event_id"]
+    rejected = {
+        "type": "error",
+        "event_id": "server-error",
+        "error": {
+            "type": "invalid_request_error",
+            "code": "InvalidParameter",
+            "message": "instructions must be a string",
+            "event_id": request_id,
+        },
+    }
+    ws.inbox.append(rejected)
+    with pytest.raises(BadRequestError) as caught:
+        session.recv_event()
+    assert caught.value.body == rejected
+    assert ws.close_calls == 0
+    assert session.last_response_id is None
+
+    session.commit()
+    session.create_response()
+    ws.inbox.append({"type": "response.created", "response": {"id": "r1"}})
+    assert session.recv_event()["type"] == "response.created"
+    if cancelled:
+        session.cancel_response()
+    done = {
+        "type": "response.done",
+        "response": {
+            "id": "r1",
+            "status": "cancelled" if cancelled else "completed",
+        },
+    }
+    ws.inbox.append(done)
+    assert session.recv_event() == done
+    assert session.recv_event() is None
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+@pytest.mark.parametrize(
+    "error_request",
+    [None, "update", "cancel", "consumed-create"],
+)
+def test_unrelated_error_cannot_consume_pending_create(
+    model_opened,
+    error_request,
+):
+    session, ws = model_opened
+    session.send_event(
+        {"type": "response.create", "event_id": "consumed-create"},
+    )
+    ws.inbox.extend(
+        [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.done", "response": {"id": "r1"}},
+        ],
+    )
+    session.recv_event()
+    session.recv_event()
+    session.send_event({"type": "session.update", "event_id": "update"})
+    session.send_event({"type": "response.create", "event_id": "pending"})
+    session.send_event({"type": "response.cancel", "event_id": "cancel"})
+    error = {
+        "type": "invalid_request_error",
+        "code": "InvalidParameter",
+        "message": "unrelated rejection",
+    }
+    if error_request is not None:
+        error["event_id"] = error_request
+    # Even a matching outer ID identifies a server event, not a client request.
+    ws.inbox.append({"type": "error", "event_id": "pending", "error": error})
+    with pytest.raises(BadRequestError, match="unrelated rejection"):
+        session.recv_event()
+    assert ws.close_calls == 0
+    with pytest.raises(APIConnectionError, match="before response.done"):
+        session.recv_event()
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+@pytest.mark.parametrize("order", [(0, 1, 2), (2, 0, 1)])
+def test_multiple_rejected_creates_are_correlated_individually(
+    model_opened,
+    order,
+):
+    session, ws = model_opened
+    for index in range(3):
+        session.send_event(
+            {
+                "type": "response.create",
+                "event_id": f"create-{index}",
+                "response": {"instructions": 123},
+            },
+        )
+    for index in order:
+        ws.inbox.append(
+            {
+                "type": "error",
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "InvalidParameter",
+                    "event_id": f"create-{index}",
+                },
+            },
+        )
+        with pytest.raises(BadRequestError):
+            session.recv_event()
+        assert ws.close_calls == 0
+    assert session.recv_event() is None
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+@pytest.mark.parametrize(
+    "second_outcome",
+    ["missing", "rejected", "completed"],
+)
+def test_created_consumes_only_one_pending_request(
+    model_opened,
+    second_outcome,
+):
+    session, ws = model_opened
+    session.send_event({"type": "response.create", "event_id": "first"})
+    session.send_event({"type": "response.create", "event_id": "second"})
+    ws.inbox.extend(
+        [
+            {"type": "response.created", "response": {"id": "r1"}},
+            {"type": "response.done", "response": {"id": "r1"}},
+        ],
+    )
+    session.recv_event()
+    session.recv_event()
+    if second_outcome == "rejected":
+        ws.inbox.append(
+            {
+                "type": "error",
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "InvalidParameter",
+                    "event_id": "second",
+                },
+            },
+        )
+        with pytest.raises(BadRequestError):
+            session.recv_event()
+    elif second_outcome == "completed":
+        ws.inbox.extend(
+            [
+                {"type": "response.created", "response": {"id": "r2"}},
+                {"type": "response.done", "response": {"id": "r2"}},
+            ],
+        )
+        session.recv_event()
+        session.recv_event()
+    if second_outcome == "missing":
+        with pytest.raises(APIConnectionError, match="before response.done"):
+            session.recv_event()
+    else:
+        assert session.recv_event() is None
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+@pytest.mark.parametrize("stage", ["before-created", "before-done", "done"])
+def test_cancel_before_created_does_not_discard_pending_request(
+    model_opened,
+    stage,
+):
+    session, ws = model_opened
+    session.create_response()
+    session.cancel_response()
+    if stage != "before-created":
+        ws.inbox.append({"type": "response.created", "response": {"id": "r1"}})
+        session.recv_event()
+    ws.inbox.append({"type": "response.done", "response": {"id": "stale"}})
+    session.recv_event()
+    if stage == "done":
+        ws.inbox.append(
+            {
+                "type": "response.done",
+                "response": {"id": "r1", "status": "cancelled"},
+            },
+        )
+        session.recv_event()
+        assert session.recv_event() is None
+    else:
+        with pytest.raises(APIConnectionError, match="before response.done"):
+            session.recv_event()
+    assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("request_finish", [False, True])
+def test_omni38_optional_ack_cannot_hide_pending_create(
+    client,
+    request_finish,
+):
+    ws = FakeWebSocket([{"type": "session.finished"}])
+    with client.audio.realtime.connect(
+        model=_OMNI38_MODELS[0],
+        connector=lambda url, headers: ws,
+    ) as session:
+        session.create_response()
+        if request_finish:
+            session.end_session()
+        with pytest.raises(APIConnectionError, match="before response.done"):
+            list(session.events())
+        with pytest.raises(APIConnectionError, match="before response.done"):
+            session.recv_event()
+        assert ws.close_calls == 1
+
+
+@pytest.mark.parametrize("send_failure", [False, True])
+def test_reconnect_clears_pending_create_state(client, send_failure):
+    first, fresh = FakeWebSocket(), FakeWebSocket()
+    sockets = iter([first, fresh])
+    session = client.audio.realtime.connect(
+        model=_OMNI38_MODELS[0],
+        connector=lambda url, headers: next(sockets),
+    )
+    with session:
+        if send_failure:
+            first.send_error = ConnectionResetError("create failed")
+            with pytest.raises(ConnectionResetError, match="create failed"):
+                session.create_response()
+            assert session.recv_event() is None
+        else:
+            session.create_response()
+            with pytest.raises(
+                APIConnectionError,
+                match="before response.done",
+            ):
+                session.recv_event()
+    with session:
+        assert session.last_response_id is None
+        assert session.last_message is None
+        assert session.recv_event() is None
+    assert first.close_calls == fresh.close_calls == 1
+
+
+@pytest.mark.parametrize("model", _AUDIT_MODELS)
+@pytest.mark.parametrize("completed", [False, True])
+def test_rejected_create_does_not_complete_an_active_response(
+    model_opened,
+    completed,
+):
+    session, ws = model_opened
+    session.create_response()
+    ws.inbox.append({"type": "response.created", "response": {"id": "r1"}})
+    session.recv_event()
+    session.send_event({"type": "response.create", "event_id": "second"})
+    ws.inbox.append(
+        {
+            "type": "error",
+            "error": {
+                "type": "invalid_request_error",
+                "code": "InvalidParameter",
+                "message": "response already in progress",
+                "event_id": "second",
+            },
+        },
+    )
+    with pytest.raises(BadRequestError, match="already in progress"):
+        session.recv_event()
+    assert ws.close_calls == 0
+    if completed:
+        ws.inbox.append({"type": "response.done", "response": {"id": "r1"}})
+        session.recv_event()
+        assert session.recv_event() is None
+    else:
+        with pytest.raises(APIConnectionError, match="before response.done"):
+            session.recv_event()
+    assert ws.close_calls == 1

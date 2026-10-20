@@ -6,13 +6,17 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Protocol, TypeVar
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from dashscope.v2.errors import error_from_business_code, error_from_status
 
 __all__ = [
     "JobStatus",
     "ResponseBase",
     "Usage",
     "flatten_envelope",
+    "response_body",
     "response_envelope",
     "with_headers",
 ]
@@ -131,6 +135,57 @@ def flatten_envelope(
     flat = dict(payload) if isinstance(payload, dict) else {}
     flat.update({k: v for k, v in body.items() if k != key and v is not None})
     return flat
+
+
+def response_body(
+    response: httpx.Response,
+    *,
+    raise_on_error: bool = True,
+) -> Dict[str, Any]:
+    """Opt in to strict HTTP envelopes, retaining non-JSON service failures."""
+    success = 200 <= response.status_code < 300
+    try:
+        raw = response.json()
+    except ValueError:
+        if success:
+            raise
+        raw = None
+    if isinstance(raw, dict):
+        body = raw
+    else:
+        if success:
+            raise ValueError("expected a JSON object response")
+        body = {"message": response.text}
+    output = body.get("output")
+    output = output if isinstance(output, dict) else {}
+    request_id = (
+        body.get("request_id")
+        or output.get("request_id")
+        or response.headers.get("x-request-id")
+    )
+    error = None
+    if not success:
+        error = error_from_status(
+            response.status_code,
+            message=response.text,
+            body=raw,
+            headers=response.headers,
+        )
+    elif body.get("code"):
+        error = error_from_business_code(
+            message=body.get("message") or response.text,
+            body=raw,
+            headers=response.headers,
+        )
+    if error is not None and raise_on_error:
+        error.request_id = request_id
+        raise error
+    body = {**body, "status_code": response.status_code}
+    if request_id is not None:
+        body["request_id"] = request_id
+    if error is not None:
+        body["is_error"] = True
+    return body
 
 
 def response_envelope(body: Dict[str, Any]) -> Dict[str, Any]:

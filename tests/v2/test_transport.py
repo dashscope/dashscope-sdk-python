@@ -12,9 +12,10 @@ import pytest
 
 from dashscope.v2.errors import (
     APIConnectionError,
+    APIStatusError,
     APITimeoutError,
     BadRequestError,
-    RateLimitError,
+    response_error,
 )
 from dashscope.v2.transport import AsyncTransport, SyncTransport
 from dashscope.v2.transport import http as transport_http
@@ -157,38 +158,6 @@ def test_open_stream_transport_error_mapped(no_sleep):
         t.open_stream("POST", "/x")
     # Streams are never retried.
     assert rec.calls == 1
-
-
-def test_open_stream_retryable_status_not_retried(no_sleep):
-    # Contract relied on by examples/04_real_world_scenarios/
-    # production_ready_rag_harness.py: a retryable status on a streaming
-    # call raises after a single attempt -- the application, not the
-    # SDK, owns stream backoff and failover.
-    rec = _Recorder()
-    responses = [(429, {"retry-after": "3"}), (200, {})]
-    t = _make_sync(rec, responses, max_retries=3)
-    with pytest.raises(RateLimitError):
-        t.open_stream("POST", "/x", json={"a": 1})
-    assert rec.calls == 1
-    assert no_sleep == []
-
-
-@pytest.mark.asyncio
-async def test_open_stream_retryable_status_not_retried_async(no_sleep):
-    rec = _Recorder()
-    responses = [(429, {"retry-after": "3"}), (200, {})]
-    mock = httpx.MockTransport(rec.handler(responses))
-    http_client = httpx.AsyncClient(transport=mock, base_url=BASE_URL)
-    t = AsyncTransport(
-        base_url=BASE_URL,
-        http_client=http_client,
-        max_retries=3,
-    )
-    with pytest.raises(RateLimitError):
-        await t.open_stream("POST", "/x", json={"a": 1})
-    assert rec.calls == 1
-    assert no_sleep == []
-    await t.aclose()
 
 
 _SSE_ERROR_BODY = (
@@ -583,3 +552,216 @@ def test_backoff_delay_bounds():
     assert d10 <= 8.0 * 1.25
     assert backoff_delay(0, {"retry-after": "2"}) == 2.0
     assert backoff_delay(0, {"retry-after": "999"}) == 8.0
+
+
+@pytest.mark.parametrize("method", ["request", "open_stream"])
+@pytest.mark.parametrize("lowercase", [False, True])
+def test_sync_call_auth_wins_case_insensitively(method, lowercase):
+    rec = _Recorder()
+    transport = _make_sync(rec, [])
+    with transport.http_client as http_client:
+        http_client.headers.update(
+            {
+                "Authorization": "Bearer pool-key",
+                "X-DashScope-WorkSpace": "pool-ws",
+            },
+        )
+        headers = {
+            "Authorization": "Bearer header-key",
+            "X-DashScope-WorkSpace": "header-ws",
+        }
+        if lowercase:
+            headers = {key.lower(): value for key, value in headers.items()}
+        original = dict(headers)
+        call = getattr(transport, method)
+        call(
+            "GET",
+            "/x",
+            headers=headers,
+            api_key="call-key",
+            workspace="call-ws",
+        ).close()
+        call("GET", "/x").close()
+        assert headers == original
+    first, second = rec.requests
+    assert first.headers.get_list("authorization") == ["Bearer call-key"]
+    assert first.headers.get_list("x-dashscope-workspace") == ["call-ws"]
+    assert second.headers.get_list("authorization") == ["Bearer pool-key"]
+    assert second.headers.get_list("x-dashscope-workspace") == ["pool-ws"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["request", "open_stream"])
+@pytest.mark.parametrize("lowercase", [False, True])
+async def test_async_call_auth_wins_case_insensitively(method, lowercase):
+    rec = _Recorder()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(rec.handler([])),
+        base_url=BASE_URL,
+        headers={
+            "Authorization": "Bearer pool-key",
+            "X-DashScope-WorkSpace": "pool-ws",
+        },
+    ) as http_client:
+        transport = AsyncTransport(base_url=BASE_URL, http_client=http_client)
+        headers = {
+            "Authorization": "Bearer header-key",
+            "X-DashScope-WorkSpace": "header-ws",
+        }
+        if lowercase:
+            headers = {key.lower(): value for key, value in headers.items()}
+        original = dict(headers)
+        call = getattr(transport, method)
+        response = await call(
+            "GET",
+            "/x",
+            headers=headers,
+            api_key="call-key",
+            workspace="call-ws",
+        )
+        await response.aclose()
+        response = await call("GET", "/x")
+        await response.aclose()
+        assert headers == original
+    first, second = rec.requests
+    assert first.headers.get_list("authorization") == ["Bearer call-key"]
+    assert first.headers.get_list("x-dashscope-workspace") == ["call-ws"]
+    assert second.headers.get_list("authorization") == ["Bearer pool-key"]
+    assert second.headers.get_list("x-dashscope-workspace") == ["pool-ws"]
+
+
+class _TrackedSyncStream(httpx.SyncByteStream):
+    def __init__(self, read_error):
+        self.read_error = read_error
+        self.closed = False
+
+    def __iter__(self):
+        yield b"gateway "
+        if self.read_error is not None:
+            raise self.read_error("connection lost")
+        yield b"rejected"
+
+    def close(self):
+        self.closed = True
+
+
+class _TrackedAsyncStream(httpx.AsyncByteStream):
+    def __init__(self, read_error):
+        self.read_error = read_error
+        self.closed = False
+
+    async def __aiter__(self):
+        yield b"gateway "
+        if self.read_error is not None:
+            raise self.read_error("connection lost")
+        yield b"rejected"
+
+    async def aclose(self):
+        self.closed = True
+
+
+@pytest.mark.parametrize("status", [199, 302, 400, 500])
+@pytest.mark.parametrize(
+    "read_error",
+    [None, httpx.ReadError, httpx.ReadTimeout],
+)
+def test_sync_open_stream_status_and_response_ownership(status, read_error):
+    wire = _TrackedSyncStream(read_error)
+    response = httpx.Response(
+        status,
+        stream=wire,
+        headers={"x-request-id": "header-id"},
+    )
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return response
+
+    with httpx.Client(
+        transport=httpx.MockTransport(handler),
+        base_url=BASE_URL,
+    ) as http_client:
+        transport = SyncTransport(base_url=BASE_URL, http_client=http_client)
+        if status >= 400:
+            with pytest.raises(read_error or APIStatusError) as caught:
+                transport.open_stream("GET", "/x")
+            if read_error is None:
+                assert caught.value.status_code == status
+                assert caught.value.request_id == "header-id"
+                assert caught.value.message == "gateway rejected"
+        else:
+            opened = transport.open_stream("GET", "/x")
+            assert opened is response
+            assert not wire.closed and not response.is_stream_consumed
+            try:
+                if read_error is None:
+                    assert opened.read() == b"gateway rejected"
+                else:
+                    with pytest.raises(read_error):
+                        opened.read()
+            finally:
+                opened.close()
+        assert wire.closed and response.is_closed
+        assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [199, 302, 400, 500])
+@pytest.mark.parametrize(
+    "read_error",
+    [None, httpx.ReadError, httpx.ReadTimeout],
+)
+async def test_async_open_stream_status_and_response_ownership(
+    status,
+    read_error,
+):
+    wire = _TrackedAsyncStream(read_error)
+    response = httpx.Response(
+        status,
+        stream=wire,
+        headers={"x-request-id": "header-id"},
+    )
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return response
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url=BASE_URL,
+    ) as http_client:
+        transport = AsyncTransport(base_url=BASE_URL, http_client=http_client)
+        if status >= 400:
+            with pytest.raises(read_error or APIStatusError) as caught:
+                await transport.open_stream("GET", "/x")
+            if read_error is None:
+                assert caught.value.status_code == status
+                assert caught.value.request_id == "header-id"
+                assert caught.value.message == "gateway rejected"
+        else:
+            opened = await transport.open_stream("GET", "/x")
+            assert opened is response
+            assert not wire.closed and not response.is_stream_consumed
+            try:
+                if read_error is None:
+                    assert await opened.aread() == b"gateway rejected"
+                else:
+                    with pytest.raises(read_error):
+                        await opened.aread()
+            finally:
+                await opened.aclose()
+        assert wire.closed and response.is_closed
+        assert len(requests) == 1
+
+
+@pytest.mark.parametrize("status", [199, 200, 204, 299, 302, 400, 500])
+def test_response_error_preserves_shared_http_status_contract(status):
+    response = httpx.Response(status, json={})
+    error = response_error(response)
+    if status < 400:
+        assert error is None
+    else:
+        assert isinstance(error, APIStatusError)
+        assert error.status_code == status

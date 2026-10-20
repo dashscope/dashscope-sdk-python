@@ -18,6 +18,11 @@ from dashscope.v2.errors import (
     DashScopeError,
     RateLimitError,
 )
+from dashscope.v2.resources._sse import _aiter_sse, _iter_sse, _stream_error
+from dashscope.v2.resources.audio.http_tts import (
+    _audio_stream_error,
+    _iter_audio_sse,
+)
 from dashscope.v2.transport.sse import (
     parse_event_data,
     stream_error,
@@ -397,3 +402,231 @@ async def test_async_stream_error_carries_request_id_and_skips_ping():
             pass
     assert exc_info.value.request_id == "req-async-1"
     await client.aclose()
+
+
+_AUDIO_SSE_CASES = [
+    pytest.param(": keepalive\n\nid: 1\n\n", [], id="no-data"),
+    pytest.param(
+        'status: 201\r\ndata: {\r\ndata: "status": "RUNNING"\r\n'
+        'data: }\r\n\r\ndata: {"status": "SUCCEEDED"}\r\n\r\n',
+        [
+            (False, 201, '{\n"status": "RUNNING"\n}'),
+            (False, None, '{"status": "SUCCEEDED"}'),
+        ],
+        id="multiline-and-status-reset",
+    ),
+    pytest.param(
+        'event: errorish\ndata:  {"status": "RUNNING"} \n\n',
+        [(False, None, ' {"status": "RUNNING"} ')],
+        id="exact-event-and-preserved-data-spaces",
+    ),
+    pytest.param(
+        "data:\n\ndata: second\n\n",
+        [(False, None, ""), (False, None, "second")],
+        id="empty-data",
+    ),
+    pytest.param(
+        "event: error\nstatus: 400\n\ndata: ok\n\n",
+        [(False, None, "ok")],
+        id="empty-frame-resets-metadata",
+    ),
+    pytest.param(
+        "event: error\nstatus: 400\ndata: rejected\n\ndata: ignored\n\n",
+        [(True, 400, "rejected")],
+        id="standard-error-stops-stream",
+    ),
+    pytest.param(
+        'data: {"code": "Throttling"}\n\ndata: ignored\n\n',
+        [(True, None, '{"code": "Throttling"}')],
+        id="data-only-business-error",
+    ),
+    pytest.param(
+        'data: {\ndata: "code": "Throttling"\ndata: }\n\n',
+        [(True, None, '{\n"code": "Throttling"\n}')],
+        id="multiline-business-error",
+    ),
+    pytest.param(
+        'event:error\nstatus: 429\ndata: {"code": "Throttling"}',
+        [(True, 429, '{"code": "Throttling"}')],
+        id="legacy-error-without-final-newline",
+    ),
+    pytest.param(
+        'data: {"status": "SUCCEEDED"}\n',
+        [(False, None, '{"status": "SUCCEEDED"}')],
+        id="legacy-eof-without-blank-line",
+    ),
+]
+
+
+@pytest.mark.parametrize("wire, expected", _AUDIO_SSE_CASES)
+def test_audio_sse_sync_framing(wire, expected):
+    response = httpx.Response(200, text=wire)
+    assert list(_iter_audio_sse(response)) == expected
+
+
+_JOB_SSE_CASES = [
+    pytest.param(": keepalive\n\nid: 1\n\n", [], id="no-data"),
+    pytest.param(
+        "status: 201\ndata: first\ndata: second\n\ndata: third",
+        [(False, 201, "first"), (False, 201, "second"), (False, 201, "third")],
+        id="per-line-with-sticky-status",
+    ),
+    pytest.param(
+        "event: error\ndata:  payload  \n\n",
+        [(False, None, "payload")],
+        id="legacy-event-spelling-and-stripped-data",
+    ),
+    pytest.param(
+        "event:errorish\nstatus: 400\n\ndata: rejected\ndata: ignored\n",
+        [(True, 400, "rejected")],
+        id="legacy-prefix-error-and-no-blank-reset",
+    ),
+    pytest.param(
+        'data: {"code": "Throttling"}\ndata: next\n',
+        [(False, None, '{"code": "Throttling"}'), (False, None, "next")],
+        id="code-is-ordinary-data",
+    ),
+    pytest.param(
+        "event:error\ndata: rejected",
+        [(True, None, "rejected")],
+        id="error-at-eof",
+    ),
+    pytest.param(
+        "data:\n\ndata: next\n",
+        [(False, None, ""), (False, None, "next")],
+        id="empty-data",
+    ),
+]
+
+
+@pytest.mark.parametrize("wire, expected", _JOB_SSE_CASES)
+def test_resource_sse_sync_legacy_framing(wire, expected):
+    assert list(_iter_sse(httpx.Response(200, text=wire))) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wire, expected", _JOB_SSE_CASES)
+async def test_resource_sse_async_legacy_framing(wire, expected):
+    response = httpx.Response(200, text=wire)
+    assert [frame async for frame in _aiter_sse(response)] == expected
+
+
+def test_resource_sse_invalid_status_still_raises():
+    # Malformed status was always an exception, unlike malformed JSON data.
+    response = httpx.Response(200, text="status: invalid\ndata: value\n")
+    with pytest.raises(ValueError):
+        list(_iter_sse(response))
+
+
+@pytest.mark.asyncio
+async def test_resource_sse_async_invalid_status_still_raises():
+    response = httpx.Response(200, text="status: invalid\ndata: value\n")
+    with pytest.raises(ValueError):
+        async for _ in _aiter_sse(response):
+            pytest.fail("malformed status must raise before yielding data")
+
+
+@pytest.mark.parametrize("status", [None, 429])
+@pytest.mark.parametrize(
+    "outer_id, inner_id, expected_id",
+    [
+        ("outer-id", "inner-id", "outer-id"),
+        (None, "inner-id", "inner-id"),
+        (None, None, "header-id"),
+    ],
+)
+def test_audio_stream_error_keeps_headers_and_request_id(
+    status,
+    outer_id,
+    inner_id,
+    expected_id,
+):
+    body = {
+        "code": "Throttling",
+        "message": "slow down",
+        "request_id": outer_id,
+        "output": {"request_id": inner_id},
+    }
+    headers = {"x-request-id": "header-id"}
+    error = _audio_stream_error(status, json.dumps(body), headers=headers)
+    assert isinstance(error, RateLimitError)
+    assert error.status_code == (status or 200)
+    assert error.request_id == expected_id
+    assert error.body == body
+    assert error.headers == headers
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    [
+        "application/json",
+        "Application/JSON; charset=utf-8",
+        "application/problem+json",
+    ],
+)
+def test_audio_sse_sync_json_business_error(content_type):
+    response = httpx.Response(
+        200,
+        json={"code": "Throttling", "message": "slow down"},
+        headers={"content-type": content_type, "x-request-id": "json-id"},
+    )
+    with pytest.raises(RateLimitError, match="slow down") as caught:
+        list(_iter_audio_sse(response))
+    assert caught.value.status_code == 200
+    assert caught.value.request_id == "json-id"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content_type",
+    [
+        "application/json",
+        "Application/JSON; charset=utf-8",
+        "application/problem+json",
+    ],
+)
+async def test_resource_sse_async_json_business_error_is_empty(content_type):
+    response = httpx.Response(
+        200,
+        json={"code": "Throttling", "message": "slow down"},
+        headers={"content-type": content_type, "x-request-id": "json-id"},
+    )
+    assert [frame async for frame in _aiter_sse(response)] == []
+
+
+def test_audio_sse_sync_malformed_json_response():
+    response = httpx.Response(
+        200,
+        content=b'{"output":',
+        headers={"content-type": "application/json"},
+    )
+    with pytest.raises(ValueError):
+        list(_iter_audio_sse(response))
+
+
+@pytest.mark.asyncio
+async def test_resource_sse_async_malformed_json_response_is_empty():
+    # JSON errors belong to audio's decoder; job streams never parse JSON MIME.
+    response = httpx.Response(
+        200,
+        content=b'{"output":',
+        headers={"content-type": "application/json"},
+    )
+    assert [frame async for frame in _aiter_sse(response)] == []
+
+
+@pytest.mark.parametrize("status", [None, 429])
+@pytest.mark.parametrize("outer_id", [None, "outer-id"])
+def test_resource_stream_error_keeps_legacy_request_id(status, outer_id):
+    body = {
+        "code": "Throttling",
+        "message": "slow down",
+        "request_id": outer_id,
+        "output": {"request_id": "inner-id"},
+    }
+    error = _stream_error(status, json.dumps(body))
+    assert isinstance(error, RateLimitError)
+    assert error.status_code == (status or 200)
+    assert error.request_id == outer_id
+    assert error.body == body
+    assert error.headers == {}

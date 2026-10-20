@@ -32,25 +32,19 @@ Two-branch translation (design doc §7):
 The proxy is transparent (``__class__`` spoofing plus attribute
 forwarding) so ``isinstance(client.agentstudio, AgentStudioClient)``,
 ``.transport`` access and the context-manager protocol keep working.
-
-Return values whose errors surface *after* the call are guarded too:
-event streams raise on enter/iterate, and cursor pages raise on
-auto-pagination and explicit ``get_next()`` (their ``fetch_next``
-closure captures the raw 1.x resource method, bypassing the method
-guards), so both are wrapped to keep late failures translated.
 """
 
 from __future__ import annotations
 
 import asyncio
 import functools
-from typing import Any, Dict, Optional
+from collections.abc import AsyncIterator, Iterator
+from typing import Any, Optional
+
+import httpx
 
 from dashscope.agentstudio import exceptions as _as_exceptions
-from dashscope.agentstudio.pagination import (
-    AsyncCursorPage as _AsyncCursorPage,
-)
-from dashscope.agentstudio.pagination import CursorPage as _CursorPage
+from dashscope.agentstudio.pagination import AsyncCursorPage, CursorPage
 from dashscope.v2 import errors as _v2_errors
 
 _AGENTSTUDIO_FAMILY = "sdk.agentstudio"
@@ -77,7 +71,7 @@ _RESOURCE_PACKAGE = "dashscope.agentstudio.resources"
 # class stands for so ``error_from_status`` still picks the right v2 class
 # instead of degrading to a 500. Values mirror agentstudio's own
 # ``_STATUS_TO_DEFAULT``; only the class's canonical status is kept.
-_STATUS_BY_CLASS: Dict[type, int] = {
+_STATUS_BY_CLASS = {
     _as_exceptions.InvalidRequestError: 400,
     _as_exceptions.AuthenticationError: 401,
     _as_exceptions.PermissionDeniedError: 403,
@@ -108,18 +102,17 @@ def translate_agentstudio_error(
 
     status = getattr(exc, "status_code", None)
     if isinstance(exc, _as_exceptions.APIStatusError) or status is not None:
-        # HTTP layer: keep the server's real status and let the catalog
-        # status map pick the class. agentstudio codes are CMA-shaped
-        # (``rate_limit_error``), not gateway wire codes, so the map keys
-        # off ``status_code``; the raw body still supplies message/code.
+        # V1 already resolved compatibility fields and header precedence.
         request_id = getattr(exc, "request_id", None)
         headers = {"x-request-id": request_id} if request_id else None
-        return _v2_errors.error_from_status(
+        error = _v2_errors.error_from_status(
             _effective_status(exc),
             message=getattr(exc, "message", None) or str(exc),
-            body=getattr(exc, "raw", None),
             headers=headers,
         )
+        error.code = exc.code
+        error.body = exc.raw
+        return error
 
     if type(exc).__name__ in _SDK_ERROR_CLASSES:
         return _v2_errors.error_from_sdk_exception(
@@ -141,8 +134,7 @@ def _is_resource(obj: Any) -> bool:
 
 def _is_sync_stream(obj: Any) -> bool:
     # CursorPage is iterable but not a context manager, so requiring both
-    # keeps pagination results out of the stream proxy; they get their
-    # own guard in ``_wrap_result``.
+    # keeps pagination results out of the stream proxy.
     return hasattr(obj, "__enter__") and hasattr(obj, "__iter__")
 
 
@@ -151,22 +143,56 @@ def _is_async_stream(obj: Any) -> bool:
 
 
 def _wrap_result(result: Any) -> Any:
-    """Guard a method's return value if its failures surface lazily.
+    """Guard lazy stream and pagination calls without changing model data."""
 
-    Streams raise on enter/iterate; cursor pages raise while iterating
-    (auto-pagination) and on explicit ``get_next()``. Plain values pass
-    through untouched.
-    """
-
-    if isinstance(result, _AsyncCursorPage):
+    if isinstance(result, AsyncCursorPage):
         return _AsyncPageProxy(result)
-    if isinstance(result, _CursorPage):
+    if isinstance(result, CursorPage):
         return _SyncPageProxy(result)
     if _is_async_stream(result):
         return _AsyncStreamProxy(result)
     if _is_sync_stream(result):
         return _SyncStreamProxy(result)
     return result
+
+
+_STREAM_ERRORS = (
+    _as_exceptions.AgentStudioError,
+    httpx.TimeoutException,
+    httpx.NetworkError,
+    httpx.RemoteProtocolError,
+)
+
+
+def _translate_stream_error(exc: Exception) -> _v2_errors.DashScopeError:
+    if isinstance(exc, _as_exceptions.AgentStudioError):
+        return translate_agentstudio_error(exc)
+    cls = (
+        _as_exceptions.APITimeoutError
+        if isinstance(exc, httpx.TimeoutException)
+        else _as_exceptions.APIConnectionError
+    )
+    return translate_agentstudio_error(cls(str(exc)))
+
+
+def _iterate_sync(target: Any) -> Any:
+    try:
+        yield from target
+    except _STREAM_ERRORS as exc:
+        raise _translate_stream_error(exc) from exc
+
+
+async def _iterate_async(target: Any) -> Any:
+    iterator = None
+    try:
+        iterator = target.__aiter__()
+        async for item in iterator:
+            yield item
+    except _STREAM_ERRORS as exc:
+        raise _translate_stream_error(exc) from exc
+    finally:
+        if hasattr(iterator, "aclose"):
+            await iterator.aclose()
 
 
 def _guard_sync(func: Any) -> Any:
@@ -204,7 +230,15 @@ class _SyncStreamProxy:
         return type(object.__getattribute__(self, "_target"))
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(object.__getattribute__(self, "_target"), name)
+        value = getattr(object.__getattribute__(self, "_target"), name)
+        if isinstance(value, Iterator):
+            return _iterate_sync(value)
+        if callable(value):
+            return _guard_sync(value)
+        return value
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(object.__getattribute__(self, "_target"), name, value)
 
     def __enter__(self) -> "_SyncStreamProxy":
         target = object.__getattribute__(self, "_target")
@@ -219,12 +253,7 @@ class _SyncStreamProxy:
         return target.__exit__(*exc_info)
 
     def __iter__(self) -> Any:
-        target = object.__getattribute__(self, "_target")
-        try:
-            for item in target:
-                yield item
-        except _as_exceptions.AgentStudioError as exc:
-            raise translate_agentstudio_error(exc) from exc
+        return _iterate_sync(object.__getattribute__(self, "_target"))
 
 
 class _AsyncStreamProxy:
@@ -238,7 +267,19 @@ class _AsyncStreamProxy:
         return type(object.__getattribute__(self, "_target"))
 
     def __getattr__(self, name: str) -> Any:
-        return getattr(object.__getattribute__(self, "_target"), name)
+        value = getattr(object.__getattribute__(self, "_target"), name)
+        if isinstance(value, AsyncIterator):
+            return _iterate_async(value)
+        if callable(value):
+            return (
+                _guard_async(value)
+                if asyncio.iscoroutinefunction(value)
+                else _guard_sync(value)
+            )
+        return value
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(object.__getattribute__(self, "_target"), name, value)
 
     async def __aenter__(self) -> "_AsyncStreamProxy":
         target = object.__getattribute__(self, "_target")
@@ -252,85 +293,8 @@ class _AsyncStreamProxy:
         target = object.__getattribute__(self, "_target")
         return await target.__aexit__(*exc_info)
 
-    async def __aiter__(self) -> Any:
-        target = object.__getattribute__(self, "_target")
-        try:
-            async for item in target:
-                yield item
-        except _as_exceptions.AgentStudioError as exc:
-            raise translate_agentstudio_error(exc) from exc
-
-
-class _SyncPageProxy:
-    """Guards a cursor page whose fetches surface on iterate/get_next.
-
-    Iterating the raw page auto-paginates through the unguarded
-    ``fetch_next`` closure, so both dunder iteration and the explicit
-    ``get_next()`` need the translation here.
-    """
-
-    def __init__(self, target: Any) -> None:
-        object.__setattr__(self, "_target", target)
-
-    @property  # type: ignore[misc]
-    def __class__(self) -> type:  # noqa: D105 - transparency helper
-        return type(object.__getattribute__(self, "_target"))
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(object.__getattribute__(self, "_target"), name)
-
-    def __len__(self) -> int:
-        return len(object.__getattribute__(self, "_target"))
-
-    def get_next(self) -> Any:
-        target = object.__getattribute__(self, "_target")
-        try:
-            return _wrap_result(target.get_next())
-        except _as_exceptions.AgentStudioError as exc:
-            raise translate_agentstudio_error(exc) from exc
-
-    def __iter__(self) -> Any:
-        target = object.__getattribute__(self, "_target")
-        try:
-            for item in target:
-                yield item
-        except _as_exceptions.AgentStudioError as exc:
-            raise translate_agentstudio_error(exc) from exc
-
-
-class _AsyncPageProxy:
-    """Async twin of :class:`_SyncPageProxy`."""
-
-    def __init__(self, target: Any) -> None:
-        object.__setattr__(self, "_target", target)
-
-    @property  # type: ignore[misc]
-    def __class__(self) -> type:  # noqa: D105 - transparency helper
-        return type(object.__getattribute__(self, "_target"))
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(object.__getattribute__(self, "_target"), name)
-
-    def __len__(self) -> int:
-        return len(object.__getattribute__(self, "_target"))
-
-    async def get_next(self) -> Any:
-        target = object.__getattribute__(self, "_target")
-        try:
-            return _wrap_result(await target.get_next())
-        except _as_exceptions.AgentStudioError as exc:
-            raise translate_agentstudio_error(exc) from exc
-
     def __aiter__(self) -> Any:
-        return self._aiter()
-
-    async def _aiter(self) -> Any:
-        target = object.__getattribute__(self, "_target")
-        try:
-            async for item in target:
-                yield item
-        except _as_exceptions.AgentStudioError as exc:
-            raise translate_agentstudio_error(exc) from exc
+        return _iterate_async(object.__getattribute__(self, "_target"))
 
 
 class AgentStudioProxy:
@@ -352,24 +316,24 @@ class AgentStudioProxy:
     def __getattr__(self, name: str) -> Any:
         target = object.__getattribute__(self, "_target")
         cache = object.__getattribute__(self, "_cache")
-        if name in cache:
-            return cache[name]
         value = getattr(target, name)
+        if _is_resource(value) and not callable(value):
+            cached = cache.get(name)
+            if cached is None or cached[0] is not value:
+                cached = cache[name] = (value, AgentStudioProxy(value))
+            return cached[1]
+        cache.pop(name, None)
         if callable(value):
-            wrapped = (
+            return (
                 _guard_async(value)
                 if asyncio.iscoroutinefunction(value)
                 else _guard_sync(value)
             )
-        elif _is_resource(value):
-            wrapped = AgentStudioProxy(value)
-        else:
-            wrapped = value
-        cache[name] = wrapped
-        return wrapped
+        return value
 
     def __setattr__(self, name: str, value: Any) -> None:
         setattr(object.__getattribute__(self, "_target"), name, value)
+        object.__getattribute__(self, "_cache").pop(name, None)
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return repr(object.__getattribute__(self, "_target"))
@@ -389,6 +353,29 @@ class AgentStudioProxy:
     async def __aexit__(self, *exc_info: Any) -> Optional[bool]:
         target = object.__getattribute__(self, "_target")
         return await target.__aexit__(*exc_info)
+
+
+class _SyncPageProxy(AgentStudioProxy):
+    def __len__(self) -> int:
+        return len(object.__getattribute__(self, "_target"))
+
+    def __iter__(self) -> Any:
+        try:
+            yield from object.__getattribute__(self, "_target")
+        except _as_exceptions.AgentStudioError as exc:
+            raise translate_agentstudio_error(exc) from exc
+
+
+class _AsyncPageProxy(AgentStudioProxy):
+    def __len__(self) -> int:
+        return len(object.__getattribute__(self, "_target"))
+
+    async def __aiter__(self) -> Any:
+        try:
+            async for item in object.__getattribute__(self, "_target"):
+                yield item
+        except _as_exceptions.AgentStudioError as exc:
+            raise translate_agentstudio_error(exc) from exc
 
 
 def wrap_agentstudio(client: Any) -> AgentStudioProxy:

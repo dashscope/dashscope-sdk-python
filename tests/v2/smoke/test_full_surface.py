@@ -255,31 +255,6 @@ def test_smoke_embeddings_rerank_tokenization():
     assert done.succeeded
 
 
-def test_smoke_decision():
-    def handler(request):
-        assert request.url.path == "/api/v1/systemone"
-        body = json.loads(request.content)
-        assert body["questions"]["refund"]["type"] == "noul"
-        return _json(
-            {
-                "request_id": "req-dec",
-                "model": "decision-model-preview",
-                "answers": {"refund": {"type": "noul", "noul": 0.99}},
-                "usage": {"input_tokens": 9},
-                "latency_ms": 12.3,
-            },
-        )
-
-    client = _make_client(handler)
-    resp = client.decision.create(
-        model="decision-model-preview",
-        state="这段评论是否在索要退款？",
-        questions={"refund": {"type": "noul"}},
-    )
-    assert resp.answers["refund"].noul == 0.99
-    assert resp.usage.input_tokens == 9
-
-
 def test_smoke_files_models(tmp_path):
     data_file = tmp_path / "train.jsonl"
     data_file.write_text('{"prompt": "hi"}\n', encoding="utf-8")
@@ -397,7 +372,16 @@ class FakeWebSocket:
     def recv(self):
         if not self.inbox:
             return None
-        return self.inbox.pop(0)
+        raw = self.inbox.pop(0)
+        if isinstance(raw, str):
+            event = json.loads(raw)
+            header = event.get("header")
+            if isinstance(header, dict) and header.get("task_id") == "t":
+                header["task_id"] = json.loads(self.sent[0])["header"][
+                    "task_id"
+                ]
+                return json.dumps(event)
+        return raw
 
     def close(self):
         self.closed = True
@@ -635,14 +619,6 @@ async def test_smoke_async_surface():
                     "output": {"text": "hi"},
                 },
             )
-        if request.url.path.endswith("/systemone"):
-            return _json(
-                {
-                    "request_id": "req-dec",
-                    "model": "decision-model-preview",
-                    "answers": {"q": {"type": "noul", "noul": 0.5}},
-                },
-            )
         if request.method == "POST":
             return _json(
                 {
@@ -674,12 +650,6 @@ async def test_smoke_async_surface():
         messages=[{"role": "user", "content": "hi"}],
     )
     assert resp.output_text == "Hello"
-    decision = await client.decision.create(
-        model="decision-model-preview",
-        state="s",
-        questions={"q": {"type": "noul"}},
-    )
-    assert decision.answers["q"].noul == 0.5
     img = await client.images.generate(
         model="wanx2.1-t2i",
         prompt="a cat",

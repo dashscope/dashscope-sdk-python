@@ -13,9 +13,11 @@ import httpx
 import pytest
 
 from dashscope.v2 import AsyncClient, Client
-from dashscope.v2.errors import DashScopeError
+from dashscope.v2.errors import APIConnectionError, DashScopeError
+from dashscope.v2.resources import audio as audio_resources
 from dashscope.v2.resources.audio._callbacks import run_with_callback
 from dashscope.v2.resources.audio.asr import RecognitionResult
+from dashscope.v2.transport.ws import WsEventError
 
 BASE_URL = "https://api.test.local/api/v1"
 TRANSCRIPTION_PATH = "/api/v1/services/audio/asr/transcription"
@@ -65,7 +67,19 @@ class FakeWebSocket:
     def recv(self):
         if not self.inbox:
             return None
-        return self.inbox.pop(0)
+        raw = self.inbox.pop(0)
+        if isinstance(raw, str):
+            try:
+                event = json.loads(raw)
+            except ValueError:
+                return raw
+            header = event.get("header") if isinstance(event, dict) else None
+            if isinstance(header, dict) and header.get("task_id") == "t":
+                header["task_id"] = json.loads(self.sent[0])["header"][
+                    "task_id"
+                ]
+                return json.dumps(event)
+        return raw
 
     def close(self):
         self.closed = True
@@ -85,6 +99,21 @@ def _event(name, payload=None):
 
 def _sent_frames(ws):
     return [json.loads(item) for item in ws.sent if isinstance(item, str)]
+
+
+def test_audio_public_resources_exclude_translation():
+    with _make_bare_client() as client:
+        assert isinstance(client.audio, audio_resources.Audio)
+        assert not hasattr(client.audio, "translation")
+        assert isinstance(client.audio.asr, audio_resources.Asr)
+        assert isinstance(client.audio.tts, audio_resources.Tts)
+        assert isinstance(client.audio.realtime, audio_resources.Realtime)
+        assert callable(client.audio.asr.recognize)
+        assert callable(client.audio.tts.synthesize)
+        assert callable(client.audio.realtime.connect)
+    for name in ("translation", "Translation", "TranslationSession"):
+        assert not hasattr(audio_resources, name)
+        assert name not in audio_resources.__all__
 
 
 def test_transcription_transcribe_submit_and_wait():
@@ -128,6 +157,59 @@ def test_transcription_transcribe_submit_and_wait():
     assert job.output["results"][0]["transcription_url"]
 
 
+@pytest.mark.parametrize("entry_point", ["transcribe", "create"])
+@pytest.mark.parametrize(
+    "parameter_kwargs",
+    [
+        pytest.param({}, id="omitted"),
+        pytest.param({"parameters": None}, id="none"),
+        pytest.param({"parameters": {}}, id="empty"),
+        pytest.param(
+            {
+                "parameters": {
+                    "keep_dialect": False,
+                    "vocabulary": {"通义千问": 5},
+                    "language_hints": ["zh", "en"],
+                    "channel_id": [0],
+                    "diarization_enabled": False,
+                },
+            },
+            id="custom",
+        ),
+    ],
+)
+def test_transcription_serializes_parameters(entry_point, parameter_kwargs):
+    bodies = []
+
+    def handler(request):
+        assert request.method == "POST"
+        assert request.url.path == TRANSCRIPTION_PATH
+        assert request.headers["X-DashScope-Async"] == "enable"
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=_task_body("SUCCEEDED"))
+
+    with _make_client(handler) as client:
+        if entry_point == "transcribe":
+            job = client.audio.asr.transcribe(
+                ["https://example.com/a.wav"],
+                **parameter_kwargs,
+            )
+        else:
+            job = client.audio.asr.jobs.create(
+                model="qwen-audio-3.1-asr-flash-filetrans",
+                file_urls=["https://example.com/a.wav"],
+                **parameter_kwargs,
+            )
+    assert job.succeeded
+    assert bodies == [
+        {
+            "model": "qwen-audio-3.1-asr-flash-filetrans",
+            "input": {"file_urls": ["https://example.com/a.wav"]},
+            "parameters": parameter_kwargs.get("parameters") or {},
+        },
+    ]
+
+
 def test_transcription_requires_file_urls():
     client = _make_bare_client()
     with pytest.raises(ValueError, match="file_urls"):
@@ -164,17 +246,91 @@ def test_transcription_threads_per_call_auth():
 
 
 @pytest.mark.asyncio
-async def test_async_transcription_transcribe():
+@pytest.mark.parametrize(
+    "model_kwargs, expected_model",
+    [
+        ({}, "qwen-audio-3.1-asr-flash-filetrans"),
+        ({"model": "paraformer-v2"}, "paraformer-v2"),
+    ],
+)
+async def test_async_transcription_transcribe(model_kwargs, expected_model):
+    captured = {}
+
     def handler(request):
         if request.method == "POST":
+            captured["body"] = json.loads(request.content)
             return httpx.Response(200, json=_task_body("PENDING"))
         return httpx.Response(200, json=_task_body("SUCCEEDED"))
 
-    client = _make_async_client(handler)
-    job = await client.audio.asr.transcribe(
-        ["https://example.com/a.wav"],
-    )
+    async with _make_async_client(handler) as client:
+        job = await client.audio.asr.transcribe(
+            ["https://example.com/a.wav"],
+            poll_interval=0,
+            **model_kwargs,
+        )
     assert job.succeeded is True
+    assert captured["body"] == {
+        "model": expected_model,
+        "input": {"file_urls": ["https://example.com/a.wav"]},
+        "parameters": {},
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry_point", ["transcribe", "create"])
+@pytest.mark.parametrize(
+    "parameter_kwargs",
+    [
+        pytest.param({}, id="omitted"),
+        pytest.param({"parameters": None}, id="none"),
+        pytest.param({"parameters": {}}, id="empty"),
+        pytest.param(
+            {
+                "parameters": {
+                    "keep_dialect": False,
+                    "vocabulary": {"通义千问": 5},
+                    "language_hints": ["zh", "en"],
+                    "channel_id": [0],
+                    "diarization_enabled": False,
+                },
+            },
+            id="custom",
+        ),
+    ],
+)
+async def test_async_transcription_serializes_parameters(
+    entry_point,
+    parameter_kwargs,
+):
+    bodies = []
+
+    def handler(request):
+        assert request.method == "POST"
+        assert request.url.path == TRANSCRIPTION_PATH
+        assert request.headers["X-DashScope-Async"] == "enable"
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=_task_body("SUCCEEDED"))
+
+    async with _make_async_client(handler) as client:
+        if entry_point == "transcribe":
+            job = await client.audio.asr.transcribe(
+                ["https://example.com/a.wav"],
+                **parameter_kwargs,
+            )
+        else:
+            job = await client.audio.asr.jobs.create(
+                model="qwen-audio-3.1-asr-flash-filetrans",
+                file_urls=["https://example.com/a.wav"],
+                **parameter_kwargs,
+            )
+    assert job.succeeded
+    assert bodies == [
+        {
+            "model": "qwen-audio-3.1-asr-flash-filetrans",
+            "input": {"file_urls": ["https://example.com/a.wav"]},
+            "parameters": parameter_kwargs.get("parameters") or {},
+        },
+    ]
 
 
 def test_recognition_session_lifecycle():
@@ -689,3 +845,323 @@ def test_run_with_callback_delivers_errors_via_on_error():
 
     kinds = [call[0] for call in callback.calls]
     assert kinds == ["on_open", "on_error", "on_close"]
+
+
+def test_recognition_audio_parameter_merge_precedence():
+    parameters = {
+        "format": "wav",
+        "sample_rate": 8000,
+        "vocabulary_id": "old",
+        "diarization_enabled": True,
+        "disfluency_removal_enabled": True,
+        "language_hints": ["zh"],
+    }
+    original = dict(parameters)
+    ws = FakeWebSocket([_event("task-started")])
+    with _make_bare_client() as client:
+        with client.audio.asr.recognize(
+            model="fun-asr-realtime",
+            format="pcm",
+            sample_rate=16000,
+            vocabulary_id="new",
+            diarization_enabled=False,
+            disfluency_removal_enabled=False,
+            parameters=parameters,
+            connector=lambda url, headers: ws,
+        ):
+            actual = _sent_frames(ws)[0]["payload"]["parameters"]
+    assert parameters == original
+    assert actual == {
+        **original,
+        "vocabulary_id": "new",
+        "diarization_enabled": False,
+        "disfluency_removal_enabled": False,
+    }
+
+
+def test_recognition_results_preserve_optional_request_id_and_extra_fields():
+    generated = {
+        "header": {"event": "result-generated", "task_id": "t"},
+        "payload": {
+            "output": {"sentence": {"text": "final", "end_time": 0}},
+            "usage": {"duration": 0},
+            "future_field": {"ok": True},
+        },
+    }
+    ws = FakeWebSocket(
+        [
+            _event("task-started"),
+            json.dumps(generated),
+            _event("task-finished"),
+        ],
+    )
+    with _make_bare_client() as client:
+        with client.audio.asr.recognize(
+            model="fun-asr-realtime",
+            connector=lambda url, headers: ws,
+        ) as rec:
+            result = next(rec.results())
+            assert result.get_sentence()["end_time"] == 0
+            assert result.is_sentence_end()
+            assert result.get_usage() == {"duration": 0}
+            assert result.future_field == {"ok": True}
+            assert result.request_id is None
+            assert rec.request_id == rec.session.task_id
+
+
+def test_recognition_same_object_restarts_with_fresh_state_after_close():
+    sockets = []
+
+    def connector(url, headers):
+        ws = FakeWebSocket(
+            [
+                _event("task-started"),
+                _event(
+                    "result-generated",
+                    {
+                        "output": {
+                            "sentence": {"text": "hello", "end_time": 0},
+                        },
+                        "usage": {"duration": 1},
+                    },
+                ),
+                _event("task-finished"),
+            ],
+        )
+        sockets.append(ws)
+        return ws
+
+    task_ids = []
+    with _make_bare_client() as client:
+        rec = client.audio.asr.recognize(
+            model="fun-asr-realtime",
+            connector=connector,
+        )
+        for _ in range(2):
+            with rec:
+                task_ids.append(rec.session.task_id)
+                assert rec.usage is None
+                assert rec.first_package_delay is None
+                assert rec.last_package_delay is None
+                assert rec.last_response["header"]["event"] == "task-started"
+                rec.send_audio_frame(b"audio")
+                rec.stop()
+                assert len(list(rec.results())) == 1
+                assert rec.usage == {"duration": 1}
+                assert rec.first_package_delay >= 0
+                assert rec.last_package_delay >= 0
+            rec.close()
+        assert task_ids[0] != task_ids[1]
+    assert len(sockets) == 2 and all(ws.closed for ws in sockets)
+
+
+@pytest.mark.parametrize("raw", [None, "", "peer-close"])
+def test_recognition_eof_before_terminal_is_not_success(raw):
+    from websocket import WebSocketConnectionClosedException
+
+    class PeerCloseSocket(FakeWebSocket):
+        def recv(self):
+            value = super().recv()
+            if value == "peer-close":
+                raise WebSocketConnectionClosedException("peer closed")
+            return value
+
+    ws = PeerCloseSocket([_event("task-started"), raw])
+    with _make_bare_client() as client:
+        with client.audio.asr.recognize(
+            model="fun-asr-realtime",
+            connector=lambda url, headers: ws,
+        ) as rec:
+            with pytest.raises(
+                APIConnectionError,
+                match="before task-finished",
+            ):
+                list(rec.events())
+            assert ws.closed
+
+
+@pytest.mark.parametrize(
+    "raw, error_type",
+    [
+        ("{", json.JSONDecodeError),
+        ("[]", WsEventError),
+        ('{"header": []}', WsEventError),
+    ],
+)
+def test_recognition_invalid_frame_raises_and_closes(raw, error_type):
+    ws = FakeWebSocket([_event("task-started"), raw])
+    with _make_bare_client() as client:
+        with client.audio.asr.recognize(
+            model="fun-asr-realtime",
+            connector=lambda url, headers: ws,
+        ) as rec:
+            with pytest.raises(error_type):
+                next(rec.events())
+            assert ws.closed
+
+
+@pytest.mark.parametrize("phase", ["start", "result"])
+def test_recognition_rejects_foreign_task_id(phase):
+    class ForeignTaskSocket(FakeWebSocket):
+        def send(self, payload, opcode=1):
+            super().send(payload, opcode=opcode)
+            if (
+                opcode == 1
+                and json.loads(payload)["header"]["action"] == "run-task"
+            ):
+                task_id = json.loads(payload)["header"]["task_id"]
+                self.inbox.append(
+                    json.dumps(
+                        {
+                            "header": {
+                                "event": "task-started",
+                                "task_id": "foreign-task"
+                                if phase == "start"
+                                else task_id,
+                            },
+                            "payload": {},
+                        },
+                    ),
+                )
+                self.inbox.append(
+                    json.dumps(
+                        {
+                            "header": {
+                                "event": "task-finished",
+                                "task_id": "foreign-task",
+                            },
+                            "payload": {},
+                        },
+                    ),
+                )
+
+    ws = ForeignTaskSocket()
+    with _make_bare_client() as client:
+        with pytest.raises(WsEventError):
+            with client.audio.asr.recognize(
+                model="fun-asr-realtime",
+                connector=lambda url, headers: ws,
+            ) as rec:
+                if phase == "result":
+                    next(rec.events())
+    assert ws.closed
+
+
+@pytest.mark.parametrize(
+    "action",
+    ["run-task", "continue-task", "finish-task"],
+)
+def test_recognition_control_send_failure_closes_and_can_restart(action):
+    class BrokenControlSocket(FakeWebSocket):
+        def send(self, payload, opcode=1):
+            if (
+                opcode == 1
+                and json.loads(payload)["header"]["action"] == action
+            ):
+                raise OSError("control send failed")
+            super().send(payload, opcode=opcode)
+
+    broken = BrokenControlSocket([_event("task-started")])
+    healthy = FakeWebSocket([_event("task-started"), _event("task-finished")])
+    sockets = iter([broken, healthy])
+    with _make_bare_client() as client:
+        rec = client.audio.asr.recognize(
+            model="fun-asr-realtime",
+            connector=lambda url, headers: next(sockets),
+        )
+        with pytest.raises(OSError, match="control send failed"):
+            with rec:
+                if action == "continue-task":
+                    rec.update_context({"context": "next"})
+                else:
+                    rec.stop()
+        assert broken.closed
+        with rec:
+            rec.stop()
+            assert len(list(rec.events())) == 1
+    assert healthy.closed
+
+
+def test_recognize_file_close_after_partial_iteration_releases_socket(
+    tmp_path,
+):
+    path = tmp_path / "local.pcm"
+    path.write_bytes(b"audio")
+    ws = FakeWebSocket(
+        [
+            _event("task-started"),
+            _event(
+                "result-generated",
+                {"output": {"sentence": {"text": "partial"}}},
+            ),
+            _event("task-finished"),
+        ],
+    )
+    with _make_bare_client() as client:
+        events = client.audio.asr.recognize_file(
+            str(path),
+            model="fun-asr-realtime",
+            connector=lambda url, headers: ws,
+        )
+        try:
+            assert next(events)["header"]["event"] == "result-generated"
+        finally:
+            events.close()
+    assert ws.closed
+
+
+def test_recognize_file_removed_before_iteration_closes_opened_socket(
+    tmp_path,
+):
+    path = tmp_path / "local.pcm"
+    path.write_bytes(b"audio")
+    ws = FakeWebSocket([_event("task-started")])
+    with _make_bare_client() as client:
+        events = client.audio.asr.recognize_file(
+            str(path),
+            model="fun-asr-realtime",
+            connector=lambda url, headers: ws,
+        )
+        path.unlink()
+        with pytest.raises(FileNotFoundError):
+            next(events)
+    assert ws.closed
+
+
+@pytest.mark.parametrize("family", ["asr", "tts"])
+def test_audio_ws_call_auth_is_case_insensitive_and_isolated(family):
+    captured = []
+    headers = {
+        "authorization": "Bearer old-key",
+        "x-dashscope-workspace": "old-workspace",
+        "User-Agent": "custom-agent",
+    }
+    original = dict(headers)
+
+    def connector(url, actual):
+        captured.append(actual)
+        return FakeWebSocket([_event("task-started")])
+
+    with _make_bare_client() as client:
+        connect = (
+            client.audio.asr.recognize
+            if family == "asr"
+            else client.audio.tts.connect
+        )
+        with connect(
+            model="test-model",
+            connector=connector,
+            headers=headers,
+            api_key="call-key",
+            workspace="call-workspace",
+        ):
+            pass
+        with connect(model="test-model", connector=connector):
+            pass
+    first, second = [httpx.Headers(value) for value in captured]
+    assert first.get_list("authorization") == ["Bearer call-key"]
+    assert first.get_list("x-dashscope-workspace") == ["call-workspace"]
+    assert first.get_list("user-agent") == ["custom-agent"]
+    assert second.get_list("authorization") == ["Bearer sk-test"]
+    assert second.get_list("x-dashscope-workspace") == ["ws-test"]
+    assert headers == original

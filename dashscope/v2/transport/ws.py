@@ -76,14 +76,21 @@ def _assemble_headers(
     headers: Optional[Mapping[str, str]],
     module: Optional[str],
 ) -> Dict[str, str]:
-    all_headers = dict(headers or {})
+    auth = {}
     if api_key:
-        all_headers["Authorization"] = f"Bearer {api_key}"
+        auth["Authorization"] = f"Bearer {api_key}"
     if workspace:
-        all_headers["X-DashScope-WorkSpace"] = workspace
-    all_headers.setdefault("user-agent", default_user_agent())
+        auth["X-DashScope-WorkSpace"] = workspace
+    auth_keys = {key.lower() for key in auth}
+    all_headers = {
+        key: value
+        for key, value in (headers or {}).items()
+        if key.lower() not in auth_keys
+    }
+    all_headers.update(auth)
     provided = {key.lower() for key in all_headers}
-    for key, value in sdk_headers(module).items():
+    defaults = {"user-agent": default_user_agent(), **sdk_headers(module)}
+    for key, value in defaults.items():
         if key.lower() not in provided:
             all_headers[key] = value
     return all_headers
@@ -140,6 +147,12 @@ class _EventProcessor:
         ):
             raise WsEventError("expected a websocket event header")
         header = event["header"]
+        if header.get("task_id") not in (None, self.task_id):
+            raise WsEventError(
+                "websocket event belongs to a different task",
+                request_id=self._request_id,
+                body=event,
+            )
         self._request_id = (
             header.get("request_id")
             or header.get("task_id")

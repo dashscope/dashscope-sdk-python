@@ -145,7 +145,7 @@ The offline demo runs 4 rooms concurrently, reports `completed` / `degraded` sep
 ### Adapt it into your own meeting platform
 
 1. **Swap the audio source**: `_read_pcm` currently reads local 16 kHz PCM/WAV; in production feed `_pump_audio` frames from a microphone / RTC downlink / message-queue byte stream, keeping `pace=True` for realtime pacing.
-2. **True speak-while-transcribing**: the demo is "send all audio → stop → read events" (consistent with `01_atomic_capabilities/audio_speech/tingwu.py`, for offline determinism); for live-caption style, drain `realtime.events()` on a reader thread concurrently while sending — the socket itself is full-duplex.
+2. **True speak-while-transcribing**: the demo is "send all audio → stop → read events" (consistent with `01_atomic_capabilities/audio/tingwu.py`, for offline determinism); for live-caption style, drain `realtime.events()` on a reader thread concurrently while sending — the socket itself is full-duplex.
 3. **Tune concurrency and admission**: `MAX_CONCURRENT` is the active-socket cap — set it by your machine's file-descriptor / thread budget; `RECONNECT_ATTEMPTS` and `BASE_DELAY` (production suggests ≈0.5s) control reconnect aggressiveness.
 4. **Plug in persistence and observability**: `MeetingSession.transition` is the single exit for state; in production wire it to logging / metrics / meeting-record storage, persisting transcripts and states by `meeting_id`.
 

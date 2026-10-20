@@ -44,6 +44,67 @@ def _make_async_client(handler, **kwargs):
     return AsyncClient(api_key="sk-test", http_client=http_client, **kwargs)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("status", [199, 200, 302, 307, 308])
+async def test_chat_preserves_non_error_http_statuses(
+    asynchronous,
+    streaming,
+    status,
+):
+    body = {
+        "request_id": "body-id",
+        "output": {
+            "choices": [
+                {"finish_reason": "stop", "message": {"content": "unchanged"}},
+            ],
+        },
+    }
+    response = httpx.Response(
+        status,
+        content=_sse([body]) if streaming else json.dumps(body),
+        headers={
+            "content-type": "text/event-stream"
+            if streaming
+            else "application/json",
+            "location": f"{BASE_URL}/redirect-target",
+        },
+    )
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return response
+
+    client = (_make_async_client if asynchronous else _make_client)(handler)
+    try:
+        result = client.chat.completions.create(
+            model="qwen-plus",
+            messages="hi",
+            stream=streaming,
+        )
+        if asynchronous:
+            result = await result
+        if streaming:
+            texts = (
+                [text async for text in result.text_stream]
+                if asynchronous
+                else list(result.text_stream)
+            )
+            assert texts == ["unchanged"]
+        else:
+            assert result.output_text == "unchanged"
+            assert not result.is_error
+        assert len(requests) == 1
+        assert response.is_closed
+    finally:
+        if asynchronous:
+            await client.aclose()
+        else:
+            client.close()
+
+
 def test_create_non_streaming():
     captured = {}
 
@@ -997,7 +1058,6 @@ def test_escape_hatch_incremental_output_false_final_is_last_snapshot():
         parameters={"incremental_output": False},
     )
     # Raw iteration stays server-cumulative (1.x passthrough behavior).
-    # pylint: disable-next=not-an-iterable  # stream=True overload returns ChatStream
     assert [c.delta.content for c in stream] == ["你", "你好。"]
 
     client2 = _make_client(handler)

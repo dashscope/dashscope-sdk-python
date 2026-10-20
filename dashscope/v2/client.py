@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
-import warnings
 
 import httpx
 
@@ -117,32 +116,13 @@ class Client:
         self.models = Models(self)
         self.images = Images(self)
         self.videos = Videos(self)
-        self._audio = None
+        self.audio = Audio(self)
         self.fine_tunes = FineTunes(self)
         self.deployments = Deployments(self)
         self.rl = Rl(self)
         self.apps = Apps(self)
         self.tingwu = TingWu(self)
         self._agentstudio = None
-
-    @property
-    def audio(self) -> "Audio":
-        """Audio capabilities (lazily mounted).
-
-        Preview: the 2.0 audio API surface is not final and may change
-        in a future release.
-        """
-        if self._audio is None:
-            warnings.warn(
-                "dashscope 2.0 audio API is a preview and may change "
-                "in a future release.",
-                FutureWarning,
-                stacklevel=2,
-            )
-            self._audio = Audio(self)
-        audio = self._audio
-        assert audio is not None
-        return audio
 
     @property
     def reinforcement_learning(self) -> "Rl":
@@ -266,11 +246,11 @@ class Client:
         Credentials, region and timeout come from this client's config.
         Pass the connection as ``connection=`` to the realtime audio
         sessions (``audio.asr.recognize`` / ``audio.tts.connect`` /
-        ``audio.translation.recognize`` / ``tingwu.realtime``) to run
-        tasks concurrently or back-to-back on one socket, saving the
-        handshake per task -- the 1.x Java-side connection-reuse pattern
-        for latency-sensitive audio traffic. The caller owns the
-        connection and closes it via ``WsConnection.close``.
+        ``tingwu.realtime``) to run tasks concurrently or back-to-back
+        on one socket, saving the handshake per task -- the 1.x
+        Java-side connection-reuse pattern for latency-sensitive audio
+        traffic. The caller owns the connection and closes it via
+        ``WsConnection.close``.
         """
         config = self._config
         return WsConnection(
@@ -358,32 +338,13 @@ class AsyncClient:
         self.models = AsyncModels(self)
         self.images = AsyncImages(self)
         self.videos = AsyncVideos(self)
-        self._audio = None
+        self.audio = AsyncAudio(self)
         self.fine_tunes = AsyncFineTunes(self)
         self.deployments = AsyncDeployments(self)
         self.rl = AsyncRl(self)
         self.apps = AsyncApps(self)
         self.tingwu = AsyncTingWu(self)
         self._agentstudio = None
-
-    @property
-    def audio(self) -> "AsyncAudio":
-        """Audio capabilities (lazily mounted).
-
-        Preview: the 2.0 audio API surface is not final and may change
-        in a future release.
-        """
-        if self._audio is None:
-            warnings.warn(
-                "dashscope 2.0 audio API is a preview and may change "
-                "in a future release.",
-                FutureWarning,
-                stacklevel=2,
-            )
-            self._audio = AsyncAudio(self)
-        audio = self._audio
-        assert audio is not None
-        return audio
 
     @property
     def reinforcement_learning(self) -> "AsyncRl":

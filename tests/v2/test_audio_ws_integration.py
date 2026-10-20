@@ -23,6 +23,7 @@ from dashscope.v2.errors import (
     BadRequestError,
     RateLimitError,
 )
+from dashscope.v2.transport.ws import WsEventError
 
 
 TIMEOUT = 2
@@ -496,11 +497,16 @@ def test_tts_cancel_after_first_audio_uses_finish_directive(
             assert list(events) == [_task_event("task-finished", task_id)]
 
 
+@pytest.mark.parametrize(
+    "model",
+    ["qwen-omni-turbo-realtime", "qwen3.8-omni-flash-realtime"],
+)
 def test_omni_manual_commit_two_responses_and_session_finish(
     client,
     local_ws_server,
+    model,
 ):
-    model = "qwen-omni-turbo-realtime"
+    omni38 = model == "qwen3.8-omni-flash-realtime"
     session_id = "local-omni-session"
     audio_inputs = [b"\x00\xffround-one", b"\x80\x01round-two"]
     settings = {
@@ -508,6 +514,15 @@ def test_omni_manual_commit_two_responses_and_session_finish(
         "input_audio_format": "pcm16",
         "turn_detection": None,
     }
+    if omni38:
+        settings.pop("input_audio_format")
+        settings["audio"] = {
+            "input": {"format": {"type": "pcm", "sample_rate": 16000}},
+            "output": {
+                "format": {"type": "pcm", "sample_rate": 24000},
+                "voice": "longanlingxin",
+            },
+        }
     created = {"type": "session.created", "session": {"id": session_id}}
     updated = {
         "type": "session.updated",
@@ -579,7 +594,10 @@ def test_omni_manual_commit_two_responses_and_session_finish(
                 "type": "input_audio_buffer.commit",
             }
             response = await receive_event(ws, "response.create")
-            assert response["response"]["modalities"] == ["text", "audio"]
+            if omni38:
+                assert response == {"type": "response.create"}
+            else:
+                assert response["response"]["modalities"] == ["text", "audio"]
             for event in rounds[index]:
                 await ws.send_json(event)
         assert await receive_event(ws, "session.finish") == {
@@ -587,7 +605,10 @@ def test_omni_manual_commit_two_responses_and_session_finish(
         }
         assert response_read[-1].done()
         await _wait_for_return(end_returned)
-        await ws.send_json(finished)
+        if omni38:
+            await ws.close()
+        else:
+            await ws.send_json(finished)
 
     with local_ws_server(scenario) as server:
         with client.audio.realtime.connect(
@@ -596,15 +617,27 @@ def test_omni_manual_commit_two_responses_and_session_finish(
             timeout=TIMEOUT,
         ) as realtime:
             assert realtime.recv_event() == created
-            realtime.send_event(
-                {"type": "session.update", "session": settings},
-            )
+            if omni38:
+                realtime.update_session(
+                    ["text", "audio"],
+                    input_audio_config={"type": "pcm", "sample_rate": 16000},
+                    output_audio_config={"type": "pcm", "sample_rate": 24000},
+                    voice="longanlingxin",
+                    enable_turn_detection=False,
+                )
+            else:
+                realtime.send_event(
+                    {"type": "session.update", "session": settings},
+                )
             events = realtime.events()
             assert next(events) == updated
             for index, audio in enumerate(audio_inputs):
                 realtime.append_audio(audio)
                 realtime.commit()
-                realtime.create_response(modalities=["text", "audio"])
+                if omni38:
+                    realtime.create_response()
+                else:
+                    realtime.create_response(modalities=["text", "audio"])
                 received = [next(events) for _ in rounds[index]]
                 assert received == rounds[index]
                 assert base64.b64decode(
@@ -614,8 +647,12 @@ def test_omni_manual_commit_two_responses_and_session_finish(
                 response_read[index].set_result(None)
             realtime.end_session()
             end_returned.set_result(None)
-            assert list(events) == [finished]
-            assert realtime.last_message == finished
+            if omni38:
+                assert list(events) == []
+                assert realtime.last_message == rounds[-1][-1]
+            else:
+                assert list(events) == [finished]
+                assert realtime.last_message == finished
 
 
 def test_qwen_audio_manual_turns_recover_error_and_close(
@@ -1233,3 +1270,309 @@ def test_livetranslate_response_done_does_not_replace_finish_ack(
             ):
                 list(realtime.events())
             assert realtime.last_message["type"] == "response.done"
+
+
+@pytest.mark.parametrize("task", ["asr", "tts"])
+@pytest.mark.parametrize(
+    "failure, expected_error",
+    [
+        ("invalid-json", json.JSONDecodeError),
+        ("receive-timeout", websocket.WebSocketTimeoutException),
+        ("tcp-abort", APIConnectionError),
+        ("close-frame", APIConnectionError),
+    ],
+)
+def test_run_task_faults_after_partial_output(
+    client,
+    local_ws_server,
+    task,
+    failure,
+    expected_error,
+):
+    model = (
+        "qwen-audio-3.1-asr-flash-streaming"
+        if task == "asr"
+        else "qwen-audio-3.0-tts-flash"
+    )
+    partial = {"output": {"sentence": {"text": "partial", "end_time": None}}}
+
+    async def scenario(ws, request):
+        run = await _receive_run(ws, task=task, model=model)
+        task_id = run["header"]["task_id"]
+        await ws.send_json(_task_event("task-started", task_id))
+        if task == "asr":
+            await _receive_binary(ws, b"audio")
+        else:
+            await _receive_action(ws, task_id, "continue-task", {"text": "hi"})
+        await _receive_action(ws, task_id, "finish-task", {})
+        if task == "asr":
+            await ws.send_json(
+                _task_event("result-generated", task_id, partial),
+            )
+        else:
+            await ws.send_bytes(b"partial")
+        if failure == "invalid-json":
+            await ws.send_str("{broken")
+        elif failure == "tcp-abort":
+            request.transport.abort()
+        elif failure == "close-frame":
+            await ws.close(code=1000)
+
+    connect = (
+        client.audio.asr.recognize
+        if task == "asr"
+        else client.audio.tts.connect
+    )
+    with local_ws_server(scenario) as server:
+        with connect(model=model, ws_url=server.url, timeout=0.5) as session:
+            if task == "asr":
+                session.send_audio_frame(b"audio")
+            else:
+                session.send_text("hi")
+            session.stop()
+            reader = session.events()
+            try:
+                frame = next(reader)
+                if task == "asr":
+                    assert frame["payload"] == partial
+                else:
+                    assert frame == b"partial"
+                with pytest.raises(expected_error):
+                    next(reader)
+            finally:
+                reader.close()
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "qwen3.5-omni-flash-realtime",
+        "qwen3.8-omni-flash-realtime",
+        "qwen-audio-3.0-realtime-flash",
+        "qwen3.5-livetranslate-flash-realtime",
+        "qwen3.8-livetranslate-flash-realtime",
+    ],
+)
+@pytest.mark.parametrize(
+    "failure, expected_error",
+    [
+        ("invalid-json", json.JSONDecodeError),
+        ("receive-timeout", websocket.WebSocketTimeoutException),
+        ("tcp-abort", APIConnectionError),
+    ],
+)
+def test_realtime_faults_during_active_response(
+    client,
+    local_ws_server,
+    model,
+    failure,
+    expected_error,
+):
+    created = {"type": "response.created", "response": {"id": "r-active"}}
+
+    async def scenario(ws, request):
+        await ws.send_json(created)
+        if failure == "invalid-json":
+            await ws.send_str("{broken")
+        elif failure == "tcp-abort":
+            request.transport.abort()
+
+    with local_ws_server(scenario) as server:
+        with client.audio.realtime.connect(
+            model=model,
+            ws_url=server.url,
+            timeout=0.5,
+        ) as session:
+            assert session.recv_event() == created
+            with pytest.raises(expected_error):
+                session.recv_event()
+
+
+@pytest.mark.parametrize("task", ["asr", "tts"])
+@pytest.mark.parametrize("during_start", [False, True])
+def test_run_task_rejects_mismatched_response_id(
+    client,
+    local_ws_server,
+    task,
+    during_start,
+):
+    model = "fun-asr-realtime" if task == "asr" else "cosyvoice-v1"
+
+    async def scenario(ws, _request):
+        run = await _receive_run(ws, task=task, model=model)
+        task_id = run["header"]["task_id"]
+        await ws.send_json(
+            _task_event(
+                "task-started",
+                "another-task" if during_start else task_id,
+            ),
+        )
+        if not during_start:
+            await _receive_action(ws, task_id, "finish-task", {})
+            await ws.send_json(_task_event("task-finished", "another-task"))
+
+    connect = (
+        client.audio.asr.recognize
+        if task == "asr"
+        else client.audio.tts.connect
+    )
+    with local_ws_server(scenario) as server:
+        with pytest.raises(WsEventError, match="different task"):
+            with connect(model=model, ws_url=server.url) as session:
+                assert not during_start
+                session.stop()
+                list(session.events())
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [None, "asr-failed", "close-frame", "tcp-abort", "invalid-json"],
+)
+def test_shared_audio_tasks_route_output_and_isolate_failures(
+    client,
+    local_ws_server,
+    failure,
+):
+    partial = {"output": {"sentence": {"text": "partial"}}}
+
+    async def scenario(ws, request):
+        run_asr = await _receive_run(ws, task="asr", model="fun-asr-realtime")
+        asr_id = run_asr["header"]["task_id"]
+        await ws.send_json(_task_event("task-started", asr_id))
+        run_tts = await _receive_run(ws, task="tts", model="cosyvoice-v1")
+        tts_id = run_tts["header"]["task_id"]
+        assert asr_id != tts_id
+        await ws.send_json(_task_event("task-started", tts_id))
+        await _receive_binary(ws, b"input-audio")
+        await _receive_action(ws, tts_id, "continue-task", {"text": "hello"})
+        await _receive_action(ws, asr_id, "finish-task", {})
+        await _receive_action(ws, tts_id, "finish-task", {})
+        await ws.send_bytes(b"output-audio")
+        await ws.send_json(_task_event("result-generated", asr_id, partial))
+        if failure == "close-frame":
+            await ws.close(code=1000)
+        elif failure == "tcp-abort":
+            request.transport.abort()
+        elif failure == "invalid-json":
+            await ws.send_str("{broken")
+        else:
+            if failure == "asr-failed":
+                failed = _task_event("task-failed", asr_id)
+                failed["header"].update(
+                    error_code="InvalidParameter",
+                    error_message="bad audio",
+                )
+                await ws.send_json(failed)
+            else:
+                await ws.send_json(_task_event("task-finished", asr_id))
+            await ws.send_json(_task_event("task-finished", tts_id))
+
+    with local_ws_server(scenario) as server:
+        connection = client.ws_connection(url=server.url)
+        try:
+            with client.audio.asr.recognize(
+                model="fun-asr-realtime",
+                connection=connection,
+            ) as asr, client.audio.tts.connect(
+                model="cosyvoice-v1",
+                connection=connection,
+            ) as tts:
+                asr.send_audio_frame(b"input-audio")
+                tts.send_text("hello")
+                asr.stop()
+                tts.stop()
+                asr_events = asr.events()
+                tts_audio = tts.audio_chunks()
+                try:
+                    assert next(asr_events)["payload"] == partial
+                    assert next(tts_audio) == b"output-audio"
+                    if failure in {"close-frame", "tcp-abort", "invalid-json"}:
+                        expected = (
+                            json.JSONDecodeError
+                            if failure == "invalid-json"
+                            else APIConnectionError
+                        )
+                        for stream in (asr_events, tts_audio):
+                            with pytest.raises(expected):
+                                list(stream)
+                        assert connection.closed
+                    else:
+                        if failure == "asr-failed":
+                            with pytest.raises(
+                                BadRequestError,
+                                match="bad audio",
+                            ):
+                                list(asr_events)
+                        else:
+                            assert list(asr_events)[-1]["header"]["event"] == (
+                                "task-finished"
+                            )
+                        assert list(tts_audio) == []
+                        assert not connection.closed
+                finally:
+                    asr_events.close()
+                    tts_audio.close()
+        finally:
+            connection.close()
+            connection._reader.join(timeout=TIMEOUT)
+            assert not connection._reader.is_alive()
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "qwen3.5-omni-flash-realtime",
+        "qwen3.8-omni-flash-realtime",
+        "qwen-audio-3.0-realtime-flash",
+    ],
+)
+@pytest.mark.parametrize("disconnect", ["close-frame", "tcp-abort"])
+def test_realtime_requested_response_cannot_end_before_created(
+    client,
+    local_ws_server,
+    model,
+    disconnect,
+):
+    async def scenario(ws, request):
+        await _receive_realtime_event(ws, {"type": "response.create"}, set())
+        if disconnect == "close-frame":
+            await ws.close(code=1000)
+        else:
+            request.transport.abort()
+
+    with local_ws_server(scenario) as server:
+        with client.audio.realtime.connect(
+            model=model,
+            ws_url=server.url,
+        ) as session:
+            session.send_event({"type": "response.create"})
+            with pytest.raises(
+                APIConnectionError,
+                match="before response.done",
+            ):
+                list(session.events())
+
+
+def test_omni38_finish_ack_does_not_complete_active_response(
+    client,
+    local_ws_server,
+):
+    async def scenario(ws, request):
+        await ws.send_json(
+            {"type": "response.created", "response": {"id": "r1"}},
+        )
+        await _receive_realtime_event(ws, {"type": "session.finish"}, set())
+        await ws.send_json({"type": "session.finished"})
+
+    with local_ws_server(scenario) as server:
+        with client.audio.realtime.connect(
+            model="qwen3.8-omni-flash-realtime",
+            ws_url=server.url,
+        ) as session:
+            assert session.recv_event()["type"] == "response.created"
+            session.end_session()
+            with pytest.raises(
+                APIConnectionError,
+                match="before response.done",
+            ):
+                list(session.events())

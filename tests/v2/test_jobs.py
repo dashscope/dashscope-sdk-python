@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -37,6 +38,27 @@ def _job_body(status="PENDING", task_id="task-1", **extra):
     output = {"task_id": task_id, "task_status": status}
     output.update(extra)
     return {"request_id": "req-1", "output": output}
+
+
+@pytest.fixture
+def wait_clock():
+    now = [10.0]
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    async def async_sleep(seconds):
+        sleep(seconds)
+
+    # Replace only the resource's time binding, not asyncio's global clock.
+    return SimpleNamespace(
+        monotonic=lambda: now[0],
+        sleep=sleep,
+        async_sleep=async_sleep,
+        sleeps=sleeps,
+    )
 
 
 def test_job_from_payload():
@@ -93,6 +115,73 @@ def test_create_submits_async_task():
     assert job.finished is False
 
 
+@pytest.mark.parametrize(
+    "parameter_kwargs, expected_fields",
+    [
+        pytest.param({}, {}, id="omitted"),
+        pytest.param({"parameters": None}, {}, id="none"),
+        pytest.param({"parameters": {}}, {"parameters": {}}, id="empty"),
+    ],
+)
+def test_create_distinguishes_none_and_empty_parameters(
+    parameter_kwargs,
+    expected_fields,
+):
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=_job_body())
+
+    with _make_client(handler) as client:
+        Jobs(client, "aigc").create(
+            model="wanx2.1-t2i",
+            input={"prompt": "a cat"},
+            **parameter_kwargs,
+        )
+    assert bodies == [
+        {
+            "model": "wanx2.1-t2i",
+            "input": {"prompt": "a cat"},
+            **expected_fields,
+        },
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "parameter_kwargs, expected_fields",
+    [
+        pytest.param({}, {}, id="omitted"),
+        pytest.param({"parameters": None}, {}, id="none"),
+        pytest.param({"parameters": {}}, {"parameters": {}}, id="empty"),
+    ],
+)
+async def test_async_create_distinguishes_none_and_empty_parameters(
+    parameter_kwargs,
+    expected_fields,
+):
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=_job_body())
+
+    async with _make_async_client(handler) as client:
+        await AsyncJobs(client, "aigc").create(
+            model="wanx2.1-t2i",
+            input={"prompt": "a cat"},
+            **parameter_kwargs,
+        )
+    assert bodies == [
+        {
+            "model": "wanx2.1-t2i",
+            "input": {"prompt": "a cat"},
+            **expected_fields,
+        },
+    ]
+
+
 def test_wait_polls_with_exponential_backoff():
     statuses = iter(["RUNNING", "RUNNING", "SUCCEEDED"])
     calls = []
@@ -143,14 +232,15 @@ def test_wait_accepts_job_and_caps_interval():
     assert delays == [1.0, 2.0, 2.0]
 
 
-def test_wait_times_out():
+def test_wait_times_out(monkeypatch, wait_clock):
     def handler(request):
         return httpx.Response(200, json=_job_body("RUNNING"))
 
+    monkeypatch.setattr("dashscope.v2.resources._jobs.time", wait_clock)
     client = _make_client(handler)
     jobs = Jobs(client, "aigc")
     with pytest.raises(DashScopeError, match="timed out"):
-        jobs.wait("task-1", timeout=0.001, _sleep=lambda seconds: None)
+        jobs.wait("task-1", timeout=0.5, _sleep=wait_clock.sleep)
 
 
 def test_fetch_failed_raises_mapped_error():
@@ -389,7 +479,7 @@ def test_wait_returns_error_envelope_when_not_raising():
     job = jobs.wait(
         "task-1",
         timeout=60.0,
-        _sleep=sleeps.append,
+        _sleep=lambda seconds: sleeps.append(seconds),
     )
     # The error envelope has no task status; wait must return it
     # instead of polling until the timeout.
@@ -503,3 +593,385 @@ def test_wait_still_polls_past_running_to_succeed():
     assert job.succeeded is True
     assert len(calls) == 3
     assert delays == [1.0, 2.0]
+
+
+@pytest.mark.parametrize("modality", ["images", "videos", "embeddings"])
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("raise_on_error", [False, True])
+@pytest.mark.parametrize(
+    "status",
+    ["SUCCEEDED", "FAILED", "CANCELED", "UNKNOWN"],
+)
+async def test_non_asr_wait_terminal_snapshot_contract(
+    modality,
+    asynchronous,
+    raise_on_error,
+    status,
+):
+    def handler(request):
+        pytest.fail("terminal snapshots must not trigger another request")
+
+    client = (
+        _make_async_client(handler, raise_on_error=raise_on_error)
+        if asynchronous
+        else _make_client(handler, raise_on_error=raise_on_error)
+    )
+    job = Job.from_payload(
+        _job_body(
+            status,
+            **(
+                {"code": "InvalidParameter", "message": "invalid input"}
+                if status == "FAILED"
+                else {}
+            ),
+        ),
+    )
+    try:
+        jobs = getattr(client, modality).jobs
+        if raise_on_error and status == "CANCELED":
+            with pytest.raises(DashScopeError, match="canceled") as caught:
+                result = jobs.wait(job)
+                if asynchronous:
+                    await result
+            assert type(caught.value) is DashScopeError
+            assert caught.value.request_id == "req-1"
+        else:
+            result = jobs.wait(job)
+            if asynchronous:
+                result = await result
+            assert result is job
+    finally:
+        if asynchronous:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.parametrize("modality", ["images", "videos", "embeddings"])
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("raise_on_error", [False, True])
+async def test_non_asr_wait_allows_final_fetch_at_deadline(
+    monkeypatch,
+    wait_clock,
+    modality,
+    asynchronous,
+    raise_on_error,
+):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.method == "GET"
+        assert request.url.path == "/api/v1/tasks/task-1"
+        assert wait_clock.monotonic() == 10.5
+        return httpx.Response(200, json=_job_body("SUCCEEDED"))
+
+    monkeypatch.setattr("dashscope.v2.resources._jobs.time", wait_clock)
+    client = (
+        _make_async_client(handler, raise_on_error=raise_on_error)
+        if asynchronous
+        else _make_client(handler, raise_on_error=raise_on_error)
+    )
+    try:
+        result = getattr(client, modality).jobs.wait(
+            Job(task_id="task-1", status="RUNNING"),
+            timeout=0.5,
+            poll_interval=1,
+            _sleep=wait_clock.async_sleep
+            if asynchronous
+            else wait_clock.sleep,
+        )
+        if asynchronous:
+            result = await result
+        assert result.succeeded is True
+        assert len(requests) == 1
+        assert wait_clock.sleeps == [0.5]
+    finally:
+        if asynchronous:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.parametrize("modality", ["images", "videos", "embeddings", "asr"])
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("raise_on_error", [False, True])
+@pytest.mark.parametrize("status_code", [None, 0])
+async def test_public_wait_polls_running_until_succeeded(
+    monkeypatch,
+    wait_clock,
+    modality,
+    asynchronous,
+    raise_on_error,
+    status_code,
+):
+    statuses = iter(["RUNNING", "RUNNING", "RUNNING", "SUCCEEDED"])
+    requests = []
+    output_extra = {} if status_code is None else {"status_code": status_code}
+
+    def handler(request):
+        requests.append(request)
+        assert request.method == "GET"
+        assert request.url.path == "/api/v1/tasks/task-1"
+        assert request.headers["Authorization"] == "Bearer sk-override"
+        assert request.headers["X-DashScope-WorkSpace"] == "ws-9"
+        return httpx.Response(
+            200,
+            json=_job_body(next(statuses), **output_extra),
+        )
+
+    clock_module = "audio.asr" if modality == "asr" else "_jobs"
+    monkeypatch.setattr(
+        f"dashscope.v2.resources.{clock_module}.time",
+        wait_clock,
+    )
+    client = (
+        _make_async_client(handler, raise_on_error=raise_on_error)
+        if asynchronous
+        else _make_client(handler, raise_on_error=raise_on_error)
+    )
+    try:
+        resource = (
+            client.audio.asr
+            if modality == "asr"
+            else getattr(client, modality)
+        )
+        result = resource.jobs.wait(
+            "task-1",
+            timeout=60,
+            poll_interval=1,
+            max_interval=2,
+            api_key="sk-override",
+            workspace="ws-9",
+            _sleep=wait_clock.async_sleep
+            if asynchronous
+            else wait_clock.sleep,
+        )
+        if asynchronous:
+            result = await result
+        assert result.succeeded is True
+        assert result.is_error is False
+        assert result.request_id == "req-1"
+        if status_code is not None:
+            assert result.output["status_code"] == status_code
+        assert len(requests) == 4
+        assert wait_clock.sleeps == [1, 2, 2]
+    finally:
+        if asynchronous:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("raise_on_error", [False, True])
+async def test_asr_wait_does_not_fetch_after_budget_expires(
+    monkeypatch,
+    wait_clock,
+    asynchronous,
+    raise_on_error,
+):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=_job_body("SUCCEEDED"))
+
+    monkeypatch.setattr("dashscope.v2.resources.audio.asr.time", wait_clock)
+    client = (
+        _make_async_client(handler, raise_on_error=raise_on_error)
+        if asynchronous
+        else _make_client(handler, raise_on_error=raise_on_error)
+    )
+    try:
+        with pytest.raises(DashScopeError, match="timed out"):
+            result = client.audio.asr.jobs.wait(
+                Job(task_id="task-1", status="RUNNING"),
+                timeout=0.5,
+                poll_interval=1,
+                _sleep=(
+                    wait_clock.async_sleep
+                    if asynchronous
+                    else wait_clock.sleep
+                ),
+            )
+            if asynchronous:
+                await result
+        assert requests == []
+        assert wait_clock.sleeps == [0.5]
+    finally:
+        if asynchronous:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("raise_on_error", [False, True])
+@pytest.mark.parametrize(
+    "status",
+    ["SUCCEEDED", "FAILED", "CANCELED", "UNKNOWN"],
+)
+async def test_asr_wait_terminal_snapshot_contract(
+    asynchronous,
+    raise_on_error,
+    status,
+):
+    def handler(request):
+        pytest.fail("terminal snapshots must not trigger another request")
+
+    client = (
+        _make_async_client(handler, raise_on_error=raise_on_error)
+        if asynchronous
+        else _make_client(handler, raise_on_error=raise_on_error)
+    )
+    job = Job.from_payload(
+        _job_body(
+            status,
+            **(
+                {"code": "InvalidParameter", "message": "invalid audio"}
+                if status == "FAILED"
+                else {}
+            ),
+        ),
+    )
+    job.headers = {"x-request-id": "header-id", "x-gateway": "test"}
+    try:
+        if raise_on_error and status in ("FAILED", "CANCELED"):
+            with pytest.raises(DashScopeError) as caught:
+                result = client.audio.asr.jobs.wait(job)
+                if asynchronous:
+                    await result
+            assert caught.value.request_id == "req-1"
+            assert dict(caught.value.headers) == job.headers
+            if status == "FAILED":
+                assert type(caught.value).__name__ == "BadRequestError"
+                assert caught.value.code == "InvalidParameter"
+                assert caught.value.message == "invalid audio"
+        else:
+            result = client.audio.asr.jobs.wait(job)
+            if asynchronous:
+                result = await result
+            assert result is job
+    finally:
+        if asynchronous:
+            await client.aclose()
+        else:
+            client.close()
+
+
+async def test_async_asr_wait_cancellation_stops_polling():
+    import asyncio
+
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=_job_body("RUNNING"))
+
+    async def cancel_sleep(seconds):
+        raise asyncio.CancelledError()
+
+    async with _make_async_client(handler) as client:
+        with pytest.raises(asyncio.CancelledError):
+            await client.audio.asr.jobs.wait(
+                "task-1",
+                _sleep=cancel_sleep,
+            )
+    assert len(requests) == 1
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("entry", ["transcribe", "fetch"])
+@pytest.mark.parametrize(
+    "status, code, expected_error",
+    [
+        (400, "InvalidParameter", "BadRequestError"),
+        (401, "InvalidApiKey", "AuthenticationError"),
+        (403, "AccessDenied", "PermissionDeniedError"),
+        (404, "NotFound", "NotFoundError"),
+        (429, "Throttling", "RateLimitError"),
+        (500, "InternalError", "InternalServerError"),
+        (200, "InvalidParameter", "BadRequestError"),
+    ],
+)
+async def test_asr_http_errors_preserve_request_id(
+    asynchronous,
+    entry,
+    status,
+    code,
+    expected_error,
+):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            status,
+            headers={"x-request-id": "header-request"},
+            json={"code": code, "message": "audio request rejected"},
+        )
+
+    client = (
+        _make_async_client(handler, max_retries=0)
+        if asynchronous
+        else _make_client(handler, max_retries=0)
+    )
+    try:
+        with pytest.raises(DashScopeError) as caught:
+            if entry == "transcribe":
+                result = client.audio.asr.transcribe(
+                    ["https://example.com/a.wav"],
+                )
+            else:
+                result = client.audio.asr.jobs.fetch("task-1")
+            if asynchronous:
+                await result
+        assert type(caught.value).__name__ == expected_error
+        assert caught.value.code == code
+        assert caught.value.request_id == "header-request"
+        assert caught.value.status_code == status
+        assert len(requests) == 1
+    finally:
+        if asynchronous:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize(
+    "transport_error, expected_error",
+    [
+        (httpx.ReadTimeout, "APITimeoutError"),
+        (httpx.ConnectError, "APIConnectionError"),
+    ],
+)
+async def test_asr_transport_errors_are_not_suppressed(
+    asynchronous,
+    transport_error,
+    expected_error,
+):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        raise transport_error("network fault", request=request)
+
+    client = (
+        _make_async_client(handler, raise_on_error=False, max_retries=0)
+        if asynchronous
+        else _make_client(handler, raise_on_error=False, max_retries=0)
+    )
+    try:
+        with pytest.raises(DashScopeError) as caught:
+            result = client.audio.asr.transcribe(["https://example.com/a.wav"])
+            if asynchronous:
+                await result
+        assert type(caught.value).__name__ == expected_error
+        assert len(calls) == 1
+    finally:
+        if asynchronous:
+            await client.aclose()
+        else:
+            client.close()

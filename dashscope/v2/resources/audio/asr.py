@@ -11,6 +11,7 @@ websocket session used as a context manager, ``recognize``).
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from typing import (
@@ -27,10 +28,13 @@ from typing import (
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from dashscope.v2.errors import DashScopeError, error_from_business_code
 from dashscope.v2.resources._jobs import (
+    CANCELED,
     DEFAULT_MAX_INTERVAL,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_WAIT_TIMEOUT,
+    FAILED,
     AsyncJobs,
     Job,
     Jobs,
@@ -86,10 +90,29 @@ def _phrase_resources(
     return [{"resource_id": phrase_id, "resource_type": "asr_phrase"}]
 
 
+def _check_terminal(job: Job, *, raise_on_error: bool) -> Job:
+    """Apply ASR's error contract even to caller-supplied snapshots."""
+    if job.status == FAILED and raise_on_error:
+        raise error_from_business_code(
+            message=job.message or f"task {job.task_id} failed",
+            code=job.code,
+            body=job.model_dump(),
+            headers=job.headers,
+        )
+    if job.status == CANCELED and raise_on_error:
+        raise DashScopeError(
+            f"task {job.task_id} was canceled while waiting",
+            request_id=job.request_id,
+            headers=job.headers,
+        )
+    return job
+
+
 class TranscriptionJobs:
     """Async task facade over the batch transcription service."""
 
     def __init__(self, client) -> None:
+        self._client = client
         self._jobs = Jobs(client, SERVICE, MODULE)
 
     def create(
@@ -106,7 +129,7 @@ class TranscriptionJobs:
         return self._jobs.create(
             model=model,
             input=_input_for(file_urls),
-            parameters=parameters,
+            parameters={} if parameters is None else parameters,
             resources=_phrase_resources(phrase_id),
             timeout=timeout,
             api_key=api_key,
@@ -139,19 +162,41 @@ class TranscriptionJobs:
         workspace: Optional[str] = None,
         _sleep: Optional[Callable[[float], Any]] = None,
     ) -> Job:
-        return self._jobs.wait(
-            job,
-            poll_interval=poll_interval,
-            max_interval=max_interval,
-            timeout=timeout,
-            api_key=api_key,
-            workspace=workspace,
-            _sleep=_sleep,
+        """Poll with backoff, without starting another poll after the deadline."""
+        task_id = job.task_id if isinstance(job, Job) else job
+        sleep_fn = _sleep or time.sleep
+        deadline = time.monotonic() + timeout
+        current = (
+            job
+            if isinstance(job, Job)
+            else self.fetch(task_id, api_key=api_key, workspace=workspace)
+        )
+        interval = poll_interval
+        while not current.finished:
+            # Compat-mode error envelopes have no terminal task status.
+            if current.is_error:
+                return current
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise DashScopeError(
+                    f"timed out after {timeout}s waiting for task {task_id}",
+                )
+            sleep_fn(min(interval, remaining))
+            if time.monotonic() >= deadline:
+                raise DashScopeError(
+                    f"timed out after {timeout}s waiting for task {task_id}",
+                )
+            interval = min(interval * 2, max_interval)
+            current = self.fetch(task_id, api_key=api_key, workspace=workspace)
+        return _check_terminal(
+            current,
+            raise_on_error=self._client.raise_on_error,
         )
 
 
 class AsyncTranscriptionJobs:
     def __init__(self, client) -> None:
+        self._client = client
         self._jobs = AsyncJobs(client, SERVICE, MODULE)
 
     async def create(
@@ -168,7 +213,7 @@ class AsyncTranscriptionJobs:
         return await self._jobs.create(
             model=model,
             input=_input_for(file_urls),
-            parameters=parameters,
+            parameters={} if parameters is None else parameters,
             resources=_phrase_resources(phrase_id),
             timeout=timeout,
             api_key=api_key,
@@ -201,14 +246,43 @@ class AsyncTranscriptionJobs:
         workspace: Optional[str] = None,
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
     ) -> Job:
-        return await self._jobs.wait(
-            job,
-            poll_interval=poll_interval,
-            max_interval=max_interval,
-            timeout=timeout,
-            api_key=api_key,
-            workspace=workspace,
-            _sleep=_sleep,
+        """Async twin of :meth:`TranscriptionJobs.wait`."""
+        task_id = job.task_id if isinstance(job, Job) else job
+        sleep_fn = _sleep or asyncio.sleep
+        deadline = time.monotonic() + timeout
+        current = (
+            job
+            if isinstance(job, Job)
+            else await self.fetch(
+                task_id,
+                api_key=api_key,
+                workspace=workspace,
+            )
+        )
+        interval = poll_interval
+        while not current.finished:
+            # Compat-mode error envelopes have no terminal task status.
+            if current.is_error:
+                return current
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise DashScopeError(
+                    f"timed out after {timeout}s waiting for task {task_id}",
+                )
+            await sleep_fn(min(interval, remaining))
+            if time.monotonic() >= deadline:
+                raise DashScopeError(
+                    f"timed out after {timeout}s waiting for task {task_id}",
+                )
+            interval = min(interval * 2, max_interval)
+            current = await self.fetch(
+                task_id,
+                api_key=api_key,
+                workspace=workspace,
+            )
+        return _check_terminal(
+            current,
+            raise_on_error=self._client.raise_on_error,
         )
 
 
@@ -385,26 +459,8 @@ class Recognition:
                 self.usage = payload["usage"]
             output = payload.get("output") or {}
             sentence = output.get("sentence") or {}
-            transcription = output.get("transcription") or {}
-            translations = output.get("translations") or []
-            # First-package delay fires on the first frame carrying real
-            # recognized text. Plain ASR puts it in ``output.sentence``; the
-            # Gummy translation wire shares this base but reports text under
-            # ``output.transcription`` / ``output.translations`` instead, so
-            # all three shapes count. Heartbeat frames carry no text and so
-            # never trigger the timestamp.
             has_text = bool(
-                (sentence.get("text") and not sentence.get("heartbeat"))
-                or (
-                    transcription.get("text")
-                    and not transcription.get("heartbeat")
-                )
-                or any(
-                    isinstance(item, dict)
-                    and item.get("text")
-                    and not item.get("heartbeat")
-                    for item in translations
-                ),
+                sentence.get("text") and not sentence.get("heartbeat"),
             )
             if (
                 has_text
@@ -457,7 +513,7 @@ class Asr:
         self,
         file_urls: List[str],
         *,
-        model: str = "paraformer-v2",
+        model: str = "qwen-audio-3.1-asr-flash-filetrans",
         parameters: Optional[Dict[str, Any]] = None,
         phrase_id: Optional[str] = None,
         timeout: float = DEFAULT_WAIT_TIMEOUT,
@@ -594,7 +650,7 @@ class AsyncAsr:
         self,
         file_urls: List[str],
         *,
-        model: str = "paraformer-v2",
+        model: str = "qwen-audio-3.1-asr-flash-filetrans",
         parameters: Optional[Dict[str, Any]] = None,
         phrase_id: Optional[str] = None,
         timeout: float = DEFAULT_WAIT_TIMEOUT,

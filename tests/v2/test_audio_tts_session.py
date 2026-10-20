@@ -19,9 +19,9 @@ from dashscope.v2.errors import APIConnectionError, BadRequestError
 from dashscope.v2.resources.audio.tts import SynthesisSession
 
 
-def _event(name, payload=None):
+def _event(name, payload=None, task_id="t"):
     return {
-        "header": {"event": name, "task_id": "t", "request_id": "r"},
+        "header": {"event": name, "task_id": task_id, "request_id": "r"},
         "payload": payload or {},
     }
 
@@ -46,7 +46,12 @@ class FakeWebSocket:
         frame = self.inbox.pop(0) if self.inbox else None
         if isinstance(frame, Exception):
             raise frame  # pylint: disable=raising-bad-type
-        return json.dumps(frame) if isinstance(frame, dict) else frame
+        if isinstance(frame, dict):
+            header = frame.get("header")
+            if isinstance(header, dict) and header.get("task_id") == "t":
+                header["task_id"] = self.sent[0]["header"]["task_id"]
+            return json.dumps(frame)
+        return frame
 
     def settimeout(self, timeout):
         if self.timeout_error:
@@ -260,7 +265,9 @@ def test_cancel_once_before_terminal_including_after_stop(
         sent_count = len(ws.sent)
         session.cancel()
         assert len(ws.sent) == sent_count
-        assert list(session.events()) == [_event("task-finished")]
+        expected = _event("task-finished")
+        expected["header"]["task_id"] = ws.sent[0]["header"]["task_id"]
+        assert list(session.events()) == [expected]
     assert ws.close_count == 1
 
 
@@ -451,23 +458,52 @@ def test_stream_close_and_context_exception_clean_up(client):
     _assert_unusable(session)
 
 
+@pytest.mark.parametrize("error_type", [KeyboardInterrupt, SystemExit])
+def test_interrupted_start_closes_session(client, monkeypatch, error_type):
+    ws = FakeWebSocket()
+    session = _session(client, ws)
+    error = error_type("interrupted handshake")
+
+    def interrupted_run(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(
+        "dashscope.v2.resources.audio.tts.WsSession.run_task",
+        interrupted_run,
+    )
+    try:
+        with pytest.raises(error_type) as caught:
+            session.start()
+        assert caught.value is error
+        assert ws.close_count == 1
+        _assert_unusable(session)
+    finally:
+        session.close()
+
+
 def test_caller_thread_receives_while_another_sends(client):
     class DuplexWebSocket(FakeWebSocket):
         def __init__(self):
             super().__init__()
             self.frames = queue.Queue()
-            self.frames.put(json.dumps(_event("task-started")))
             self.waiting_for_more = threading.Event()
 
         def send(self, payload):
             super().send(payload)
             frame = self.sent[-1]
             action = frame["header"]["action"]
+            task_id = frame["header"]["task_id"]
             data = frame["payload"]["input"]
-            if action == "continue-task" and "text" in data:
+            if action == "run-task":
+                self.frames.put(
+                    json.dumps(_event("task-started", task_id=task_id)),
+                )
+            elif action == "continue-task" and "text" in data:
                 self.frames.put(data["text"].encode("utf-8"))
             elif action == "finish-task":
-                self.frames.put(json.dumps(_event("task-finished")))
+                self.frames.put(
+                    json.dumps(_event("task-finished", task_id=task_id)),
+                )
 
         def recv(self):
             if self.frames.empty():
@@ -490,6 +526,9 @@ def test_caller_thread_receives_while_another_sends(client):
             assert received.result(timeout=3) == [
                 b"first",
                 b"second",
-                _event("task-finished"),
+                _event(
+                    "task-finished",
+                    task_id=ws.sent[0]["header"]["task_id"],
+                ),
             ]
     assert ws.close_count == 1

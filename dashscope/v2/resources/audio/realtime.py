@@ -52,25 +52,19 @@ class RealtimeSession:
     Usage::
 
         with client.audio.realtime.connect(
-            model="qwen-omni-turbo-realtime",
+            model="qwen3.8-omni-flash-realtime",
         ) as rt:
             rt.send_event({"type": "session.update", "session": {...}})
             for event in rt.events():
                 ...
 
-    Unlike the run-task family (asr/tts/translation/tingwu), the
+    Unlike the run-task family (asr/tts/tingwu), the
     realtime protocol has no task id: one socket IS one session and the
     server closes it when the session ends, so connection reuse does
     not apply here -- every session opens its own socket (see
     ``WsConnection`` for the multiplexable family). Latency-sensitive
     callers can shave the handshake by connecting ahead of use rather
     than by pooling.
-
-    This one-socket-per-session rule is a published contract: it is
-    pinned by tests/v2/test_audio_omni_session.py and relied on by
-    examples/04_real_world_scenarios/
-    realtime_audio_meeting_harness.py, which sizes its meeting
-    concurrency on it.
     """
 
     def __init__(
@@ -126,7 +120,9 @@ class RealtimeSession:
         all_headers.update(user_headers)
         self._model = model
         wire_model = next(value for key, value in query if key == "model")
-        if wire_model.startswith("qwen-audio-"):
+        if wire_model.startswith("qwen3.8-omni-"):
+            self._protocol = "omni_v38"
+        elif wire_model.startswith("qwen-audio-"):
             self._protocol = "qwen_audio"
         elif wire_model.startswith("qwen3.8-livetranslate-"):
             self._protocol = "livetranslate_v38"
@@ -141,6 +137,8 @@ class RealtimeSession:
         self._connector = connector
         self._timeout = config.timeout if timeout is None else timeout
         self._lock = threading.RLock()
+        self._recv_lock = threading.Lock()
+        self._generation = 0
         self._ws = None
         self._reset_state()
 
@@ -149,6 +147,7 @@ class RealtimeSession:
         self._finish_requested = False
         self._finished = False
         self._response_active = False
+        self._pending_response_ids: List[Any] = []
         self.session_id: Optional[str] = None
         self.last_message: Optional[Dict[str, Any]] = None
         self.last_response_id: Optional[str] = None
@@ -169,6 +168,7 @@ class RealtimeSession:
         with self._lock:
             if self._ws is not None:
                 raise RuntimeError("realtime session is already open")
+            self._generation += 1
             try:
                 if self._connector is None:
                     self._ws = _default_connector(
@@ -209,6 +209,8 @@ class RealtimeSession:
                 self._finish_requested = True
             try:
                 self._ws.send(raw)
+                if payload.get("type") == "response.create":
+                    self._pending_response_ids.append(payload["event_id"])
             except BaseException:
                 self.close()
                 raise
@@ -256,7 +258,7 @@ class RealtimeSession:
         ),
         **kwargs: Any,
     ) -> None:
-        """Patch Qwen-Audio/Live settings; Omni retains its legacy defaults.
+        """Patch modern sessions; pre-3.8 Omni retains its legacy defaults.
 
         ``**kwargs`` is the protocol-evolution escape hatch: extra keys
         merge into the wire ``session`` object after the named helpers,
@@ -390,7 +392,9 @@ class RealtimeSession:
         session.update(kwargs)
         return session
 
-    def _incremental_session(  # pylint: disable=too-many-branches,too-many-statements
+    # Protocol event routing is a deliberate branch table.
+    # pylint: disable-next=too-many-branches,too-many-statements
+    def _incremental_session(
         self,
         options: Dict[str, Any],
         kwargs: Dict[str, Any],
@@ -434,7 +438,7 @@ class RealtimeSession:
         if enabled is True and self._protocol != "livetranslate_v38":
             transcription = (
                 {"model": "qwen3-asr-flash-realtime"}
-                if self._protocol == "livetranslate"
+                if self._protocol in {"livetranslate", "omni_v38"}
                 else {}
             )
         if "input_audio_transcription_model" in options:
@@ -486,7 +490,7 @@ class RealtimeSession:
                 audio[direction] = {"format": options[key]}
         if audio:
             session["audio"] = audio
-            if self._protocol != "livetranslate_v38":
+            if self._protocol not in {"livetranslate_v38", "omni_v38"}:
                 for key in (
                     "input_audio_format",
                     "output_audio_format",
@@ -514,12 +518,12 @@ class RealtimeSession:
                     "Livetranslate 3.8 does not support "
                     "same_language_skip_options",
                 )
-            session = self._nested_translation_session(session)
+        if self._protocol in {"livetranslate_v38", "omni_v38"}:
+            session = self._nested_audio_session(session)
         return session
 
-    @staticmethod
-    def _nested_translation_session(session: Dict[str, Any]) -> Dict[str, Any]:
-        if "modalities" in session:
+    def _nested_audio_session(self, session: Dict[str, Any]) -> Dict[str, Any]:
+        if self._protocol == "livetranslate_v38" and "modalities" in session:
             session["output_modalities"] = session.pop("modalities")
         audio: Dict[str, Any] = {}
         for field, direction, nested_key in (
@@ -531,12 +535,15 @@ class RealtimeSession:
                 audio.setdefault(direction, {}).setdefault("format", {})[
                     nested_key
                 ] = session.pop(field)
-        for field, direction in (
-            ("turn_detection", "input"),
-            ("voice", "output"),
+        if "voice" in session:
+            audio.setdefault("output", {})["voice"] = session.pop("voice")
+        if (
+            self._protocol == "livetranslate_v38"
+            and "turn_detection" in session
         ):
-            if field in session:
-                audio.setdefault(direction, {})[field] = session.pop(field)
+            audio.setdefault("input", {})["turn_detection"] = session.pop(
+                "turn_detection",
+            )
         raw_audio = session.pop("audio", _UNSET)
         if isinstance(raw_audio, dict):
             for direction, config in raw_audio.items():
@@ -630,7 +637,10 @@ class RealtimeSession:
         ):
             response["modalities"] = modalities
         response.update(kwargs)
-        self.send_event({"type": "response.create", "response": response})
+        event: Dict[str, Any] = {"type": "response.create"}
+        if response or self._protocol != "omni_v38":
+            event["response"] = response
+        self.send_event(event)
 
     def cancel_response(self) -> None:
         self.send_event({"type": "response.cancel"})
@@ -644,60 +654,100 @@ class RealtimeSession:
             )
         self.send_event({"type": "session.finish"})
 
+    # pylint: disable-next=too-many-branches,too-many-statements
     def recv_event(self) -> Optional[Dict[str, Any]]:
         """Receive a raw event; unfinished responses cannot end silently."""
-        ws = self._ws
-        if ws is None:
-            self._check_unfinished()
-            if self._closed:
-                return None
-            raise RuntimeError("realtime session is not open")
         from websocket import (  # pylint: disable=import-outside-toplevel
             WebSocketConnectionClosedException,
         )
 
-        try:
+        # Network reads must not hold the lock needed by send_event() or close().
+        with self._recv_lock:
+            with self._lock:
+                ws, generation = self._ws, self._generation
+                if ws is None:
+                    self._check_unfinished()
+                    if self._closed:
+                        return None
+                    raise RuntimeError("realtime session is not open")
+            failure = None
             try:
-                raw = ws.recv()
-            except WebSocketConnectionClosedException:
-                raw = None
-            if raw is None or raw == "" or raw == b"":
-                self.close()
-                self._check_unfinished()
-                return None
-            if isinstance(raw, (bytes, bytearray)):
-                raw = raw.decode("utf-8")
-            event = json.loads(raw)
-            if not isinstance(event, dict):
-                raise ValueError("expected a JSON event object")
-            self.last_message = event
-            self._track_event(event)
-            if event.get("type") == "session.finished":
-                self._finished = True
-                self.close()
-        except BaseException:
-            self.close()
-            raise
-        if event.get("type") == "error":
-            error = event.get("error") or {}
-            if (
-                error.get("type") != "invalid_request_error"
-                or self._finish_requested
-            ):
-                self.close()
-            raise error_from_business_code(
-                message=error.get("message") or "realtime error",
-                code=error.get("code"),
-                body=event,
-            )
-        return event
+                try:
+                    raw = ws.recv()
+                except WebSocketConnectionClosedException:
+                    raw = None
+                with self._lock:
+                    if generation != self._generation:
+                        return None
+                    if ws is not self._ws:
+                        self._check_unfinished()
+                        return None
+                    if raw is None or raw == "" or raw == b"":
+                        self.close()
+                        self._check_unfinished()
+                        return None
+                    if isinstance(raw, (bytes, bytearray)):
+                        raw = raw.decode("utf-8")
+                    event = json.loads(raw)
+                    if not isinstance(event, dict):
+                        raise ValueError("expected a JSON event object")
+                    self.last_message = event
+                    self._track_event(event)
+                    if event.get("type") == "session.finished":
+                        self._finished = True
+                        self.close()
+                        self._check_unfinished()
+                    elif event.get("type") == "error":
+                        error = event.get("error")
+                        if error is None:
+                            error = {}
+                        if not isinstance(error, dict):
+                            raise ValueError("expected a JSON error object")
+                        code = error.get("code")
+                        if code is not None and not isinstance(code, str):
+                            raise ValueError("expected a string error code")
+                        failure = error_from_business_code(
+                            message=error.get("message") or "realtime error",
+                            code=code,
+                            body=event,
+                        )
+                        recoverable = (
+                            error.get("type") == "invalid_request_error"
+                        )
+                        if recoverable:
+                            # The nested event_id identifies the rejected request.
+                            request_id = error.get("event_id")
+                            if (
+                                isinstance(request_id, str)
+                                and request_id in self._pending_response_ids
+                            ):
+                                self._pending_response_ids.remove(request_id)
+                        if not recoverable or self._finish_requested:
+                            self.close()
+            except BaseException:
+                with self._lock:
+                    if ws is self._ws and generation == self._generation:
+                        self.close()
+                raise
+            # Malformed errors require cleanup; parsed request errors may recover.
+            if failure is not None:
+                raise failure
+            return event
 
     def _check_unfinished(self) -> None:
-        if self._finish_requested and not self._finished:
+        # Omni 3.8 documents session.finish without a session.finished ACK.
+        if (
+            self._finish_requested
+            and not self._finished
+            and self._protocol != "omni_v38"
+        ):
             raise APIConnectionError(
                 "realtime connection closed before session.finished",
             )
-        if self._response_active and not self._finished:
+        # Unlike legacy protocols, Omni 3.8's optional ACK cannot finish a response.
+        if (self._response_active or self._pending_response_ids) and (
+            not self._finished or self._protocol == "omni_v38"
+        ):
             raise APIConnectionError(
                 "realtime connection closed before response.done",
             )
@@ -716,6 +766,9 @@ class RealtimeSession:
             self.last_first_audio_delay = None
             self.last_first_text_delay = None
             self._response_active = True
+            # response.created has no client ID; acknowledge in wire order.
+            if self._pending_response_ids:
+                self._pending_response_ids.pop(0)
         elif kind == "response.done":
             response_id = (event.get("response") or {}).get(
                 "id",
