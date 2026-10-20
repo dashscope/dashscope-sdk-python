@@ -39,7 +39,7 @@ from __future__ import annotations
 import asyncio
 import functools
 from collections.abc import AsyncIterator, Iterator
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import httpx
 
@@ -71,7 +71,7 @@ _RESOURCE_PACKAGE = "dashscope.agentstudio.resources"
 # class stands for so ``error_from_status`` still picks the right v2 class
 # instead of degrading to a 500. Values mirror agentstudio's own
 # ``_STATUS_TO_DEFAULT``; only the class's canonical status is kept.
-_STATUS_BY_CLASS = {
+_STATUS_BY_CLASS: Dict[type, int] = {
     _as_exceptions.InvalidRequestError: 400,
     _as_exceptions.AuthenticationError: 401,
     _as_exceptions.PermissionDeniedError: 403,

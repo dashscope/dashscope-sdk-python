@@ -1058,6 +1058,7 @@ def test_escape_hatch_incremental_output_false_final_is_last_snapshot():
         parameters={"incremental_output": False},
     )
     # Raw iteration stays server-cumulative (1.x passthrough behavior).
+    # pylint: disable-next=not-an-iterable
     assert [c.delta.content for c in stream] == ["你", "你好。"]
 
     client2 = _make_client(handler)

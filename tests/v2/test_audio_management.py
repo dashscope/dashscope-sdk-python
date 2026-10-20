@@ -286,6 +286,8 @@ def test_voice_design_crud():
         parameters={"sample_rate": 24000, "response_format": "wav"},
     )
     assert created.voice == "announcer"
+    # The mock always returns a dict; pylint only sees Optional[Dict].
+    # pylint: disable-next=unsubscriptable-object
     assert created.preview_audio["response_format"] == "wav"
     assert calls[0] == {
         "model": "qwen-voice-design",
