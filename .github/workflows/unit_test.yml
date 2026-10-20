@@ -7,7 +7,6 @@ on:
   pull_request:
     branches:
       - 'main'
-      - 'dev/v2'
 
 jobs:
   test:
