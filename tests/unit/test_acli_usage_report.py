@@ -126,6 +126,30 @@ def _read(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _await_usage(path: Path, predicate: Callable[[dict], bool]) -> dict:
+    """Return the first flushed usage satisfying ``predicate``.
+
+    The flusher ticks on a daemon thread a shared CI runner can starve for
+    longer than any fixed sleep's slack (a 0.3s sleep leaves the duration
+    assertion only 0.1s), so poll instead of sleep-then-read.
+    """
+    deadline = time.monotonic() + 5.0
+    usage: dict | None = None
+    while time.monotonic() < deadline:
+        try:
+            usage = _read(path)
+        except FileNotFoundError:
+            # The first tick is what creates the file; it may not have landed.
+            pass
+        else:
+            if predicate(usage):
+                return usage
+        time.sleep(0.05)
+    raise AssertionError(
+        f"no flush within 5s satisfied the predicate; last read: {usage}",
+    )
+
+
 def test_the_flusher_writes_while_nothing_is_streaming(
     tmp_path,
     ticking_flusher,
@@ -138,9 +162,7 @@ def test_the_flusher_writes_while_nothing_is_streaming(
     executor = Executor()
     ticking_flusher(str(path), executor)
     executor.record_api_call({"input_tokens": 111, "output_tokens": 222})
-    time.sleep(0.3)
-    usage = _read(path)
-    assert usage["api_calls"] == 1
+    usage = _await_usage(path, lambda u: u["api_calls"] == 1)
     assert usage["input_tokens"] == 111
     assert usage["output_tokens"] == 222
 
@@ -156,8 +178,8 @@ def test_duration_keeps_advancing_after_the_run_goes_quiet(
     _write_usage_file(str(path), executor)
     first = _read(path)["duration_sec"]
     ticking_flusher(str(path), executor)
-    time.sleep(0.3)
-    assert _read(path)["duration_sec"] > first + 0.2
+    usage = _await_usage(path, lambda u: u["duration_sec"] > first + 0.2)
+    assert usage["duration_sec"] > first + 0.2
 
 
 def test_stop_waits_for_a_tick_that_is_already_in_flight(
@@ -250,6 +272,6 @@ def test_a_tick_that_raises_does_not_stop_the_flusher(
     path = tmp_path / "usage.json"
     executor = RacyExecutor(2)
     ticking_flusher(str(path), executor)
-    time.sleep(0.4)
+    usage = _await_usage(path, lambda u: u["duration_sec"] > 0.2)
     assert executor.failures_left == 0
-    assert _read(path)["duration_sec"] > 0.2
+    assert usage["duration_sec"] > 0.2
