@@ -50,19 +50,29 @@ def test_legacy_exports_untouched():
     assert hasattr(dashscope, "save_api_key")
 
 
-def test_v2_namespace_reexports_1x_offline_helpers():
-    # The 2.0 namespace delegates the offline helpers to 1.x instead of
-    # re-implementing them (same objects the package root exposes).
+def test_v2_namespace_reexports_1x_tokenizers():
+    # The local tiktoken wrapper is still delegated to 1.x rather than
+    # re-implemented (same objects the package root exposes).
     from dashscope import v2
-    from dashscope.common.api_key import save_api_key as save_1x
     from dashscope.tokenizers import get_tokenizer as get_1x
     from dashscope.tokenizers import list_tokenizers as list_1x
 
-    assert v2.save_api_key is save_1x
     assert v2.get_tokenizer is get_1x
     assert v2.list_tokenizers is list_1x
-    for name in ("get_tokenizer", "list_tokenizers", "save_api_key"):
+    for name in ("get_tokenizer", "list_tokenizers"):
         assert name in v2.__all__
+
+
+def test_v2_owns_save_api_key():
+    # The key-file writer is v2-native, so reaching for it does not pull in
+    # the 1.x package root; the package root keeps its own 1.x writer.
+    from dashscope import v2
+    from dashscope.common.api_key import save_api_key as save_1x
+
+    assert v2.save_api_key.__module__ == "dashscope.v2._config"
+    assert v2.save_api_key is not save_1x
+    assert dashscope.save_api_key is save_1x
+    assert "save_api_key" in v2.__all__
 
 
 def test_v2_get_tokenizer_encodes_locally():

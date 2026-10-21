@@ -14,12 +14,14 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, Union, overload
 
 from typing_extensions import Literal
 
-from dashscope.utils.param_utils import ParamUtil
 from dashscope.v2.errors import response_error
 from dashscope.v2.protocols.base import ChatRequest
 from dashscope.v2.resources._oss import (
     OSS_RESOLVE_HEADERS,
     upload_message_media,
+)
+from dashscope.v2.resources.chat._params import (
+    should_modify_incremental_output,
 )
 from dashscope.v2.types.common import Usage, with_headers
 from dashscope.v2.types.completions import (
@@ -114,7 +116,7 @@ def _build_request(
     merge_incremental = False
     if stream and incremental_output is not None:
         if client.protocol.name == "native":
-            server_side = not ParamUtil.should_modify_incremental_output(model)
+            server_side = not should_modify_incremental_output(model)
             if incremental_output is False and not server_side:
                 merge_incremental = True
                 # 1.x also forces the wire incremental while merging

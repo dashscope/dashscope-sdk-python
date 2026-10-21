@@ -59,6 +59,20 @@ def test_python_sdk_client_header():
         assert headers[SESSION_HEADER] == _SDK_SESSION_ID
 
 
+def test_session_id_has_one_source_across_stacks():
+    # A process using the 1.x classes and the 2.0 client at once must
+    # report one id, or server-side log grouping splits a single logical
+    # session. The legacy deep path re-exports the neutral leaf rather
+    # than holding its own copy of the state.
+    from dashscope._shared._sdk_session import sdk_session_id as leaf
+    from dashscope.common._sdk_session import sdk_session_id as via_1x
+    from dashscope.v2.transport._ident import sdk_session_id as via_v2
+
+    assert via_1x is leaf
+    assert via_v2 is leaf
+    assert leaf() == _SDK_SESSION_ID
+
+
 def test_acli_client_header():
     # pylint: disable=protected-access
     print("\n=== acli: x-dashscope-sdk-client ===")

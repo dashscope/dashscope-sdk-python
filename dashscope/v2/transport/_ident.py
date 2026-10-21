@@ -20,8 +20,8 @@ from typing import Optional
 # One process-wide session id shared with the 1.x API classes, so a
 # single SDK session is not split across ids when the 2.0 client
 # delegates calls (rl, agentstudio) into 1.x. (acli keeps its own: it is
-# a one-way sync copy, see common/_sdk_session.)
-from dashscope.common._sdk_session import sdk_session_id
+# a one-way sync copy, see _shared/_sdk_session.)
+from dashscope._shared._sdk_session import sdk_session_id
 
 SDK_CLIENT_HEADER = "x-dashscope-sdk-client"
 SDK_SESSION_ID_HEADER = "x-dashscope-sdk-session-id"

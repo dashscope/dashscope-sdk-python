@@ -430,7 +430,7 @@ async def test_async_sdk_identification_headers(no_sleep):
 
 
 def test_sdk_session_id_cached_per_process():
-    from dashscope.common import _sdk_session
+    from dashscope._shared import _sdk_session
     from dashscope.v2.transport import _ident
 
     original = _sdk_session._session_id
