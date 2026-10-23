@@ -204,7 +204,7 @@ def test_acli_external_dashscope_imports_match_allowlist():
     assert not added and not gone, (
         "acli's coupling to the SDK changed.\n"
         f"  added by a sync (accept consciously, then extend _ALLOWLIST): "
-        f"{ {m: found[m] for m in added} }\n"
+        f"{str({m: found[m] for m in added})}\n"
         f"  no longer imported (_ALLOWLIST is stale): {gone}"
     )
 
