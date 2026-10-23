@@ -9,14 +9,14 @@ from dashscope import __version__ as sdk_version
 from dashscope.acli import SDK_SESSION_ID as ACLI_SESSION_ID
 from dashscope.acli import __version__ as acli_version
 from dashscope.acli.providers.tongyi import TongyiProvider
-from dashscope.common.utils import _SDK_SESSION_ID, get_sdk_headers
+from dashscope.legacy_1x.common.utils import _SDK_SESSION_ID, get_sdk_headers
 
 CLIENT_HEADER = "x-dashscope-sdk-client"
 SESSION_HEADER = "x-dashscope-sdk-session-id"
 DISABLE_ENV = "DASHSCOPE_DISABLE_SDK_HEADERS"
 
 # client value sources:
-#   - "python-sdk": SDK default (_SDK_CLIENT in common/utils.py)
+#   - "python-sdk": SDK default (_SDK_CLIENT in _shared/_sdk_ident.py)
 #   - "python-cli": dashscope/cli/__init__.py calls
 #                   set_sdk_client("python-cli") at CLI process startup
 #   - "acli":       acli/providers/tongyi.py builds its own header
@@ -35,7 +35,10 @@ ACLI_MODULES = ["", "app"]
 @pytest.fixture(autouse=True)
 def _pin_sdk_client(monkeypatch):
     # CLI tests switch the client to python-cli in-process; pin the default
-    monkeypatch.setattr("dashscope.common.utils._SDK_CLIENT", "python-sdk")
+    monkeypatch.setattr(
+        "dashscope._shared._sdk_ident._SDK_CLIENT",
+        "python-sdk",
+    )
 
 
 def _check_client_header(value, client, version, module=""):
@@ -57,6 +60,22 @@ def test_python_sdk_client_header():
         print(f"module={module or '(none)':<15} -> {value}")
         _check_client_header(value, "python-sdk", sdk_version, module)
         assert headers[SESSION_HEADER] == _SDK_SESSION_ID
+
+
+def test_session_id_has_one_source_across_stacks():
+    # A process using the 1.x classes and the 2.0 client at once must
+    # report one id, or server-side log grouping splits a single logical
+    # session. The legacy deep path re-exports the neutral leaf rather
+    # than holding its own copy of the state.
+    from dashscope._shared._sdk_session import sdk_session_id as leaf
+    from dashscope.legacy_1x.common._sdk_session import (
+        sdk_session_id as via_1x,
+    )
+    from dashscope.v2.transport._ident import sdk_session_id as via_v2
+
+    assert via_1x is leaf
+    assert via_v2 is leaf
+    assert leaf() == _SDK_SESSION_ID
 
 
 def test_acli_client_header():
@@ -90,7 +109,7 @@ def test_sdk_headers_disabled(monkeypatch):
 
 
 def test_python_cli_client_header():
-    from dashscope.common.utils import set_sdk_client
+    from dashscope.legacy_1x.common.utils import set_sdk_client
 
     set_sdk_client("python-cli")
     try:
@@ -107,14 +126,14 @@ def test_python_cli_client_header():
 
 
 def test_cli_import_marks_process():
-    # subprocess isolation check: after importing dashscope.cli, requests in
+    # subprocess isolation check: after importing dashscope.legacy_1x.cli, requests in
     # that process must carry client=python-cli (independent of test order)
     import subprocess
     import sys
 
     code = (
-        "import dashscope.cli; "
-        "from dashscope.common.utils import get_sdk_headers; "
+        "import dashscope.legacy_1x.cli; "
+        "from dashscope.legacy_1x.common.utils import get_sdk_headers; "
         "h = get_sdk_headers(); "
         "c = h['x-dashscope-sdk-client']; "
         "assert c.startswith('python-cli/'), c; "
@@ -181,27 +200,28 @@ def test_embedded_module_defaults_to_app(monkeypatch):
 
 
 def test_get_api_module_mapping():
-    from dashscope.common.utils import get_api_module
+    from dashscope.legacy_1x.common.utils import get_api_module
 
     cases = {
-        "dashscope.aigc.generation": "aigc",
-        "dashscope.aigc.multimodal_conversation": "aigc",
-        "dashscope.audio.tts.speech_synthesizer": "audio",
-        "dashscope.audio.asr.recognition": "audio",
-        "dashscope.embeddings.text_embedding": "embeddings",
-        "dashscope.nlp.understanding": "nlp",
-        "dashscope.rerank.text_rerank": "rerank",
-        "dashscope.app.application": "app",
+        "dashscope.legacy_1x.aigc.generation": "aigc",
+        "dashscope.legacy_1x.aigc.multimodal_conversation": "aigc",
+        "dashscope.legacy_1x.audio.tts.speech_synthesizer": "audio",
+        "dashscope.legacy_1x.audio.asr.recognition": "audio",
+        "dashscope.legacy_1x.embeddings.text_embedding": "embeddings",
+        "dashscope.legacy_1x.nlp.understanding": "nlp",
+        "dashscope.legacy_1x.rerank.text_rerank": "rerank",
+        "dashscope.legacy_1x.app.application": "app",
         "dashscope.tokenizers.tokenization": "tokenizers",
-        "dashscope.assistants.assistants": "assistants",
+        "dashscope.legacy_1x.assistants.assistants": "assistants",
         # threads/messages/runs/steps are grouped into the assistants module
-        "dashscope.threads.threads": "assistants",
-        "dashscope.threads.runs.runs": "assistants",
-        "dashscope.models": "models",
-        "dashscope.files": "files",
+        "dashscope.legacy_1x.threads.threads": "assistants",
+        "dashscope.legacy_1x.threads.runs.runs": "assistants",
+        "dashscope.legacy_1x.models": "models",
+        "dashscope.legacy_1x.files": "files",
         "dashscope.finetune.finetunes": "finetune",
-        "dashscope.multimodal.tingwu.tingwu": "multimodal",
-        "dashscope.common.utils": "common",  # non-API classes never reach this
+        "dashscope.legacy_1x.multimodal.tingwu.tingwu": "multimodal",
+        # non-API classes never reach this
+        "dashscope.legacy_1x.common.utils": "common",
         "other.lib": "",
     }
     for module_name, expected in cases.items():
@@ -223,8 +243,10 @@ def capture_headers(monkeypatch):
     import aiohttp
     import requests
 
-    from dashscope.api_entities.http_request import HttpRequest
-    from dashscope.api_entities.websocket_request import WebSocketRequest
+    from dashscope.legacy_1x.api_entities.http_request import HttpRequest
+    from dashscope.legacy_1x.api_entities.websocket_request import (
+        WebSocketRequest,
+    )
 
     def _raise(headers):
         raise _CapturedRequest(headers)
@@ -290,29 +312,35 @@ def test_service_api_modules(capture_headers, tmp_path):
         Understanding,
         VideoSynthesis,
     )
-    from dashscope.aigc.generation import AioGeneration
-    from dashscope.aigc.multimodal_conversation import (
+    from dashscope.legacy_1x.aigc.generation import AioGeneration
+    from dashscope.legacy_1x.aigc.multimodal_conversation import (
         AioMultiModalConversation,
     )
-    from dashscope.audio.asr.recognition import (
+    from dashscope.legacy_1x.audio.asr.recognition import (
         Recognition,
         RecognitionCallback,
     )
-    from dashscope.audio.asr.transcription import Transcription
-    from dashscope.audio.asr.translation_recognizer import (
+    from dashscope.legacy_1x.audio.asr.transcription import Transcription
+    from dashscope.legacy_1x.audio.asr.translation_recognizer import (
         TranslationRecognizerCallback,
         TranslationRecognizerRealtime,
     )
-    from dashscope.audio.http_tts.http_speech_synthesizer import (
+    from dashscope.legacy_1x.audio.http_tts.http_speech_synthesizer import (
         HttpSpeechSynthesizer,
     )
-    from dashscope.audio.qwen_asr.qwen_transcription import QwenTranscription
-    from dashscope.audio.tts.speech_synthesizer import SpeechSynthesizer
-    from dashscope.embeddings.batch_text_embedding import BatchTextEmbedding
-    from dashscope.embeddings.multimodal_embedding import (
+    from dashscope.legacy_1x.audio.qwen_asr.qwen_transcription import (
+        QwenTranscription,
+    )
+    from dashscope.legacy_1x.audio.tts.speech_synthesizer import (
+        SpeechSynthesizer,
+    )
+    from dashscope.legacy_1x.embeddings.batch_text_embedding import (
+        BatchTextEmbedding,
+    )
+    from dashscope.legacy_1x.embeddings.multimodal_embedding import (
         AioMultiModalEmbedding,
     )
-    from dashscope.rerank.text_rerank import AioTextReRank
+    from dashscope.legacy_1x.rerank.text_rerank import AioTextReRank
 
     audio_file = tmp_path / "a.wav"
     audio_file.write_bytes(b"\x00" * 128)
@@ -500,8 +528,8 @@ def test_tasks_module(capture_headers):
     import asyncio
 
     from dashscope import ImageSynthesis
-    from dashscope.aigc.image_synthesis import AioImageSynthesis
-    from dashscope.aigc.video_synthesis import VideoSynthesis
+    from dashscope.legacy_1x.aigc.image_synthesis import AioImageSynthesis
+    from dashscope.legacy_1x.aigc.video_synthesis import VideoSynthesis
 
     cases = [
         (
@@ -590,18 +618,20 @@ def test_resource_api_modules(capture_headers):
 def test_realtime_websocket_modules():
     # pylint: disable=import-outside-toplevel,protected-access
     import dashscope
-    from dashscope.audio.qwen_omni.omni_realtime import (
+    from dashscope.legacy_1x.audio.qwen_omni.omni_realtime import (
         OmniRealtimeCallback,
         OmniRealtimeConversation,
     )
-    from dashscope.audio.qwen_tts_realtime.qwen_tts_realtime import (
+    from dashscope.legacy_1x.audio.qwen_tts_realtime.qwen_tts_realtime import (
         QwenTtsRealtime,
     )
-    from dashscope.audio.tts_v2.speech_synthesizer import Request as TtsV2Req
-    from dashscope.multimodal.multimodal_dialog import (
+    from dashscope.legacy_1x.audio.tts_v2.speech_synthesizer import (
+        Request as TtsV2Req,
+    )
+    from dashscope.legacy_1x.multimodal.multimodal_dialog import (
         _Request as DialogRequest,
     )
-    from dashscope.multimodal.tingwu.tingwu_realtime import (
+    from dashscope.legacy_1x.multimodal.tingwu.tingwu_realtime import (
         _Request as TingwuRequest,
     )
 
@@ -652,13 +682,13 @@ def test_realtime_websocket_modules():
 
 def test_encryption_module(monkeypatch):
     # pylint: disable=import-outside-toplevel
-    from dashscope.api_entities.encryption import Encryption
+    from dashscope.legacy_1x.api_entities.encryption import Encryption
 
     def fake_get(url, headers=None, timeout=None):
         raise _CapturedRequest(headers)
 
     monkeypatch.setattr(
-        "dashscope.api_entities.encryption.requests.get",
+        "dashscope.legacy_1x.api_entities.encryption.requests.get",
         fake_get,
     )
     monkeypatch.setattr("dashscope.api_key", "sk-test")

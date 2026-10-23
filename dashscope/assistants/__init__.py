@@ -1,31 +1,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
+"""Backward-compat shim; the implementation moved to ``dashscope.legacy_1x.assistants``.
 
-import warnings
+Import from ``dashscope.legacy_1x.assistants`` (or the public ``dashscope``
+root re-exports) in new code.
+"""
 
-# yapf: disable
+from dashscope.legacy_1x._shim import install as _install
 
-from dashscope.assistants.assistant_types import (
-    Assistant, AssistantFile,
-    AssistantList,
-    DeleteResponse,
-)
-from dashscope.assistants.assistants import Assistants
-
-__all__ = [
-    'Assistant',
-    'Assistants',
-    'AssistantList',
-    'AssistantFile',
-    'DeleteResponse',
-]
-
-# Deprecation warning
-_DEPRECATION_MSG = (
-    "The Assistants API (dashscope.assistants) is deprecated and will be "
-    "removed in a future release. Please migrate to the Responses API. "
-    "See https://help.aliyun.com/zh/model-studio/"
-    "synchronous-call-api-reference for migration details."
-)
-
-warnings.warn(_DEPRECATION_MSG, category=DeprecationWarning, stacklevel=2)
+_install(__name__, "dashscope.legacy_1x.assistants")

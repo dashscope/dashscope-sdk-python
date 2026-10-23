@@ -2,7 +2,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 from typing import Optional
-from dashscope.client.base_api import (
+from dashscope.legacy_1x.client.base_api import (
     CreateMixin,
     DeleteMixin,
     GetMixin,

@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-from dashscope.audio.asr import TranslationRecognizerCallback
-from dashscope.audio.asr.translation_recognizer import (
+from dashscope.legacy_1x.audio.asr import TranslationRecognizerCallback
+from dashscope.legacy_1x.audio.asr.translation_recognizer import (
     TranscriptionResult,
     TranslationRecognizerRealtime,
     TranslationResult,

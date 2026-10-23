@@ -11,7 +11,7 @@ from typing import Tuple
 import aiohttp
 from aiohttp import web
 
-from dashscope.protocol.websocket import ActionType
+from dashscope.legacy_1x.protocol.websocket import ActionType
 from tests.unit.constants import (
     TEST_DISABLE_DATA_INSPECTION_REQUEST_ID,
     TEST_ENABLE_DATA_INSPECTION_REQUEST_ID,

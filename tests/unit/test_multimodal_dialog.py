@@ -5,12 +5,12 @@ import sys
 import time
 
 import pytest
-from dashscope.multimodal.dialog_state import DialogState
-from dashscope.multimodal.multimodal_dialog import (
+from dashscope.legacy_1x.multimodal.dialog_state import DialogState
+from dashscope.legacy_1x.multimodal.multimodal_dialog import (
     MultiModalDialog,
     MultiModalCallback,
 )
-from dashscope.multimodal.multimodal_request_params import (
+from dashscope.legacy_1x.multimodal.multimodal_request_params import (
     Upstream,
     Downstream,
     ClientInfo,
@@ -29,7 +29,7 @@ g_dialog_id = None
 conver_instance = None
 
 
-# 定义voice chat服务回调
+# Define the voice chat service callback
 class TestCallback(MultiModalCallback):
     def on_connected(self):
         logger.debug("connected with server.")
@@ -43,13 +43,13 @@ class TestCallback(MultiModalCallback):
 
     def on_state_changed(self, state: DialogState):
         if state == DialogState.LISTENING:
-            # app.update_text("开始收音。。。请提问")
+            # app.update_text("Listening... please ask")
             return
         if state == DialogState.THINKING:
-            # app.update_text("思考中。。。请耐心等待")
+            # app.update_text("Thinking... please wait")
             return
         if state == DialogState.RESPONDING:
-            # app.update_text("正在回答。。。")
+            # app.update_text("Answering...")
             return
 
     def on_speech_audio_data(
@@ -64,7 +64,7 @@ class TestCallback(MultiModalCallback):
         sys.exit(0)
 
     def on_responding_started(self):
-        # 开始端侧播放
+        # Start device-side playback
         # pcm_play.start_play()
         global conver_instance  # pylint: disable=global-variable-not-assigned
         if conver_instance is not None:
@@ -86,7 +86,7 @@ class TestCallback(MultiModalCallback):
             logger.debug(payload)
 
     def on_request_accepted(self):
-        # 服务端接受打断当前播报
+        # The server accepts interrupting the current playback
         # pcm_play.cancel_play()
         return
 
@@ -107,7 +107,7 @@ class TestMultiModalDialog(BaseTestEnvironment):
 
     @pytest.mark.skip
     def test_multimodal_dialog_one_turn(self):
-        # 对话状态 Listening->Thinking->Responding->Listening
+        # Dialog states: Listening->Thinking->Responding->Listening
         up_stream = Upstream(
             type="AudioOnly",
             mode="push2talk",
@@ -136,7 +136,7 @@ class TestMultiModalDialog(BaseTestEnvironment):
         )
 
         self.conversation.start("")
-        # 首轮进入Listening
+        # First turn enters Listening
         while (
             DialogState.LISTENING is not self.conversation.get_dialog_state()
         ):
@@ -146,7 +146,7 @@ class TestMultiModalDialog(BaseTestEnvironment):
             "今天天气不错",
             parameters=None,
         )
-        # 等待第二轮Listening
+        # Wait for the second Listening
         while (
             DialogState.LISTENING is not self.conversation.get_dialog_state()
         ):

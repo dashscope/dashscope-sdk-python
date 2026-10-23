@@ -28,10 +28,15 @@ _WORKSPACE_HEADER = "X-DashScope-WorkSpace"
 
 
 def _map_transport_error(exc: httpx.TransportError) -> DashScopeError:
-    """Map raw httpx transport failures into the SDK error hierarchy."""
+    """Map raw httpx transport failures into the SDK error hierarchy.
+
+    The message text comes from the catalog entry behind each class
+    (``sdk.Timeout`` / ``sdk.ConnectionError``), with the httpx error as
+    the ``{detail}``.
+    """
     if isinstance(exc, httpx.TimeoutException):
-        return APITimeoutError(f"request timed out: {exc}")
-    return APIConnectionError(f"connection error: {exc}")
+        return APITimeoutError(detail=str(exc))
+    return APIConnectionError(detail=str(exc))
 
 
 def _resolve_timeout(

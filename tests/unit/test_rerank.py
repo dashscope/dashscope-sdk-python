@@ -18,14 +18,14 @@ class TestReRank(MockServerBase):
                     {
                         "index": 1,
                         "relevance_score": 0.987654,
-                        "document": {  # 如果return_documents=true
+                        "document": {  # when return_documents=true
                             "text": "哈尔滨是中国黑龙江省的省会，位于中国东北",
                         },
                     },
                     {
                         "index": 0,
                         "relevance_score": 0.876543,
-                        "document": {  # 如果return_documents=true
+                        "document": {  # when return_documents=true
                             "text": "黑龙江离俄罗斯很近",
                         },
                     },

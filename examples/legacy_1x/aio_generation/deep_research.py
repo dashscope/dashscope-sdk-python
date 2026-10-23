@@ -16,7 +16,7 @@ display the progress of each phase.
 import asyncio
 import os
 
-from dashscope.aigc.generation import AioGeneration
+from dashscope.legacy_1x.aigc.generation import AioGeneration
 
 # Authentication: set your Model Studio API key via the
 # DASHSCOPE_API_KEY environment variable (recommended), or pass

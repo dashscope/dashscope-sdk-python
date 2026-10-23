@@ -10,8 +10,8 @@ from http import HTTPStatus
 import pytest
 
 import dashscope
-from dashscope.api_entities.dashscope_response import SpeechSynthesisResponse
-from dashscope.audio.tts import (
+from dashscope.legacy_1x.api_entities.dashscope_response import SpeechSynthesisResponse
+from dashscope.legacy_1x.audio.tts import (
     ResultCallback,
     SpeechSynthesisResult,
     SpeechSynthesizer,

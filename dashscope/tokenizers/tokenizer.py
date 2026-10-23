@@ -1,49 +1,41 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
+"""Compatibility re-export; the implementation moved to the 2.0 package.
 
-import os
-from typing import List
+The offline tokenizer factory lives only in
+``dashscope.v2.tokenizers.tokenizer``, next to the bundled vocab, so both
+stacks share one copy of the code and of the vocab. Import from there in
+new code.
 
-from dashscope.common.error import UnsupportedModel
-from dashscope.tokenizers.qwen_tokenizer import QwenTokenizer
+Note that :func:`get_tokenizer` raises ``ValueError`` for an unknown model;
+it used to raise ``dashscope.legacy_1x.common.error.UnsupportedModel``, which the 2.0
+leaf must not depend on.
 
-from .tokenizer_base import Tokenizer
+``Tokenizer`` and ``QwenTokenizer`` are re-exported because the old module
+imported them into its own namespace. The old module-level ``current_path``
+and ``root_path`` are deliberately not restored: they only located the
+vocab, which no longer ships next to this file.
+"""
 
-QWEN_SERIALS = ["qwen-7b-chat", "qwen-turbo", "qwen-plus", "qwen-max"]
-current_path = os.path.dirname(os.path.abspath(__file__))
-root_path = os.path.dirname(current_path)
+# pylint: disable-next=unused-import
+from dashscope.v2.tokenizers.tokenizer import (  # noqa: F401
+    QWEN_SERIALS,
+    get_tokenizer,
+    list_tokenizers,
+)
 
+# pylint: disable-next=unused-import
+from dashscope.v2.tokenizers.qwen_tokenizer import (  # noqa: F401
+    QwenTokenizer,
+)
 
-def get_tokenizer(model: str) -> Tokenizer:
-    """Get a tokenizer based on model name.
+# pylint: disable-next=unused-import
+from dashscope.v2.tokenizers.tokenizer_base import Tokenizer  # noqa: F401
 
-    Args:
-        model (str): The model name.
-
-    Raises:
-        UnsupportedModel: Not support model
-
-    Returns:
-        Tokenizer: The  `Tokenizer` of the model.
-    """
-    if model in QWEN_SERIALS:
-        return QwenTokenizer(
-            os.path.join(root_path, "resources", "qwen.tiktoken"),
-        )
-    elif model.startswith("qwen"):
-        return QwenTokenizer(
-            os.path.join(root_path, "resources", "qwen.tiktoken"),
-        )
-    else:
-        raise UnsupportedModel(
-            f"Not support model: {model}, currently only support qwen models.",
-        )
-
-
-def list_tokenizers() -> List[str]:
-    """List support models
-
-    Returns:
-        List[str]: The model list.
-    """
-    return QWEN_SERIALS
+__all__ = [
+    "QWEN_SERIALS",
+    "QwenTokenizer",
+    "Tokenizer",
+    "get_tokenizer",
+    "list_tokenizers",
+]

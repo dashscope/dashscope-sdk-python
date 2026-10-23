@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Unit tests for CLI exit-code classification in dashscope.cli.common."""
+"""Unit tests for CLI exit-code classification in dashscope.legacy_1x.cli.common."""
 from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
-from dashscope.cli.common import _exit_code_for
-from dashscope.cli import embeddings
+from dashscope.legacy_1x.cli.common import _exit_code_for
+from dashscope.legacy_1x.cli import embeddings
 
 
 # ---------------------------------------------------------------------------

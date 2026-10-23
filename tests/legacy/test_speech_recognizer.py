@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import pytest
 
 import dashscope
-from dashscope.audio.asr import (
+from dashscope.legacy_1x.audio.asr import (
     Recognition,
     RecognitionCallback,
     RecognitionResult,
@@ -119,10 +119,10 @@ def complete_url(url: str) -> str:
     parsed = urlparse(url)
     base_url = "".join([parsed.scheme, "://", parsed.netloc])
     dashscope.base_websocket_api_url = "/".join(
-        [base_url, "api-ws", dashscope.common.env.api_version, "inference"],
+        [base_url, "api-ws", dashscope.legacy_1x.common.env.api_version, "inference"],
     )
     dashscope.base_http_api_url = url = "/".join(
-        [base_url, "api", dashscope.common.env.api_version],
+        [base_url, "api", dashscope.legacy_1x.common.env.api_version],
     )
     print("Set base_websocket_api_url: ", dashscope.base_websocket_api_url)
     print("Set base_http_api_url: ", dashscope.base_http_api_url)

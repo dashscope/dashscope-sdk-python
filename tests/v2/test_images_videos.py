@@ -665,9 +665,9 @@ async def test_async_videos_generate_wan27_i2v():
 def test_image_jobs_create_uploads_with_the_per_call_api_key(monkeypatch):
     seen = {}
 
-    def fake_upload(model, content, api_key, cert, **kwargs):
-        seen["api_key"] = api_key
-        seen["base_address"] = kwargs.get("base_address")
+    def fake_upload(client, model, content, **kwargs):
+        seen["client"] = client
+        seen["api_key"] = kwargs.get("api_key")
         return True, "oss://bucket/ref.png", {}
 
     monkeypatch.setattr(
@@ -690,7 +690,7 @@ def test_image_jobs_create_uploads_with_the_per_call_api_key(monkeypatch):
         api_key="sk-override",
     )
     assert seen["api_key"] == "sk-override"
-    assert seen["base_address"] == client.config.base_url
+    assert seen["client"] is client
     assert captured["auth"] == "Bearer sk-override"
     assert captured["oss"] == "enable"
     content = captured["body"]["input"]["messages"][0]["content"]

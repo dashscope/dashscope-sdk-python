@@ -15,9 +15,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from dashscope.api_entities.http_request import HttpRequest
-from dashscope.api_entities.aiohttp_request import AioHttpRequest
-from dashscope.common.constants import HTTPMethod
+from dashscope.legacy_1x.api_entities.http_request import HttpRequest
+from dashscope.legacy_1x.api_entities.aiohttp_request import AioHttpRequest
+from dashscope.legacy_1x.common.constants import HTTPMethod
 
 
 NON_ASCII_PAYLOAD = {
@@ -162,7 +162,9 @@ class TestAioHttpRequestUtf8Headers:
 class TestHttpRequestUtf8Body:
     # pylint: disable=protected-access
 
-    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    @patch(
+        "dashscope.legacy_1x.api_entities.http_request._get_shared_sync_session",
+    )
     def test_body_is_utf8_bytes(self, mock_session_cls):
         mock_session = _make_mock_sync_session()
         mock_session_cls.return_value = mock_session
@@ -186,7 +188,9 @@ class TestHttpRequestUtf8Body:
         assert isinstance(sent_body, bytes), "Body must be bytes, not str"
         assert sent_body == EXPECTED_BODY
 
-    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    @patch(
+        "dashscope.legacy_1x.api_entities.http_request._get_shared_sync_session",
+    )
     def test_no_unicode_escapes_in_body(self, mock_session_cls):
         mock_session = _make_mock_sync_session()
         mock_session_cls.return_value = mock_session
@@ -212,7 +216,9 @@ class TestHttpRequestUtf8Body:
         assert "Оцени идею" in body_str
         assert "こんにちは" in body_str
 
-    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    @patch(
+        "dashscope.legacy_1x.api_entities.http_request._get_shared_sync_session",
+    )
     def test_body_is_smaller_than_ascii_escaped(self, mock_session_cls):
         mock_session = _make_mock_sync_session()
         mock_session_cls.return_value = mock_session
@@ -311,7 +317,9 @@ class TestWebSocketRequestUtf8:
     # pylint: disable=protected-access
 
     def test_build_up_message_no_unicode_escapes(self):
-        from dashscope.api_entities.websocket_request import WebSocketRequest
+        from dashscope.legacy_1x.api_entities.websocket_request import (
+            WebSocketRequest,
+        )
 
         req = WebSocketRequest(
             url="wss://example.com/api-ws/v1/test",
@@ -330,7 +338,9 @@ class TestWebSocketRequestUtf8:
         assert "你好世界" in message
 
     def test_build_up_message_smaller_than_ascii_escaped(self):
-        from dashscope.api_entities.websocket_request import WebSocketRequest
+        from dashscope.legacy_1x.api_entities.websocket_request import (
+            WebSocketRequest,
+        )
 
         req = WebSocketRequest(
             url="wss://example.com/api-ws/v1/test",

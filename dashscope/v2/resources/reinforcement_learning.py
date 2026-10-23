@@ -2,12 +2,12 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 """client.rl thin mount layer (design doc M3 3.7).
 
-The agentic-RL business logic stays in the 1.x implementation
-(``dashscope.finetune.agentic_rl``); this layer only mounts it on the
-2.0 Client and routes both halves through the v2 error model -- job
-management through the v2 transport, and the workflow steps by
-translating 1.x exceptions into ``SdkError`` (catalog ``code`` plus
-``solution``). One ``except DashScopeError`` therefore covers both.
+The agentic-RL workflow lives in the 2.0 package
+(``dashscope.v2.finetune``); this layer only mounts it on the 2.0 Client
+and routes both halves through the v2 error model -- job management
+through the v2 transport, and the workflow steps by translating the RL
+exception family into ``SdkError`` (catalog ``code`` plus ``solution``).
+One ``except DashScopeError`` therefore covers both.
 
 Two halves, matching the rest of the SDK: ``rl.jobs`` is the training
 job lifecycle (``create`` submits and never blocks, ``wait`` blocks,
@@ -15,13 +15,20 @@ plus ``fetch``/``list``/``cancel``/``logs``/``delete``), and ``rl``
 itself carries the RL-specific workflow steps that have no
 ``fine_tunes`` equivalent, including the function-instance queries.
 
+The two halves also identify themselves differently on the wire, and
+that split predates this layer: ``rl.jobs`` rides the v2 transport and
+sends the marked ``finetune2`` module tag, while the workflow/submit
+path keeps sending the unmarked ``finetune`` tag the feature has always
+sent. Both are backend statistics contracts, so neither is folded into
+the other.
+
 ``register_functions`` / ``test_functions`` / ``upload_data`` /
 ``jobs.create`` / the function-instance methods are the SDK's only
-public methods without ``timeout=``: the 1.x implementation they wrap
-accepts none, so declaring it here would silently do nothing. The other
-``jobs`` methods take ``timeout=`` as everywhere else. Those same
-1.x-wrapped methods accept a per-call ``api_key`` but no ``workspace``:
-the 1.x ``AgenticRL`` they delegate to has no workspace concept.
+public methods without ``timeout=``: the workflow implementation they
+wrap accepts none, so declaring it here would silently do nothing. The
+other ``jobs`` methods take ``timeout=`` as everywhere else. Those same
+workflow-wrapping methods accept a per-call ``api_key`` but no
+``workspace``: ``AgenticRL`` has no workspace concept.
 """
 
 from __future__ import annotations
@@ -69,11 +76,12 @@ __all__ = [
     "UploadedData",
 ]
 
-# Imported lazily below via the module object so tests can monkeypatch
-# ``dashscope.finetune.agentic_rl.AgenticRL`` without touching 1.x code.
-from dashscope.finetune import agentic_rl as _agentic_rl  # noqa: E402
-from dashscope.finetune import reinforcement as _reinforcement  # noqa: E402
-from dashscope.finetune.reinforcement.common import (  # noqa: E402
+# Imported below via the module object so tests can monkeypatch
+# ``dashscope.v2.finetune.agentic_rl.AgenticRL`` without touching the
+# workflow implementation.
+from dashscope.v2.finetune import agentic_rl as _agentic_rl  # noqa: E402
+from dashscope.v2.finetune import reinforcement as _reinforcement  # noqa: E402
+from dashscope.v2.finetune.reinforcement.common import (  # noqa: E402
     errors as _rl_errors,
 )
 
@@ -113,10 +121,10 @@ _RL_FAMILY = "sdk.agentic_rl"
 # These three bases cover all 19 exception classes in common/errors.py:
 # AgenticRLError roots 17, and the two *WithCode classes derive from
 # RuntimeError / ValueError instead. Nothing wider is needed, since
-# common/utils.py:139 already funnels transport, timeout and unexpected
-# failures into RuntimeErrorWithCode; catching more would relabel bugs
-# in this module as SDK errors. pydantic's ValidationError, which is
-# also a ValueError, stays outside on purpose.
+# common/utils.py's request helper already funnels transport, timeout
+# and unexpected failures into RuntimeErrorWithCode; catching more would
+# relabel bugs in this module as SDK errors. pydantic's ValidationError,
+# which is also a ValueError, stays outside on purpose.
 _RL_EXCEPTIONS = (
     _rl_errors.AgenticRLError,
     _rl_errors.RuntimeErrorWithCode,
@@ -126,7 +134,7 @@ _RL_EXCEPTIONS = (
 
 @contextlib.contextmanager
 def _translate_rl_errors():
-    """Keep 1.x agentic-RL failures inside the v2 exception family.
+    """Keep agentic-RL workflow failures inside the v2 exception family.
 
     A plain sync context manager, so it wraps ``asyncio.run(...)`` and
     ``await ...`` bodies alike.
@@ -157,9 +165,9 @@ def _new_agentic_rl(
 
 
 def _to_job(result: Any) -> FineTune:
-    """Adapt the 1.x ``FineTune`` dataclass into the v2 model.
+    """Adapt the RL submit result into the v2 job model.
 
-    The 1.x submit returns ``output`` as a nested object and spells the
+    The submit returns ``output`` as a nested object and spells the
     timestamps ``create_time`` / ``end_time``; the v2 model's aliases
     absorb both once the envelope is flattened by hand here.
     """
@@ -239,14 +247,14 @@ async def _register_functions_workflow(
 class RlJobs:
     """``client.rl.jobs``: the agentic-RL training job lifecycle.
 
-    ``create`` runs the whole 1.x workflow — register functions, upload
+    ``create`` runs the whole workflow — register functions, upload
     datasets, submit — and returns the job without blocking; ``wait``
     polls it to a terminal status. The remaining verbs share the
     ``fine_tunes`` wire contract (RL jobs are fine-tune jobs: same
     backend, same response models) and ride the v2 client endpoint
-    like every other resource; 1.x forces a management-plane host
-    only in its workflow/submit path, which is a config quirk there,
-    not parity.
+    like every other resource. The workflow/submit path is the
+    exception: it posts to the management-plane host its own constants
+    name, as it always has.
     """
 
     def __init__(self, client) -> None:
@@ -420,10 +428,10 @@ class RlJobs:
 
 
 class Rl:
-    """Sync mount of the 1.x agentic-RL workflow.
+    """Sync mount of the agentic-RL workflow.
 
     The workflow methods (``register_functions``/``test_functions``/
-    ``upload_data``/``jobs.create``) wrap the 1.x async implementation
+    ``upload_data``/``jobs.create``) wrap the async implementation
     with ``asyncio.run``, so they must not be called from a thread that
     already runs an event loop (Jupyter, FastAPI, pytest-asyncio) —
     use :class:`AsyncRl` there instead.
@@ -471,7 +479,7 @@ class Rl:
         """Returns whatever the customer's own function returns.
 
         The ``pull_logs``/``log_page_size``/``start_time``/``end_time``
-        parameters forward to the 1.x log-pulling step that runs after
+        parameters forward to the log-pulling step that runs after
         verification.
         """
         with _translate_rl_errors():
@@ -762,7 +770,7 @@ class AsyncRlJobs:
 
 
 class AsyncRl:
-    """Async mount of the 1.x agentic-RL workflow."""
+    """Async mount of the agentic-RL workflow."""
 
     def __init__(self, client) -> None:
         self._client = client
@@ -804,7 +812,7 @@ class AsyncRl:
         """Returns whatever the customer's own function returns.
 
         The ``pull_logs``/``log_page_size``/``start_time``/``end_time``
-        parameters forward to the 1.x log-pulling step that runs after
+        parameters forward to the log-pulling step that runs after
         verification.
         """
         with _translate_rl_errors():

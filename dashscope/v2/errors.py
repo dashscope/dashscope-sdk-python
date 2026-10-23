@@ -18,8 +18,14 @@ gateway may return HTTP 200 with a business error in the body
 
 A third source has no response at all: failures the SDK reports on its
 own side. Those come from the catalog's ``SDK_ERRORS`` table as
-:class:`SdkError`, and the v2 mount layers over 1.x subsystems
-translate with :func:`error_from_sdk_exception`.
+:class:`SdkError`; the transport errors (:class:`APIConnectionError` /
+:class:`APITimeoutError`) are SdkError subclasses backed by the generic
+``sdk.ConnectionError`` / ``sdk.Timeout`` entries, the websocket
+transport errors (:class:`WsEventError` / :class:`WsStateError` /
+:class:`WsBinaryOwnerConflictError`) are backed by the ``sdk.ws.*``
+entries, and the mounts over sub-SDKs outside this error family (1.x
+agentic_rl, the 2.x AgentStudio sub-SDK) translate with
+:func:`error_from_sdk_exception`.
 """
 
 from __future__ import annotations
@@ -85,12 +91,110 @@ class DashScopeError(Exception):
         return " | ".join(parts)
 
 
-class APIConnectionError(DashScopeError):
-    """Network-level failure (connection refused, DNS, TLS...)."""
+_SDK_ERRORS: Dict[str, SdkErrorDef] = {
+    entry.name: entry for entry in _registry.SDK_ERRORS
+}
+
+
+class SdkError(DashScopeError):
+    """A failure the SDK reported itself, with no HTTP response behind it.
+
+    ``code`` is the catalog name (``sdk.agentic_rl.OSSUploadError``) and
+    ``solution`` the fix guidance shipped alongside it. ``status_code``
+    stays ``None``: the catalog gives SDK-side errors no public
+    projection, so inventing a status would add meaning the standard
+    does not carry.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: Optional[str] = None,
+        solution: Optional[str] = None,
+        allow_retry: bool = False,
+        request_id: Optional[str] = None,
+        body: Any = None,
+        headers: Optional[Mapping[str, str]] = None,
+    ) -> None:
+        super().__init__(
+            message,
+            code=code,
+            request_id=request_id,
+            body=body,
+            headers=headers,
+        )
+        self.solution = solution
+        self.allow_retry = allow_retry
+
+
+class _CatalogSdkError(SdkError):
+    """SdkError whose message defaults to the entry's ``{detail}`` template."""
+
+    _SDK_ERROR_NAME = ""
+
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        *,
+        detail: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        entry = _SDK_ERRORS[self._SDK_ERROR_NAME]
+        if message is None:
+            message = entry.format_message({"detail": detail or ""})
+        kwargs.setdefault("code", entry.name)
+        kwargs.setdefault("solution", entry.solution)
+        kwargs.setdefault("allow_retry", entry.allow_retry)
+        super().__init__(message, **kwargs)
+
+
+class APIConnectionError(_CatalogSdkError):
+    """Network-level failure (connection refused, DNS, TLS...).
+
+    Backed by the catalog's ``sdk.ConnectionError`` entry: ``code`` /
+    ``solution`` / ``allow_retry`` default from it, so every raise site
+    is catalog-identical without repeating the wiring. Pass ``detail``
+    instead of ``message`` to use the entry's message template.
+    """
+
+    _SDK_ERROR_NAME = "sdk.ConnectionError"
 
 
 class APITimeoutError(APIConnectionError):
-    """Request timed out."""
+    """Request timed out; backed by the catalog's ``sdk.Timeout`` entry."""
+
+    _SDK_ERROR_NAME = "sdk.Timeout"
+
+
+class WsEventError(_CatalogSdkError):
+    """The server sent an unexpected websocket protocol event.
+
+    Backed by the catalog's ``sdk.ws.ProtocolError`` entry: ``code`` /
+    ``solution`` / ``allow_retry`` default from it. Pass ``detail``
+    instead of ``message`` to use the entry's message template.
+    """
+
+    _SDK_ERROR_NAME = "sdk.ws.ProtocolError"
+
+
+class WsStateError(_CatalogSdkError):
+    """Operation invalid for the websocket task's current state.
+
+    Backed by the catalog's ``sdk.ws.IllegalState`` entry: duplicate
+    start, send after close, receive on a closed session.
+    """
+
+    _SDK_ERROR_NAME = "sdk.ws.IllegalState"
+
+
+class WsBinaryOwnerConflictError(_CatalogSdkError):
+    """A shared connection allows one binary owner per direction.
+
+    Backed by the catalog's ``sdk.ws.BinaryOwnerConflict`` entry.
+    """
+
+    _SDK_ERROR_NAME = "sdk.ws.BinaryOwnerConflict"
 
 
 class APIStatusError(DashScopeError):
@@ -142,6 +246,17 @@ class InternalServerError(APIStatusError):
     status_code = _CATALOG_STATUS["InternalServerError"]
 
 
+class ResponseError(APIStatusError):
+    """The server returned a response that could not be parsed.
+
+    SDK-side, never gateway-sent: it shares status 500 with
+    ``internal_error``, so the status maps below must keep resolving a
+    bare 500 to :class:`InternalServerError`.
+    """
+
+    status_code = _CATALOG_STATUS["ResponseError"]
+
+
 class ServiceUnavailableError(APIStatusError):
     status_code = _CATALOG_STATUS["ServiceUnavailableError"]
 
@@ -161,38 +276,6 @@ class ContentFilterError(BadRequestError):
     """
 
 
-class SdkError(DashScopeError):
-    """A failure the SDK reported itself, with no HTTP response behind it.
-
-    ``code`` is the catalog name (``sdk.agentic_rl.OSSUploadError``) and
-    ``solution`` the fix guidance shipped alongside it. ``status_code``
-    stays ``None``: the catalog gives SDK-side errors no public
-    projection, so inventing a status would add meaning the standard
-    does not carry.
-    """
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        code: Optional[str] = None,
-        solution: Optional[str] = None,
-        allow_retry: bool = False,
-        request_id: Optional[str] = None,
-        body: Any = None,
-        headers: Optional[Mapping[str, str]] = None,
-    ) -> None:
-        super().__init__(
-            message,
-            code=code,
-            request_id=request_id,
-            body=body,
-            headers=headers,
-        )
-        self.solution = solution
-        self.allow_retry = allow_retry
-
-
 _CATALOG_CLASSES: Dict[str, Type[APIStatusError]] = {
     cls.__name__: cls
     for cls in (
@@ -203,23 +286,29 @@ _CATALOG_CLASSES: Dict[str, Type[APIStatusError]] = {
         RequestTooLargeError,
         RateLimitError,
         InternalServerError,
+        ResponseError,
         ServiceUnavailableError,
         GatewayTimeoutError,
     )
 }
 
-_STATUS_MAP: Dict[int, Type[APIStatusError]] = {
-    entry.status_code: _CATALOG_CLASSES[entry.error_code]
-    for entry in _registry.PUBLIC_ERRORS
-}
+# First entry per status wins: response_error shares 500 with
+# internal_error, and a bare 500 from the gateway means internal_error --
+# ResponseError is raised by the SDK itself, never picked by status.
+_STATUS_MAP: Dict[int, Type[APIStatusError]] = {}
+for _entry_ in _registry.PUBLIC_ERRORS:
+    _STATUS_MAP.setdefault(
+        _entry_.status_code, _CATALOG_CLASSES[_entry_.error_code]
+    )
+del _entry_
 
 _STATUS_COUNTS = Counter(
     entry.status_code for entry in _registry.PUBLIC_ERRORS
 )
 
-# Only the statuses a single entry claims. 400 / 401 / 429 carry siblings
-# with different ``error_msg`` text, so a status alone cannot pick one
-# without stating a reason the gateway never gave.
+# Only the statuses a single entry claims. 400 / 401 / 429 / 500 carry
+# siblings with different ``error_msg`` text, so a status alone cannot
+# pick one without stating a reason the gateway never gave.
 _STATUS_ENTRY: Dict[int, PublicError] = {
     entry.status_code: entry
     for entry in _registry.PUBLIC_ERRORS
@@ -261,10 +350,6 @@ _REFINED_CLASS: Dict[str, Type[DashScopeError]] = {
 _CODE_MAP: Dict[str, Type[DashScopeError]] = {
     wire: _REFINED_CLASS.get(wire) or _CATALOG_CLASSES[entry.error_code]
     for wire, entry in _WIRE_TO_PUBLIC.items()
-}
-
-_SDK_ERRORS: Dict[str, SdkErrorDef] = {
-    entry.name: entry for entry in _registry.SDK_ERRORS
 }
 
 
@@ -347,19 +432,41 @@ def error_from_business_code(
     )
 
 
+def sdk_error(
+    name: str,
+    variables: Optional[Dict[str, str]] = None,
+    **kwargs: Any,
+) -> SdkError:
+    """Build an :class:`SdkError` straight from a catalog entry.
+
+    For ``SDK_ERRORS`` entries with no dedicated exception class (e.g.
+    ``sdk.IoError``): message text, ``code``, ``solution`` and
+    ``allow_retry`` all come from the entry, so the raise site carries
+    no catalog knowledge of its own.
+    """
+    entry = _SDK_ERRORS[name]
+    return SdkError(
+        entry.format_message(variables),
+        code=entry.name,
+        solution=entry.solution,
+        allow_retry=entry.allow_retry,
+        **kwargs,
+    )
+
+
 def error_from_sdk_exception(
     exc: BaseException,
     *,
     family: str,
 ) -> SdkError:
-    """Translate a 1.x SDK-side exception into the v2 error family.
+    """Translate a mounted sub-SDK's own exception into the v2 family.
 
     ``family`` is the catalog namespace the subsystem owns, e.g.
     ``sdk.agentic_rl``. Lookup is two-tier and needs no hand-maintained
     table: ``<family>.<ClassName>`` when the catalog carries that exact
     class, otherwise the family's ``<family>.Error`` fallback. Message
-    text and the 1.x numeric ``error_code`` are deliberately never
-    sniffed -- both are 1.x internals.
+    text and any numeric ``error_code`` are deliberately never sniffed
+    -- both are the source SDK's internals.
     """
     name = f"{family}.{type(exc).__name__}"
     entry = _SDK_ERRORS.get(name)

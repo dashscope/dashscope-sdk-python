@@ -462,6 +462,40 @@ def test_save_api_key_roundtrip(clean_env, tmp_path, monkeypatch):
     assert cfg.api_key == "sk-saved"
 
 
+def test_save_api_key_writes_the_default_path(
+    clean_env,
+    tmp_path,
+    monkeypatch,
+):
+    from dashscope.v2 import _config
+
+    default = tmp_path / "home" / ".dashscope" / "api_key"
+    monkeypatch.setattr(_config, "_DEFAULT_API_KEY_FILE_PATH", str(default))
+    # The env var outranks the default path when reading; drop it so this
+    # exercises the write-default / read-default pair.
+    monkeypatch.delenv("DASHSCOPE_API_KEY_FILE_PATH", raising=False)
+
+    _config.save_api_key("sk-default")
+
+    assert default.read_text(encoding="utf-8") == "sk-default"
+    cfg = resolve_config(config_path="/nonexistent/config.toml")
+    assert cfg.api_key == "sk-default"
+
+
+def test_save_api_key_accepts_a_bare_filename(
+    clean_env,
+    tmp_path,
+    monkeypatch,
+):
+    from dashscope.v2 import save_api_key
+
+    # 1.x does os.makedirs(os.path.dirname(path)), which raises when the
+    # path has no directory component; the v2 writer resolves against cwd.
+    monkeypatch.chdir(tmp_path)
+    save_api_key("sk-bare", "api_key")
+    assert (tmp_path / "api_key").read_text(encoding="utf-8") == "sk-bare"
+
+
 def test_invalid_protocol(clean_env):
     with pytest.raises(ValueError, match="invalid protocol"):
         resolve_config(protocol="grpc", config_path="/nonexistent/config.toml")

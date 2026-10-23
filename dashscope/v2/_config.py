@@ -136,8 +136,8 @@ _HTTP_KEEPALIVE_EXPIRY_ENV = "DASHSCOPE_HTTP_KEEPALIVE_EXPIRY"
 _LOG_ENV = "DASHSCOPE_LOG"
 _CONFIG_PATH_ENV = "DASHSCOPE_CONFIG"
 _DEFAULT_CONFIG_PATH = "~/.dashscope/config.toml"
-# 1.x key-file auth (dashscope.save_api_key): env-specified path first,
-# then the default file -- the lowest api_key tier.
+# Key-file auth (save_api_key, below): env-specified path first, then the
+# default file -- the lowest api_key tier.
 _API_KEY_FILE_PATH_ENV = "DASHSCOPE_API_KEY_FILE_PATH"
 _DEFAULT_API_KEY_FILE_PATH = "~/.dashscope/api_key"
 
@@ -528,7 +528,7 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
 def _api_key_from_file() -> Optional[str]:
     """Lowest api_key tier: the 1.x key file.
 
-    Same order as ``dashscope.common.api_key.get_default_api_key`` --
+    Same order as ``dashscope.legacy_1x.common.api_key.get_default_api_key`` --
     ``DASHSCOPE_API_KEY_FILE_PATH`` first, then the default
     ``~/.dashscope/api_key`` written by ``save_api_key``. A missing or
     unreadable file resolves to None rather than raising, since this is
@@ -540,6 +540,27 @@ def _api_key_from_file() -> Optional[str]:
             return f.read().strip() or None
     except OSError:
         return None
+
+
+def save_api_key(
+    api_key: str,
+    api_key_file_path: Optional[str] = None,
+) -> None:
+    """Store an api key in the key file ``_api_key_from_file`` reads back.
+
+    Without an explicit path this writes ``~/.dashscope/api_key``, the same
+    fixed location the 1.x ``dashscope.save_api_key`` uses, so a key stored
+    through either stack is picked up by both. As in 1.x,
+    ``DASHSCOPE_API_KEY_FILE_PATH`` redirects only the read, not the write.
+    """
+    target = (
+        _DEFAULT_API_KEY_FILE_PATH
+        if api_key_file_path is None
+        else api_key_file_path
+    )
+    path = Path(target).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(api_key, encoding="utf-8")
 
 
 def _pick(

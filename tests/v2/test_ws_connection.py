@@ -10,7 +10,12 @@ import threading
 
 import pytest
 
-from dashscope.v2.errors import APIConnectionError, DashScopeError
+from dashscope.v2.errors import (
+    APIConnectionError,
+    DashScopeError,
+    WsBinaryOwnerConflictError,
+    WsStateError,
+)
 from dashscope.v2.transport.ws import WsEventError, WsSession
 from dashscope.v2.transport.ws_connection import WsConnection
 
@@ -161,7 +166,7 @@ def test_binary_downlink_two_active_tasks_requires_claim():
     _started(conn, t1)
     _started(conn, t2)
     t2.claim_binary_downlink()
-    with pytest.raises(RuntimeError, match="binary downlink"):
+    with pytest.raises(WsBinaryOwnerConflictError, match="binary downlink"):
         t1.claim_binary_downlink()
     conn._ws.inbox.put(b"audio-for-t2")
     assert t2.recv() == b"audio-for-t2"
@@ -183,7 +188,7 @@ def test_binary_downlink_ambiguous_fails_connection():
     with pytest.raises(WsEventError, match="claim_binary_downlink"):
         t2.recv()
     assert conn.closed
-    with pytest.raises(RuntimeError, match="closed"):
+    with pytest.raises(WsStateError, match="closed"):
         conn.open_task()
 
 
@@ -194,7 +199,7 @@ def test_binary_uplink_single_owner_and_release_on_finish():
     _started(conn, t1)
     _started(conn, t2)
     t1.send_binary(b"frame-1")
-    with pytest.raises(RuntimeError, match="binary uplink"):
+    with pytest.raises(WsBinaryOwnerConflictError, match="binary uplink"):
         t2.send_binary(b"frame-2")
     assert conn._ws.sent[-1] == b"frame-1"
 
@@ -250,7 +255,7 @@ def test_task_close_detaches_and_late_events_drop():
     conn._ws.inbox.put(_event("result-generated", t2.task_id, {"ok": 1}))
     assert t2.recv_event()["payload"] == {"ok": 1}
     assert not conn.closed
-    with pytest.raises(RuntimeError, match="closed"):
+    with pytest.raises(WsStateError, match="closed"):
         t1.recv()
     conn.close()
 
@@ -433,7 +438,7 @@ def test_shared_send_failure_closes_and_wakes_other_tasks(
     assert conn.closed and ws.closed
     with pytest.raises(APIConnectionError):
         other.recv()
-    with pytest.raises(RuntimeError, match="closed"):
+    with pytest.raises(WsStateError, match="closed"):
         conn.open_task()
     task.close()
     other.close()
@@ -547,7 +552,7 @@ def test_inactive_task_cannot_reclaim_binary_downlink(
     else:
         conn._ws.inbox.put(_event(terminal, task.task_id))
         task.recv_event()
-    with pytest.raises(RuntimeError):
+    with pytest.raises(WsStateError):
         task.claim_binary_downlink()
     next_task.claim_binary_downlink()
     conn._ws.inbox.put(b"next-output")
@@ -572,7 +577,7 @@ def test_connection_shutdown_releases_binary_owners(
         task.recv()
     assert conn._binary_uplink_owner is None
     assert conn._binary_downlink_owner is None
-    with pytest.raises(RuntimeError, match="closed"):
+    with pytest.raises(WsStateError, match="closed"):
         task.claim_binary_downlink()
     assert conn._binary_downlink_owner is None
 
@@ -601,9 +606,9 @@ def test_reader_releases_terminal_owners_before_consumer_finishes(
     assert not first.finished  # The consumer must still drain its frames.
     assert conn._binary_uplink_owner is None
     assert conn._binary_downlink_owner is None
-    with pytest.raises(RuntimeError, match="not active"):
+    with pytest.raises(WsStateError, match="not active"):
         first.claim_binary_downlink()
-    with pytest.raises(RuntimeError, match="not active"):
+    with pytest.raises(WsStateError, match="not active"):
         first.send_binary(b"too late")
     second.send_binary(b"second-input")
     if claim:
@@ -634,7 +639,7 @@ def test_binary_owner_must_be_attached_to_this_connection(
     foreign._task_id = (
         task.task_id
     )  # Matching ids alone do not imply attachment.
-    with pytest.raises(RuntimeError, match="not active"):
+    with pytest.raises(WsStateError, match="not active"):
         getattr(conn, "_claim_binary_" + direction)(foreign)
     assert getattr(conn, "_binary_" + direction + "_owner") is None
     task.claim_binary_downlink()
@@ -676,7 +681,7 @@ def test_close_wakes_already_blocked_receiver(
         receiver.join(timeout=1)
         assert not receiver.is_alive(), "close did not wake the receiver"
         expected = (
-            RuntimeError if close_target == "task" else APIConnectionError
+            WsStateError if close_target == "task" else APIConnectionError
         )
         assert len(errors) == 1 and isinstance(errors[0], expected), errors
     finally:
@@ -742,7 +747,7 @@ def test_error_is_persistent_but_preserves_earlier_frames(
     barrier.recv_event()  # Earlier frames have reached the task's queue.
     if shutdown in ("task", "connection"):
         (task if shutdown == "task" else conn).close()
-        expected = RuntimeError if shutdown == "task" else APIConnectionError
+        expected = WsStateError if shutdown == "task" else APIConnectionError
     else:
         conn._ws.inbox.put(
             OSError("receive failed") if shutdown == "recv" else "{",

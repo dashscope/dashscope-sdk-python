@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-from dashscope.aigc.generation import Generation, AioGeneration
+from dashscope.legacy_1x.aigc.generation import Generation, AioGeneration
 
 WEBSEARCH_JSON = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),

@@ -10,7 +10,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from dashscope.finetune import agentic_rl as agentic_rl_module
+from dashscope.v2.finetune import agentic_rl as agentic_rl_module
 from dashscope.finetune.reinforcement.common.errors import (
     AgenticRLError,
     InstanceQueryError,
@@ -644,7 +644,7 @@ def test_rl_long_form_alias():
     assert async_client.reinforcement_learning is async_client.rl
 
 
-# -- 1.x exceptions translated into the v2 error family -----------------
+# -- RL exceptions translated into the v2 error family -------------------
 
 
 @pytest.fixture(name="fail_step")
@@ -710,8 +710,8 @@ def test_exact_catalog_hit_carries_its_own_solution(fail_step):
 
 
 def test_uncatalogued_rl_class_falls_back_to_the_family_entry(fail_step):
-    # AgenticRLError is the 1.x base but has no catalog entry of its own,
-    # so it must land on the family fallback rather than escape raw.
+    # AgenticRLError is the RL family's base but has no catalog entry of
+    # its own, so it must land on the family fallback, not escape raw.
     fail_step("register_functions", AgenticRLError("something odd"))
     client = _make_client(lambda request: httpx.Response(200, json={}))
     with pytest.raises(SdkError) as ei:

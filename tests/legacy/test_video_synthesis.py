@@ -6,7 +6,7 @@ from http import HTTPStatus
 import pytest
 
 from dashscope import VideoSynthesis
-from dashscope.common.constants import TaskStatus
+from dashscope.legacy_1x.common.constants import TaskStatus
 from tests.unit.base_test import BaseTestEnvironment
 
 

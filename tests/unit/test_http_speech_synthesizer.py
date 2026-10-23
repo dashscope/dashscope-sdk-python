@@ -5,8 +5,10 @@
 import base64
 from http import HTTPStatus
 
-from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
-from dashscope.audio.http_tts.http_speech_synthesizer import (
+from dashscope.legacy_1x.api_entities.dashscope_response import (
+    DashScopeAPIResponse,
+)
+from dashscope.legacy_1x.audio.http_tts.http_speech_synthesizer import (
     HttpSpeechSynthesizer,
 )
 

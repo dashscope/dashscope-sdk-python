@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Dict, List, Optional
 
-from dashscope.common.base_type import BaseObjectMixin
+from dashscope.legacy_1x.common.base_type import BaseObjectMixin
 
 __all__ = ["Deployment", "FineTune", "DeploymentList", "FineTuneList"]
 

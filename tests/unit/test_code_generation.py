@@ -5,7 +5,7 @@ import json
 from http import HTTPStatus
 
 from dashscope import CodeGeneration
-from dashscope.aigc.code_generation import (
+from dashscope.legacy_1x.aigc.code_generation import (
     AttachmentRoleMessageParam,
     UserRoleMessageParam,
 )

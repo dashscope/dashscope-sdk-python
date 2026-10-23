@@ -392,7 +392,10 @@ class TestMainWorkflow:
             new_callable=AsyncMock,
             side_effect=Exception("Network error"),
         ):
+            # astroid reads __new__ as a classmethod through the 1.x->v2 MRO
+            # pylint: disable=no-value-for-parameter
             client = AgenticRL.__new__(AgenticRL)
+            # pylint: enable=no-value-for-parameter
             with pytest.raises(Exception, match="Network error"):
                 await client.run(
                     model="qwen3.5-9b",
@@ -499,7 +502,7 @@ class TestAgenticRLClient:
         from dashscope.finetune.agentic_rl import AgenticRL
 
         with patch(
-            "dashscope.finetune.agentic_rl.set_api_key",
+            "dashscope.v2.finetune.agentic_rl.set_api_key",
         ) as mock_set_key:
             client = AgenticRL(api_key="sk-test-key")
             mock_set_key.assert_called_once_with("sk-test-key")
@@ -512,7 +515,7 @@ class TestAgenticRLClient:
         )
 
         with patch(
-            "dashscope.finetune.agentic_rl.set_api_key",
+            "dashscope.v2.finetune.agentic_rl.set_api_key",
             side_effect=Exception("Invalid key"),
         ):
             with pytest.raises(ValueErrorWithCode):
@@ -522,7 +525,7 @@ class TestAgenticRLClient:
         from dashscope.finetune.agentic_rl import AgenticRL
 
         with patch(
-            "dashscope.finetune.agentic_rl.set_api_key",
+            "dashscope.v2.finetune.agentic_rl.set_api_key",
         ) as mock_set_key:
             _ = AgenticRL()
             mock_set_key.assert_called_once_with(None)
@@ -531,7 +534,7 @@ class TestAgenticRLClient:
         from dashscope.finetune.agentic_rl import AgenticRL
 
         with patch(
-            "dashscope.finetune.agentic_rl.set_api_key",
+            "dashscope.v2.finetune.agentic_rl.set_api_key",
         ) as mock_set_key:
             _ = AgenticRL(api_key="your_api_key_here")
             mock_set_key.assert_called_once_with("your_api_key_here")
@@ -659,7 +662,7 @@ class TestSubmitJob:
         from dashscope.finetune.agentic_rl import AgenticRL
 
         with patch(
-            "dashscope.finetune.agentic_rl.generate_random_id",
+            "dashscope.v2.finetune.agentic_rl.generate_random_id",
             return_value="abcdef1234567890",
         ):
             client = AgenticRL()

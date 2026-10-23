@@ -11,8 +11,8 @@ region fails with 401.
 """
 
 import dashscope
-from dashscope.aigc.chat_completion import Completions
-from dashscope.aigc.generation import Generation
+from dashscope.legacy_1x.aigc.chat_completion import Completions
+from dashscope.legacy_1x.aigc.generation import Generation
 
 
 def example_basic_usage():

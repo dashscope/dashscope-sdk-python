@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-__version__ = "1.0.6"
-__commit__ = "56b7208"
+__version__ = "1.0.11"
+__commit__ = "cd873b6"
 __snapshot__ = False
 
 
@@ -174,6 +174,14 @@ INTERNAL_ERROR = PublicError(
     anthropic_error_code="api_error",
 )
 
+RESPONSE_ERROR = PublicError(
+    key="response_error",
+    status_code=500,
+    error_code="ResponseError",
+    error_msg="The server returned a response that could not be parsed.",
+    anthropic_error_code="api_error",
+)
+
 SERVICE_UNAVAILABLE = PublicError(
     key="service_unavailable",
     status_code=503,
@@ -206,6 +214,56 @@ SDK_INVALID_API_KEY = SdkErrorDef(
     ),
     allow_retry=False,
     vars=[],
+)
+
+SDK_CONNECTION_ERROR = SdkErrorDef(
+    name="sdk.ConnectionError",
+    message="Connection failed: {detail}.",
+    solution=(
+        "Check network connectivity, proxy and firewall "
+        "settings, and confirm the service endpoint is "
+        "reachable. Retry the request; persistent failures "
+        "usually indicate a local network problem."
+    ),
+    allow_retry=True,
+    vars=["detail"],
+)
+
+SDK_CONNECTION_INTERRUPTED = SdkErrorDef(
+    name="sdk.ConnectionInterrupted",
+    message="Interrupted while waiting: {detail}.",
+    solution=(
+        "The thread was interrupted, typically because the "
+        "caller cancelled the operation. Re-issue the request "
+        "from a fresh thread if the cancellation was not "
+        "intentional."
+    ),
+    allow_retry=False,
+    vars=["detail"],
+)
+
+SDK_TIMEOUT = SdkErrorDef(
+    name="sdk.Timeout",
+    message="Operation timed out: {detail}.",
+    solution=(
+        "The server or gateway did not respond within the "
+        "deadline. Check network latency and service status, "
+        "then retry; consider raising the timeout for "
+        "long-running operations."
+    ),
+    allow_retry=True,
+    vars=["detail"],
+)
+
+SDK_IO_ERROR = SdkErrorDef(
+    name="sdk.IoError",
+    message="Local I/O failed: {detail}.",
+    solution=(
+        "Verify the file path exists and is readable, and that "
+        "the process has the required filesystem permissions."
+    ),
+    allow_retry=False,
+    vars=["detail"],
 )
 
 SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED = SdkErrorDef(
@@ -594,6 +652,69 @@ SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR = SdkErrorDef(
     vars=[],
 )
 
+SDK_WS_PROTOCOL_ERROR = SdkErrorDef(
+    name="sdk.ws.ProtocolError",
+    message="WebSocket protocol violation: {detail}.",
+    solution=(
+        "The gateway sent a frame that violates the task protocol "
+        "(missing header, unknown task_id, or an unexpected event). "
+        "Not retryable; if it persists, report it at "
+        "https://github.com/dashscope/dashscope-sdk-python/issues "
+        "with the frame detail."
+    ),
+    allow_retry=False,
+    vars=["detail"],
+)
+
+SDK_WS_UPSTREAM_QUEUE_FULL = SdkErrorDef(
+    name="sdk.ws.UpstreamQueueFull",
+    message="WebSocket upstream send queue is full.",
+    solution=(
+        "The client is producing frames faster than the network "
+        "drains them (the send buffer is full). Slow the producer "
+        "down — pace audio frames to real time instead of buffering "
+        "unboundedly."
+    ),
+    allow_retry=False,
+    vars=[],
+)
+
+SDK_WS_QUEUE_CAPACITY_EXCEEDED = SdkErrorDef(
+    name="sdk.ws.QueueCapacityExceeded",
+    message="A task receive queue exceeded its configured capacity.",
+    solution=(
+        "The consumer is slower than the producer and the bounded "
+        "receive queue overflowed. Drain events faster or raise the "
+        "capacity; frames are never dropped silently."
+    ),
+    allow_retry=False,
+    vars=[],
+)
+
+SDK_WS_BINARY_OWNER_CONFLICT = SdkErrorDef(
+    name="sdk.ws.BinaryOwnerConflict",
+    message="Binary stream ownership conflict: {detail}.",
+    solution=(
+        "A shared WebSocket connection supports at most one binary "
+        "uplink (ASR) and one binary downlink (TTS). Use a separate "
+        "connection for a second binary task."
+    ),
+    allow_retry=False,
+    vars=["detail"],
+)
+
+SDK_WS_ILLEGAL_STATE = SdkErrorDef(
+    name="sdk.ws.IllegalState",
+    message="Illegal WebSocket task state: {detail}.",
+    solution=(
+        "The operation is not valid for the task's current state "
+        "(duplicate task_id, send after close, receive on a closed "
+        "session). Check the session lifecycle."
+    ),
+    allow_retry=False,
+    vars=["detail"],
+)
+
 
 # -- Catalogs ------------------------------------------------------
 PUBLIC_ERRORS = [
@@ -611,11 +732,16 @@ PUBLIC_ERRORS = [
     CONCURRENCY_LIMIT_EXCEEDED,
     INSUFFICIENT_QUOTA,
     INTERNAL_ERROR,
+    RESPONSE_ERROR,
     SERVICE_UNAVAILABLE,
     REQUEST_TIMEOUT,
 ]
 SDK_ERRORS = [
     SDK_INVALID_API_KEY,
+    SDK_CONNECTION_ERROR,
+    SDK_CONNECTION_INTERRUPTED,
+    SDK_TIMEOUT,
+    SDK_IO_ERROR,
     SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED,
     SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED,
     SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES,
@@ -647,4 +773,9 @@ SDK_ERRORS = [
     SDK_AGENTSTUDIO_API_TIMEOUT_ERROR,
     SDK_AGENTSTUDIO_STREAM_ERROR,
     SDK_AGENTSTUDIO_STREAM_CLOSED_ERROR,
+    SDK_WS_PROTOCOL_ERROR,
+    SDK_WS_UPSTREAM_QUEUE_FULL,
+    SDK_WS_QUEUE_CAPACITY_EXCEEDED,
+    SDK_WS_BINARY_OWNER_CONFLICT,
+    SDK_WS_ILLEGAL_STATE,
 ]

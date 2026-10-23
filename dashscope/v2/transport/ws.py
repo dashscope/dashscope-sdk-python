@@ -18,7 +18,8 @@ from dashscope.v2._config import (
 )
 from dashscope.v2.errors import (
     APIConnectionError,
-    DashScopeError,
+    WsEventError,
+    WsStateError,
     error_from_business_code,
 )
 from dashscope.v2.transport import default_user_agent
@@ -31,6 +32,7 @@ __all__ = [
     "EVENT_STARTED",
     "WsEventError",
     "WsSession",
+    "WsStateError",
 ]
 
 EVENT_STARTED = "task-started"
@@ -39,10 +41,6 @@ EVENT_FINISHED = "task-finished"
 EVENT_FAILED = "task-failed"
 
 Connector = Callable[[str, Dict[str, str]], Any]
-
-
-class WsEventError(DashScopeError):
-    """The server sent an unexpected websocket protocol event."""
 
 
 def _default_connector(
@@ -145,11 +143,11 @@ class _EventProcessor:
             event.get("header"),
             dict,
         ):
-            raise WsEventError("expected a websocket event header")
+            raise WsEventError(detail="expected a websocket event header")
         header = event["header"]
         if header.get("task_id") not in (None, self.task_id):
             raise WsEventError(
-                "websocket event belongs to a different task",
+                detail="websocket event belongs to a different task",
                 request_id=self._request_id,
                 body=event,
             )
@@ -269,14 +267,14 @@ class WsSession(_EventProcessor):
         frame["header"]["streaming"] = streaming
         with self._lock:
             if self._closed or self._run_sent:
-                raise RuntimeError("websocket task already started or closed")
+                raise WsStateError(detail="task already started or closed")
             self._run_sent = True
             self._send(frame)
         try:
             event = self.recv_event()
             if event["header"].get("event") != EVENT_STARTED:
                 raise WsEventError(
-                    "expected task-started, got "
+                    detail="expected task-started, got "
                     f"{event['header'].get('event')!r}",
                     request_id=self.request_id,
                 )
@@ -288,9 +286,9 @@ class WsSession(_EventProcessor):
 
     def _check_input(self) -> None:
         if self._closed or not self._started or self._finished:
-            raise RuntimeError("websocket task is not active")
+            raise WsStateError(detail="task is not active")
         if self._input_finished:
-            raise RuntimeError("websocket task input is finished")
+            raise WsStateError(detail="task input is finished")
 
     def send_binary(self, data: bytes) -> None:
         if not isinstance(data, (bytes, bytearray, memoryview)):
@@ -312,7 +310,7 @@ class WsSession(_EventProcessor):
         """
         with self._lock:
             if self._closed or not self._started:
-                raise RuntimeError("websocket task is not active")
+                raise WsStateError(detail="task is not active")
             if self._finished:
                 return
             cancel = input is not None and input.get("directive") == "cancel"
@@ -327,7 +325,7 @@ class WsSession(_EventProcessor):
         while True:
             frame = self.recv()
             if frame is None:
-                raise RuntimeError("websocket task is finished")
+                raise WsStateError(detail="task is finished")
             if isinstance(frame, dict):
                 return frame
 
@@ -336,7 +334,7 @@ class WsSession(_EventProcessor):
         if self._finished:
             return None
         if self._closed:
-            raise RuntimeError("websocket session is closed")
+            raise WsStateError(detail="session is closed")
         try:
             raw = _recv_frame(self._ws)
             if raw is None or raw == "":

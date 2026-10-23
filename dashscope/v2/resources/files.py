@@ -16,6 +16,7 @@ from dashscope.v2.errors import (
     NotFoundError,
     check_response,
     response_error,
+    sdk_error,
 )
 from dashscope.v2.types.common import (
     ResponseBase,
@@ -123,13 +124,22 @@ def _parse_delete(body: Dict[str, Any]) -> DeletionStatus:
 
 
 def _is_valid_jsonl(file_path: str) -> bool:
-    with open(file_path, encoding="utf-8") as f:
-        for line in f:
-            try:
-                json.loads(line)
-            except json.decoder.JSONDecodeError:
-                return False
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    json.loads(line)
+                except json.decoder.JSONDecodeError:
+                    return False
+    except OSError as exc:
+        raise _io_error(exc) from exc
     return True
+
+
+def _io_error(exc: BaseException) -> Exception:
+    # Local filesystem failures are SDK-side, not gateway errors: the
+    # catalog's sdk.IoError entry supplies message/code/solution.
+    return sdk_error("sdk.IoError", {"detail": str(exc)})
 
 
 def _validate_upload(file_path: str, purpose: str) -> None:
@@ -139,17 +149,20 @@ def _validate_upload(file_path: str, purpose: str) -> None:
                 f"file {file_path} is not in valid jsonl format",
             )
     if not os.path.isfile(file_path):
-        raise FileNotFoundError(f"file not found: {file_path}")
+        raise _io_error(FileNotFoundError(f"file not found: {file_path}"))
 
 
 def _upload_form(file_path: str, description: Optional[str]):
     data = {}
     if description is not None:
         data["descriptions"] = description
-    with open(file_path, "rb") as f:
-        # Bytes, not a live handle: transport retries must be able
-        # to re-send the full body.
-        content = f.read()
+    try:
+        with open(file_path, "rb") as f:
+            # Bytes, not a live handle: transport retries must be able
+            # to re-send the full body.
+            content = f.read()
+    except OSError as exc:
+        raise _io_error(exc) from exc
     return data, {"files": (os.path.basename(file_path), content)}
 
 

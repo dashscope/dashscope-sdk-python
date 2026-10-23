@@ -1532,14 +1532,14 @@ async def test_async_incremental_output_false_merges_client_side():
 
 
 def test_media_upload_uses_the_per_call_api_key(monkeypatch):
-    # The OSS upload must run under the per-call key (1.x behavior);
-    # uploading with the client key would park the file in the wrong
-    # account when the two differ.
+    # The OSS upload must run under the per-call key; uploading with the
+    # client key would park the file in the wrong account when the two
+    # differ.
     seen = {}
 
-    def fake_upload(model, content, api_key, cert, **kwargs):
-        seen["api_key"] = api_key
-        seen["base_address"] = kwargs.get("base_address")
+    def fake_upload(client, model, content, **kwargs):
+        seen["client"] = client
+        seen["api_key"] = kwargs.get("api_key")
         return True, "oss://bucket/cat.png", {}
 
     monkeypatch.setattr(
@@ -1563,9 +1563,9 @@ def test_media_upload_uses_the_per_call_api_key(monkeypatch):
         api_key="sk-override",
     )
     assert seen["api_key"] == "sk-override"
-    # The certificate is fetched from the client's own base_url so a
+    # The certificate is fetched through the client's own transport, so a
     # region/gateway-scoped client uploads to the matching regional OSS.
-    assert seen["base_address"] == client.config.base_url
+    assert seen["client"] is client
     assert captured["auth"] == "Bearer sk-override"
     assert captured["oss"] == "enable"
     assert captured["body"]["input"]["messages"][0]["content"] == [

@@ -16,7 +16,7 @@ from unittest.mock import patch
 import aiohttp
 import pytest
 
-from dashscope.api_entities import aio_session
+from dashscope.legacy_1x.api_entities import aio_session
 
 
 class TestSSLContextCaching:

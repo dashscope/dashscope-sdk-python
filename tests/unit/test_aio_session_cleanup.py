@@ -33,7 +33,9 @@ def test_single_thread():
     warnings.filterwarnings("always", category=ResourceWarning)
 
     async def simulate_multimodal_conversation():
-        from dashscope.api_entities.aio_session import get_shared_aio_session
+        from dashscope.legacy_1x.api_entities.aio_session import (
+            get_shared_aio_session,
+        )
 
         print("[Step 1] Creating shared aiohttp session...")
         session = await get_shared_aio_session()
@@ -63,7 +65,9 @@ def run_async_in_thread(thread_id):
     """Run async code in a separate thread with its own event loop."""
 
     async def create_session():
-        from dashscope.api_entities.aio_session import get_shared_aio_session
+        from dashscope.legacy_1x.api_entities.aio_session import (
+            get_shared_aio_session,
+        )
 
         session = await get_shared_aio_session()
         print(f"  Thread {thread_id}: Session {id(session)} created")
@@ -146,7 +150,9 @@ async def test_concurrent_tasks_same_loop():
     print("=" * 70)
     print()
 
-    from dashscope.api_entities.aio_session import get_shared_aio_session
+    from dashscope.legacy_1x.api_entities.aio_session import (
+        get_shared_aio_session,
+    )
 
     num_tasks = 10
     print(f"Creating {num_tasks} concurrent tasks in same event loop...")

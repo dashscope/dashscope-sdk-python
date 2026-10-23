@@ -50,31 +50,43 @@ def test_legacy_exports_untouched():
     assert hasattr(dashscope, "save_api_key")
 
 
-def test_v2_namespace_reexports_1x_offline_helpers():
-    # The 2.0 namespace delegates the offline helpers to 1.x instead of
-    # re-implementing them (same objects the package root exposes).
+def test_tokenizers_are_shared_between_stacks():
+    # The local tiktoken wrapper is owned by 2.0; 1.x and the package root
+    # re-export the same objects, so there is one implementation and one
+    # copy of the bundled vocab.
     from dashscope import v2
-    from dashscope.common.api_key import save_api_key as save_1x
     from dashscope.tokenizers import get_tokenizer as get_1x
     from dashscope.tokenizers import list_tokenizers as list_1x
 
-    assert v2.save_api_key is save_1x
+    assert v2.get_tokenizer.__module__.startswith("dashscope.v2.tokenizers")
     assert v2.get_tokenizer is get_1x
     assert v2.list_tokenizers is list_1x
-    for name in ("get_tokenizer", "list_tokenizers", "save_api_key"):
+    assert dashscope.get_tokenizer is v2.get_tokenizer
+    for name in ("get_tokenizer", "list_tokenizers"):
         assert name in v2.__all__
+
+
+def test_v2_owns_save_api_key():
+    # The key-file writer is v2-native, so reaching for it does not pull in
+    # the 1.x package root; the package root keeps its own 1.x writer.
+    from dashscope import v2
+    from dashscope.legacy_1x.common.api_key import save_api_key as save_1x
+
+    assert v2.save_api_key.__module__ == "dashscope.v2._config"
+    assert v2.save_api_key is not save_1x
+    assert dashscope.save_api_key is save_1x
+    assert "save_api_key" in v2.__all__
 
 
 def test_v2_get_tokenizer_encodes_locally():
     from dashscope import v2
-    from dashscope.common.error import UnsupportedModel
 
     tokenizer = v2.get_tokenizer("qwen-turbo")
     ids = tokenizer.encode("hello world")
     assert ids and all(isinstance(i, int) for i in ids)
     assert tokenizer.decode(ids) == "hello world"
     assert "qwen-turbo" in v2.list_tokenizers()
-    with pytest.raises(UnsupportedModel):
+    with pytest.raises(ValueError):
         v2.get_tokenizer("not-a-qwen-model")
 
 

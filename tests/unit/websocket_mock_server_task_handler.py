@@ -6,8 +6,8 @@ import json
 
 import aiohttp
 
-from dashscope.common.error import UnexpectedMessageReceived
-from dashscope.protocol.websocket import (
+from dashscope.legacy_1x.common.error import UnexpectedMessageReceived
+from dashscope.legacy_1x.protocol.websocket import (
     ACTION_KEY,
     EVENT_KEY,
     ActionType,

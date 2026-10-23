@@ -133,6 +133,8 @@ def test_connection_error_retried_then_raises(no_sleep):
     with pytest.raises(APIConnectionError) as exc_info:
         t.request("GET", "/x")
     assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
+    assert exc_info.value.code == "sdk.ConnectionError"
+    assert exc_info.value.allow_retry is True
     assert rec.calls == 3
     assert len(no_sleep) == 2
 
@@ -148,14 +150,17 @@ def test_timeout_maps_to_api_timeout_error(no_sleep):
         t.request("GET", "/x")
     assert isinstance(exc_info.value, APIConnectionError)
     assert isinstance(exc_info.value.__cause__, httpx.ConnectTimeout)
+    assert exc_info.value.code == "sdk.Timeout"
+    assert exc_info.value.allow_retry is True
     assert rec.calls == 3
 
 
 def test_open_stream_transport_error_mapped(no_sleep):
     rec = _Recorder()
     t = _make_sync(rec, [httpx.ConnectError("boom")], max_retries=2)
-    with pytest.raises(APIConnectionError):
+    with pytest.raises(APIConnectionError) as exc_info:
         t.open_stream("POST", "/x")
+    assert exc_info.value.code == "sdk.ConnectionError"
     # Streams are never retried.
     assert rec.calls == 1
 
@@ -430,7 +435,7 @@ async def test_async_sdk_identification_headers(no_sleep):
 
 
 def test_sdk_session_id_cached_per_process():
-    from dashscope.common import _sdk_session
+    from dashscope._shared import _sdk_session
     from dashscope.v2.transport import _ident
 
     original = _sdk_session._session_id

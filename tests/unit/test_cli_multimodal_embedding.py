@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
-from dashscope.cli import multimodal_embedding
+from dashscope.legacy_1x.cli import multimodal_embedding
 
 
 class TestCliMultiModalEmbedding:

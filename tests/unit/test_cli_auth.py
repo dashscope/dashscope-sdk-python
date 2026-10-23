@@ -17,9 +17,9 @@ import pytest
 from typer.testing import CliRunner
 
 import dashscope
-from dashscope.cli import auth as auth_cli
-from dashscope.common import api_key as api_key_mod
-from dashscope.common.constants import (
+from dashscope.legacy_1x.cli import auth as auth_cli
+from dashscope.legacy_1x.common import api_key as api_key_mod
+from dashscope.legacy_1x.common.constants import (
     DASHSCOPE_API_KEY_ENV,
     DASHSCOPE_API_KEY_FILE_PATH_ENV,
 )
@@ -67,7 +67,7 @@ def key_store(monkeypatch, tmp_path):
     key_file = cache_dir / "api_key"
     cache_dir.mkdir(parents=True, exist_ok=True)
     # ``save_api_key``/``get_default_api_key`` read the constant from
-    # dashscope.common.api_key, while the printed path and the source check in
+    # dashscope.legacy_1x.common.api_key, while the printed path and the source check in
     # auth read its own imported copy. Both bindings have to move, or login and
     # whoami silently disagree about where the key lives.
     monkeypatch.setattr(

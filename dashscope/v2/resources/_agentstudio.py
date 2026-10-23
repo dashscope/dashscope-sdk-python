@@ -2,18 +2,18 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 """Transparent v2 error-alignment proxy for the mounted AgentStudio sub-SDK.
 
-Design doc M3 task 3.12. ``client.agentstudio`` lazily mounts the 1.x
+Design doc M3 task 3.12. ``client.agentstudio`` lazily mounts the
 AgentStudio sub-SDK, which keeps its own exception family rooted at
-``dashscope.common.error.DashScopeException``. That family shares no
+``dashscope._shared._errors.DashScopeException``. That family shares no
 lineage with ``dashscope.v2.errors.DashScopeError``, so a user writing
 ``except dashscope.v2.errors.DashScopeError`` would miss every failure
 the mounted sub-SDK raises.
 
 This module closes that gap at the *mount boundary only*: it wraps the
 constructed AgentStudio client in a transparent proxy that catches
-``AgentStudioError`` and re-raises the equivalent v2 error. No 1.x code
-is touched, and the standalone ``dashscope.agentstudio.Client`` keeps its
-native error contract -- only the v2 mount is translated.
+``AgentStudioError`` and re-raises the equivalent v2 error. The
+standalone ``dashscope.agentstudio.Client`` keeps its native error
+contract -- only the v2 mount is translated.
 
 Two-branch translation (design doc §7):
 
@@ -43,9 +43,9 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-from dashscope.agentstudio import exceptions as _as_exceptions
-from dashscope.agentstudio.pagination import AsyncCursorPage, CursorPage
 from dashscope.v2 import errors as _v2_errors
+from dashscope.v2.agentstudio import exceptions as _as_exceptions
+from dashscope.v2.agentstudio.pagination import AsyncCursorPage, CursorPage
 
 _AGENTSTUDIO_FAMILY = "sdk.agentstudio"
 
@@ -63,7 +63,7 @@ _SDK_ERROR_CLASSES = frozenset(
 
 # Resource classes (and the typed event streams) live under this package;
 # attribute access recurses into them so nested method calls stay guarded.
-_RESOURCE_PACKAGE = "dashscope.agentstudio.resources"
+_RESOURCE_PACKAGE = "dashscope.v2.agentstudio.resources"
 
 # AgentStudio raises a few HTTP-family errors locally, without a response,
 # so they carry no ``status_code`` (the missing-``api_key`` guard in
@@ -98,11 +98,12 @@ def _effective_status(exc: _as_exceptions.AgentStudioError) -> int:
 def translate_agentstudio_error(
     exc: _as_exceptions.AgentStudioError,
 ) -> _v2_errors.DashScopeError:
-    """Map a 1.x AgentStudio exception into the v2 error family."""
+    """Map an AgentStudio exception into the v2 error family."""
 
     status = getattr(exc, "status_code", None)
     if isinstance(exc, _as_exceptions.APIStatusError) or status is not None:
-        # V1 already resolved compatibility fields and header precedence.
+        # AgentStudio's own exception already resolved the compatibility
+        # fields and the header precedence.
         request_id = getattr(exc, "request_id", None)
         headers = {"x-request-id": request_id} if request_id else None
         error = _v2_errors.error_from_status(

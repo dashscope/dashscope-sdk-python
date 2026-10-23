@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
-from dashscope.cli import image_synthesis
+from dashscope.legacy_1x.cli import image_synthesis
 
 
 class TestCliImageSynthesis:

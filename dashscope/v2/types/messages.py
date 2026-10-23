@@ -32,8 +32,8 @@ class TextPart(BaseModel):
 
     type: Literal["text"] = "text"
     text: str
-    # Explicit context-cache marker (Bailian 上下文缓存): a part-level
-    # sibling such as {"type": "ephemeral"} on the native and
+    # Explicit context-cache marker (Bailian context caching): a
+    # part-level sibling such as {"type": "ephemeral"} on the native and
     # OpenAI-compatible wires; the cached prefix ends at this part.
     # 1.x passed content blocks through unvalidated, so the marker must
     # stay accepted on every part type.

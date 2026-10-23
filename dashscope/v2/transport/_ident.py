@@ -18,10 +18,10 @@ import os
 from typing import Optional
 
 # One process-wide session id shared with the 1.x API classes, so a
-# single SDK session is not split across ids when the 2.0 client
-# delegates calls (rl, agentstudio) into 1.x. (acli keeps its own: it is
-# a one-way sync copy, see common/_sdk_session.)
-from dashscope.common._sdk_session import sdk_session_id
+# single SDK session is not split across ids when one process issues
+# requests through both stacks. (acli keeps its own: it is a one-way
+# sync copy, see _shared/_sdk_session.)
+from dashscope._shared._sdk_session import sdk_session_id
 
 SDK_CLIENT_HEADER = "x-dashscope-sdk-client"
 SDK_SESSION_ID_HEADER = "x-dashscope-sdk-session-id"
@@ -33,7 +33,8 @@ SDK_SESSION_ID_HEADER = "x-dashscope-sdk-session-id"
 # ``embeddings`` / ``finetune`` / ...) using the same base vocabulary as 1.x
 # ``get_api_module``, but carries a trailing ``V2_MODULE_MARKER`` so the two
 # API generations stay separable. The version segment cannot do this: one
-# installed package (e.g. 2.0.0) ships both the 1.x surface (``dashscope.aigc``)
+# installed package (e.g. 2.0.0) ships both the 1.x surface
+# (``dashscope.legacy_1x.aigc``)
 # and this v2 surface, and both read the same ``__version__``, so a 1.x
 # ``Generation.call()`` and a v2 ``client.chat.completions.create()`` would
 # otherwise both emit ``python-sdk/2.0.0/aigc``. With the marker v2 emits
@@ -43,8 +44,9 @@ SDK_CLIENT = "python-sdk"
 DEFAULT_MODULE = "dashscope"
 # Trailing generation marker appended to every v2 module tag (``aigc`` ->
 # ``aigc2``). Only the v2 transport applies it; the 1.x surface in
-# ``common.utils.get_sdk_headers`` emits the unmarked module, and calls that
-# delegate into 1.x (e.g. ``client.agentstudio``) inherit the 1.x tag.
+# ``common.utils.get_sdk_headers`` emits the unmarked module, and so does
+# AgentStudio, whose own transport builds its header from the shared
+# ``_shared._sdk_ident`` because the backend already reports on that tag.
 V2_MODULE_MARKER = "2"
 
 

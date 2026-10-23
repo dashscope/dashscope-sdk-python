@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
-from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
-from dashscope.client.base_api import BaseAioApi, BaseApi
-from dashscope.common.constants import ApiProtocol
-from dashscope.protocol.websocket import WebsocketStreamingMode
+from dashscope.legacy_1x.api_entities.dashscope_response import (
+    DashScopeAPIResponse,
+)
+from dashscope.legacy_1x.client.base_api import BaseAioApi, BaseApi
+from dashscope.legacy_1x.common.constants import ApiProtocol
+from dashscope.legacy_1x.protocol.websocket import WebsocketStreamingMode
 
 
 class WebSocketRequest(BaseApi, BaseAioApi):

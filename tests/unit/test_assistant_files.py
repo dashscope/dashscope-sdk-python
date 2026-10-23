@@ -4,7 +4,7 @@
 import json
 import uuid
 
-from dashscope.assistants.files import Files
+from dashscope.legacy_1x.assistants.files import Files
 from tests.unit.mock_request_base import MockServerBase
 from tests.unit.mock_server import MockServer
 

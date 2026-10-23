@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
-from dashscope.cli import rerank
+from dashscope.legacy_1x.cli import rerank
 
 
 class TestCliRerank:

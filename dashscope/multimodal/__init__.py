@@ -1,95 +1,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
+"""Backward-compat shim; the implementation moved to ``dashscope.legacy_1x.multimodal``.
 
-from .tingwu import tingwu
-from .tingwu.tingwu import TingWu
-from .tingwu.tingwu_realtime import TingWuRealtime, TingWuRealtimeCallback
+Import from ``dashscope.legacy_1x.multimodal`` (or the public ``dashscope``
+root re-exports) in new code.
+"""
 
-from .multimodal_dialog import MultiModalDialog, MultiModalCallback
-from .dialog_state import DialogState
-from .multimodal_constants import (
-    RequestToRespondType,
-    RESPONSE_NAME_TASK_STARTED,
-    RESPONSE_NAME_RESULT_GENERATED,
-    RESPONSE_NAME_TASK_FINISHED,
-    RESPONSE_NAME_TASK_FAILED,
-    RESPONSE_NAME_STARTED,
-    RESPONSE_NAME_STOPPED,
-    RESPONSE_NAME_STATE_CHANGED,
-    RESPONSE_NAME_REQUEST_ACCEPTED,
-    RESPONSE_NAME_SPEECH_STARTED,
-    RESPONSE_NAME_SPEECH_ENDED,
-    RESPONSE_NAME_RESPONDING_STARTED,
-    RESPONSE_NAME_RESPONDING_ENDED,
-    RESPONSE_NAME_SPEECH_CONTENT,
-    RESPONSE_NAME_RESPONDING_CONTENT,
-    RESPONSE_NAME_ERROR,
-    RESPONSE_NAME_HEART_BEAT,
-)
-from .multimodal_request_params import (
-    DashHeader,
-    DashPayloadParameters,
-    DashPayloadInput,
-    DashPayload,
-    RequestBodyInput,
-    AsrPostProcessing,
-    ReplaceWord,
-    Upstream,
-    Downstream,
-    DialogAttributes,
-    Locations,
-    Network,
-    Device,
-    ClientInfo,
-    BizParams,
-    RequestParameters,
-    RequestToRespondParameters,
-    RequestToRespondBodyInput,
-    get_random_uuid,
-)
+from dashscope.legacy_1x._shim import install as _install
 
-__all__ = [
-    "tingwu",
-    "TingWu",
-    "TingWuRealtime",
-    "TingWuRealtimeCallback",
-    "MultiModalDialog",
-    "MultiModalCallback",
-    "DialogState",
-    "RequestToRespondType",
-    "RESPONSE_NAME_TASK_STARTED",
-    "RESPONSE_NAME_RESULT_GENERATED",
-    "RESPONSE_NAME_TASK_FINISHED",
-    "RESPONSE_NAME_TASK_FAILED",
-    "RESPONSE_NAME_STARTED",
-    "RESPONSE_NAME_STOPPED",
-    "RESPONSE_NAME_STATE_CHANGED",
-    "RESPONSE_NAME_REQUEST_ACCEPTED",
-    "RESPONSE_NAME_SPEECH_STARTED",
-    "RESPONSE_NAME_SPEECH_ENDED",
-    "RESPONSE_NAME_RESPONDING_STARTED",
-    "RESPONSE_NAME_RESPONDING_ENDED",
-    "RESPONSE_NAME_SPEECH_CONTENT",
-    "RESPONSE_NAME_RESPONDING_CONTENT",
-    "RESPONSE_NAME_ERROR",
-    "RESPONSE_NAME_HEART_BEAT",
-    "DashHeader",
-    "DashPayloadParameters",
-    "DashPayloadInput",
-    "DashPayload",
-    "RequestBodyInput",
-    "AsrPostProcessing",
-    "ReplaceWord",
-    "Upstream",
-    "Downstream",
-    "DialogAttributes",
-    "Locations",
-    "Network",
-    "Device",
-    "ClientInfo",
-    "BizParams",
-    "RequestParameters",
-    "RequestToRespondParameters",
-    "RequestToRespondBodyInput",
-    "get_random_uuid",
-]
+_install(__name__, "dashscope.legacy_1x.multimodal")

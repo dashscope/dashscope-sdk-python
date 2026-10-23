@@ -4,7 +4,7 @@
 
 ``dashscope/v2/_error_registry.py`` is a generated artifact from the
 separate ``dashscope-error-registry`` repo (``tools/generate.py`` over
-``data/*.textproto``), vendored at ``__version__ == "1.0.6"``. Only the
+``data/*.textproto``), vendored at ``__version__ == "1.0.11"``. Only the
 ``PublicError`` and ``SdkErrorDef`` tables are carried; see
 ``test_vendored_copy_is_pruned_to_the_tables_v2_consumes``.
 
@@ -48,7 +48,7 @@ _CONDITION_ONLY = {
     "sdk.agentic_rl.FunctionTestTimeout",
 }
 
-# The nine exception class names the catalog requires.
+# The ten exception class names the catalog requires.
 _REQUIRED_CLASSES = {
     "AuthenticationError",
     "BadRequestError",
@@ -58,6 +58,7 @@ _REQUIRED_CLASSES = {
     "PermissionDeniedError",
     "RateLimitError",
     "RequestTooLargeError",
+    "ResponseError",
     "ServiceUnavailableError",
 }
 
@@ -83,11 +84,11 @@ def _by_key(key):
 
 
 def test_catalog_size_and_provenance():
-    assert registry.__version__ == "1.0.6"
-    assert registry.__commit__ == "56b7208"
+    assert registry.__version__ == "1.0.11"
+    assert registry.__commit__ == "cd873b6"
     assert registry.__snapshot__ is False
-    assert len(PUBLIC) == 16
-    assert len(SDK) == 32
+    assert len(PUBLIC) == 17
+    assert len(SDK) == 41
 
 
 def test_generated_header_survives_vendoring():
@@ -97,7 +98,7 @@ def test_generated_header_survives_vendoring():
 
 
 def test_vendored_copy_is_pruned_to_the_tables_v2_consumes():
-    """Upstream 1.0.6 also ships a 277-entry ``INTERNAL_ERRORS`` table.
+    """Upstream 1.0.11 also ships a 299-entry ``INTERNAL_ERRORS`` table.
 
     It describes server-side components (``gateway.*`` / ``mint.*`` /
     ``api.*`` / ``turbo.*`` / ``model.*``) through ``InternalErrorDef``,
@@ -130,7 +131,7 @@ def test_public_entries_are_immutable():
         PUBLIC[0].key = "mutated"
 
 
-def test_catalog_requires_exactly_nine_exception_classes():
+def test_catalog_requires_exactly_ten_exception_classes():
     assert {entry.error_code for entry in PUBLIC} == _REQUIRED_CLASSES
 
 
@@ -287,10 +288,59 @@ def test_agentstudio_has_no_family_fallback():
     assert status_classes, "expected 1.x agentstudio HTTP error classes"
 
 
-def test_invalid_api_key_is_the_only_unfamily_entry():
+def test_unfamily_entries_are_the_generic_sdk_ones():
+    """Entries outside a product family are the cross-SDK generics.
+
+    ``sdk.InvalidApiKey`` plus the transport/file quartet shared with
+    the Java SDK (Python wires up ConnectionError / Timeout / IoError;
+    ConnectionInterrupted is a Java threading artifact carried for
+    parity). Anything else landing here means a product family grew
+    without its ``sdk.<family>.`` prefix -- that is a catalog bug.
+    """
     others = [
         e.name
         for e in SDK
-        if not e.name.startswith(("sdk.agentic_rl.", "sdk.agentstudio."))
+        if not e.name.startswith(
+            ("sdk.agentic_rl.", "sdk.agentstudio.", "sdk.ws.")
+        )
     ]
-    assert others == ["sdk.InvalidApiKey"]
+    assert others == [
+        "sdk.InvalidApiKey",
+        "sdk.ConnectionError",
+        "sdk.ConnectionInterrupted",
+        "sdk.Timeout",
+        "sdk.IoError",
+    ]
+
+
+def test_ws_family_entries():
+    """The five websocket entries; three wired, two carried for parity.
+
+    ProtocolError / IllegalState / BinaryOwnerConflict back the v2
+    websocket transport's exception classes. UpstreamQueueFull (sync
+    send, no send buffer) and QueueCapacityExceeded (unbounded per-task
+    queues) describe mechanisms the Python transport does not have.
+    """
+    entries = _by_name(SDK)
+    expected = {
+        "sdk.ws.ProtocolError",
+        "sdk.ws.UpstreamQueueFull",
+        "sdk.ws.QueueCapacityExceeded",
+        "sdk.ws.BinaryOwnerConflict",
+        "sdk.ws.IllegalState",
+    }
+    assert {
+        e.name for e in SDK if e.name.startswith("sdk.ws.")
+    } == expected
+
+    from dashscope.v2 import errors as v2_errors
+
+    wired = {
+        "sdk.ws.ProtocolError": "WsEventError",
+        "sdk.ws.IllegalState": "WsStateError",
+        "sdk.ws.BinaryOwnerConflict": "WsBinaryOwnerConflictError",
+    }
+    for name, cls_name in wired.items():
+        cls = getattr(v2_errors, cls_name)
+        assert cls._SDK_ERROR_NAME == name
+        assert entries[name].vars == ["detail"]

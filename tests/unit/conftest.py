@@ -6,7 +6,9 @@ import time
 
 import pytest
 
-from dashscope.common.constants import DASHSCOPE_DISABLE_DATA_INSPECTION_ENV
+from dashscope.legacy_1x.common.constants import (
+    DASHSCOPE_DISABLE_DATA_INSPECTION_ENV,
+)
 from tests.unit.mock_server import create_mock_server, run_server
 
 

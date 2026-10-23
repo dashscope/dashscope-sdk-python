@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
+"""Backward-compat shim; the implementation moved to ``dashscope.legacy_1x.app``.
 
-from .application import Application
+Import from ``dashscope.legacy_1x.app`` (or the public ``dashscope``
+root re-exports) in new code.
+"""
 
-__all__ = ["Application"]
+from dashscope.legacy_1x._shim import install as _install
+
+_install(__name__, "dashscope.legacy_1x.app")

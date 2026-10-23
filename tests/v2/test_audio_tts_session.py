@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from dashscope.v2 import Client
-from dashscope.v2.errors import APIConnectionError, BadRequestError
+from dashscope.v2.errors import APIConnectionError, BadRequestError, WsStateError
 from dashscope.v2.resources.audio.tts import SynthesisSession
 
 
@@ -278,7 +278,7 @@ def test_no_more_text_or_flush_after_input_ends(client, ending, operation):
     with _session(client, ws) as session:
         getattr(session, ending)()
         sent_count = len(ws.sent)
-        with pytest.raises(RuntimeError):
+        with pytest.raises(WsStateError):
             if operation == "send_text":
                 session.send_text("too late")
             else:

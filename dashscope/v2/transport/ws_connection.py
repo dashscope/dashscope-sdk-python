@@ -40,7 +40,11 @@ from dashscope.v2._config import (
     settings,
     workspace_ws_url,
 )
-from dashscope.v2.errors import APIConnectionError
+from dashscope.v2.errors import (
+    APIConnectionError,
+    WsBinaryOwnerConflictError,
+    WsStateError,
+)
 from dashscope.v2.transport.ws import (
     EVENT_FAILED,
     EVENT_FINISHED,
@@ -149,14 +153,14 @@ class WsTask(_EventProcessor):
         frame["header"]["streaming"] = streaming
         with self._lock:
             if self._closed or self._run_sent:
-                raise RuntimeError("websocket task already started or closed")
+                raise WsStateError(detail="task already started or closed")
             self._run_sent = True
             self._conn._send(frame)
         try:
             event = self.recv_event()
             if event["header"].get("event") != EVENT_STARTED:
                 raise WsEventError(
-                    "expected task-started, got "
+                    detail="expected task-started, got "
                     f"{event['header'].get('event')!r}",
                     request_id=self.request_id,
                 )
@@ -168,9 +172,9 @@ class WsTask(_EventProcessor):
 
     def _check_input(self) -> None:
         if self._closed or not self._started or self._finished:
-            raise RuntimeError("websocket task is not active")
+            raise WsStateError(detail="task is not active")
         if self._input_finished:
-            raise RuntimeError("websocket task input is finished")
+            raise WsStateError(detail="task input is finished")
 
     def claim_binary_downlink(self) -> None:
         """Route binary output frames to this task.
@@ -198,7 +202,7 @@ class WsTask(_EventProcessor):
         """End input, or cancel synthesis while output is still arriving."""
         with self._lock:
             if self._closed or not self._started:
-                raise RuntimeError("websocket task is not active")
+                raise WsStateError(detail="task is not active")
             if self._finished:
                 return
             cancel = input is not None and input.get("directive") == "cancel"
@@ -215,7 +219,7 @@ class WsTask(_EventProcessor):
         while True:
             frame = self.recv()
             if frame is None:
-                raise RuntimeError("websocket task is finished")
+                raise WsStateError(detail="task is finished")
             if isinstance(frame, dict):
                 return frame
 
@@ -309,7 +313,7 @@ class WsConnection:
             raise ValueError("timeout must be positive")
         with self._lock:
             if self._closed:
-                raise RuntimeError("websocket connection is closed")
+                raise WsStateError(detail="connection is closed")
             task = WsTask(
                 self,
                 uuid.uuid4().hex,
@@ -321,7 +325,7 @@ class WsConnection:
     def _send(self, data: Any, *, opcode: int = 1) -> None:
         with self._send_lock:
             if self._closed:
-                raise RuntimeError("websocket connection is closed")
+                raise WsStateError(detail="connection is closed")
             try:
                 if opcode == 2:
                     self._ws.send(data, opcode=2)
@@ -334,22 +338,23 @@ class WsConnection:
     def _check_binary_owner(self, task: WsTask) -> None:
         """Validate under the connection lock; pre-start claims are allowed."""
         if self._closed:
-            raise RuntimeError("websocket connection is closed")
+            raise WsStateError(detail="connection is closed")
         if (
             self._tasks.get(task.task_id) is not task
             or task._closed
             or task._finished
             or task._routing_finished
         ):
-            raise RuntimeError("websocket task is not active")
+            raise WsStateError(detail="task is not active")
 
     def _claim_binary_uplink(self, task: WsTask) -> None:
         with self._lock:
             self._check_binary_owner(task)
             owner = self._binary_uplink_owner
             if owner is not None and owner is not task:
-                raise RuntimeError(
-                    "another task owns the binary uplink on this connection",
+                raise WsBinaryOwnerConflictError(
+                    detail="another task owns the binary uplink on this "
+                    "connection",
                 )
             self._binary_uplink_owner = task
 
@@ -358,8 +363,9 @@ class WsConnection:
             self._check_binary_owner(task)
             owner = self._binary_downlink_owner
             if owner is not None and owner is not task:
-                raise RuntimeError(
-                    "another task owns the binary downlink on this connection",
+                raise WsBinaryOwnerConflictError(
+                    detail="another task owns the binary downlink on this "
+                    "connection",
                 )
             self._binary_downlink_owner = task
 
@@ -372,7 +378,7 @@ class WsConnection:
 
     def _detach(self, task: WsTask) -> None:
         with self._lock:
-            task._enqueue((_ERROR, RuntimeError("websocket task is closed")))
+            task._enqueue((_ERROR, WsStateError(detail="task is closed")))
             task._closed = True
             task._routing_active = False
             if self._tasks.get(task.task_id) is task:
@@ -397,10 +403,10 @@ class WsConnection:
     def _route_event(self, event: Any) -> None:
         header = event.get("header") if isinstance(event, dict) else None
         if not isinstance(header, dict):
-            raise WsEventError("expected a websocket event header")
+            raise WsEventError(detail="expected a websocket event header")
         task_id = header.get("task_id")
         if not isinstance(task_id, str) or not task_id:
-            raise WsEventError("expected a non-empty websocket task_id")
+            raise WsEventError(detail="expected a non-empty websocket task_id")
         with self._lock:
             task = self._tasks.get(task_id)
             if self._closed or task is None or task._routing_finished:
@@ -431,8 +437,8 @@ class WsConnection:
                     return
                 if len(active) != 1:
                     raise WsEventError(
-                        "binary frame with multiple active tasks; claim the "
-                        "downlink with claim_binary_downlink()",
+                        detail="binary frame with multiple active tasks; "
+                        "claim the downlink with claim_binary_downlink()",
                     )
                 owner = active[0]
                 self._binary_downlink_owner = owner

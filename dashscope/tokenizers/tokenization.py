@@ -4,21 +4,21 @@
 import copy
 from typing import Any, List, Optional
 
-from dashscope.api_entities.dashscope_response import (
+from dashscope.legacy_1x.api_entities.dashscope_response import (
     DashScopeAPIResponse,
     Message,
     Role,
 )
-from dashscope.client.base_api import BaseApi
-from dashscope.common.constants import (
+from dashscope.legacy_1x.client.base_api import BaseApi
+from dashscope.legacy_1x.common.constants import (
     CUSTOMIZED_MODEL_ID,
     DEPRECATED_MESSAGE,
     HISTORY,
     MESSAGES,
     PROMPT,
 )
-from dashscope.common.error import InputRequired, ModelRequired
-from dashscope.common.logging import logger
+from dashscope.legacy_1x.common.error import InputRequired, ModelRequired
+from dashscope.legacy_1x.common.logging import logger
 
 
 class Tokenization(BaseApi):
