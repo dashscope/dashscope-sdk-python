@@ -22,7 +22,9 @@ from dashscope.v2 import AsyncClient, Client
 from dashscope.v2 import _error_registry as registry
 from dashscope.v2 import errors
 from dashscope.v2.errors import (
+    APIConnectionError,
     APIStatusError,
+    APITimeoutError,
     AuthenticationError,
     BadRequestError,
     ContentFilterError,
@@ -39,6 +41,7 @@ from dashscope.v2.errors import (
     check_response,
     error_from_business_code,
     error_from_sdk_exception,
+    sdk_error,
 )
 from dashscope.v2.errors import (
     _CODE_MAP,
@@ -826,6 +829,47 @@ def test_sdk_error_has_no_http_semantics():
     assert issubclass(SdkError, DashScopeError)
     assert not issubclass(SdkError, APIStatusError)
     assert SdkError("boom").status_code is None
+
+
+def test_transport_errors_are_catalog_backed_sdk_errors():
+    assert issubclass(APIConnectionError, SdkError)
+    assert issubclass(APITimeoutError, APIConnectionError)
+
+    conn = APIConnectionError("boom")
+    conn_entry = _SDK_ERRORS["sdk.ConnectionError"]
+    assert conn.code == conn_entry.name
+    assert conn.solution == conn_entry.solution
+    assert conn.allow_retry == conn_entry.allow_retry
+    assert conn.status_code is None
+
+    timeout = APITimeoutError("boom")
+    timeout_entry = _SDK_ERRORS["sdk.Timeout"]
+    assert timeout.code == timeout_entry.name
+    assert timeout.solution == timeout_entry.solution
+    assert timeout.allow_retry == timeout_entry.allow_retry
+
+
+def test_transport_error_detail_fills_the_catalog_template():
+    err = APIConnectionError(detail="dns blew up")
+    assert err.message == "Connection failed: dns blew up."
+    err = APITimeoutError(detail="slow")
+    assert err.message == "Operation timed out: slow."
+
+
+def test_transport_error_explicit_fields_win_over_catalog_defaults():
+    err = APIConnectionError("boom", code="custom", allow_retry=False)
+    assert err.code == "custom"
+    assert err.allow_retry is False
+
+
+def test_sdk_error_factory_builds_classless_entries_from_the_catalog():
+    entry = _SDK_ERRORS["sdk.IoError"]
+    err = sdk_error("sdk.IoError", {"detail": "disk full"})
+    assert type(err) is SdkError
+    assert err.message == "Local I/O failed: disk full."
+    assert err.code == entry.name
+    assert err.solution == entry.solution
+    assert err.allow_retry is entry.allow_retry
 
 
 def test_sdk_error_translation_resolves_the_catalog_by_class_name():

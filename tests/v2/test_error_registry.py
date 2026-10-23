@@ -4,7 +4,7 @@
 
 ``dashscope/v2/_error_registry.py`` is a generated artifact from the
 separate ``dashscope-error-registry`` repo (``tools/generate.py`` over
-``data/*.textproto``), vendored at ``__version__ == "1.0.6"``. Only the
+``data/*.textproto``), vendored at ``__version__ == "1.0.11"``. Only the
 ``PublicError`` and ``SdkErrorDef`` tables are carried; see
 ``test_vendored_copy_is_pruned_to_the_tables_v2_consumes``.
 
@@ -83,11 +83,11 @@ def _by_key(key):
 
 
 def test_catalog_size_and_provenance():
-    assert registry.__version__ == "1.0.6"
-    assert registry.__commit__ == "56b7208"
+    assert registry.__version__ == "1.0.11"
+    assert registry.__commit__ == "5b2d2e1"
     assert registry.__snapshot__ is False
     assert len(PUBLIC) == 16
-    assert len(SDK) == 32
+    assert len(SDK) == 36
 
 
 def test_generated_header_survives_vendoring():
@@ -97,7 +97,7 @@ def test_generated_header_survives_vendoring():
 
 
 def test_vendored_copy_is_pruned_to_the_tables_v2_consumes():
-    """Upstream 1.0.6 also ships a 277-entry ``INTERNAL_ERRORS`` table.
+    """Upstream 1.0.11 also ships a 299-entry ``INTERNAL_ERRORS`` table.
 
     It describes server-side components (``gateway.*`` / ``mint.*`` /
     ``api.*`` / ``turbo.*`` / ``model.*``) through ``InternalErrorDef``,
@@ -287,10 +287,24 @@ def test_agentstudio_has_no_family_fallback():
     assert status_classes, "expected 1.x agentstudio HTTP error classes"
 
 
-def test_invalid_api_key_is_the_only_unfamily_entry():
+def test_unfamily_entries_are_the_generic_sdk_ones():
+    """Entries outside a product family are the cross-SDK generics.
+
+    ``sdk.InvalidApiKey`` plus the transport/file quartet shared with
+    the Java SDK (Python wires up ConnectionError / Timeout / IoError;
+    ConnectionInterrupted is a Java threading artifact carried for
+    parity). Anything else landing here means a product family grew
+    without its ``sdk.<family>.`` prefix -- that is a catalog bug.
+    """
     others = [
         e.name
         for e in SDK
         if not e.name.startswith(("sdk.agentic_rl.", "sdk.agentstudio."))
     ]
-    assert others == ["sdk.InvalidApiKey"]
+    assert others == [
+        "sdk.InvalidApiKey",
+        "sdk.ConnectionError",
+        "sdk.ConnectionInterrupted",
+        "sdk.Timeout",
+        "sdk.IoError",
+    ]

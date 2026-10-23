@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from dashscope.v2 import AsyncClient, Client
-from dashscope.v2.errors import BadRequestError, NotFoundError
+from dashscope.v2.errors import BadRequestError, NotFoundError, SdkError
 
 BASE_URL = "https://api.test.local/api/v1"
 
@@ -64,8 +64,11 @@ def test_files_upload(tmp_path):
 
 def test_files_upload_validation(tmp_path):
     client = _make_client(lambda r: httpx.Response(200, json={"data": {}}))
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(SdkError) as missing:
         client.files.upload(file_path=str(tmp_path / "nope.jsonl"))
+    assert missing.value.code == "sdk.IoError"
+    assert "nope.jsonl" in missing.value.message
+    assert missing.value.allow_retry is False
 
     bad = tmp_path / "bad.jsonl"
     bad.write_text("not json\n", encoding="utf-8")
@@ -74,6 +77,24 @@ def test_files_upload_validation(tmp_path):
 
     resp = client.files.upload(file_path=str(bad), purpose="inference")
     assert resp is not None
+
+
+def test_files_upload_unreadable_file_is_catalog_io_error(
+    tmp_path,
+    monkeypatch,
+):
+    client = _make_client(lambda r: httpx.Response(200, json={"data": {}}))
+    path = tmp_path / "x.jsonl"
+    path.write_text("{}\n", encoding="utf-8")
+
+    def _deny(*args, **kwargs):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr("builtins.open", _deny)
+    with pytest.raises(SdkError) as ei:
+        client.files.upload(file_path=str(path))
+    assert ei.value.code == "sdk.IoError"
+    assert ei.value.message == "Local I/O failed: denied."
 
 
 def test_files_upload_retry_resends_full_body(tmp_path, monkeypatch):

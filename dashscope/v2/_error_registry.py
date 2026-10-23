@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-__version__ = "1.0.6"
-__commit__ = "56b7208"
+__version__ = "1.0.11"
+__commit__ = "5b2d2e1"
 __snapshot__ = False
 
 
@@ -206,6 +206,56 @@ SDK_INVALID_API_KEY = SdkErrorDef(
     ),
     allow_retry=False,
     vars=[],
+)
+
+SDK_CONNECTION_ERROR = SdkErrorDef(
+    name="sdk.ConnectionError",
+    message="Connection failed: {detail}.",
+    solution=(
+        "Check network connectivity, proxy and firewall "
+        "settings, and confirm the service endpoint is "
+        "reachable. Retry the request; persistent failures "
+        "usually indicate a local network problem."
+    ),
+    allow_retry=True,
+    vars=["detail"],
+)
+
+SDK_CONNECTION_INTERRUPTED = SdkErrorDef(
+    name="sdk.ConnectionInterrupted",
+    message="Interrupted while waiting: {detail}.",
+    solution=(
+        "The thread was interrupted, typically because the "
+        "caller cancelled the operation. Re-issue the request "
+        "from a fresh thread if the cancellation was not "
+        "intentional."
+    ),
+    allow_retry=False,
+    vars=["detail"],
+)
+
+SDK_TIMEOUT = SdkErrorDef(
+    name="sdk.Timeout",
+    message="Operation timed out: {detail}.",
+    solution=(
+        "The server or gateway did not respond within the "
+        "deadline. Check network latency and service status, "
+        "then retry; consider raising the timeout for "
+        "long-running operations."
+    ),
+    allow_retry=True,
+    vars=["detail"],
+)
+
+SDK_IO_ERROR = SdkErrorDef(
+    name="sdk.IoError",
+    message="Local I/O failed: {detail}.",
+    solution=(
+        "Verify the file path exists and is readable, and that "
+        "the process has the required filesystem permissions."
+    ),
+    allow_retry=False,
+    vars=["detail"],
 )
 
 SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED = SdkErrorDef(
@@ -616,6 +666,10 @@ PUBLIC_ERRORS = [
 ]
 SDK_ERRORS = [
     SDK_INVALID_API_KEY,
+    SDK_CONNECTION_ERROR,
+    SDK_CONNECTION_INTERRUPTED,
+    SDK_TIMEOUT,
+    SDK_IO_ERROR,
     SDK_AGENTIC_RL_FUNCTION_REGISTRATION_FAILED,
     SDK_AGENTIC_RL_DATASETS_UPLOAD_FAILED,
     SDK_AGENTIC_RL_DUPLICATE_FUNCTION_NAMES,
