@@ -16,9 +16,9 @@ Python 3.8+ compatible.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Dict, Mapping, Optional, Sequence, Union
 
-from dashscope.agentstudio.types.models import BaseModel
+from dashscope.agentstudio.types.models import BaseModel, ModelConfig
 
 _NOT_GIVEN = object()
 
@@ -31,6 +31,24 @@ def _to_mapping(value: Any) -> Any:
     return value
 
 
+def _resolve_model(
+    model: Optional[Union[str, ModelConfig]],
+) -> Dict[str, Any]:
+    """Wire ``model`` from a ModelConfig or a bare model id; id required."""
+    if model is None:
+        raise ValueError("model is required")
+    if isinstance(model, str):
+        model = ModelConfig(id=model)
+    if not isinstance(model, ModelConfig):
+        raise TypeError(
+            f"model must be a ModelConfig, got {type(model).__name__} "
+            "(use ModelConfig(**raw))",
+        )
+    if not model.id:
+        raise ValueError("model.id is required")
+    return model.to_dict()
+
+
 # ===========================================================================
 # Agents
 # ===========================================================================
@@ -39,9 +57,10 @@ def _to_mapping(value: Any) -> Any:
 class AgentCreateParams(BaseModel):
     """Request body for ``POST /agents``.
 
-    Maps to :meth:`Agents.create`.  The SDK method exposes
-    ``model`` as a plain string and ``system_prompt`` as a keyword arg,
-    but the wire format uses ``model: {"id": "…"}`` and ``system``.
+    Maps to :meth:`Agents.create`.  The SDK method exposes ``model`` as a
+    :class:`ModelConfig` or a bare model id, and ``system_prompt`` as a
+    keyword arg; the wire format uses ``model: {"id": "…", …}`` and
+    ``system``.
     """
 
     _fields = (
@@ -60,7 +79,7 @@ class AgentCreateParams(BaseModel):
         self,
         *,
         name: str,
-        model: str,
+        model: Union[str, ModelConfig],
         description: Optional[str] = None,
         system_prompt: Optional[str] = None,
         tools: Optional[Sequence[Mapping[str, Any]]] = None,
@@ -71,7 +90,7 @@ class AgentCreateParams(BaseModel):
     ) -> None:
         super().__init__(
             name=name,
-            model={"id": model},
+            model=_resolve_model(model),
             description=description,
             system=system_prompt,
             tools=([dict(t) for t in tools] if tools is not None else None),
@@ -109,7 +128,7 @@ class AgentUpdateParams(BaseModel):
         *,
         version: int,
         name: Optional[str] = None,
-        model: Optional[str] = None,
+        model: Optional[Union[str, ModelConfig]] = None,
         description: Optional[str] = None,
         system_prompt: Optional[str] = None,
         tools: Optional[Sequence[Mapping[str, Any]]] = None,
@@ -121,7 +140,7 @@ class AgentUpdateParams(BaseModel):
         super().__init__(
             version=version,
             name=name,
-            model=({"id": model} if model is not None else None),
+            model=(_resolve_model(model) if model is not None else None),
             description=description,
             system=system_prompt,
             tools=([dict(t) for t in tools] if tools is not None else None),

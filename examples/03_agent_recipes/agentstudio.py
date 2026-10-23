@@ -22,7 +22,7 @@ AgentStudio workspace (defaults to trial).
 import os
 
 import dashscope
-from dashscope.agentstudio import user_message
+from dashscope.agentstudio import ModelConfig, user_message
 
 
 def make_client():
@@ -48,10 +48,16 @@ def main() -> None:
     print(f"   environment_id={env.id}")
 
     print("==> creating agent")
+    # model is a ModelConfig (a bare id string is the ModelConfig(id=...)
+    # shorthand); unset params keep the server defaults.
     agent = studio.agents.create(
         name="quickstart-agent",
         system_prompt="You are a friendly demo agent. Reply briefly.",
-        model="qwen3.8-max",
+        model=ModelConfig(
+            id="qwen3.8-max",
+            temperature=0.7,
+            max_tokens=4096,
+        ),
         tools=[
             {
                 "type": "builtin_toolkit",
@@ -60,7 +66,7 @@ def main() -> None:
             },
         ],
     )
-    print(f"   agent_id={agent.id}")
+    print(f"   agent_id={agent.id} model={agent.model_id}")
 
     print("==> creating session")
     session = studio.sessions.create(

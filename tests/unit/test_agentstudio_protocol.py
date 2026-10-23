@@ -448,6 +448,314 @@ def test_agent_update_body_includes_multiagent():
     }
 
 
+# ---------------------------------------------------------------------------
+# Agent model config — one object on create/update
+# ---------------------------------------------------------------------------
+
+
+def test_agent_create_body_model_id_shorthand():
+    """Bare model id == ModelConfig(id=...) shorthand."""
+    from dashscope.agentstudio.types.params import AgentCreateParams
+
+    body = AgentCreateParams(name="a", model="qwen3-max").to_dict()
+    assert body["model"] == {"id": "qwen3-max"}
+
+
+def test_agent_create_body_model_config_object():
+    """The model config is one object carrying id + inference params."""
+    from dashscope.agentstudio.types import ModelConfig
+    from dashscope.agentstudio.types.params import AgentCreateParams
+
+    body = AgentCreateParams(
+        name="a",
+        model=ModelConfig(
+            id="qwen3-max",
+            temperature=0.7,
+            max_tokens=8192,
+            enable_thinking=True,
+            thinking_budget=2048,
+        ),
+    ).to_dict()
+    assert body["model"] == {
+        "id": "qwen3-max",
+        "temperature": 0.7,
+        "max_tokens": 8192,
+        "enable_thinking": True,
+        "thinking_budget": 2048,
+    }
+    # emitted in the documented field order, so recorded bodies stay stable
+    assert list(body["model"]) == [
+        "id",
+        "temperature",
+        "max_tokens",
+        "enable_thinking",
+        "thinking_budget",
+    ]
+
+
+def test_agent_create_body_keeps_falsy_params():
+    """False / 0.0 mean "set to this", not "unset"."""
+    from dashscope.agentstudio.types import ModelConfig
+    from dashscope.agentstudio.types.params import AgentCreateParams
+
+    body = AgentCreateParams(
+        name="a",
+        model=ModelConfig(
+            id="qwen3-max",
+            temperature=0.0,
+            enable_thinking=False,
+        ),
+    ).to_dict()
+    assert body["model"] == {
+        "id": "qwen3-max",
+        "temperature": 0.0,
+        "enable_thinking": False,
+    }
+
+
+def test_agent_create_rejects_a_raw_dict_model():
+    """Request side takes the typed config; the response parser still maps."""
+    from dashscope.agentstudio.types.params import (
+        AgentCreateParams,
+        AgentUpdateParams,
+    )
+
+    for params_cls, kwargs in (
+        (AgentCreateParams, {"name": "a"}),
+        (AgentUpdateParams, {"version": 2}),
+    ):
+        with pytest.raises(TypeError, match=r"ModelConfig\(\*\*raw\)"):
+            params_cls(model={"id": "qwen3-max", "temperature": 0.7}, **kwargs)
+        with pytest.raises(TypeError, match="model must be a ModelConfig"):
+            params_cls(model=42, **kwargs)
+
+
+def test_agent_create_body_omits_unset_model_params():
+    """Only the fields you set are sent; the rest keep server defaults."""
+    from dashscope.agentstudio.types import ModelConfig
+    from dashscope.agentstudio.types.params import AgentCreateParams
+
+    body = AgentCreateParams(
+        name="a",
+        model=ModelConfig(id="qwen3-max", max_tokens=1024),
+    ).to_dict()
+    assert body["model"] == {"id": "qwen3-max", "max_tokens": 1024}
+    for key in ("name", "temperature", "enable_thinking", "thinking_budget"):
+        assert key not in body["model"]
+
+
+def test_model_config_carries_the_whole_surface_no_flat_kwargs():
+    """Guard: inference params live on ModelConfig, never as flat kwargs."""
+    import inspect
+
+    from dashscope.agentstudio.resources.agents import Agents, AsyncAgents
+    from dashscope.agentstudio.types import ModelConfig
+    from dashscope.agentstudio.types.params import (
+        AgentCreateParams,
+        AgentUpdateParams,
+    )
+
+    # "name" is the *agent's* name at this level, not the model's
+    scattered = set(ModelConfig._fields) - {"id", "name"}
+    assert scattered, "ModelConfig has no inference fields to guard"
+
+    for entry in (
+        AgentCreateParams.__init__,
+        AgentUpdateParams.__init__,
+        Agents.create,
+        Agents.update,
+        AsyncAgents.create,
+        AsyncAgents.update,
+    ):
+        kwargs = set(inspect.signature(entry).parameters)
+        assert "model" in kwargs, entry
+        assert kwargs.isdisjoint(scattered), entry
+
+
+def test_agent_create_requires_a_model_with_id():
+    """Missing or id-less configs fail fast."""
+    from dashscope.agentstudio.types import ModelConfig
+    from dashscope.agentstudio.types.params import AgentCreateParams
+
+    with pytest.raises(ValueError, match="model is required"):
+        AgentCreateParams(name="a", model=None)
+    for partial in (ModelConfig(), ModelConfig(temperature=0.5), ""):
+        with pytest.raises(ValueError, match="model.id is required"):
+            AgentCreateParams(name="a", model=partial)
+
+
+def test_agent_update_body_omits_model_when_unset():
+    """Update without model omits the field, so the remote config survives."""
+    from dashscope.agentstudio.types.params import AgentUpdateParams
+
+    body = AgentUpdateParams(version=2, name="a").to_dict()
+    assert "model" not in body
+    # explicit None means the same thing
+    assert "model" not in AgentUpdateParams(version=2, model=None).to_dict()
+
+
+def test_agent_update_replaces_model_config_without_local_merge():
+    """No local merge: the SDK sends exactly the config it was given."""
+    from dashscope.agentstudio.types import ModelConfig
+    from dashscope.agentstudio.types.params import AgentUpdateParams
+
+    body = AgentUpdateParams(
+        version=2,
+        model=ModelConfig(id="qwen3-max"),
+    ).to_dict()
+    assert body["model"] == {"id": "qwen3-max"}
+    for key in (
+        "temperature",
+        "max_tokens",
+        "enable_thinking",
+        "thinking_budget",
+    ):
+        assert key not in body["model"]
+    for key in ("tools", "mcp_servers", "skills", "multiagent", "metadata"):
+        assert key not in body
+
+
+def test_agent_update_partial_config_is_not_silently_dropped():
+    """An explicit model argument must carry an id, even when empty."""
+    from dashscope.agentstudio.types import ModelConfig
+    from dashscope.agentstudio.types.params import AgentUpdateParams
+
+    with pytest.raises(ValueError, match="model.id is required"):
+        AgentUpdateParams(version=2, model=ModelConfig())
+    with pytest.raises(ValueError, match="model.id is required"):
+        AgentUpdateParams(version=2, model=ModelConfig(temperature=0.5))
+
+
+def test_agents_create_sends_model_config():
+    """The resource method forwards the config object into the request."""
+    from dashscope.agentstudio.types import ModelConfig
+
+    client = _client_with_recording_transport()
+    client.agents.create(
+        name="a",
+        model=ModelConfig(
+            id="qwen3-max",
+            temperature=0.7,
+            thinking_budget=2048,
+        ),
+    )
+    call = client.transport.calls[0]
+    assert call["method"] == "POST"
+    assert call["path"] == "/agents"
+    assert call["json"]["model"] == {
+        "id": "qwen3-max",
+        "temperature": 0.7,
+        "thinking_budget": 2048,
+    }
+
+
+def test_agents_update_sends_model_config():
+    from dashscope.agentstudio.types import Agent
+
+    client = _client_with_recording_transport()
+    agent = Agent(id="agent_1", model={"id": "qwen3-max", "max_tokens": 4096})
+    client.agents.update(
+        "agent_1",
+        version=3,
+        model=agent.model.copy_with(temperature=0.5, max_tokens=8192),
+    )
+    body = client.transport.calls[0]["json"]
+    assert body["version"] == 3
+    assert body["model"] == {
+        "id": "qwen3-max",
+        "temperature": 0.5,
+        "max_tokens": 8192,
+    }
+
+
+class _AsyncRecordingTransport:
+    """Async mirror of :class:`_RecordingTransport` for AsyncAgents."""
+
+    def __init__(self):
+        self.calls = []
+
+    async def request(self, method, path, **kwargs):
+        self.calls.append({"method": method, "path": path, **kwargs})
+        from dashscope.agentstudio.transport import APIResponse
+
+        return APIResponse(
+            data={"id": "agent_1", "version": 3, "name": "demo"},
+            request_id="req_1",
+        )
+
+
+def _async_client_with_recording_transport():
+    from dashscope.agentstudio import AsyncClient
+
+    c = AsyncClient(api_key="test-key", base_url="http://test")
+    c.transport = _AsyncRecordingTransport()
+    return c
+
+
+def test_agents_sync_and_async_mirror_each_other():
+    """AsyncAgents must mirror Agents: same kwargs, same docstrings."""
+    import inspect
+
+    from dashscope.agentstudio.resources.agents import Agents, AsyncAgents
+
+    for method in (
+        "create",
+        "retrieve",
+        "update",
+        "archive",
+        "list",
+        "list_versions",
+    ):
+        sync = getattr(Agents, method)
+        asynchronous = getattr(AsyncAgents, method)
+        sync_params = inspect.signature(sync).parameters
+        async_params = inspect.signature(asynchronous).parameters
+        assert list(sync_params) == list(async_params), method
+        for name in sync_params:
+            assert (
+                sync_params[name].default == async_params[name].default
+            ), f"{method}.{name}"
+        assert sync.__doc__ == asynchronous.__doc__, method
+
+
+@pytest.mark.asyncio
+async def test_async_agents_create_sends_model_config():
+    from dashscope.agentstudio.types import ModelConfig
+
+    client = _async_client_with_recording_transport()
+    await client.agents.create(
+        name="a",
+        model=ModelConfig(
+            id="qwen3-max",
+            enable_thinking=True,
+            thinking_budget=4096,
+        ),
+    )
+    call = client.transport.calls[0]
+    assert call["path"] == "/agents"
+    assert call["json"]["model"] == {
+        "id": "qwen3-max",
+        "enable_thinking": True,
+        "thinking_budget": 4096,
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_agents_update_sends_model_config():
+    from dashscope.agentstudio.types import ModelConfig
+
+    client = _async_client_with_recording_transport()
+    await client.agents.update(
+        "agent_1",
+        version=3,
+        model=ModelConfig(id="qwen3-max", temperature=0.3),
+    )
+    assert client.transport.calls[0]["json"]["model"] == {
+        "id": "qwen3-max",
+        "temperature": 0.3,
+    }
+
+
 def test_agent_model_hydrates_multiagent():
     """Agent response hydrates the multiagent dict into typed models."""
     from dashscope.agentstudio.types import (
@@ -663,6 +971,77 @@ def test_delta_frames_and_text_deltas():
     ts = _TypedEventStream.__new__(_TypedEventStream)
     ts._stream = _Fake(_delta_payloads())  # pylint: disable=protected-access
     assert list(ts.text_deltas) == ["事件增量", "流"]
+
+
+# The shape the SDK reads: ``event_start`` announces a preview event (and with it
+# which channel), ``event_delta`` carries one chunk.
+
+
+def _start(eid, channel):
+    return {"type": "event_start", "event": {"id": eid, "type": channel}}
+
+
+def _chunk(eid, text):
+    return {
+        "type": "event_delta",
+        "event_id": eid,
+        "delta": {
+            "type": "content_delta",
+            "index": 0,
+            "content": {"type": "text", "text": text},
+        },
+    }
+
+
+_DELTA_FRAMES = [
+    _start("sevt_m", "message"),
+    _chunk("sevt_m", "你好！"),
+    # A chunk whose event_start was never seen (a reconnect replays only
+    # persisted events) stays on the text side rather than vanishing.
+    _chunk("sevt_unseen", "补发"),
+]
+
+
+def _stream_of(frames):
+    from dashscope.agentstudio.resources.session_events import (
+        _TypedEventStream,
+    )
+
+    return _TypedEventStream.from_raw_events(frames)
+
+
+def test_second_pass_on_one_stream_raises_instead_of_returning_nothing():
+    from dashscope.agentstudio.resources.session_events import (
+        _AioTypedEventStream,
+    )
+
+    ts = _stream_of(_DELTA_FRAMES)
+    assert list(ts.text_deltas) == ["你好！", "补发"]
+    with pytest.raises(RuntimeError, match="single-pass"):
+        list(ts.text_deltas)
+
+    class _FakeAio:
+        def __init__(self, items):
+            self._items = items
+
+        async def __aiter__(self):
+            for item in self._items:
+                yield item
+
+    ast = _AioTypedEventStream.__new__(_AioTypedEventStream)
+    ast._stream = _FakeAio(_DELTA_FRAMES)  # pylint: disable=protected-access
+    assert _run(ast.text_deltas) == ["你好！", "补发"]
+    with pytest.raises(RuntimeError, match="single-pass"):
+        _run(ast.text_deltas)
+
+
+def _run(agen):
+    import asyncio
+
+    async def collect():
+        return [c async for c in agen]
+
+    return asyncio.run(collect())
 
 
 # ---------------------------------------------------------------------------

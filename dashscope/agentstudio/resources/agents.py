@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence, Union
 
 from dashscope.agentstudio.pagination import (
     AsyncCursorPage,
@@ -15,7 +15,7 @@ from dashscope.agentstudio.resources._helpers import (
     _coerce_agent,
     _coerce_agent_version,
 )
-from dashscope.agentstudio.types import Agent, AgentVersion
+from dashscope.agentstudio.types import Agent, AgentVersion, ModelConfig
 from dashscope.agentstudio.types.params import (
     AgentCreateParams,
     AgentListParams,
@@ -36,7 +36,7 @@ class Agents:
         self,
         *,
         name: str,
-        model: str,
+        model: Union[str, ModelConfig],
         description: Optional[str] = None,
         system_prompt: Optional[str] = None,
         tools: Optional[Sequence[Mapping[str, Any]]] = None,
@@ -85,8 +85,8 @@ class Agents:
         *,
         version: int,
         name: Optional[str] = None,
+        model: Optional[Union[str, ModelConfig]] = None,
         description: Optional[str] = None,
-        model: Optional[str] = None,
         system_prompt: Optional[str] = None,
         tools: Optional[Sequence[Mapping[str, Any]]] = None,
         mcp_servers: Optional[Sequence[Mapping[str, Any]]] = None,
@@ -99,12 +99,13 @@ class Agents:
         ``version`` must equal the server's current version;
         the server rejects mismatches with HTTP 409.
         Retrieve the agent first to obtain the current version.
+        ``name`` is required too (``AGENT_005`` without it).
         """
         body = AgentUpdateParams(
             version=version,
             name=name,
-            description=description,
             model=model,
+            description=description,
             system_prompt=system_prompt,
             tools=tools,
             mcp_servers=mcp_servers,
@@ -189,7 +190,7 @@ class AsyncAgents:
         self,
         *,
         name: str,
-        model: str,
+        model: Union[str, ModelConfig],
         description: Optional[str] = None,
         system_prompt: Optional[str] = None,
         tools: Optional[Sequence[Mapping[str, Any]]] = None,
@@ -242,8 +243,8 @@ class AsyncAgents:
         *,
         version: int,
         name: Optional[str] = None,
+        model: Optional[Union[str, ModelConfig]] = None,
         description: Optional[str] = None,
-        model: Optional[str] = None,
         system_prompt: Optional[str] = None,
         tools: Optional[Sequence[Mapping[str, Any]]] = None,
         mcp_servers: Optional[Sequence[Mapping[str, Any]]] = None,
@@ -256,12 +257,13 @@ class AsyncAgents:
         ``version`` must equal the server's current version;
         the server rejects mismatches with HTTP 409.
         Retrieve the agent first to obtain the current version.
+        ``name`` is required too (``AGENT_005`` without it).
         """
         body = AgentUpdateParams(
             version=version,
             name=name,
-            description=description,
             model=model,
+            description=description,
             system_prompt=system_prompt,
             tools=tools,
             mcp_servers=mcp_servers,

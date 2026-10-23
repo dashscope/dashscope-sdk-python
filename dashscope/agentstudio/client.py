@@ -100,10 +100,18 @@ class Client:
 
     Usage::
 
-        from dashscope.agentstudio import Client
+        from dashscope.agentstudio import Client, ModelConfig
 
         client = Client(api_key="sk-xxx", workspace="my-ws")
-        agent = client.agents.create(name="demo", model="qwen-max")
+        agent = client.agents.create(
+            name="demo",
+            model=ModelConfig(
+                id="qwen-max",
+                temperature=0.7,
+                enable_thinking=True,
+                thinking_budget=2048,
+            ),
+        )
         session = client.sessions.create(agent=agent.id)
         with client.sessions.events.stream(session.id) as stream:
             for event in stream:
@@ -173,11 +181,12 @@ class AsyncClient:
 
     Usage::
 
-        from dashscope.agentstudio import AsyncClient
+        from dashscope.agentstudio import AsyncClient, ModelConfig
 
         client = AsyncClient(api_key="sk-xxx", workspace="my-ws")
         agent = await client.agents.create(
-            name="demo", model="qwen-max",
+            name="demo",
+            model=ModelConfig(id="qwen-max", max_tokens=4096),
         )
         session = await client.sessions.create(agent=agent.id)
         async with client.sessions.events.stream(session.id) as stream:
