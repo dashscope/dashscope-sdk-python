@@ -5,18 +5,18 @@
 The ``x-dashscope-sdk-session-id`` header lets server-side access logs
 group every request one SDK session makes. A process can emit requests
 through both stacks at once -- the 1.x API classes and the 2.0 transport
--- and the 2.0 client even delegates some calls (rl, agentstudio)
-straight into 1.x. If each stack minted its own id, one logical session
-would split across several ids and the grouping breaks.
+-- and the sub-SDKs owned by 2.0 (AgentStudio, agentic RL) build their
+request headers from ``_shared._sdk_ident`` rather than from the v2
+transport. If each stack minted its own id, one logical session would
+split across several ids and the grouping breaks.
 
 This leaf module is the one source of truth both import. It depends only
 on the stdlib so it can be pulled in from anywhere without dragging
 ``dashscope/__init__`` (and its v2 surface) into a cycle.
 
 The embedded ``acli`` deliberately keeps its own id: it is a one-way
-sync copy of the agenticCLI repo (design doc §3.2), so wiring it to this
-module would be silently reverted by the next sync and cannot be
-upstreamed as written.
+sync copy of the agenticCLI repo, so wiring it to this module would be
+silently reverted by the next sync and cannot be upstreamed as written.
 """
 
 from __future__ import annotations

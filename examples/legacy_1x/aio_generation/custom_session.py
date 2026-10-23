@@ -10,7 +10,7 @@ import ssl
 import aiohttp
 import certifi
 
-from dashscope.aigc.generation import AioGeneration
+from dashscope.legacy_1x.aigc.generation import AioGeneration
 
 # Authentication: set your Model Studio API key via the
 # DASHSCOPE_API_KEY environment variable (recommended), or pass

@@ -5,9 +5,17 @@ import json
 from http import HTTPStatus
 
 from dashscope import Generation
-from dashscope.aigc.conversation import Conversation, History, HistoryItem
-from dashscope.api_entities.dashscope_response import Choice, Message, Role
-from dashscope.common.message_manager import MessageManager
+from dashscope.legacy_1x.aigc.conversation import (
+    Conversation,
+    History,
+    HistoryItem,
+)
+from dashscope.legacy_1x.api_entities.dashscope_response import (
+    Choice,
+    Message,
+    Role,
+)
+from dashscope.legacy_1x.common.message_manager import MessageManager
 from tests.unit.mock_request_base import MockServerBase
 from tests.unit.mock_server import MockServer
 

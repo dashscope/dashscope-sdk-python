@@ -78,19 +78,22 @@ def test_accessing_threads_emits_deprecation_warning():
 
 
 def test_direct_assistants_import_emits_deprecation_warning():
-    result = _run("import dashscope.assistants", error_on_deprecation=True)
+    result = _run(
+        "import dashscope.legacy_1x.assistants",
+        error_on_deprecation=True,
+    )
     assert result.returncode != 0
     assert "DeprecationWarning" in result.stderr
 
 
 def test_lazy_names_resolve_to_real_objects():
     import dashscope
-    from dashscope.assistants import Assistant, Assistants
-    from dashscope.assistants.assistant_types import (
+    from dashscope.legacy_1x.assistants import Assistant, Assistants
+    from dashscope.legacy_1x.assistants.assistant_types import (
         AssistantFile,
         DeleteResponse,
     )
-    from dashscope.threads import RunStepList, Threads
+    from dashscope.legacy_1x.threads import RunStepList, Threads
 
     assert dashscope.Assistants is Assistants
     assert dashscope.Assistant is Assistant

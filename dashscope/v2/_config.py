@@ -528,7 +528,7 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
 def _api_key_from_file() -> Optional[str]:
     """Lowest api_key tier: the 1.x key file.
 
-    Same order as ``dashscope.common.api_key.get_default_api_key`` --
+    Same order as ``dashscope.legacy_1x.common.api_key.get_default_api_key`` --
     ``DASHSCOPE_API_KEY_FILE_PATH`` first, then the default
     ``~/.dashscope/api_key`` written by ``save_api_key``. A missing or
     unreadable file resolves to None rather than raising, since this is
@@ -543,7 +543,8 @@ def _api_key_from_file() -> Optional[str]:
 
 
 def save_api_key(
-    api_key: str, api_key_file_path: Optional[str] = None
+    api_key: str,
+    api_key_file_path: Optional[str] = None,
 ) -> None:
     """Store an api key in the key file ``_api_key_from_file`` reads back.
 

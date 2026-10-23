@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """Minimal OPD contract tests."""
-# pylint: disable=redefined-outer-name  # pytest fixture 标准用法
+# pylint: disable=redefined-outer-name  # standard pytest fixture usage
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from dashscope.client.base_api import CreateMixin
 from dashscope.finetune.agentic_rl import AgenticRL
 from dashscope.finetune.reinforcement import (
     DataSourceType,
@@ -21,7 +20,9 @@ from dashscope.finetune.reinforcement.common.errors import ValueErrorWithCode
 
 @pytest.fixture
 def rl_client():
-    with patch("dashscope.finetune.agentic_rl.set_api_key"):
+    # ``set_api_key`` is looked up in the module that defines __init__,
+    # which is the 2.0 one; patching the 1.x shim's copy would miss.
+    with patch("dashscope.v2.finetune.agentic_rl.set_api_key"):
         return AgenticRL(api_key="test-key")
 
 
@@ -69,9 +70,8 @@ def test_teacher_model_enables_opd(
     has_rollout,
     reward_count,
 ):
-    with patch.object(
-        CreateMixin,
-        "call",
+    with patch(
+        "dashscope.v2.finetune._submit.post_submit",
         return_value=_success_response(),
     ) as call:
         rl_client.submit_job(
@@ -96,9 +96,8 @@ def test_teacher_model_can_come_from_yaml(rl_client, tmp_path):
     )
     rl_client.init(config_path=str(config))
 
-    with patch.object(
-        CreateMixin,
-        "call",
+    with patch(
+        "dashscope.v2.finetune._submit.post_submit",
         return_value=_success_response(),
     ) as call:
         rl_client.submit_job(datasets=[_training_dataset()])
@@ -111,15 +110,14 @@ def test_teacher_model_can_come_from_yaml(rl_client, tmp_path):
 def test_opd_example_reuses_supported_rl_configuration(rl_client):
     config = (
         Path(__file__).parents[2]
-        / "dashscope/finetune/reinforcement/examples/workspace"
+        / "dashscope/v2/finetune/reinforcement/examples/workspace"
         / "opd-job.yaml"
     )
     config_text = config.read_text(encoding="utf-8")
     rl_client.init(config_path=str(config))
 
-    with patch.object(
-        CreateMixin,
-        "call",
+    with patch(
+        "dashscope.v2.finetune._submit.post_submit",
         return_value=_success_response(),
     ) as call:
         rl_client.submit_job()
@@ -160,7 +158,7 @@ def test_opd_example_reuses_supported_rl_configuration(rl_client):
 async def test_opd_example_uploads_local_datasets(rl_client):
     config = (
         Path(__file__).parents[2]
-        / "dashscope/finetune/reinforcement/examples/workspace"
+        / "dashscope/v2/finetune/reinforcement/examples/workspace"
         / "opd-job.yaml"
     )
     rl_client.init(config_path=str(config))
@@ -182,7 +180,7 @@ async def test_opd_example_uploads_local_datasets(rl_client):
 def test_regular_rl_example_keeps_resources_and_rl_hyperparameters(rl_client):
     config = (
         Path(__file__).parents[2]
-        / "dashscope/finetune/reinforcement/examples/workspace"
+        / "dashscope/v2/finetune/reinforcement/examples/workspace"
         / "rl-job.yaml"
     )
     rl_client.init(config_path=str(config))
@@ -212,9 +210,8 @@ def test_pg_opd_requires_teacher_model(rl_client):
 
 
 def test_regular_reinforcement_is_unchanged(rl_client):
-    with patch.object(
-        CreateMixin,
-        "call",
+    with patch(
+        "dashscope.v2.finetune._submit.post_submit",
         return_value=_success_response(),
     ) as call:
         rl_client.submit_job(datasets=[_training_dataset()])

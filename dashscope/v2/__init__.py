@@ -11,15 +11,8 @@ from dashscope.v2._config import Config, Settings, save_api_key, settings
 from dashscope.v2._quickstart import chat
 from dashscope.v2.client import AsyncClient, Client
 from dashscope.v2.errors import DashScopeError, ErrorCode
+from dashscope.v2.tokenizers import get_tokenizer, list_tokenizers
 from dashscope.v2.transport.ws_connection import WsConnection, WsTask
-
-# Offline helper still delegated to the 1.x implementation, re-exported so
-# the 2.0 namespace is self-contained (same objects the package root
-# already exposes): the local tiktoken wrapper.
-from dashscope.tokenizers import (  # noqa: E402
-    get_tokenizer,
-    list_tokenizers,
-)
 
 __all__ = [
     "AsyncClient",

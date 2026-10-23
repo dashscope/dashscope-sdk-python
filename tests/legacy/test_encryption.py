@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from dashscope.api_entities.encryption import Encryption
+from dashscope.legacy_1x.api_entities.encryption import Encryption
 
 
 class TestEncryption:

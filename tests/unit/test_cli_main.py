@@ -13,12 +13,12 @@ import pytest
 from typer.testing import CliRunner
 
 import dashscope
-from dashscope.cli import agentic_rl
-from dashscope.cli import (
+from dashscope.legacy_1x.cli import agentic_rl
+from dashscope.legacy_1x.cli import (
     app as cli_app,
     main as cli_main,
 )
-from dashscope.common.error import AuthenticationError
+from dashscope.legacy_1x.common.error import AuthenticationError
 
 
 def strip_ansi_codes(text):
@@ -53,7 +53,7 @@ class TestCliMain:
             raise AuthenticationError("No api key provided.")
 
         monkeypatch.setattr(
-            "dashscope.cli.models.dashscope.Models.list",
+            "dashscope.legacy_1x.cli.models.dashscope.Models.list",
             mock_list,
         )
         monkeypatch.setattr(sys, "argv", ["dashscope", "models", "list"])
@@ -77,7 +77,7 @@ class TestCliMain:
 
     def test_python_module_help_suppresses_urllib3_warning(self):
         result = subprocess.run(
-            [sys.executable, "-m", "dashscope.cli", "--help"],
+            [sys.executable, "-m", "dashscope.legacy_1x.cli", "--help"],
             check=False,
             capture_output=True,
             text=True,
@@ -204,7 +204,7 @@ class TestCliMain:
             return SimpleNamespace(status_code=200, output={"models": []})
 
         monkeypatch.setattr(
-            "dashscope.cli.models.dashscope.Models.list",
+            "dashscope.legacy_1x.cli.models.dashscope.Models.list",
             mock_list,
         )
         monkeypatch.setattr(dashscope, "api_key", None)
@@ -236,7 +236,7 @@ class TestCliMain:
             return SimpleNamespace(status_code=200, output={"models": []})
 
         monkeypatch.setattr(
-            "dashscope.cli.models.dashscope.Models.list",
+            "dashscope.legacy_1x.cli.models.dashscope.Models.list",
             mock_list,
         )
         monkeypatch.setattr(dashscope, "api_key", None)
@@ -267,22 +267,25 @@ class TestCliMain:
         monkeypatch,
         capsys,
     ):
-        # The rl import is deferred, so importing dashscope.cli must not tell
+        # The rl import is deferred, so importing dashscope.legacy_1x.cli must not tell
         # the user about a dependency they may never ask for.
-        monkeypatch.setattr(dashscope.cli, "_RL_IMPORT_ERROR", None)
+        monkeypatch.setattr(dashscope.legacy_1x.cli, "_RL_IMPORT_ERROR", None)
         monkeypatch.setitem(
             sys.modules,
-            "dashscope.cli.agentic_rl",
+            "dashscope.legacy_1x.cli.agentic_rl",
             _ImportErrorOnApp(
                 "Agentic RL fine-tuning dependencies are missing from this "
                 "install. Reinstall with: pip install -U dashscope",
             ),
         )
 
-        dashscope.cli._register_rl_app()
+        dashscope.legacy_1x.cli._register_rl_app()
 
         assert capsys.readouterr().err == ""
-        assert isinstance(dashscope.cli._RL_IMPORT_ERROR, ImportError)
+        assert isinstance(
+            dashscope.legacy_1x.cli._RL_IMPORT_ERROR,
+            ImportError,
+        )
 
     def test_rl_command_prints_the_install_command_verbatim(
         self,
@@ -292,7 +295,7 @@ class TestCliMain:
         # The error already carries its own remedy, so the fallback hint in
         # _rl_unavailable_detail must not be appended a second time.
         monkeypatch.setattr(
-            dashscope.cli,
+            dashscope.legacy_1x.cli,
             "_RL_IMPORT_ERROR",
             ImportError(
                 "Agentic RL fine-tuning dependencies are missing from this "
@@ -315,7 +318,7 @@ class TestCliMain:
         capsys,
     ):
         monkeypatch.setattr(
-            dashscope.cli,
+            dashscope.legacy_1x.cli,
             "_RL_IMPORT_ERROR",
             ImportError("No module named 'typer_x'"),
         )
@@ -334,13 +337,13 @@ class TestCliMain:
         capsys,
     ):
         monkeypatch.setattr(
-            dashscope.cli,
+            dashscope.legacy_1x.cli,
             "_RL_IMPORT_ERROR",
             ImportError("Reinstall with: pip install -U dashscope"),
         )
         monkeypatch.setattr(sys, "argv", ["dashscope"])
         monkeypatch.setattr(
-            dashscope.cli,
+            dashscope.legacy_1x.cli,
             "_route_to_expert",
             lambda *args, **kwargs: None,
         )
@@ -363,10 +366,13 @@ class TestCliMain:
             return "oss://uploaded", None
 
         monkeypatch.setattr(
-            "dashscope.cli.oss.os.path.exists",
+            "dashscope.legacy_1x.cli.oss.os.path.exists",
             lambda path: True,
         )
-        monkeypatch.setattr("dashscope.cli.oss.OssUtils.upload", mock_upload)
+        monkeypatch.setattr(
+            "dashscope.legacy_1x.cli.oss.OssUtils.upload",
+            mock_upload,
+        )
         monkeypatch.setattr(dashscope, "api_key", "global-key")
         monkeypatch.setattr(
             sys,
@@ -471,7 +477,7 @@ class TestCliMain:
             )
 
         monkeypatch.setattr(
-            "dashscope.cli.generation.Generation.call",
+            "dashscope.legacy_1x.cli.generation.Generation.call",
             mock_call,
         )
         monkeypatch.setattr(
@@ -530,15 +536,15 @@ class TestCliMain:
             return result
 
         monkeypatch.setattr(
-            "dashscope.cli.files.dashscope.Files.list",
+            "dashscope.legacy_1x.cli.files.dashscope.Files.list",
             mock_files_list,
         )
         monkeypatch.setattr(
-            "dashscope.cli.fine_tunes.dashscope.FineTunes.list",
+            "dashscope.legacy_1x.cli.fine_tunes.dashscope.FineTunes.list",
             mock_fine_tunes_list,
         )
         monkeypatch.setattr(
-            "dashscope.cli.deployments.dashscope.Deployments.list",
+            "dashscope.legacy_1x.cli.deployments.dashscope.Deployments.list",
             mock_deployments_list,
         )
 
@@ -571,7 +577,7 @@ class TestCliMain:
             return SimpleNamespace(status_code=200, output={})
 
         monkeypatch.setattr(
-            "dashscope.cli.files.dashscope.Files.list",
+            "dashscope.legacy_1x.cli.files.dashscope.Files.list",
             mock_files_list,
         )
         monkeypatch.setattr(
@@ -592,7 +598,7 @@ class TestCliMain:
         capsys,
     ):
         monkeypatch.setattr(
-            "dashscope.cli.files.os.path.exists",
+            "dashscope.legacy_1x.cli.files.os.path.exists",
             lambda path: False,
         )
         monkeypatch.setattr(
@@ -620,11 +626,11 @@ class TestCliMain:
             raise RuntimeError("upload failed")
 
         monkeypatch.setattr(
-            "dashscope.cli.files.os.path.exists",
+            "dashscope.legacy_1x.cli.files.os.path.exists",
             lambda path: True,
         )
         monkeypatch.setattr(
-            "dashscope.cli.files.dashscope.Files.upload",
+            "dashscope.legacy_1x.cli.files.dashscope.Files.upload",
             mock_upload,
         )
         monkeypatch.setattr(
@@ -699,7 +705,7 @@ class TestCliMain:
             return FailingStream()
 
         monkeypatch.setattr(
-            "dashscope.cli.generation.Generation.call",
+            "dashscope.legacy_1x.cli.generation.Generation.call",
             mock_call,
         )
 
@@ -728,7 +734,7 @@ class TestCliMain:
             raise RuntimeError("models failed")
 
         monkeypatch.setattr(
-            "dashscope.cli.models.dashscope.Models.list",
+            "dashscope.legacy_1x.cli.models.dashscope.Models.list",
             mock_list,
         )
 
@@ -746,7 +752,7 @@ class TestCliMain:
             raise RuntimeError("deployment failed")
 
         monkeypatch.setattr(
-            "dashscope.cli.deployments.dashscope.Deployments.call",
+            "dashscope.legacy_1x.cli.deployments.dashscope.Deployments.call",
             mock_call,
         )
 
@@ -773,11 +779,11 @@ class TestCliMain:
             raise RuntimeError("network down")
 
         monkeypatch.setattr(
-            "dashscope.cli.deployments.dashscope.Deployments.call",
+            "dashscope.legacy_1x.cli.deployments.dashscope.Deployments.call",
             mock_call,
         )
         monkeypatch.setattr(
-            "dashscope.cli.deployments.dashscope.Deployments.get",
+            "dashscope.legacy_1x.cli.deployments.dashscope.Deployments.get",
             mock_get,
         )
 
@@ -799,7 +805,7 @@ class TestCliMain:
             return SimpleNamespace(status_code=200, output={"text": "ok"})
 
         monkeypatch.setattr(
-            "dashscope.cli.application.dashscope.Application.call",
+            "dashscope.legacy_1x.cli.application.dashscope.Application.call",
             mock_call,
         )
 
@@ -817,7 +823,7 @@ class TestCliMain:
             return SimpleNamespace(status_code=200, output={"text": "ok"})
 
         monkeypatch.setattr(
-            "dashscope.cli.generation.Generation.call",
+            "dashscope.legacy_1x.cli.generation.Generation.call",
             mock_call,
         )
 
@@ -840,7 +846,7 @@ class TestCliMain:
             )
 
         monkeypatch.setattr(
-            "dashscope.cli.generation.Generation.call",
+            "dashscope.legacy_1x.cli.generation.Generation.call",
             mock_call,
         )
 
@@ -869,7 +875,7 @@ class TestCliMain:
             raise RuntimeError("image failed")
 
         monkeypatch.setattr(
-            "dashscope.cli.image_generation.ImageGeneration.call",
+            "dashscope.legacy_1x.cli.image_generation.ImageGeneration.call",
             mock_call,
         )
 
@@ -897,7 +903,7 @@ class TestCliMain:
             return SimpleNamespace(status_code=200, output={"text": "ok"})
 
         monkeypatch.setattr(
-            "dashscope.cli.multimodal_conversation.dashscope."
+            "dashscope.legacy_1x.cli.multimodal_conversation.dashscope."
             "MultiModalConversation.call",
             mock_call,
         )
@@ -926,7 +932,7 @@ class TestCliMain:
             return SimpleNamespace(status_code=200, output={"embeddings": []})
 
         monkeypatch.setattr(
-            "dashscope.cli.multimodal_embedding.dashscope."
+            "dashscope.legacy_1x.cli.multimodal_embedding.dashscope."
             "MultiModalEmbedding.call",
             mock_call,
         )
@@ -955,7 +961,7 @@ class TestCliMain:
             raise RuntimeError("embedding failed")
 
         monkeypatch.setattr(
-            "dashscope.cli.multimodal_embedding.dashscope."
+            "dashscope.legacy_1x.cli.multimodal_embedding.dashscope."
             "MultiModalEmbedding.call",
             mock_call,
         )

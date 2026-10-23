@@ -1,29 +1,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
+"""Backward-compat shim; the implementation moved to ``dashscope.legacy_1x.threads``.
 
-# yapf: disable
+Import from ``dashscope.legacy_1x.threads`` (or the public ``dashscope``
+root re-exports) in new code.
+"""
 
-from dashscope.threads.messages.messages import Messages
-from dashscope.threads.runs.runs import Runs
-from dashscope.threads.runs.steps import Steps
-from dashscope.threads.thread_types import (
-    MessageFile, Run, RunList, RunStep,
-    RunStepList, Thread, ThreadMessage,
-    ThreadMessageList,
-)
-from dashscope.threads.threads import Threads
+from dashscope.legacy_1x._shim import install as _install
 
-__all__ = [
-    'MessageFile',
-    'Messages',
-    'Run',
-    'Runs',
-    'RunList',
-    'Steps',
-    'RunStep',
-    'RunStepList',
-    'Threads',
-    'Thread',
-    'ThreadMessage',
-    'ThreadMessageList',
-]
+_install(__name__, "dashscope.legacy_1x.threads")

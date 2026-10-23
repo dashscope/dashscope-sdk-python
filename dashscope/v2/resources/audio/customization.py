@@ -5,7 +5,7 @@
 V2 form of 1.x ``VocabularyService`` (asr hot-word tables,
 ``audio/asr/vocabulary.py``) and ``VoiceEnrollmentService`` (voice
 cloning, ``audio/tts_v2/enrollment.py``), plus the qwen voice-design
-family (声音设计, no 1.x SDK class — modeled from the official REST API).
+family (no 1.x SDK class — modeled from the official REST API).
 All three ride the same envelope: ``POST /services/audio/{asr|tts}/
 customization`` with ``{model, input: {action, ...}, parameters?}``;
 only the action words and id fields differ per family. 1.x retried
@@ -293,7 +293,7 @@ class Vocabularies(_CustomizationBase):
 
 
 class Voices(_CustomizationBase):
-    """``client.audio.voices`` -- voice cloning (声音复刻)."""
+    """``client.audio.voices`` -- voice cloning."""
 
     PATH = "/services/audio/tts/customization"
     DEFAULT_MODEL = "voice-enrollment"
@@ -453,7 +453,7 @@ class Voices(_CustomizationBase):
 
 
 class VoiceDesign(_CustomizationBase):
-    """``client.audio.voice_design`` -- qwen voice design (声音设计).
+    """``client.audio.voice_design`` -- qwen voice design.
 
     No 1.x SDK class; modeled from the official REST API, which shares
     the voices endpoint with shorter action words and a ``voice`` id

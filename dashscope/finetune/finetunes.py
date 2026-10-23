@@ -5,7 +5,7 @@ import time
 from http import HTTPStatus
 from typing import Iterator, Optional, Union
 
-from dashscope.client.base_api import (
+from dashscope.legacy_1x.client.base_api import (
     CancelMixin,
     CreateMixin,
     DeleteMixin,
@@ -14,7 +14,7 @@ from dashscope.client.base_api import (
     LogMixin,
     StreamEventMixin,
 )
-from dashscope.common.constants import TaskStatus
+from dashscope.legacy_1x.common.constants import TaskStatus
 from dashscope.finetune.customize_types import (
     FineTune,
     FineTuneCancel,

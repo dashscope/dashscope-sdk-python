@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 import dashscope
-from dashscope import cli
+from dashscope.legacy_1x import cli
 
 
 @pytest.fixture()

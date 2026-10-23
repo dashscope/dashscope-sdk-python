@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import pytest
 
 import dashscope
-from dashscope.audio.asr import AsrPhraseManager
+from dashscope.legacy_1x.audio.asr import AsrPhraseManager
 from tests.unit.constants import TEST_JOB_ID
 from tests.unit.mock_request_base import MockRequestBase
 
@@ -115,10 +115,15 @@ def complete_url(url: str) -> None:
     parsed = urlparse(url)
     base_url = "".join([parsed.scheme, "://", parsed.netloc])
     dashscope.base_websocket_api_url = "/".join(
-        [base_url, "api-ws", dashscope.common.env.api_version, "inference"],
+        [
+            base_url,
+            "api-ws",
+            dashscope.legacy_1x.common.env.api_version,
+            "inference",
+        ],
     )
     dashscope.base_http_api_url = "/".join(
-        [base_url, "api", dashscope.common.env.api_version],
+        [base_url, "api", dashscope.legacy_1x.common.env.api_version],
     )
     print("Set base_websocket_api_url: ", dashscope.base_websocket_api_url)
     print("Set base_http_api_url: ", dashscope.base_http_api_url)

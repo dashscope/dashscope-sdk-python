@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
-from dashscope.cli import transcription
+from dashscope.legacy_1x.cli import transcription
 
 
 class TestCliTranscription:

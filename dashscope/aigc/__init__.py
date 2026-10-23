@@ -1,24 +1,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-from .conversation import Conversation, History, HistoryItem
-from .generation import Generation, AioGeneration
-from .image_synthesis import ImageSynthesis, AioImageSynthesis
-from .multimodal_conversation import (
-    MultiModalConversation,
-    AioMultiModalConversation,
-)
-from .video_synthesis import VideoSynthesis, AioVideoSynthesis
+"""Backward-compat shim; the implementation moved to ``dashscope.legacy_1x.aigc``.
 
-__all__ = [
-    "Generation",
-    "AioGeneration",
-    "Conversation",
-    "HistoryItem",
-    "History",
-    "ImageSynthesis",
-    "AioImageSynthesis",
-    "MultiModalConversation",
-    "AioMultiModalConversation",
-    "VideoSynthesis",
-    "AioVideoSynthesis",
-]
+Import from ``dashscope.legacy_1x.aigc`` (or the public ``dashscope``
+root re-exports) in new code.
+"""
+
+from dashscope.legacy_1x._shim import install as _install
+
+_install(__name__, "dashscope.legacy_1x.aigc")

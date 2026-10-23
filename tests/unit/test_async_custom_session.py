@@ -2,16 +2,16 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 """
-异步 HTTP 自定义 Session 功能单元测试
+Unit tests for async HTTP custom session support.
 
-测试范围：
-1. HttpRequest 接受自定义 aiohttp.ClientSession 参数
-2. 自定义 aio_session 的使用和资源管理
-3. 临时 aio_session 的创建和清理
-4. Session 优先级逻辑
-5. 不同场景下的异步 Session 行为
+Scope:
+1. HttpRequest accepts a custom aiohttp.ClientSession parameter
+2. Usage and resource management of a custom aio_session
+3. Creation and cleanup of temporary aio_session instances
+4. Session priority logic
+5. Async session behavior across different scenarios
 
-注意：所有测试都不依赖真实的 API Key
+Note: none of the tests rely on a real API key.
 """
 
 # pylint: disable=protected-access,unused-argument,unused-variable
@@ -24,17 +24,17 @@ import aiohttp
 import certifi
 import pytest
 
-from dashscope.api_entities.http_request import HttpRequest
-from dashscope.api_entities.api_request_data import ApiRequestData
-from dashscope.common.constants import ApiProtocol, HTTPMethod
+from dashscope.legacy_1x.api_entities.http_request import HttpRequest
+from dashscope.legacy_1x.api_entities.api_request_data import ApiRequestData
+from dashscope.legacy_1x.common.constants import ApiProtocol, HTTPMethod
 
 
 class TestAsyncSessionBasics:
-    """测试异步 Session 基本功能"""
+    """Basic tests for async sessions"""
 
     @pytest.mark.asyncio
     async def test_http_request_accepts_aio_session_parameter(self):
-        """测试 HttpRequest 接受 aio_session 参数"""
+        """Test that HttpRequest accepts the aio_session parameter"""
         connector = aiohttp.TCPConnector()
         custom_session = aiohttp.ClientSession(connector=connector)
 
@@ -53,7 +53,7 @@ class TestAsyncSessionBasics:
 
     @pytest.mark.asyncio
     async def test_http_request_without_aio_session_parameter(self):
-        """测试 HttpRequest 不传 aio_session 参数"""
+        """Test HttpRequest without the aio_session parameter"""
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -64,8 +64,8 @@ class TestAsyncSessionBasics:
 
     @pytest.mark.asyncio
     async def test_aio_session_parameter_is_optional(self):
-        """测试 aio_session 参数是可选的"""
-        # 不传 aio_session 参数应该正常工作
+        """Test that the aio_session parameter is optional"""
+        # Works without the aio_session parameter
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -78,12 +78,12 @@ class TestAsyncSessionBasics:
 
 
 class TestAsyncSessionUsage:
-    """测试异步 Session 的实际使用"""
+    """Tests for actual async session usage"""
 
     @pytest.mark.asyncio
     async def test_custom_aio_session_is_used_for_request(self):
-        """测试自定义 aio_session 被实际用于请求"""
-        # 创建 mock session
+        """Test that the custom aio_session is actually used for the request"""
+        # Create a mock session
         mock_session = AsyncMock(spec=aiohttp.ClientSession)
         mock_response = AsyncMock()
         mock_response.status = 200
@@ -97,7 +97,7 @@ class TestAsyncSessionUsage:
 
         mock_session.request = mock_request
 
-        # 创建 HttpRequest 并传入自定义 session
+        # Create an HttpRequest with the custom session
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -106,7 +106,7 @@ class TestAsyncSessionUsage:
             session=mock_session,
         )
 
-        # 添加请求数据
+        # Add request data
         request_data = ApiRequestData(
             model="test-model",
             task_group="test",
@@ -119,7 +119,7 @@ class TestAsyncSessionUsage:
         )
         http_request.data = request_data
 
-        # 执行请求
+        # Execute the request
         async def mock_handle_response(_response):
             yield mock_response
 
@@ -130,15 +130,16 @@ class TestAsyncSessionUsage:
         ):
             _ = await http_request.aio_call()
 
-        # 验证自定义 session 没有被关闭
+        # Verify the custom session was not closed
         mock_session.close.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_shared_aio_session_is_used_when_no_custom_session(
         self,
     ):
-        """测试没有自定义 aio_session 时使用共享 session（不被关闭）"""
-        # 创建 mock shared session
+        """Test that the shared session is used (and not closed) when no
+        custom aio_session is given"""
+        # Create a mock shared session
         mock_session = AsyncMock()
         mock_response = AsyncMock()
         mock_response.status = 200
@@ -147,7 +148,7 @@ class TestAsyncSessionUsage:
         mock_response.__aexit__ = AsyncMock(return_value=None)
         mock_session.request.return_value = mock_response
 
-        # 创建 HttpRequest 不传 aio_session
+        # Create an HttpRequest without aio_session
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -155,7 +156,7 @@ class TestAsyncSessionUsage:
             stream=False,
         )
 
-        # 添加请求数据
+        # Add request data
         request_data = ApiRequestData(
             model="test-model",
             task_group="test",
@@ -168,12 +169,12 @@ class TestAsyncSessionUsage:
         )
         http_request.data = request_data
 
-        # 执行请求
+        # Execute the request
         async def mock_handle_response(_response):
             yield mock_response
 
         with patch(
-            "dashscope.api_entities.http_request.get_shared_aio_session",
+            "dashscope.legacy_1x.api_entities.http_request.get_shared_aio_session",
             return_value=mock_session,
         ):
             with patch.object(
@@ -183,16 +184,17 @@ class TestAsyncSessionUsage:
             ):
                 _ = await http_request.aio_call()
 
-        # 共享 session 不应被关闭（由 aio_session 模块管理生命周期）
+        # The shared session must not be closed (lifecycle is managed
+        # by the aio_session module)
         mock_session.close.assert_not_called()
 
 
 class TestAsyncSessionResourceManagement:
-    """测试异步 Session 资源管理"""
+    """Tests for async session resource management"""
 
     @pytest.mark.asyncio
     async def test_custom_aio_session_not_closed_by_http_request(self):
-        """测试自定义 aio_session 不会被 HttpRequest 关闭"""
+        """Test that HttpRequest does not close the custom aio_session"""
         custom_session = AsyncMock(spec=aiohttp.ClientSession)
         mock_response = AsyncMock()
         mock_response.status = 200
@@ -236,12 +238,13 @@ class TestAsyncSessionResourceManagement:
         ):
             _ = await http_request.aio_call()
 
-        # 验证自定义 aio_session 没有被关闭
+        # Verify the custom aio_session was not closed
         custom_session.close.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_shared_aio_session_not_closed_on_success(self):
-        """测试共享 aio_session 在成功后不被关闭（由模块管理生命周期）"""
+        """Test that the shared aio_session is not closed on success
+        (lifecycle managed by the module)"""
         mock_session = AsyncMock()
         mock_response = AsyncMock()
         mock_response.status = 200
@@ -273,7 +276,7 @@ class TestAsyncSessionResourceManagement:
             yield mock_response
 
         with patch(
-            "dashscope.api_entities.http_request.get_shared_aio_session",
+            "dashscope.legacy_1x.api_entities.http_request.get_shared_aio_session",
             return_value=mock_session,
         ):
             with patch.object(
@@ -283,12 +286,12 @@ class TestAsyncSessionResourceManagement:
             ):
                 _ = await http_request.aio_call()
 
-        # 共享 session 不应被关闭
+        # The shared session must not be closed
         mock_session.close.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_shared_aio_session_not_closed_on_exception(self):
-        """测试共享 aio_session 在异常时也不被关闭"""
+        """Test that the shared aio_session is not closed on exceptions either"""
         mock_session = AsyncMock()
 
         # Make request() raise an exception
@@ -316,24 +319,24 @@ class TestAsyncSessionResourceManagement:
         )
         http_request.data = request_data
 
-        # 执行请求应该抛出异常
+        # Executing the request should raise
         with patch(
-            "dashscope.api_entities.http_request.get_shared_aio_session",
+            "dashscope.legacy_1x.api_entities.http_request.get_shared_aio_session",
             return_value=mock_session,
         ):
             with pytest.raises(Exception, match="Network error"):
                 _ = await http_request.aio_call()
 
-        # 共享 session 仍然不应被关闭（由模块管理生命周期）
+        # The shared session still must not be closed (lifecycle managed by the module)
         mock_session.close.assert_not_called()
 
 
 class TestAsyncSessionWithCustomConfiguration:
-    """测试自定义配置的异步 Session"""
+    """Tests for async sessions with custom configuration"""
 
     @pytest.mark.asyncio
     async def test_custom_aio_session_with_connector(self):
-        """测试带自定义 connector 的 aio_session"""
+        """Test an aio_session with a custom connector"""
         connector = aiohttp.TCPConnector(
             limit=100,
             limit_per_host=30,
@@ -350,14 +353,14 @@ class TestAsyncSessionWithCustomConfiguration:
             )
 
             assert http_request._external_aio_session is custom_session
-            # 验证 connector 已配置
+            # Verify the connector is configured
             assert custom_session.connector is not None
         finally:
             await custom_session.close()
 
     @pytest.mark.asyncio
     async def test_custom_aio_session_with_headers(self):
-        """测试带自定义 headers 的 aio_session"""
+        """Test an aio_session with custom headers"""
         custom_headers = {
             "User-Agent": "Custom-Agent/1.0",
             "X-Custom-Header": "custom-value",
@@ -373,14 +376,14 @@ class TestAsyncSessionWithCustomConfiguration:
             )
 
             assert http_request._external_aio_session is custom_session
-            # 验证 headers 已配置
+            # Verify the headers are configured
             assert "User-Agent" in custom_session.headers
         finally:
             await custom_session.close()
 
     @pytest.mark.asyncio
     async def test_custom_aio_session_with_timeout(self):
-        """测试带自定义 timeout 的 aio_session"""
+        """Test an aio_session with a custom timeout"""
         timeout = aiohttp.ClientTimeout(total=60)
         custom_session = aiohttp.ClientSession(timeout=timeout)
 
@@ -393,18 +396,18 @@ class TestAsyncSessionWithCustomConfiguration:
             )
 
             assert http_request._external_aio_session is custom_session
-            # 验证 timeout 已配置
+            # Verify the timeout is configured
             assert custom_session.timeout is not None
         finally:
             await custom_session.close()
 
 
 class TestAsyncSessionPriority:
-    """测试异步 Session 优先级"""
+    """Tests for async session priority"""
 
     @pytest.mark.asyncio
     async def test_custom_aio_session_has_priority(self):
-        """测试自定义 aio_session 优先于临时 aio_session"""
+        """Test that a custom aio_session takes priority over a temporary one"""
         connector = aiohttp.TCPConnector()
         custom_session = aiohttp.ClientSession(connector=connector)
 
@@ -416,7 +419,7 @@ class TestAsyncSessionPriority:
                 session=custom_session,
             )
 
-            # 验证存储了自定义 aio_session
+            # Verify the custom aio_session is stored
             assert http_request._external_aio_session is custom_session
             assert http_request._external_aio_session is not None
         finally:
@@ -424,11 +427,11 @@ class TestAsyncSessionPriority:
 
 
 class TestAsyncSessionWithDifferentMethods:
-    """测试不同 HTTP 方法的异步 Session 使用"""
+    """Tests for async session usage across HTTP methods"""
 
     @pytest.mark.asyncio
     async def test_custom_aio_session_with_post_request(self):
-        """测试 POST 请求使用自定义 session"""
+        """Test that POST requests use the custom session"""
         mock_session = AsyncMock(spec=aiohttp.ClientSession)
         mock_response = AsyncMock()
         mock_response.status = 200
@@ -475,7 +478,7 @@ class TestAsyncSessionWithDifferentMethods:
 
     @pytest.mark.asyncio
     async def test_custom_aio_session_with_get_request(self):
-        """测试 GET 请求使用自定义 session"""
+        """Test that GET requests use the custom session"""
         mock_session = AsyncMock(spec=aiohttp.ClientSession)
         mock_response = AsyncMock()
         mock_response.status = 200
@@ -522,11 +525,11 @@ class TestAsyncSessionWithDifferentMethods:
 
 
 class TestAsyncBackwardCompatibility:
-    """测试异步向后兼容性"""
+    """Tests for async backward compatibility"""
 
     @pytest.mark.asyncio
     async def test_works_without_aio_session_parameter(self):
-        """测试不传 aio_session 参数时保持原有行为"""
+        """Test that omitting aio_session keeps the original behavior"""
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -534,16 +537,16 @@ class TestAsyncBackwardCompatibility:
             stream=False,
         )
 
-        # 验证不传 aio_session 时，_external_aio_session 为 None
+        # Verify _external_aio_session is None when aio_session is not passed
         assert http_request._external_aio_session is None
 
-        # 验证其他参数正常
+        # Verify the other parameters are unaffected
         assert http_request.url == "http://example.com/api"
         assert http_request.method == HTTPMethod.POST
 
     @pytest.mark.asyncio
     async def test_default_behavior_uses_shared_session(self):
-        """测试默认行为使用共享 session（不被关闭）"""
+        """Test that the default behavior uses the shared session (not closed)"""
         mock_session = AsyncMock()
         mock_response = AsyncMock()
         mock_response.status = 200
@@ -552,7 +555,7 @@ class TestAsyncBackwardCompatibility:
         mock_response.__aexit__ = AsyncMock(return_value=None)
         mock_session.request.return_value = mock_response
 
-        # 不传 aio_session 参数
+        # Do not pass the aio_session parameter
         http_request = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -576,7 +579,7 @@ class TestAsyncBackwardCompatibility:
             yield mock_response
 
         with patch(
-            "dashscope.api_entities.http_request.get_shared_aio_session",
+            "dashscope.legacy_1x.api_entities.http_request.get_shared_aio_session",
             return_value=mock_session,
         ):
             with patch.object(
@@ -586,16 +589,17 @@ class TestAsyncBackwardCompatibility:
             ):
                 _ = await http_request.aio_call()
 
-        # 共享 session 不应被关闭（生命周期由 aio_session 模块管理）
+        # The shared session must not be closed (lifecycle managed
+        # by the aio_session module)
         mock_session.close.assert_not_called()
 
 
 class TestAsyncSessionLifecycle:
-    """测试异步 Session 生命周期"""
+    """Tests for the async session lifecycle"""
 
     @pytest.mark.asyncio
     async def test_multiple_requests_with_same_custom_session(self):
-        """测试使用同一个自定义 session 进行多次请求"""
+        """Test multiple requests with the same custom session"""
         mock_session = AsyncMock(spec=aiohttp.ClientSession)
         mock_response = AsyncMock()
         mock_response.status = 200
@@ -608,7 +612,7 @@ class TestAsyncSessionLifecycle:
 
         mock_session.request = mock_request
 
-        # 第一次请求
+        # First request
         http_request1 = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -639,7 +643,7 @@ class TestAsyncSessionLifecycle:
         ):
             _ = await http_request1.aio_call()
 
-        # 第二次请求
+        # Second request
         http_request2 = HttpRequest(
             url="http://example.com/api",
             api_key="fake-api-key",
@@ -667,12 +671,13 @@ class TestAsyncSessionLifecycle:
         ):
             _ = await http_request2.aio_call()
 
-        # 验证 session 没有被关闭（因为是外部 session）
+        # Verify the session was not closed (it is an external session)
         mock_session.close.assert_not_called()
 
 
 class TestAsyncConnectionRetry:
-    """测试异步池化连接被远端关闭后的重试行为"""
+    """Tests for retry behavior after a pooled async connection is closed
+    by the remote peer"""
 
     def _build_post_request(self):
         http_request = HttpRequest(
@@ -704,7 +709,7 @@ class TestAsyncConnectionRetry:
 
     @pytest.mark.asyncio
     async def test_retry_once_on_connection_error(self):
-        """连接被远端关闭时重试一次并成功"""
+        """Retries once and succeeds when the connection is closed by the remote peer"""
         mock_session = AsyncMock()
         mock_response = self._ok_response()
         mock_session.request.side_effect = [
@@ -718,7 +723,7 @@ class TestAsyncConnectionRetry:
             yield mock_response
 
         with patch(
-            "dashscope.api_entities.http_request.get_shared_aio_session",
+            "dashscope.legacy_1x.api_entities.http_request.get_shared_aio_session",
             return_value=mock_session,
         ):
             with patch.object(
@@ -732,7 +737,7 @@ class TestAsyncConnectionRetry:
 
     @pytest.mark.asyncio
     async def test_retry_exhausted_raises(self):
-        """连续两次 ClientConnectionError 后向上抛出"""
+        """Raises after two consecutive ClientConnectionErrors"""
         mock_session = AsyncMock()
         mock_session.request.side_effect = aiohttp.ClientConnectionError(
             "Server disconnected",
@@ -741,7 +746,7 @@ class TestAsyncConnectionRetry:
         http_request = self._build_post_request()
 
         with patch(
-            "dashscope.api_entities.http_request.get_shared_aio_session",
+            "dashscope.legacy_1x.api_entities.http_request.get_shared_aio_session",
             return_value=mock_session,
         ):
             with pytest.raises(aiohttp.ClientConnectionError):
@@ -751,14 +756,14 @@ class TestAsyncConnectionRetry:
 
     @pytest.mark.asyncio
     async def test_no_retry_on_other_exceptions(self):
-        """非连接类异常不重试"""
+        """Does not retry non-connection errors"""
         mock_session = AsyncMock()
         mock_session.request.side_effect = ValueError("bad request")
 
         http_request = self._build_post_request()
 
         with patch(
-            "dashscope.api_entities.http_request.get_shared_aio_session",
+            "dashscope.legacy_1x.api_entities.http_request.get_shared_aio_session",
             return_value=mock_session,
         ):
             with pytest.raises(ValueError, match="bad request"):

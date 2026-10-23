@@ -4,8 +4,8 @@ import os
 import unittest
 from unittest.mock import patch
 
-from dashscope.common.env import MAAS_REGIONS, resolve_base_url
-from dashscope.common.error import InputRequired
+from dashscope.legacy_1x.common.env import MAAS_REGIONS, resolve_base_url
+from dashscope.legacy_1x.common.error import InputRequired
 
 
 class TestResolveBaseUrl(unittest.TestCase):
@@ -24,7 +24,7 @@ class TestResolveBaseUrl(unittest.TestCase):
         )
 
     def test_resolve_without_workspace_raises(self):
-        import dashscope.common.env as env_mod
+        import dashscope.legacy_1x.common.env as env_mod
 
         url = "https://{workspace_id}.us-east-1.maas.aliyuncs.com/api/v1"
         with patch.object(env_mod, "_default_workspace_id", None):
@@ -32,7 +32,7 @@ class TestResolveBaseUrl(unittest.TestCase):
                 resolve_base_url(url, None)
 
     def test_resolve_with_env_default_workspace(self):
-        import dashscope.common.env as env_mod
+        import dashscope.legacy_1x.common.env as env_mod
 
         url = "https://{workspace_id}.us-east-1.maas.aliyuncs.com/api/v1"
         with patch.object(env_mod, "_default_workspace_id", "ws-env"):
@@ -58,7 +58,7 @@ class TestResolveBaseUrl(unittest.TestCase):
                 resolve_base_url(url, bad)
 
     def test_resolve_rejects_invalid_env_default_workspace(self):
-        import dashscope.common.env as env_mod
+        import dashscope.legacy_1x.common.env as env_mod
 
         url = "https://{workspace_id}.us-east-1.maas.aliyuncs.com/api/v1"
         with patch.object(env_mod, "_default_workspace_id", "evil.com/x"):
@@ -70,13 +70,13 @@ class TestValidateWorkspaceId(unittest.TestCase):
     """Test validate_workspace_id character restrictions."""
 
     def test_valid_ids(self):
-        from dashscope.common.env import validate_workspace_id
+        from dashscope.legacy_1x.common.env import validate_workspace_id
 
         for valid in ["ws-123", "llm-abc_def", "A0", "a" * 64]:
             self.assertEqual(validate_workspace_id(valid), valid)
 
     def test_invalid_ids(self):
-        from dashscope.common.env import validate_workspace_id
+        from dashscope.legacy_1x.common.env import validate_workspace_id
 
         for invalid in [
             "",
@@ -101,7 +101,7 @@ class TestValidateRegion(unittest.TestCase):
     """Test validate_region character restrictions."""
 
     def test_valid_regions(self):
-        from dashscope.common.env import validate_region
+        from dashscope.legacy_1x.common.env import validate_region
 
         # Upper case is accepted: DNS is case-insensitive and httpx
         # lowercases the host, so rejecting it broke working callers.
@@ -109,7 +109,7 @@ class TestValidateRegion(unittest.TestCase):
             self.assertEqual(validate_region(valid), valid)
 
     def test_invalid_regions(self):
-        from dashscope.common.env import validate_region
+        from dashscope.legacy_1x.common.env import validate_region
 
         for invalid in [
             "",
@@ -150,7 +150,7 @@ class TestMaasEnvLoading(unittest.TestCase):
     def _reload_env(self, env_vars):
         """Reload env module with given env vars."""
         import importlib
-        import dashscope.common.env as env_mod
+        import dashscope.legacy_1x.common.env as env_mod
 
         with patch.dict(os.environ, env_vars, clear=False):
             importlib.reload(env_mod)
@@ -159,7 +159,7 @@ class TestMaasEnvLoading(unittest.TestCase):
     def _restore_env(self):
         """Restore env module to default state."""
         import importlib
-        import dashscope.common.env as env_mod
+        import dashscope.legacy_1x.common.env as env_mod
 
         with patch.dict(
             os.environ,
@@ -271,7 +271,7 @@ class TestMaasCallTimeResolution(unittest.TestCase):
         dashscope.base_http_api_url = self._orig_http_url
 
     def _capture_request_url(self, func):
-        from dashscope.client import base_api as base_api_mod
+        from dashscope.legacy_1x.client import base_api as base_api_mod
 
         class ShortCircuit(Exception):
             pass
@@ -326,7 +326,7 @@ class TestMaasCallTimeResolution(unittest.TestCase):
         )
 
     def test_call_without_workspace_raises_clear_error(self):
-        import dashscope.common.env as env_mod
+        import dashscope.legacy_1x.common.env as env_mod
         from dashscope import Generation
 
         with patch.object(env_mod, "_default_workspace_id", None):

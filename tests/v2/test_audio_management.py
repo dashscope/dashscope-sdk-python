@@ -227,7 +227,7 @@ def test_voices_clone_create_and_crud():
     assert all(call["model"] == "voice-enrollment" for call in calls)
 
 
-# ── voice design (声音设计, qwen-voice-design) ─────────────────────────
+# ── voice design (qwen-voice-design) ─────────────────────────
 
 
 def test_voice_design_crud():

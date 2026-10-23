@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
-from dashscope.api_entities.dashscope_response import DictMixin
+from dashscope.legacy_1x.api_entities.dashscope_response import DictMixin
 
 
 class TestDictMixin:

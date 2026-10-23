@@ -8,7 +8,7 @@ import pytest
 from typer.main import get_command
 from typer.testing import CliRunner
 
-from dashscope.cli.agentic_rl import _run_workflow_async, app
+from dashscope.legacy_1x.cli.agentic_rl import _run_workflow_async, app
 from dashscope.finetune.agentic_rl import AgenticRL
 
 
@@ -16,14 +16,16 @@ def test_run_help_explains_conditional_function_requirements():
     result = CliRunner().invoke(app, ["run", "--help"])
     assert result.exit_code == 0
 
-    # 参数存在性走 typer 命令模型校验：渲染文本在不同终端宽度/平台下会被
-    # rich 截断或连字符换行（CI Linux 曾因此误报 --teacher-model 缺失），
-    # 不断言渲染后的 help 文本里出现完整 option 名。
+    # Parameter presence is asserted through typer's command model: rich
+    # truncates or hyphen-wraps rendered help at some terminal widths
+    # (CI Linux once false-reported --teacher-model as missing), so we do
+    # not assert full option names in the rendered text.
     run_cmd = get_command(app).commands["run"]
     assert "teacher_model" in {param.name for param in run_cmd.params}
 
-    # help 文档仍须说明 OPD 的条件化函数要求；剥离 ANSI 后按空白归一，
-    # 只断言散文式描述（按空格折行，归一化后稳定）。
+    # The help text must still document OPD's conditional function
+    # requirements; strip ANSI and normalize whitespace, then assert only
+    # the prose description (folded at spaces, stable once normalized).
     help_text = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", result.output).split())
     assert (
         "1. Configuration-driven: Use -c/--config to specify a YAML file"
@@ -52,7 +54,7 @@ async def test_workflow_applies_teacher_model_option(tmp_path):
 
     with (
         patch(
-            "dashscope.finetune.agentic_rl.set_api_key",
+            "dashscope.v2.finetune.agentic_rl.set_api_key",
         ),
         patch.object(
             AgenticRL,

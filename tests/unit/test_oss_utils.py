@@ -5,9 +5,9 @@ from http import HTTPStatus
 
 import pytest
 
-from dashscope.common.error import InvalidInput
-from dashscope.utils import oss_utils
-from dashscope.utils.oss_utils import OssUtils
+from dashscope.legacy_1x.common.error import InvalidInput
+from dashscope.legacy_1x.utils import oss_utils
+from dashscope.legacy_1x.utils.oss_utils import OssUtils
 
 
 class FakeUploadResponse:

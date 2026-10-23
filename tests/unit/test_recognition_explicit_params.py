@@ -7,7 +7,10 @@ import threading
 from contextlib import contextmanager
 from unittest import mock
 
-from dashscope.audio.asr.recognition import Recognition, RecognitionCallback
+from dashscope.legacy_1x.audio.asr.recognition import (
+    Recognition,
+    RecognitionCallback,
+)
 
 
 class MockRecognitionCallback(RecognitionCallback):

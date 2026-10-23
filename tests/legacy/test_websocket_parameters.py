@@ -2,7 +2,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import dashscope
-from dashscope.protocol.websocket import WebsocketStreamingMode
+from dashscope.legacy_1x.protocol.websocket import WebsocketStreamingMode
 from tests.unit.base_test import BaseTestEnvironment
 from tests.unit.constants import (
     TEST_DISABLE_DATA_INSPECTION_REQUEST_ID,

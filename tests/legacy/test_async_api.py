@@ -6,9 +6,9 @@ from http import HTTPStatus
 import pytest
 from typing import Union
 
-from dashscope.api_entities.dashscope_response import DashScopeAPIResponse
-from dashscope.client.base_api import BaseAsyncApi
-from dashscope.common.constants import ApiProtocol, HTTPMethod, TaskStatus
+from dashscope.legacy_1x.api_entities.dashscope_response import DashScopeAPIResponse
+from dashscope.legacy_1x.client.base_api import BaseAsyncApi
+from dashscope.legacy_1x.common.constants import ApiProtocol, HTTPMethod, TaskStatus
 from tests.unit.base_test import BaseTestEnvironment
 
 

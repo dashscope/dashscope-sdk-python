@@ -3,7 +3,7 @@
 """Test explicit parameters for TranslationRecognizer classes."""
 
 # pylint: disable=protected-access
-from dashscope.audio.asr.translation_recognizer import (
+from dashscope.legacy_1x.audio.asr.translation_recognizer import (
     TranslationRecognizerRealtime,
     TranslationRecognizerChat,
     TranslationRecognizerCallback,

@@ -105,7 +105,7 @@ def _build_request(
 ) -> Tuple[ChatRequest, str, bool, bool]:
     normalized = normalize_messages(messages)
     # 1.x tags the whole chat family "aigc" (MultiModalConversation lives
-    # in dashscope.aigc); media routing does not change the module tag.
+    # in dashscope.legacy_1x.aigc); media routing does not change the module tag.
     module = "aigc"
     # incremental_output=False asks for cumulative snapshots. Most native
     # models only stream incrementally, so (like 1.x) the wire keeps

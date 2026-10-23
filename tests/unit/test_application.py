@@ -10,7 +10,7 @@ import uuid
 from typing import Dict
 
 from dashscope import Application
-from dashscope.app.application_response import ApplicationResponse
+from dashscope.legacy_1x.app.application_response import ApplicationResponse
 from tests.unit.mock_request_base import MockServerBase
 from tests.unit.mock_server import MockServer
 

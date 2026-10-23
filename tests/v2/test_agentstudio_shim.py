@@ -1,0 +1,306 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) Alibaba, Inc. and its affiliates.
+"""Tests for the AgentStudio relocation into the 2.0 package (D7).
+
+The sub-SDK moved to ``dashscope.v2.agentstudio``; ``dashscope.agentstudio``
+is now a shim. Three contracts are pinned here:
+
+* the old import path -- including deep submodule paths -- resolves to the
+  very same module and class objects, so nothing downstream sees a fork;
+* the pieces AgentStudio used to borrow from the 1.x ``common`` package now
+  come from the neutral ``dashscope._shared`` layer, with identity intact
+  (the exception base class and the mutable sdk-client override are both
+  load-bearing singletons);
+* AgentStudio keeps emitting the *unmarked* ``agentstudio`` module tag, and
+  resolves its api key without reading the 1.x ``dashscope.api_key`` global.
+"""
+
+from __future__ import annotations
+
+import sys
+
+import pytest
+
+import dashscope.agentstudio as shim
+import dashscope.v2.agentstudio as impl
+from dashscope._shared import _sdk_ident, _validation
+from dashscope.agentstudio import exceptions as shim_exc
+from dashscope.agentstudio.transport import build_headers
+from dashscope.legacy_1x.common import error as legacy_error
+from dashscope.legacy_1x.common import env as legacy_env
+from dashscope.legacy_1x.common import utils as legacy_utils
+from dashscope.v2.agentstudio import client as as_client
+from dashscope.v2.agentstudio import exceptions as impl_exc
+from dashscope.v2.resources._agentstudio import _is_resource, wrap_agentstudio
+
+BASE_URL = "https://as.test.local"
+
+# Deep paths the ecosystem relies on: the unit tests, the examples and the
+# acli skill docs all import these directly.
+SUBMODULES = [
+    "client",
+    "constants",
+    "exceptions",
+    "pagination",
+    "streaming",
+    "transport",
+    "resources",
+    "resources._helpers",
+    "resources.agents",
+    "resources.deployments",
+    "resources.environments",
+    "resources.files",
+    "resources.memory_stores",
+    "resources.security",
+    "resources.session_events",
+    "resources.session_resources",
+    "resources.session_threads",
+    "resources.sessions",
+    "resources.skills",
+    "resources.vaults",
+    "resources.webhook_endpoints",
+    "types",
+    "types.models",
+    "types.params",
+]
+
+
+def _make_client(**kwargs):
+    kwargs.setdefault("api_key", "sk-test")
+    kwargs.setdefault("base_url", BASE_URL)
+    return impl.Client(**kwargs)
+
+
+@pytest.fixture
+def _clean_env(monkeypatch):
+    """Keep ambient env vars from changing base-url resolution."""
+
+    for var in (
+        "DASHSCOPE_WORKSPACE",
+        "DASHSCOPE_AGENTSTUDIO_URL",
+        "AGENTSTUDIO_URL",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
+# ---------------------------------------------------------------------------
+# The shim resolves to one and the same implementation
+# ---------------------------------------------------------------------------
+
+
+def test_public_names_are_the_same_objects():
+    assert shim.__all__ == impl.__all__
+    for name in impl.__all__:
+        assert getattr(shim, name) is getattr(impl, name), name
+
+
+def test_client_classes_are_the_same_objects():
+    assert shim.Client is impl.Client
+    assert shim.AsyncClient is impl.AsyncClient
+    assert shim.Client.__module__ == "dashscope.v2.agentstudio.client"
+
+
+def test_exception_classes_are_the_same_objects():
+    assert shim_exc.AgentStudioError is impl_exc.AgentStudioError
+    assert shim_exc.AuthenticationError is impl_exc.AuthenticationError
+    assert shim_exc.NotFoundError is impl_exc.NotFoundError
+
+
+@pytest.mark.parametrize("name", SUBMODULES)
+def test_deep_imports_alias_the_v2_module(name):
+    __import__(f"dashscope.agentstudio.{name}")
+    assert (
+        sys.modules[f"dashscope.agentstudio.{name}"]
+        is sys.modules[f"dashscope.v2.agentstudio.{name}"]
+    )
+
+
+@pytest.mark.parametrize("name", SUBMODULES)
+def test_submodules_are_reachable_as_attributes(name):
+    """sys.modules alone is not enough -- attribute access must work too."""
+
+    __import__("dashscope.agentstudio")
+    obj = shim
+    for part in name.split("."):
+        obj = getattr(obj, part)
+    assert obj is sys.modules[f"dashscope.v2.agentstudio.{name}"]
+
+
+def test_deep_import_from_syntax_resolves():
+    from dashscope.agentstudio.resources.agents import Agents
+    from dashscope.agentstudio.types.models import Agent
+    from dashscope.v2.agentstudio.resources.agents import Agents as V2Agents
+    from dashscope.v2.agentstudio.types.models import Agent as V2Agent
+
+    assert Agents is V2Agents
+    assert Agent is V2Agent
+
+
+# ---------------------------------------------------------------------------
+# The neutral layer holds the singletons AgentStudio depends on
+# ---------------------------------------------------------------------------
+
+
+def test_exception_base_class_identity_is_preserved():
+    """Both stacks must inherit from one and the same class object."""
+
+    from dashscope._shared._errors import DashScopeException
+
+    assert legacy_error.DashScopeException is DashScopeException
+    assert issubclass(
+        impl_exc.AgentStudioError,
+        legacy_error.DashScopeException,
+    )
+    assert issubclass(
+        legacy_error.InvalidParameter,
+        legacy_error.DashScopeException,
+    )
+
+
+def test_validators_are_shared_and_still_reject_host_breakouts():
+    assert legacy_env.validate_region is _validation.validate_region
+    assert (
+        legacy_env.validate_workspace_id is _validation.validate_workspace_id
+    )
+    # These values would move the effective host off *.maas.aliyuncs.com
+    # while the transport still sends Authorization: Bearer <api_key>.
+    breakout = ("a@evil.com/#", "ws/evil", "ws evil", "", "-lead")
+    for bad in breakout + ("x" * 65,):
+        with pytest.raises(ValueError):
+            _validation.validate_workspace_id(bad)
+    for bad in breakout + ("x" * 64, "trail-"):
+        with pytest.raises(ValueError):
+            _validation.validate_region(bad)
+
+
+def test_workspace_and_region_still_build_a_maas_host(_clean_env):
+    client = impl.Client(
+        api_key="sk-test",
+        workspace="ws-demo",
+        region="cn-hangzhou",
+    )
+    assert client.transport.base_url == (
+        "https://ws-demo.cn-hangzhou.maas.aliyuncs.com/api/v1/agentstudio"
+    )
+
+
+def test_untrusted_workspace_is_rejected_before_the_host_is_built(_clean_env):
+    with pytest.raises(ValueError):
+        impl.Client(api_key="sk-test", workspace="a@evil.com/#")
+
+
+# ---------------------------------------------------------------------------
+# The unmarked module tag, and the CLI's process-wide override
+# ---------------------------------------------------------------------------
+
+
+def test_agentstudio_tag_carries_no_v2_marker(monkeypatch):
+    monkeypatch.setattr(_sdk_ident, "_SDK_CLIENT", "python-sdk")
+    value = build_headers(
+        api_key="sk-test",
+        uid=None,
+        user_agent="ua",
+    )["x-dashscope-sdk-client"]
+    assert value.endswith("/agentstudio")
+    assert not value.endswith("agentstudio2")
+
+
+def test_cli_sdk_client_override_reaches_agentstudio(monkeypatch):
+    """``_SDK_CLIENT`` is process-wide mutable state: one copy only."""
+
+    monkeypatch.setattr(_sdk_ident, "_SDK_CLIENT", "python-cli")
+    value = build_headers(
+        api_key="sk-test",
+        uid=None,
+        user_agent="ua",
+    )["x-dashscope-sdk-client"]
+    assert value.split("/")[0] == "python-cli"
+    # the 1.x re-export reads the very same state
+    assert (
+        legacy_utils.get_sdk_headers(module="agentstudio")[
+            "x-dashscope-sdk-client"
+        ]
+        == value
+    )
+
+
+def test_session_id_is_shared_with_the_v2_transport():
+    from dashscope.v2.transport._ident import sdk_headers
+
+    assert (
+        build_headers(
+            api_key="sk-test",
+            uid=None,
+            user_agent="ua",
+        )["x-dashscope-sdk-session-id"]
+        == sdk_headers("aigc")["x-dashscope-sdk-session-id"]
+    )
+
+
+# ---------------------------------------------------------------------------
+# api key resolution no longer reads the 1.x ``dashscope.api_key`` global
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _no_key_anywhere(monkeypatch):
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    monkeypatch.setattr(as_client, "_api_key_from_file", lambda: None)
+    monkeypatch.setattr(as_client.settings, "api_key", None)
+
+
+def test_api_key_prefers_settings_over_the_key_file(monkeypatch):
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-env")
+    monkeypatch.setattr(as_client, "_api_key_from_file", lambda: "sk-file")
+    assert as_client._default_api_key() == "sk-env"
+
+
+def test_api_key_falls_back_to_the_key_file(monkeypatch):
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    monkeypatch.setattr(as_client, "_api_key_from_file", lambda: "sk-file")
+    monkeypatch.setattr(as_client.settings, "api_key", None)
+    assert as_client._default_api_key() == "sk-file"
+
+
+def test_missing_api_key_resolves_to_none(_no_key_anywhere):
+    assert as_client._default_api_key() is None
+
+
+def test_missing_api_key_surfaces_at_request_time(_no_key_anywhere):
+    """Construction succeeds; the transport raises the native error."""
+
+    client = impl.Client(base_url=BASE_URL)
+    assert client.transport.api_key is None
+    with pytest.raises(impl_exc.AuthenticationError):
+        build_headers(
+            api_key=client.transport.api_key,
+            uid=None,
+            user_agent="ua",
+        )
+
+
+# ---------------------------------------------------------------------------
+# The v2 error-alignment proxy still recognises sub-resources
+# ---------------------------------------------------------------------------
+
+
+def test_resource_detection_survives_the_move():
+    """``_RESOURCE_PACKAGE`` must track the new module path.
+
+    If it still pointed at ``dashscope.agentstudio.resources`` the proxy
+    would silently stop wrapping sub-resources, and their errors would
+    escape ``except dashscope.v2.errors.DashScopeError``.
+    """
+
+    client = _make_client()
+    assert _is_resource(client.agents)
+    assert _is_resource(client.sessions)
+    assert not _is_resource(client.transport)
+
+
+def test_wrapped_resource_is_proxied():
+    wrapped = wrap_agentstudio(_make_client())
+    assert wrapped.agents is not _make_client().agents
+    assert type(wrapped.agents).__module__.startswith(
+        "dashscope.v2.resources._agentstudio",
+    )

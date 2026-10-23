@@ -151,22 +151,24 @@ class Client:
 
     @property
     def agentstudio(self):
-        """Lazily mounted 1.x AgentStudio sub-SDK (design doc M3 3.8).
+        """Lazily mounted AgentStudio sub-SDK (design doc M3 3.8).
 
         The client is wrapped in a transparent proxy (design doc M3 3.12)
-        that translates 1.x AgentStudio errors into the ``dashscope.v2``
+        that translates AgentStudio errors into the ``dashscope.v2``
         exception family, so ``except dashscope.v2.errors.DashScopeError``
         covers them. The proxy spoofs ``__class__`` and forwards
         attributes, so ``isinstance(client.agentstudio, AgentStudioClient)``
-        and ``.transport`` access keep working; no 1.x code is touched.
+        and ``.transport`` access keep working.
 
-        AgentStudio rides the shared 1.x transport, so its requests keep
-        the unmarked 1.x module tag (``agentstudio``), not the v2 ``2``
-        marker -- intentional, since this is the 1.x code path.
+        AgentStudio ships its own transport rather than riding this
+        client's, so its requests keep the unmarked module tag
+        (``agentstudio``) instead of the v2 ``2`` marker -- the backend
+        already reports on that tag, and changing it would split the
+        server-side statistics.
         """
         if self._agentstudio is None:
             # pylint: disable=import-outside-toplevel
-            from dashscope.agentstudio import Client as AgentStudioClient
+            from dashscope.v2.agentstudio import Client as AgentStudioClient
             from dashscope.v2.resources._agentstudio import wrap_agentstudio
 
             # agentstudio resolves its own base_url from workspace +
@@ -392,15 +394,15 @@ class AsyncClient:
 
     @property
     def agentstudio(self):
-        """Lazily mounted 1.x AgentStudio sub-SDK (design doc M3 3.8).
+        """Lazily mounted AgentStudio sub-SDK (design doc M3 3.8).
 
         See :attr:`Client.agentstudio`: the returned client is wrapped in
-        a transparent proxy that aligns 1.x AgentStudio errors with the
+        a transparent proxy that aligns AgentStudio errors with the
         ``dashscope.v2`` exception family (design doc M3 3.12).
         """
         if self._agentstudio is None:
             # pylint: disable=import-outside-toplevel
-            from dashscope.agentstudio import AsyncClient as AsClient
+            from dashscope.v2.agentstudio import AsyncClient as AsClient
             from dashscope.v2.resources._agentstudio import wrap_agentstudio
 
             # See Client.agentstudio: agentstudio builds its own base_url

@@ -3,7 +3,7 @@
 
 import os
 
-from dashscope.multimodal.tingwu.tingwu import TingWu
+from dashscope.legacy_1x.multimodal.tingwu.tingwu import TingWu
 
 # Authentication: set your Model Studio API key via the
 # DASHSCOPE_API_KEY environment variable (recommended)

@@ -6,9 +6,9 @@ import json
 import pytest
 
 import dashscope
-from dashscope.audio.tts_v2 import ResultCallback, SpeechSynthesizer
-from dashscope.common.error import RequestFailure
-from dashscope.protocol.websocket import ActionType, EventType
+from dashscope.legacy_1x.audio.tts_v2 import ResultCallback, SpeechSynthesizer
+from dashscope.legacy_1x.common.error import RequestFailure
+from dashscope.legacy_1x.protocol.websocket import ActionType, EventType
 from tests.unit.base_test import BaseTestEnvironment
 
 

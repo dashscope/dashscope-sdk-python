@@ -5,7 +5,7 @@
 Offline summarization (``call``, one POST returning the parsed result)
 and realtime speech understanding (``realtime``, a duplex websocket
 session used as a context manager). Mirrors the 1.x
-``dashscope.multimodal.tingwu`` pair.
+``dashscope.legacy_1x.multimodal.tingwu`` pair.
 """
 
 # "input" is the wire-protocol field name for task payloads.

@@ -1,4 +1,4 @@
-include dashscope/resources/qwen.tiktoken
+include dashscope/v2/tokenizers/qwen.tiktoken
 include dashscope/py.typed
 include dashscope/__init__.pyi
 include NOTICE

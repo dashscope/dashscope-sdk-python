@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
+"""Backward-compat shim; the implementation moved to ``dashscope.legacy_1x.embeddings``.
 
-from .batch_text_embedding import BatchTextEmbedding
-from .batch_text_embedding_response import BatchTextEmbeddingResponse
-from .text_embedding import TextEmbedding
+Import from ``dashscope.legacy_1x.embeddings`` (or the public ``dashscope``
+root re-exports) in new code.
+"""
 
-__all__ = [
-    "TextEmbedding",
-    "BatchTextEmbedding",
-    "BatchTextEmbeddingResponse",
-]
+from dashscope.legacy_1x._shim import install as _install
+
+_install(__name__, "dashscope.legacy_1x.embeddings")

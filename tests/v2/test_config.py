@@ -483,7 +483,9 @@ def test_save_api_key_writes_the_default_path(
 
 
 def test_save_api_key_accepts_a_bare_filename(
-    clean_env, tmp_path, monkeypatch
+    clean_env,
+    tmp_path,
+    monkeypatch,
 ):
     from dashscope.v2 import save_api_key
 

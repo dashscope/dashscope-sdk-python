@@ -9,7 +9,7 @@ import asyncio
 import os
 from http import HTTPStatus
 
-from dashscope.aigc.image_synthesis import AioImageSynthesis
+from dashscope.legacy_1x.aigc.image_synthesis import AioImageSynthesis
 
 # Authentication: set your Model Studio API key via the
 # DASHSCOPE_API_KEY environment variable (recommended)

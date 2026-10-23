@@ -4,7 +4,7 @@
 import pytest
 
 import dashscope
-from dashscope.protocol.websocket import WebsocketStreamingMode
+from dashscope.legacy_1x.protocol.websocket import WebsocketStreamingMode
 from tests.unit.base_test import BaseTestEnvironment
 from tests.unit.constants import TestTasks
 from tests.unit.websocket_task_request import WebSocketRequest

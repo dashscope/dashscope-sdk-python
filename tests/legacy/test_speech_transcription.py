@@ -10,8 +10,8 @@ from urllib.parse import urlparse
 import pytest
 
 import dashscope
-from dashscope.audio.asr import Transcription
-from dashscope.common.constants import TaskStatus
+from dashscope.legacy_1x.audio.asr import Transcription
+from dashscope.legacy_1x.common.constants import TaskStatus
 from tests.unit.base_test import BaseTestEnvironment
 
 HTTPS_16K_CH1_WAV = "https://isv-data.oss-cn-hangzhou.aliyuncs.com/ics/MaaS/ASR/test_audio/asr_example.wav"  # noqa: *
@@ -132,10 +132,10 @@ def complete_url(url: str) -> str:
     parsed = urlparse(url)
     base_url = "".join([parsed.scheme, "://", parsed.netloc])
     dashscope.base_websocket_api_url = "/".join(
-        [base_url, "api-ws", dashscope.common.env.api_version, "inference"],
+        [base_url, "api-ws", dashscope.legacy_1x.common.env.api_version, "inference"],
     )
     dashscope.base_http_api_url = url = "/".join(
-        [base_url, "api", dashscope.common.env.api_version],
+        [base_url, "api", dashscope.legacy_1x.common.env.api_version],
     )
     print("Set base_websocket_api_url: ", dashscope.base_websocket_api_url)
     print("Set base_http_api_url: ", dashscope.base_http_api_url)

@@ -24,10 +24,12 @@ import pytest
 import requests
 from requests.adapters import HTTPAdapter
 
-from dashscope.api_entities import http_request as http_request_module
-from dashscope.api_entities.http_request import HttpRequest
-from dashscope.api_entities.api_request_data import ApiRequestData
-from dashscope.common.constants import ApiProtocol, HTTPMethod
+from dashscope.legacy_1x.api_entities import (
+    http_request as http_request_module,
+)
+from dashscope.legacy_1x.api_entities.http_request import HttpRequest
+from dashscope.legacy_1x.api_entities.api_request_data import ApiRequestData
+from dashscope.legacy_1x.common.constants import ApiProtocol, HTTPMethod
 
 
 class TestSyncSessionBasics:
@@ -121,7 +123,9 @@ class TestSyncSessionUsage:
         # verify the custom session was not closed
         mock_session.close.assert_not_called()
 
-    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    @patch(
+        "dashscope.legacy_1x.api_entities.http_request._get_shared_sync_session",
+    )
     def test_shared_session_is_used_when_no_custom_session(
         self,
         mock_get_session,
@@ -214,7 +218,9 @@ class TestSyncSessionResourceManagement:
         # verify the custom session was not closed
         custom_session.close.assert_not_called()
 
-    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    @patch(
+        "dashscope.legacy_1x.api_entities.http_request._get_shared_sync_session",
+    )
     def test_shared_session_not_closed_on_success(self, mock_get_session):
         """Shared session is not closed after success"""
         mock_session = Mock()
@@ -254,7 +260,9 @@ class TestSyncSessionResourceManagement:
         # verify the shared session was not closed
         mock_session.close.assert_not_called()
 
-    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    @patch(
+        "dashscope.legacy_1x.api_entities.http_request._get_shared_sync_session",
+    )
     def test_shared_session_not_closed_on_exception(self, mock_get_session):
         """Shared session is not closed on exception"""
         mock_session = Mock()
@@ -474,7 +482,9 @@ class TestSyncBackwardCompatibility:
         assert http_request.url == "http://example.com/api"
         assert http_request.method == HTTPMethod.POST
 
-    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    @patch(
+        "dashscope.legacy_1x.api_entities.http_request._get_shared_sync_session",
+    )
     def test_default_behavior_unchanged(self, mock_get_session):
         """Default behavior: use the shared session"""
         mock_session = Mock()
@@ -548,7 +558,9 @@ class TestSyncConnectionRetry:
         mock_response.text = '{"status": "success"}'
         return mock_response
 
-    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    @patch(
+        "dashscope.legacy_1x.api_entities.http_request._get_shared_sync_session",
+    )
     def test_retry_once_on_connection_error(self, mock_get_session):
         """Retry once and succeed when the peer drops the connection"""
         mock_session = Mock()
@@ -572,7 +584,9 @@ class TestSyncConnectionRetry:
 
         assert mock_session.post.call_count == 2
 
-    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    @patch(
+        "dashscope.legacy_1x.api_entities.http_request._get_shared_sync_session",
+    )
     def test_retry_exhausted_raises(self, mock_get_session):
         """Raise after two consecutive ConnectionErrors"""
         mock_session = Mock()
@@ -588,7 +602,9 @@ class TestSyncConnectionRetry:
 
         assert mock_session.post.call_count == 2
 
-    @patch("dashscope.api_entities.http_request._get_shared_sync_session")
+    @patch(
+        "dashscope.legacy_1x.api_entities.http_request._get_shared_sync_session",
+    )
     def test_no_retry_on_other_exceptions(self, mock_get_session):
         """Non-connection exceptions are not retried"""
         mock_session = Mock()
