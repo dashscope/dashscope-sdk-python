@@ -48,7 +48,7 @@ _CONDITION_ONLY = {
     "sdk.agentic_rl.FunctionTestTimeout",
 }
 
-# The nine exception class names the catalog requires.
+# The ten exception class names the catalog requires.
 _REQUIRED_CLASSES = {
     "AuthenticationError",
     "BadRequestError",
@@ -58,6 +58,7 @@ _REQUIRED_CLASSES = {
     "PermissionDeniedError",
     "RateLimitError",
     "RequestTooLargeError",
+    "ResponseError",
     "ServiceUnavailableError",
 }
 
@@ -84,10 +85,10 @@ def _by_key(key):
 
 def test_catalog_size_and_provenance():
     assert registry.__version__ == "1.0.11"
-    assert registry.__commit__ == "5b2d2e1"
+    assert registry.__commit__ == "cd873b6"
     assert registry.__snapshot__ is False
-    assert len(PUBLIC) == 16
-    assert len(SDK) == 36
+    assert len(PUBLIC) == 17
+    assert len(SDK) == 41
 
 
 def test_generated_header_survives_vendoring():
@@ -130,7 +131,7 @@ def test_public_entries_are_immutable():
         PUBLIC[0].key = "mutated"
 
 
-def test_catalog_requires_exactly_nine_exception_classes():
+def test_catalog_requires_exactly_ten_exception_classes():
     assert {entry.error_code for entry in PUBLIC} == _REQUIRED_CLASSES
 
 
@@ -299,7 +300,9 @@ def test_unfamily_entries_are_the_generic_sdk_ones():
     others = [
         e.name
         for e in SDK
-        if not e.name.startswith(("sdk.agentic_rl.", "sdk.agentstudio."))
+        if not e.name.startswith(
+            ("sdk.agentic_rl.", "sdk.agentstudio.", "sdk.ws.")
+        )
     ]
     assert others == [
         "sdk.InvalidApiKey",
@@ -308,3 +311,36 @@ def test_unfamily_entries_are_the_generic_sdk_ones():
         "sdk.Timeout",
         "sdk.IoError",
     ]
+
+
+def test_ws_family_entries():
+    """The five websocket entries; three wired, two carried for parity.
+
+    ProtocolError / IllegalState / BinaryOwnerConflict back the v2
+    websocket transport's exception classes. UpstreamQueueFull (sync
+    send, no send buffer) and QueueCapacityExceeded (unbounded per-task
+    queues) describe mechanisms the Python transport does not have.
+    """
+    entries = _by_name(SDK)
+    expected = {
+        "sdk.ws.ProtocolError",
+        "sdk.ws.UpstreamQueueFull",
+        "sdk.ws.QueueCapacityExceeded",
+        "sdk.ws.BinaryOwnerConflict",
+        "sdk.ws.IllegalState",
+    }
+    assert {
+        e.name for e in SDK if e.name.startswith("sdk.ws.")
+    } == expected
+
+    from dashscope.v2 import errors as v2_errors
+
+    wired = {
+        "sdk.ws.ProtocolError": "WsEventError",
+        "sdk.ws.IllegalState": "WsStateError",
+        "sdk.ws.BinaryOwnerConflict": "WsBinaryOwnerConflictError",
+    }
+    for name, cls_name in wired.items():
+        cls = getattr(v2_errors, cls_name)
+        assert cls._SDK_ERROR_NAME == name
+        assert entries[name].vars == ["detail"]

@@ -36,8 +36,12 @@ from dashscope.v2.errors import (
     PermissionDeniedError,
     RateLimitError,
     RequestTooLargeError,
+    ResponseError,
     SdkError,
     ServiceUnavailableError,
+    WsBinaryOwnerConflictError,
+    WsEventError,
+    WsStateError,
     check_response,
     error_from_business_code,
     error_from_sdk_exception,
@@ -659,7 +663,7 @@ def test_catalog_classes_are_flat_siblings():
         entry.error_code: getattr(errors, entry.error_code)
         for entry in registry.PUBLIC_ERRORS
     }
-    assert len(classes) == 9
+    assert len(classes) == 10
     for name, cls in classes.items():
         assert cls.__bases__ == (APIStatusError,), name
         for other_name, other in classes.items():
@@ -670,9 +674,57 @@ def test_catalog_classes_are_flat_siblings():
 def test_status_map_is_derived_from_the_catalog():
     catalogued = {e.status_code for e in registry.PUBLIC_ERRORS}
     assert set(_STATUS_MAP) == catalogued
+    # First claimant of a status wins the status-only mapping; later
+    # siblings on the same status (response_error on 500) are reachable
+    # only by class, never selected by the status alone.
+    seen = set()
     for entry in registry.PUBLIC_ERRORS:
+        if entry.status_code in seen:
+            continue
+        seen.add(entry.status_code)
         expected = getattr(errors, entry.error_code)
         assert _STATUS_MAP[entry.status_code] is expected, entry.key
+
+
+def test_bare_500_still_maps_to_internal_server_error():
+    # response_error shares status 500 with internal_error; the gateway
+    # only ever means internal_error by a bare 500.
+    assert _STATUS_MAP[500] is InternalServerError
+    with pytest.raises(InternalServerError) as ei:
+        check_response(_resp(500, {"message": "boom"}))
+    assert type(ei.value) is InternalServerError
+
+
+def test_response_error_is_sdk_side_only():
+    assert issubclass(ResponseError, APIStatusError)
+    assert ResponseError.status_code == 500
+    assert ResponseError not in _STATUS_MAP.values()
+    assert ResponseError not in {
+        cls for cls in _CODE_MAP.values()
+    }
+
+
+@pytest.mark.parametrize(
+    "cls,name",
+    [
+        (WsEventError, "sdk.ws.ProtocolError"),
+        (WsStateError, "sdk.ws.IllegalState"),
+        (WsBinaryOwnerConflictError, "sdk.ws.BinaryOwnerConflict"),
+    ],
+)
+def test_ws_errors_default_from_their_catalog_entries(cls, name):
+    entry = _SDK_ERRORS[name]
+    err = cls(detail="some detail")
+    assert isinstance(err, SdkError)
+    assert err.message == entry.format_message({"detail": "some detail"})
+    assert err.code == entry.name
+    assert err.solution == entry.solution
+    assert err.allow_retry is entry.allow_retry
+    # An explicit message bypasses the template but keeps the wiring.
+    err = cls("custom", request_id="req-1")
+    assert err.message == "custom"
+    assert err.code == entry.name
+    assert err.request_id == "req-1"
 
 
 def test_catalog_keys_and_wire_codes_are_separate_namespaces():
@@ -777,9 +829,9 @@ def test_placeholders_survive_the_catalog_fallback():
 
 
 def test_ambiguous_status_gets_no_catalog_text():
-    # 400 / 401 / 429 each carry several entries with different text, so
-    # a status alone cannot pick one without inventing a reason.
-    for status in (400, 401, 429):
+    # 400 / 401 / 429 / 500 each carry several entries with different
+    # text, so a status alone cannot pick one without inventing a reason.
+    for status in (400, 401, 429, 500):
         with pytest.raises(APIStatusError) as ei:
             check_response(_bare(status))
         assert ei.value.message == "", status

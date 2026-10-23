@@ -10,7 +10,7 @@ import queue
 import pytest
 
 from dashscope.v2.client import Client
-from dashscope.v2.errors import DashScopeError
+from dashscope.v2.errors import DashScopeError, WsBinaryOwnerConflictError
 
 BASE_URL = "https://api.test.local/api/v1"
 WS_URL = "wss://ws.test.local/api-ws/v1/inference"
@@ -269,7 +269,7 @@ def test_two_syntheses_on_one_connection_fail_fast():
     tts1 = client.audio.tts.connect(model="cosyvoice-v1", connection=conn)
     tts1.start()
     tts2 = client.audio.tts.connect(model="cosyvoice-v1", connection=conn)
-    with pytest.raises(RuntimeError, match="binary downlink"):
+    with pytest.raises(WsBinaryOwnerConflictError, match="binary downlink"):
         tts2.start()
     # The first session is unaffected.
     tts1.send_text("继续")
@@ -502,7 +502,7 @@ def test_shared_recognition_close_after_uplink_conflict_does_not_break_owner(
         first.start()
         second.start()
         first.send_audio_frame(b"first")
-        with pytest.raises(RuntimeError, match="binary uplink"):
+        with pytest.raises(WsBinaryOwnerConflictError, match="binary uplink"):
             second.send_audio_frame(b"blocked")
         second.close()
         first.send_audio_frame(b"still first")

@@ -13,7 +13,7 @@ import httpx
 import pytest
 
 from dashscope.v2 import AsyncClient, Client
-from dashscope.v2.errors import APIConnectionError, DashScopeError
+from dashscope.v2.errors import APIConnectionError, DashScopeError, WsStateError
 from dashscope.v2.resources import audio as audio_resources
 from dashscope.v2.resources.audio._callbacks import run_with_callback
 from dashscope.v2.resources.audio.asr import RecognitionResult
@@ -463,9 +463,9 @@ def test_recognition_context_parameters_headers_and_metrics():
         rec.send_audio_frame(b"second")
         rec.stop()
         rec.stop()
-        with pytest.raises(RuntimeError, match="input is finished"):
+        with pytest.raises(WsStateError, match="input is finished"):
             rec.send_audio_frame(b"late")
-        with pytest.raises(RuntimeError, match="input is finished"):
+        with pytest.raises(WsStateError, match="input is finished"):
             rec.update_context(context)
         assert next(events)["header"]["event"] == "task-finished"
         assert list(events) == []
@@ -543,7 +543,7 @@ def test_recognition_send_failure_closes_socket():
         with pytest.raises(OSError, match="send failed"):
             rec.send_audio_frame(b"audio")
         assert ws.closed
-        with pytest.raises(RuntimeError):
+        with pytest.raises(WsStateError):
             rec.send_audio_frame(b"more")
 
 
