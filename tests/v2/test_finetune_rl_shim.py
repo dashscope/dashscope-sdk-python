@@ -2,13 +2,13 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 """Reverse-reference shims and the submit transport for the RL move.
 
-``dashscope.finetune.reinforcement`` and ``dashscope.finetune.agentic_rl``
-are now compatibility surfaces over ``dashscope.v2.finetune``. The old
-paths have to keep resolving *by name* in processes this repo does not
-control -- a Function Compute sandbox running ``FC_SERVER_CLASSPATH``, and
-``uvicorn`` / ``python -m`` resolving the reward-server import string --
-so what is pinned here is object identity, laziness and the wire format,
-not just the happy path.
+``dashscope.reinforcement`` is the public compatibility package, with
+``dashscope.finetune.reinforcement`` retained as its legacy alias. Both
+resolve over ``dashscope.v2.finetune``. The paths have to keep resolving
+*by name* in processes this repo does not control -- a Function Compute
+sandbox running ``FC_SERVER_CLASSPATH``, and ``uvicorn`` / ``python -m``
+resolving the reward-server import string -- so what is pinned here is
+object identity, laziness and the wire format, not just the happy path.
 """
 
 from __future__ import annotations
@@ -44,10 +44,12 @@ from dashscope.v2.finetune.reinforcement.common.errors import (
 )
 from dashscope.v2.resources import reinforcement_learning as _rl_mount
 
+PUBLIC = "dashscope.reinforcement"
 LEGACY = "dashscope.finetune.reinforcement"
 V2 = "dashscope.v2.finetune.reinforcement"
+ALIASES = [PUBLIC, LEGACY]
 
-# The modules the package imports eagerly, so both spellings are already
+# The modules the package imports eagerly, so all spellings are already
 # in sys.modules before anything asks for them. The nine that are *not*
 # here (component.server.* and component.observability.genai.*) are the
 # reason the shim is a meta_path finder rather than an eager walk.
@@ -65,8 +67,6 @@ EAGER_SUBMODULES = [
     "component.parser.reward_parser",
     "component.processor.abstract_reward_processor",
 ]
-
-SUBMIT_PATH = f"{LEGACY}.component.server.server"
 
 ENVELOPE = {
     "status_code": 200,
@@ -131,8 +131,8 @@ def fixture_post_calls(monkeypatch):
     calls = []
 
     # ``_SDK_CLIENT`` is process-wide mutable state, and importing the CLI
-    # (which ``test_app_is_reachable_only_from_the_legacy_path`` does)
-    # marks the whole process ``python-cli``. Pinning it here keeps these
+    # (which the compatibility-path ``app`` test does) marks the whole
+    # process ``python-cli``. Pinning it here keeps these
     # assertions independent of test order; monkeypatch restores whatever
     # the ambient value was.
     monkeypatch.setattr(_sdk_ident, "_SDK_CLIENT", "python-sdk")
@@ -162,13 +162,14 @@ def fixture_post_calls(monkeypatch):
 # -- identity -------------------------------------------------------------
 
 
-def test_every_exported_name_is_the_same_object():
-    legacy = importlib.import_module(LEGACY)
+@pytest.mark.parametrize("alias", ALIASES)
+def test_every_exported_name_is_the_same_object(alias):
+    compatible = importlib.import_module(alias)
     v2 = importlib.import_module(V2)
     assert v2.__all__
-    assert legacy.__all__ == list(v2.__all__) + ["app"]
+    assert compatible.__all__ == list(v2.__all__) + ["app"]
     for name in v2.__all__:
-        assert getattr(legacy, name) is getattr(v2, name), name
+        assert getattr(compatible, name) is getattr(v2, name), name
 
 
 def test_legacy_agentic_rl_subclasses_the_v2_one():
@@ -183,42 +184,48 @@ def test_only_the_1x_surface_keeps_the_job_verbs():
         assert verb in LegacyAgenticRL.__dict__, verb
 
 
+@pytest.mark.parametrize("alias", ALIASES)
 @pytest.mark.parametrize("submodule", EAGER_SUBMODULES)
-def test_eager_deep_imports_alias_to_the_same_module(submodule):
-    legacy = importlib.import_module(f"{LEGACY}.{submodule}")
+def test_eager_deep_imports_alias_to_the_same_module(alias, submodule):
+    compatible = importlib.import_module(f"{alias}.{submodule}")
     v2 = importlib.import_module(f"{V2}.{submodule}")
-    assert legacy is v2
+    assert compatible is v2
     # The shared object keeps reporting the v2 name, so pickling and
     # reload resolve against the sys.modules key that owns it.
-    assert legacy.__name__ == f"{V2}.{submodule}"
-    assert sys.modules[f"{LEGACY}.{submodule}"] is v2
+    assert compatible.__name__ == f"{V2}.{submodule}"
+    assert sys.modules[f"{alias}.{submodule}"] is v2
 
 
-def test_deep_import_works_as_an_attribute_expression():
-    legacy = importlib.import_module(LEGACY)
+@pytest.mark.parametrize("alias", ALIASES)
+def test_deep_import_works_as_an_attribute_expression(alias):
+    compatible = importlib.import_module(alias)
     v2_utils = importlib.import_module(f"{V2}.common.utils")
-    assert legacy.common.utils.set_api_key is v2_utils.set_api_key
+    assert compatible.common.utils.set_api_key is v2_utils.set_api_key
 
 
 # -- laziness -------------------------------------------------------------
 
 
-def test_server_module_resolves_without_importing_fastapi():
-    spec = importlib.util.find_spec(SUBMIT_PATH)
+@pytest.mark.parametrize("alias", ALIASES)
+def test_server_module_resolves_without_importing_fastapi(alias):
+    submit_path = f"{alias}.component.server.server"
+    spec = importlib.util.find_spec(submit_path)
     assert spec is not None
     assert "dashscope/v2/finetune/reinforcement" in spec.origin.replace(
         "\\",
         "/",
     )
-    assert spec.loader.get_code(SUBMIT_PATH) is not None
+    assert spec.loader.get_code(submit_path) is not None
     assert "fastapi" not in sys.modules
 
 
-def test_python_dash_m_resolves_the_legacy_server_path():
+@pytest.mark.parametrize("alias", ALIASES)
+def test_python_dash_m_resolves_the_compatibility_server_path(alias):
     # ``runpy`` refuses a loader that yields no code object, which is how
     # examples/workspace/scripts/start_local_*.sh launches the server.
-    name, _, code = runpy._get_module_details(SUBMIT_PATH)
-    assert name == SUBMIT_PATH
+    submit_path = f"{alias}.component.server.server"
+    name, _, code = runpy._get_module_details(submit_path)
+    assert name == submit_path
     assert code is not None
     assert "fastapi" not in sys.modules
 
@@ -227,26 +234,25 @@ def test_python_dash_m_resolves_the_legacy_server_path():
     importlib.util.find_spec("opentelemetry") is not None,
     reason="opentelemetry is installed, so the guard cannot be observed",
 )
-def test_genai_stays_behind_its_optional_dependency_on_both_paths():
+def test_genai_stays_behind_its_optional_dependency_on_all_paths():
     # ``genai/__init__`` imports ``llm_dashscope`` eagerly, which needs
-    # opentelemetry. Both spellings must fail identically rather than one
+    # opentelemetry. All spellings must fail identically rather than one
     # quietly succeeding through the alias.
-    for name in (
-        f"{LEGACY}.component.observability.genai.llm_dashscope",
-        f"{V2}.component.observability.genai.llm_dashscope",
-    ):
+    for alias in ALIASES + [V2]:
+        name = f"{alias}.component.observability.genai.llm_dashscope"
         with pytest.raises(ModuleNotFoundError) as ei:
             importlib.import_module(name)
         assert "opentelemetry" in str(ei.value)
 
 
-def test_app_is_reachable_only_from_the_legacy_path():
+def test_app_is_reachable_only_from_the_compatibility_paths():
     v2 = importlib.import_module(V2)
     assert not hasattr(v2, "app")
 
     from dashscope.legacy_1x.cli.agentic_rl import app as cli_app
 
-    assert importlib.import_module(LEGACY).app is cli_app
+    for alias in ALIASES:
+        assert importlib.import_module(alias).app is cli_app
 
 
 # -- the submit POST ------------------------------------------------------
@@ -416,9 +422,10 @@ def test_a_failed_submit_is_an_envelope_not_an_exception():
 # -- single implementation ------------------------------------------------
 
 
-def test_the_legacy_package_directory_holds_only_the_shim():
-    legacy = importlib.import_module(LEGACY)
-    package_dir = pathlib.Path(legacy.__file__).parent
+@pytest.mark.parametrize("alias", ALIASES)
+def test_compatibility_package_directories_hold_only_shims(alias):
+    compatible = importlib.import_module(alias)
+    package_dir = pathlib.Path(compatible.__file__).parent
     assert [p.name for p in package_dir.rglob("*.py")] == ["__init__.py"]
 
 
@@ -429,11 +436,12 @@ def test_the_v2_mount_points_at_the_v2_workflow_modules():
     assert _rl_mount._reinforcement is importlib.import_module(V2)
 
 
-def test_the_rl_error_module_is_shared_by_both_paths():
+def test_the_rl_error_module_is_shared_by_all_paths():
+    public_errors = importlib.import_module(f"{PUBLIC}.common.errors")
     legacy_errors = importlib.import_module(f"{LEGACY}.common.errors")
     v2_errors = importlib.import_module(f"{V2}.common.errors")
-    assert legacy_errors is v2_errors
-    assert legacy_errors.ValueErrorWithCode is ValueErrorWithCode
+    assert public_errors is legacy_errors is v2_errors
+    assert public_errors.ValueErrorWithCode is ValueErrorWithCode
 
 
 @pytest.mark.parametrize(

@@ -32,10 +32,10 @@ from dashscope.v2.finetune.agentic_rl import SubmitOutput, SubmitResult
 
 # Re-exported so every name this module historically carried stays
 # importable from here. Both spellings resolve to the same objects: the
-# reverse-reference shim under ``dashscope/finetune/reinforcement``
-# aliases each submodule to the 2.0 one.
+# reverse-reference shim under ``dashscope/reinforcement`` aliases each
+# submodule to the 2.0 one.
 # pylint: disable-next=unused-import
-from dashscope.v2.finetune.reinforcement import (  # noqa: F401
+from dashscope.reinforcement import (  # noqa: F401
     DASHSCOPE_HTTP_BASE_URL,
     AgenticRLFunctionComponent,
     AgenticRLTuning,
@@ -59,7 +59,7 @@ from dashscope.v2.finetune.reinforcement import (  # noqa: F401
 )
 
 # pylint: disable-next=unused-import
-from dashscope.v2.finetune.reinforcement.common.errors import (  # noqa: F401
+from dashscope.reinforcement.common.errors import (  # noqa: F401
     DatasetsError,
     InstanceQueryError,
     RegistrationError,

@@ -117,7 +117,7 @@ Functions must inherit from the abstract base classes provided by the SDK.
 Generates agent trajectories (interactions with the environment/LLM).
 
 ```python
-from dashscope.finetune.reinforcement import AbstractRolloutProcessor, RolloutInput, RolloutOutput
+from dashscope.reinforcement import AbstractRolloutProcessor, RolloutInput, RolloutOutput
 
 class DemoRolloutProcessor(AbstractRolloutProcessor):
     async def process(self, input: RolloutInput) -> RolloutOutput:
@@ -129,7 +129,7 @@ class DemoRolloutProcessor(AbstractRolloutProcessor):
 Scores individual steps or final outputs.
 
 ```python
-from dashscope.finetune.reinforcement import AbstractRewardProcessor, RewardInput, RewardOutput
+from dashscope.reinforcement import AbstractRewardProcessor, RewardInput, RewardOutput
 
 class DemoRewardProcessor(AbstractRewardProcessor):
     def process(self, input: RewardInput) -> RewardOutput:
@@ -139,7 +139,7 @@ class DemoRewardProcessor(AbstractRewardProcessor):
 
 #### Advanced Reward Processor with Decorators
 ```python
-from dashscope.finetune.reinforcement import reward_func, sub_reward_func, aggregate_func
+from dashscope.reinforcement import reward_func, sub_reward_func, aggregate_func
 
 @reward_func("SafetyProcessor")
 class SafetyProcessor(AbstractRewardProcessor):
@@ -163,7 +163,7 @@ class SafetyProcessor(AbstractRewardProcessor):
 Scores a batch of trajectories collectively (e.g., for ranking).
 
 ```python
-from dashscope.finetune.reinforcement import AbstractGroupRewardProcessor, GroupRewardInput, GroupRewardOutput
+from dashscope.reinforcement import AbstractGroupRewardProcessor, GroupRewardInput, GroupRewardOutput
 
 class DemoGroupRewardProcessor(AbstractGroupRewardProcessor):
     def setup(self) -> None:
@@ -182,7 +182,7 @@ Enable deep visibility into your agent's execution using OpenTelemetry. Trace da
 1.  Add observability dependencies to `requirements.txt` (see Section 2.5, “Dependencies for Observability (Tracing)”).
 
 #### Instrumentation Decorators
-Import from `dashscope.finetune.reinforcement.component.observability`.
+Import from `dashscope.reinforcement.component.observability`.
 
 | Decorator | Usage | Description |
 | :--- | :--- | :--- |
@@ -217,9 +217,9 @@ Import from `dashscope.finetune.reinforcement.component.observability`.
 
 ```python
 import openai
-from dashscope.finetune.reinforcement import AbstractRolloutProcessor, RolloutInput, RolloutOutput
-from dashscope.finetune.reinforcement.component.data.base_data_model import AgentOutput, TaskStatus
-from dashscope.finetune.reinforcement.component.observability import (
+from dashscope.reinforcement import AbstractRolloutProcessor, RolloutInput, RolloutOutput
+from dashscope.reinforcement.component.data.base_data_model import AgentOutput, TaskStatus
+from dashscope.reinforcement.component.observability import (
     observe_processor,
     trace_client,
     trace_tool,

@@ -10,7 +10,7 @@ environment variables and dynamic processor class loading.
     FUNC_TYPE           Function type, current supported values:
     "reward"/"rollout" (required)
     PROCESSOR_CLASS     Full Python path to processor class, e.g.:
-dashscope.agenticRL.component.demo.reward_processor_demo.DemoRewardProcessor
+dashscope.reinforcement.component.demo.reward_processor_demo.DemoRewardProcessor
                         (required, processor instantiated using this class)
     SERVER_PORT         Server port, default 8000
     ENABLE_LOGGING      Enable verbose logging, "true"/"1" to enable,
@@ -22,14 +22,14 @@ dashscope.agenticRL.component.demo.reward_processor_demo.DemoRewardProcessor
 == Startup Methods ==
 
     # Recommended: Run with python -m
-    FUNC_TYPE=reward PROCESSOR_CLASS=dashscope.agenticRL.component.demo.
+    FUNC_TYPE=reward PROCESSOR_CLASS=dashscope.reinforcement.component.demo.
     reward_processor_demo.DemoRewardProcessor python -m
-    dashscope.agenticRL.server.server
+    dashscope.reinforcement.component.server.server
 
     # Using uvicorn
-    FUNC_TYPE=reward PROCESSOR_CLASS=dashscope.agenticRL.component.demo.
+    FUNC_TYPE=reward PROCESSOR_CLASS=dashscope.reinforcement.component.demo.
     reward_processor_demo.DemoRewardProcessor uvicorn
-    dashscope.agenticRL.server.server:app --host 0.0.0.0 --port 8000
+    dashscope.reinforcement.component.server.server:app --host 0.0.0.0 --port 8000
 
 == Endpoints ==
 
@@ -120,7 +120,7 @@ logger.info(f"[Server] FUNC_TYPE={func_type.value}")
 if not _PROCESSOR_CLASS_ENV:
     raise RuntimeError(
         "Environment variable PROCESSOR_CLASS is required. "
-        "Example: PROCESSOR_CLASS=dashscope.agenticRL.component.demo."
+        "Example: PROCESSOR_CLASS=dashscope.reinforcement.component.demo."
         "reward_processor_demo.DemoRewardProcessor",
     )
 
@@ -590,7 +590,7 @@ async def health_check_endpoint() -> JSONResponse:
 if __name__ == "__main__":
     # Direct execution entry point for FastAPI server.
     # Alternative startup using uvicorn:
-    # uvicorn dashscope.agenticRL.server.server:app --host 0.0.0.0 --port 8000
+    # uvicorn dashscope.reinforcement.component.server.server:app --host 0.0.0.0 --port 8000
     import uvicorn
     import sys
     import argparse
@@ -627,7 +627,7 @@ if __name__ == "__main__":
         # uvicorn resolves this import string inside its own worker
         # process, so it must stay the public path used by
         # examples/workspace/scripts/start_local_*.sh's ``python3 -m``.
-        "dashscope.finetune.reinforcement.component.server.server:app",
+        "dashscope.reinforcement.component.server.server:app",
         host="0.0.0.0",
         port=_SERVER_PORT,
         workers=worker_count,

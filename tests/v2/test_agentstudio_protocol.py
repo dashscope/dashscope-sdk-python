@@ -18,9 +18,9 @@ import json
 
 import pytest
 
-from dashscope.agentstudio import exceptions
-from dashscope.agentstudio.transport import is_error_payload, unwrap
-from dashscope.agentstudio.types import (
+from dashscope.v2.agentstudio import exceptions
+from dashscope.v2.agentstudio.transport import is_error_payload, unwrap
+from dashscope.v2.agentstudio.types import (
     user_custom_tool_result,
     user_define_outcome,
     user_interrupt,
@@ -260,7 +260,7 @@ def test_agent_system_field_and_property():
     """Server returns ``system`` field; SDK exposes it both as
     ``agent.system`` and the convenience ``agent.system_prompt`` property.
     """
-    from dashscope.agentstudio.types import Agent
+    from dashscope.v2.agentstudio.types import Agent
 
     agent = Agent(id="agt_1", system="You are helpful.", name="Test")
     assert agent.system == "You are helpful."
@@ -269,7 +269,7 @@ def test_agent_system_field_and_property():
 
 def test_session_stats_and_usage_fields():
     """Session now parses ``stats`` and ``usage`` from server response."""
-    from dashscope.agentstudio.types import Session
+    from dashscope.v2.agentstudio.types import Session
 
     stats = {"active_seconds": 42, "duration_seconds": 5}
     usage = {"input_tokens": 100, "output_tokens": 200}
@@ -305,7 +305,7 @@ class _RecordingTransport:
 
     def request(self, method, path, **kwargs):
         self.calls.append({"method": method, "path": path, **kwargs})
-        from dashscope.agentstudio.transport import APIResponse
+        from dashscope.v2.agentstudio.transport import APIResponse
 
         return APIResponse(
             data={"id": "agent_1", "version": 3, "name": "demo"},
@@ -314,7 +314,7 @@ class _RecordingTransport:
 
 
 def _client_with_recording_transport():
-    from dashscope.agentstudio import Client
+    from dashscope.v2.agentstudio import Client
 
     c = Client(api_key="test-key", base_url="http://test")
     c.transport = _RecordingTransport()
@@ -363,7 +363,7 @@ def test_agents_update_does_not_auto_retrieve():
 
 def test_thread_event_exposes_thread_id():
     """thread_* events carry a top-level thread_id; it must be a real field."""
-    from dashscope.agentstudio.types import Message
+    from dashscope.v2.agentstudio.types import Message
 
     ev = Message(
         object="message",
@@ -386,7 +386,7 @@ def test_thread_event_exposes_thread_id():
 
 def test_agent_create_body_includes_multiagent():
     """multiagent roster is forwarded verbatim on create."""
-    from dashscope.agentstudio.types.params import AgentCreateParams
+    from dashscope.v2.agentstudio.types.params import AgentCreateParams
 
     body = AgentCreateParams(
         name="coordinator",
@@ -411,7 +411,7 @@ def test_agent_create_body_includes_multiagent():
 
 def test_agent_update_body_includes_multiagent():
     """multiagent is forwarded on update alongside the required version."""
-    from dashscope.agentstudio.types.params import AgentUpdateParams
+    from dashscope.v2.agentstudio.types.params import AgentUpdateParams
 
     body = AgentUpdateParams(
         name="coordinator",
@@ -431,7 +431,7 @@ def test_agent_update_body_includes_multiagent():
 
     # A MultiAgentConfig read off a response must be accepted back as-is,
     # so read-modify-write round trips work.
-    from dashscope.agentstudio.types import Agent
+    from dashscope.v2.agentstudio.types import Agent
 
     hydrated = Agent(
         id="agent_1",
@@ -455,7 +455,7 @@ def test_agent_update_body_includes_multiagent():
 
 def test_agent_create_body_model_id_shorthand():
     """Bare model id == ModelConfig(id=...) shorthand."""
-    from dashscope.agentstudio.types.params import AgentCreateParams
+    from dashscope.v2.agentstudio.types.params import AgentCreateParams
 
     body = AgentCreateParams(name="a", model="qwen3-max").to_dict()
     assert body["model"] == {"id": "qwen3-max"}
@@ -463,8 +463,8 @@ def test_agent_create_body_model_id_shorthand():
 
 def test_agent_create_body_model_config_object():
     """The model config is one object carrying id + inference params."""
-    from dashscope.agentstudio.types import ModelConfig
-    from dashscope.agentstudio.types.params import AgentCreateParams
+    from dashscope.v2.agentstudio.types import ModelConfig
+    from dashscope.v2.agentstudio.types.params import AgentCreateParams
 
     body = AgentCreateParams(
         name="a",
@@ -495,8 +495,8 @@ def test_agent_create_body_model_config_object():
 
 def test_agent_create_body_keeps_falsy_params():
     """False / 0.0 mean "set to this", not "unset"."""
-    from dashscope.agentstudio.types import ModelConfig
-    from dashscope.agentstudio.types.params import AgentCreateParams
+    from dashscope.v2.agentstudio.types import ModelConfig
+    from dashscope.v2.agentstudio.types.params import AgentCreateParams
 
     body = AgentCreateParams(
         name="a",
@@ -515,7 +515,7 @@ def test_agent_create_body_keeps_falsy_params():
 
 def test_agent_create_rejects_a_raw_dict_model():
     """Request side takes the typed config; the response parser still maps."""
-    from dashscope.agentstudio.types.params import (
+    from dashscope.v2.agentstudio.types.params import (
         AgentCreateParams,
         AgentUpdateParams,
     )
@@ -532,8 +532,8 @@ def test_agent_create_rejects_a_raw_dict_model():
 
 def test_agent_create_body_omits_unset_model_params():
     """Only the fields you set are sent; the rest keep server defaults."""
-    from dashscope.agentstudio.types import ModelConfig
-    from dashscope.agentstudio.types.params import AgentCreateParams
+    from dashscope.v2.agentstudio.types import ModelConfig
+    from dashscope.v2.agentstudio.types.params import AgentCreateParams
 
     body = AgentCreateParams(
         name="a",
@@ -548,9 +548,9 @@ def test_model_config_carries_the_whole_surface_no_flat_kwargs():
     """Guard: inference params live on ModelConfig, never as flat kwargs."""
     import inspect
 
-    from dashscope.agentstudio.resources.agents import Agents, AsyncAgents
-    from dashscope.agentstudio.types import ModelConfig
-    from dashscope.agentstudio.types.params import (
+    from dashscope.v2.agentstudio.resources.agents import Agents, AsyncAgents
+    from dashscope.v2.agentstudio.types import ModelConfig
+    from dashscope.v2.agentstudio.types.params import (
         AgentCreateParams,
         AgentUpdateParams,
     )
@@ -574,8 +574,8 @@ def test_model_config_carries_the_whole_surface_no_flat_kwargs():
 
 def test_agent_create_requires_a_model_with_id():
     """Missing or id-less configs fail fast."""
-    from dashscope.agentstudio.types import ModelConfig
-    from dashscope.agentstudio.types.params import AgentCreateParams
+    from dashscope.v2.agentstudio.types import ModelConfig
+    from dashscope.v2.agentstudio.types.params import AgentCreateParams
 
     with pytest.raises(ValueError, match="model is required"):
         AgentCreateParams(name="a", model=None)
@@ -586,7 +586,7 @@ def test_agent_create_requires_a_model_with_id():
 
 def test_agent_update_body_omits_model_when_unset():
     """Update without model omits the field, so the remote config survives."""
-    from dashscope.agentstudio.types.params import AgentUpdateParams
+    from dashscope.v2.agentstudio.types.params import AgentUpdateParams
 
     body = AgentUpdateParams(version=2, name="a").to_dict()
     assert "model" not in body
@@ -596,8 +596,8 @@ def test_agent_update_body_omits_model_when_unset():
 
 def test_agent_update_replaces_model_config_without_local_merge():
     """No local merge: the SDK sends exactly the config it was given."""
-    from dashscope.agentstudio.types import ModelConfig
-    from dashscope.agentstudio.types.params import AgentUpdateParams
+    from dashscope.v2.agentstudio.types import ModelConfig
+    from dashscope.v2.agentstudio.types.params import AgentUpdateParams
 
     body = AgentUpdateParams(
         version=2,
@@ -617,8 +617,8 @@ def test_agent_update_replaces_model_config_without_local_merge():
 
 def test_agent_update_partial_config_is_not_silently_dropped():
     """An explicit model argument must carry an id, even when empty."""
-    from dashscope.agentstudio.types import ModelConfig
-    from dashscope.agentstudio.types.params import AgentUpdateParams
+    from dashscope.v2.agentstudio.types import ModelConfig
+    from dashscope.v2.agentstudio.types.params import AgentUpdateParams
 
     with pytest.raises(ValueError, match="model.id is required"):
         AgentUpdateParams(version=2, model=ModelConfig())
@@ -628,7 +628,7 @@ def test_agent_update_partial_config_is_not_silently_dropped():
 
 def test_agents_create_sends_model_config():
     """The resource method forwards the config object into the request."""
-    from dashscope.agentstudio.types import ModelConfig
+    from dashscope.v2.agentstudio.types import ModelConfig
 
     client = _client_with_recording_transport()
     client.agents.create(
@@ -650,7 +650,7 @@ def test_agents_create_sends_model_config():
 
 
 def test_agents_update_sends_model_config():
-    from dashscope.agentstudio.types import Agent
+    from dashscope.v2.agentstudio.types import Agent
 
     client = _client_with_recording_transport()
     agent = Agent(id="agent_1", model={"id": "qwen3-max", "max_tokens": 4096})
@@ -676,7 +676,7 @@ class _AsyncRecordingTransport:
 
     async def request(self, method, path, **kwargs):
         self.calls.append({"method": method, "path": path, **kwargs})
-        from dashscope.agentstudio.transport import APIResponse
+        from dashscope.v2.agentstudio.transport import APIResponse
 
         return APIResponse(
             data={"id": "agent_1", "version": 3, "name": "demo"},
@@ -685,7 +685,7 @@ class _AsyncRecordingTransport:
 
 
 def _async_client_with_recording_transport():
-    from dashscope.agentstudio import AsyncClient
+    from dashscope.v2.agentstudio import AsyncClient
 
     c = AsyncClient(api_key="test-key", base_url="http://test")
     c.transport = _AsyncRecordingTransport()
@@ -696,7 +696,7 @@ def test_agents_sync_and_async_mirror_each_other():
     """AsyncAgents must mirror Agents: same kwargs, same docstrings."""
     import inspect
 
-    from dashscope.agentstudio.resources.agents import Agents, AsyncAgents
+    from dashscope.v2.agentstudio.resources.agents import Agents, AsyncAgents
 
     for method in (
         "create",
@@ -720,7 +720,7 @@ def test_agents_sync_and_async_mirror_each_other():
 
 @pytest.mark.asyncio
 async def test_async_agents_create_sends_model_config():
-    from dashscope.agentstudio.types import ModelConfig
+    from dashscope.v2.agentstudio.types import ModelConfig
 
     client = _async_client_with_recording_transport()
     await client.agents.create(
@@ -742,7 +742,7 @@ async def test_async_agents_create_sends_model_config():
 
 @pytest.mark.asyncio
 async def test_async_agents_update_sends_model_config():
-    from dashscope.agentstudio.types import ModelConfig
+    from dashscope.v2.agentstudio.types import ModelConfig
 
     client = _async_client_with_recording_transport()
     await client.agents.update(
@@ -758,7 +758,7 @@ async def test_async_agents_update_sends_model_config():
 
 def test_agent_model_hydrates_multiagent():
     """Agent response hydrates the multiagent dict into typed models."""
-    from dashscope.agentstudio.types import (
+    from dashscope.v2.agentstudio.types import (
         Agent,
         MultiAgentConfig,
         MultiAgentRosterEntry,
@@ -785,7 +785,7 @@ def test_agent_model_hydrates_multiagent():
 
 
 def _approval_request_msg():
-    from dashscope.agentstudio.types import parse_message
+    from dashscope.v2.agentstudio.types import parse_message
 
     return parse_message(
         {
@@ -811,7 +811,7 @@ def _approval_request_msg():
 
 
 def test_tool_approval_request_accessor():
-    from dashscope.agentstudio.types import parse_message
+    from dashscope.v2.agentstudio.types import parse_message
 
     m = _approval_request_msg()
     ap = m.tool_approval_request
@@ -826,8 +826,8 @@ def test_tool_approval_request_accessor():
 
 
 def test_stop_reason_status_and_enum():
-    from dashscope.agentstudio.types import StopReason
-    from dashscope.agentstudio.constants import (
+    from dashscope.v2.agentstudio.types import StopReason
+    from dashscope.v2.agentstudio.constants import (
         SSEEventType,
         SessionStatus,
         StopReasonType,
@@ -853,7 +853,7 @@ def test_stop_reason_status_and_enum():
 
 
 def test_permission_policy_validation():
-    from dashscope.agentstudio.types import PermissionPolicy
+    from dashscope.v2.agentstudio.types import PermissionPolicy
 
     assert PermissionPolicy(type="always_ask").type == "always_ask"
     assert PermissionPolicy().type == "always_allow"  # default
@@ -868,7 +868,7 @@ def test_permission_policy_validation():
 def test_approval_errors_map_by_http_status():
     """Approval error codes are not enumerated as separate exception types;
     they map by HTTP status, with the reason in .code/.message."""
-    from dashscope.agentstudio.exceptions import (
+    from dashscope.v2.agentstudio.exceptions import (
         InternalServerError,
         InvalidRequestError,
         OverloadedError,
@@ -896,7 +896,7 @@ def test_event_list_types_repeated_query():
     """Multi-type filter serializes as repeated types[]= keys, not a single
     comma-joined string (which the server parses as one bogus value)."""
     import httpx
-    from dashscope.agentstudio.types.params import SessionEventListParams
+    from dashscope.v2.agentstudio.types.params import SessionEventListParams
 
     params = SessionEventListParams(
         types=["message", "tool_call", "tool_approval_request"],
@@ -947,10 +947,10 @@ def _delta_payloads():
 
 
 def test_delta_frames_and_text_deltas():
-    from dashscope.agentstudio.resources.session_events import (
+    from dashscope.v2.agentstudio.resources.session_events import (
         _TypedEventStream,
     )
-    from dashscope.agentstudio.types import parse_message
+    from dashscope.v2.agentstudio.types import parse_message
 
     msgs = [parse_message(p) for p in _delta_payloads()]
     assert msgs[0].event_start == {"id": "sevt_a", "type": "message"}
@@ -1003,7 +1003,7 @@ _DELTA_FRAMES = [
 
 
 def _stream_of(frames):
-    from dashscope.agentstudio.resources.session_events import (
+    from dashscope.v2.agentstudio.resources.session_events import (
         _TypedEventStream,
     )
 
@@ -1011,7 +1011,7 @@ def _stream_of(frames):
 
 
 def test_second_pass_on_one_stream_raises_instead_of_returning_nothing():
-    from dashscope.agentstudio.resources.session_events import (
+    from dashscope.v2.agentstudio.resources.session_events import (
         _AioTypedEventStream,
     )
 
@@ -1050,8 +1050,8 @@ def _run(agen):
 
 
 def test_session_resource_model_and_add_params():
-    from dashscope.agentstudio import SessionResource
-    from dashscope.agentstudio.types.params import SessionResourceAddParams
+    from dashscope.v2.agentstudio import SessionResource
+    from dashscope.v2.agentstudio.types.params import SessionResourceAddParams
 
     r = SessionResource(
         id="sesrsc_1",
@@ -1076,7 +1076,7 @@ def test_session_resource_model_and_add_params():
 
 
 def test_session_thread_model_fields():
-    from dashscope.agentstudio.types import SessionThread
+    from dashscope.v2.agentstudio.types import SessionThread
 
     th = SessionThread(
         id="sthr_01",
@@ -1098,7 +1098,7 @@ def test_session_create_params_agent_string_and_object():
     """createSession ``agent`` accepts the Agent ID string (forward-compat)
     or an override object; ``environment_variables`` / ``mcp_configs`` are
     new top-level fields. Omitted fields are not sent (no null leak)."""
-    from dashscope.agentstudio.types.params import SessionCreateParams
+    from dashscope.v2.agentstudio.types.params import SessionCreateParams
 
     # String agent — backward compatible.
     assert SessionCreateParams(agent="agent_01", title="x").to_dict() == {
@@ -1149,7 +1149,7 @@ def test_session_update_params_patch_and_clear_semantics():
     an explicit ``None`` sub-field serializes to ``null`` (revoke override),
     an omitted sub-field stays absent (keep), ``[]`` / ``""`` override empty.
     """
-    from dashscope.agentstudio.types.params import SessionUpdateParams
+    from dashscope.v2.agentstudio.types.params import SessionUpdateParams
 
     # Only title — everything else omitted, no null uploaded.
     assert SessionUpdateParams(title="x").to_dict() == {"title": "x"}
@@ -1214,7 +1214,7 @@ def test_session_update_params_patch_and_clear_semantics():
 def test_session_model_hydrates_override_agent_and_new_fields():
     """Session response parses the agent override object and the new
     ``environment_variables`` / ``mcp_configs`` fields."""
-    from dashscope.agentstudio.types import Agent, Session
+    from dashscope.v2.agentstudio.types import Agent, Session
 
     s = Session(
         id="sesn_1",
@@ -1240,7 +1240,7 @@ def test_session_model_hydrates_override_agent_and_new_fields():
 
 
 def test_message_error_and_pending_signal():
-    from dashscope.agentstudio.types import parse_message
+    from dashscope.v2.agentstudio.types import parse_message
 
     ev = parse_message(
         {
@@ -1283,7 +1283,7 @@ def test_message_error_and_pending_signal():
 
 
 def test_message_data_accessors():
-    from dashscope.agentstudio.types import parse_message
+    from dashscope.v2.agentstudio.types import parse_message
 
     # model_request_end
     mre = parse_message(
@@ -1383,7 +1383,7 @@ def test_message_data_accessors():
 
 
 def test_thread_message_routing_accessor():
-    from dashscope.agentstudio.types import parse_message
+    from dashscope.v2.agentstudio.types import parse_message
 
     sent = parse_message(
         {
@@ -1420,7 +1420,7 @@ def test_multiagent_config_normalization_and_roster_fields():
     """The SDK normalizes multiagent config (type default, self cleanup) but
     does not reject server data — the 1-20 / at-most-one-self limits are the
     server's to enforce, so parsing a valid agent never fails."""
-    from dashscope.agentstudio.types import (
+    from dashscope.v2.agentstudio.types import (
         MultiAgentConfig,
         MultiAgentRosterEntry,
     )
@@ -1452,7 +1452,7 @@ def test_text_stream_stops_on_session_status_idle():
     """Regression: text_stream/text_deltas must not crash on session_status events.
     RESCHEDULING was deleted from constants but stop-set tuples still referenced it,
     causing AttributeError on every stream's normal end path."""
-    from dashscope.agentstudio.resources.session_events import (
+    from dashscope.v2.agentstudio.resources.session_events import (
         _TypedEventStream,
     )
 

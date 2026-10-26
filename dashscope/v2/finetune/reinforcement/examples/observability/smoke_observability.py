@@ -51,33 +51,33 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
 
-from dashscope.finetune.reinforcement.common.model_types import (
+from dashscope.reinforcement.common.model_types import (
     FunctionType as FuncType,
 )
-from dashscope.finetune.reinforcement.component.data.base_data_model import (
+from dashscope.reinforcement.component.data.base_data_model import (
     AgentOutput,
     ModelResource,
 )
-from dashscope.finetune.reinforcement.component.data.reward_input import (
+from dashscope.reinforcement.component.data.reward_input import (
     RewardInput,
 )
-from dashscope.finetune.reinforcement.component.data.rollout_input import (
+from dashscope.reinforcement.component.data.rollout_input import (
     RolloutInput,
 )
-from dashscope.finetune.reinforcement.component.func_manager import FuncManager
-from dashscope.finetune.reinforcement.component.observability.genai import (
+from dashscope.reinforcement.component.func_manager import FuncManager
+from dashscope.reinforcement.component.observability.genai import (
     observe_llm,
     observe_tool,
     trace_client,
     trace_tool,
 )
-from dashscope.finetune.reinforcement.component.observability.processor_span import (  # noqa: E501  # pylint: disable=line-too-long
+from dashscope.reinforcement.component.observability.processor_span import (  # noqa: E501  # pylint: disable=line-too-long
     observe_processor,
 )
-from dashscope.finetune.reinforcement.component.processor.abstract_reward_processor import (  # noqa: E501  # pylint: disable=line-too-long
+from dashscope.reinforcement.component.processor.abstract_reward_processor import (  # noqa: E501  # pylint: disable=line-too-long
     AbstractRewardProcessor,
 )
-from dashscope.finetune.reinforcement.component.processor.abstract_rollout_processor import (  # noqa: E501  # pylint: disable=line-too-long
+from dashscope.reinforcement.component.processor.abstract_rollout_processor import (  # noqa: E501  # pylint: disable=line-too-long
     AbstractRolloutProcessor,
 )
 

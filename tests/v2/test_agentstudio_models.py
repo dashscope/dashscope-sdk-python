@@ -3,11 +3,11 @@
 
 import pytest
 
-from dashscope.agentstudio.resources._helpers import (
+from dashscope.v2.agentstudio.resources._helpers import (
     _coerce_vault,
     _coerce_credential,
 )
-from dashscope.agentstudio.types import (
+from dashscope.v2.agentstudio.types import (
     Agent,
     Credential,
     CredentialAuth,

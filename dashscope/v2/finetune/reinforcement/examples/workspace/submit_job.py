@@ -49,7 +49,7 @@ Method Documentation:
 # await client.run()  # Uses YAML configuration
 
 from dashscope.finetune.agentic_rl import AgenticRL
-from dashscope.finetune.reinforcement import (
+from dashscope.reinforcement import (
     logger,
     DataSourceType,
     TrainingDataset,

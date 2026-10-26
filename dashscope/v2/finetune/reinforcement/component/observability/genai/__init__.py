@@ -4,13 +4,13 @@ GenAI span helpers (LoongSuite / ``loongsuite-util-genai``).
 
 Submodules by responsibility:
 
-- :mod:`~dashscope.finetune.reinforcement.component.observability.genai.messages`  # noqa: E501
+- :mod:`~dashscope.reinforcement.component.observability.genai.messages`  # noqa: E501
   — message and tool_calls mapping
-- :mod:`~dashscope.finetune.reinforcement.component.observability.genai.llm_openai`  # noqa: E501
+- :mod:`~dashscope.reinforcement.component.observability.genai.llm_openai`  # noqa: E501
   — OpenAI-compatible LLM client patching
-- :mod:`~dashscope.finetune.reinforcement.component.observability.genai.llm_dashscope`  # noqa: E501
+- :mod:`~dashscope.reinforcement.component.observability.genai.llm_dashscope`  # noqa: E501
   — DashScope Generation patching
-- :mod:`~dashscope.finetune.reinforcement.component.observability.genai.tools`
+- :mod:`~dashscope.reinforcement.component.observability.genai.tools`
   — tool tracing (decorator + patcher)
 
 Requires ``pip install loongsuite-util-genai`` and tracing env flags
@@ -18,7 +18,7 @@ Requires ``pip install loongsuite-util-genai`` and tracing env flags
 
 Optional: ``AGENTIC_RL_LOG_TRACE_ID=true`` enables ``trace_id`` diagnostic
 logs (default off);
-see :mod:`dashscope.finetune.reinforcement.component.observability.tracing`.
+see :mod:`dashscope.reinforcement.component.observability.tracing`.
 """
 
 from __future__ import annotations

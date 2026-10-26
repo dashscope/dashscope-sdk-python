@@ -38,7 +38,7 @@ FC_API_KEY = os.environ.get("FC_API_KEY", DASHSCOPE_API_KEY)
 # The logger name is an observability contract: user log filters and
 # existing pipelines match on it, so it keeps the published name even
 # though the package itself now lives under ``dashscope.v2``.
-LOGGER_NAME = os.environ.get("LOGGER_NAME", "dashscope.finetune.reinforcement")
+LOGGER_NAME = os.environ.get("LOGGER_NAME", "dashscope.reinforcement")
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "info").upper()
 LOGGER_FILTER_FIELDS = {
     "trigger_token",
@@ -117,9 +117,9 @@ FC_SERVER_CLASSPATH = os.environ.get(
     "FC_SERVER_CLASSPATH",
     # Written into the start.sh deployed to the Function Compute
     # sandbox, where the installed dashscope may be any published
-    # version. The public path keeps resolving through the
-    # reverse-reference shim at dashscope/finetune/reinforcement.
-    "dashscope.finetune.reinforcement.component.server.server",
+    # version. Both the new public path and the old finetune path keep
+    # resolving through reverse-reference shims.
+    "dashscope.reinforcement.component.server.server",
 )
 FC_WORKERS_COUNT = get_int_env("FC_WORKERS_COUNT", 2)
 FC_LAYER_USED = get_bool_env("FC_LAYER_USED", True)

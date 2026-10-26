@@ -105,7 +105,7 @@ main() {
 
     # Phase 4: Service Launch
     log "Starting ${SERVICE_TYPE} service"
-    exec python3 -m dashscope.finetune.reinforcement.component.server.server "$@"
+    exec python3 -m dashscope.reinforcement.component.server.server "$@"
 }
 
 # ==================== Entry ========================

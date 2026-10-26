@@ -118,7 +118,7 @@ export LOG_LEVEL="CRITICAL"
 生成智能体轨迹（与环境/LLM 的交互）。
 
 ```python
-from dashscope.finetune.reinforcement import AbstractRolloutProcessor, RolloutInput, RolloutOutput
+from dashscope.reinforcement import AbstractRolloutProcessor, RolloutInput, RolloutOutput
 
 class DemoRolloutProcessor(AbstractRolloutProcessor):
     async def process(self, input: RolloutInput) -> RolloutOutput:
@@ -130,7 +130,7 @@ class DemoRolloutProcessor(AbstractRolloutProcessor):
 评分单个步骤或最终输出。
 
 ```python
-from dashscope.finetune.reinforcement import AbstractRewardProcessor, RewardInput, RewardOutput
+from dashscope.reinforcement import AbstractRewardProcessor, RewardInput, RewardOutput
 
 class DemoRewardProcessor(AbstractRewardProcessor):
     def process(self, input: RewardInput) -> RewardOutput:
@@ -140,7 +140,7 @@ class DemoRewardProcessor(AbstractRewardProcessor):
 
 #### 使用装饰器的高级 Reward 处理器
 ```python
-from dashscope.finetune.reinforcement import reward_func, sub_reward_func, aggregate_func
+from dashscope.reinforcement import reward_func, sub_reward_func, aggregate_func
 
 @reward_func("SafetyProcessor")
 class SafetyProcessor(AbstractRewardProcessor):
@@ -164,7 +164,7 @@ class SafetyProcessor(AbstractRewardProcessor):
 批量评分轨迹（例如用于排名）。
 
 ```python
-from dashscope.finetune.reinforcement import AbstractGroupRewardProcessor, GroupRewardInput, GroupRewardOutput
+from dashscope.reinforcement import AbstractGroupRewardProcessor, GroupRewardInput, GroupRewardOutput
 
 class DemoGroupRewardProcessor(AbstractGroupRewardProcessor):
     def setup(self) -> None:
@@ -184,7 +184,7 @@ class DemoGroupRewardProcessor(AbstractGroupRewardProcessor):
 2.  确认未显式关闭链路跟踪（`ENABLE_TRAJECTORY=false` 会关闭）。
 
 #### 检测装饰器
-从 `dashscope.finetune.reinforcement.component.observability` 导入。
+从 `dashscope.reinforcement.component.observability` 导入。
 
 | 装饰器 | 用法 | 描述 |
 | :--- | :--- | :--- |
@@ -226,9 +226,9 @@ class DemoGroupRewardProcessor(AbstractGroupRewardProcessor):
 
 ```python
 import openai
-from dashscope.finetune.reinforcement import AbstractRolloutProcessor, RolloutInput, RolloutOutput
-from dashscope.finetune.reinforcement.component.data.base_data_model import AgentOutput, TaskStatus
-from dashscope.finetune.reinforcement.component.observability import (
+from dashscope.reinforcement import AbstractRolloutProcessor, RolloutInput, RolloutOutput
+from dashscope.reinforcement.component.data.base_data_model import AgentOutput, TaskStatus
+from dashscope.reinforcement.component.observability import (
     observe_processor,
     trace_client,
     trace_tool,

@@ -37,7 +37,7 @@ test_functions():
 
 import json
 
-from dashscope.finetune.reinforcement import (
+from dashscope.reinforcement import (
     logger,
     TaskStatus,
     FunctionType,

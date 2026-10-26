@@ -16,20 +16,20 @@ import sympy
 # Public names are provided lazily via __getattr__; __all__ entries are not
 # bindings.
 # pylint: disable=undefined-all-variable
-from dashscope.finetune.reinforcement import RewardInput, RewardOutput
-from dashscope.finetune.reinforcement import logger
-from dashscope.finetune.reinforcement.component.data.base_data_model import (
+from dashscope.reinforcement import RewardInput, RewardOutput
+from dashscope.reinforcement import logger
+from dashscope.reinforcement.component.data.base_data_model import (
     TaskStatus,
 )
-from dashscope.finetune.reinforcement.component.data.reward_output import (
+from dashscope.reinforcement.component.data.reward_output import (
     Reward,
 )
 
 # pylint: disable=no-name-in-module
-from dashscope.finetune.reinforcement.component.observability import (
+from dashscope.reinforcement.component.observability import (
     observe_processor,
 )
-from dashscope.finetune.reinforcement.component.processor import (
+from dashscope.reinforcement.component.processor import (
     AbstractRewardProcessor,
 )
 
