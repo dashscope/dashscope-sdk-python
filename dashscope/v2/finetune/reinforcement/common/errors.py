@@ -1,19 +1,38 @@
 # -*- coding: utf-8 -*-
-"""
-Custom exception hierarchy for the AgenticRL system
-"""
+"""Native v2 errors for AgenticRL, with legacy numeric-code compatibility."""
 
 from datetime import datetime
-from typing import Optional, Dict
+from typing import Any, Dict, Optional
+
+from dashscope.v2.errors import _CatalogSdkError, sdk_error
+
+_LEGACY_ERROR_CODES = {
+    "sdk.agentic_rl.Error": 1000,
+    "sdk.agentic_rl.IOErrorWithCode": 1800,
+    "sdk.agentic_rl.RuntimeErrorWithCode": 0,
+    "sdk.agentic_rl.ValueErrorWithCode": 0,
+    "sdk.agentic_rl.InputError": 1100,
+    "sdk.agentic_rl.OutputError": 1200,
+    "sdk.agentic_rl.BaseConnectionError": 1300,
+    "sdk.agentic_rl.OSSConnectionError": 1310,
+    "sdk.agentic_rl.OSSUploadError": 1320,
+    "sdk.agentic_rl.DeploymentError": 1400,
+    "sdk.agentic_rl.RegistrationError": 1410,
+    "sdk.agentic_rl.DatasetsError": 1460,
+    "sdk.agentic_rl.FunctionLoadError": 1420,
+    "sdk.agentic_rl.FunctionLayerError": 1450,
+    "sdk.agentic_rl.InstanceWarmupError": 1430,
+    "sdk.agentic_rl.InstanceQueryError": 1440,
+    "sdk.agentic_rl.ValidationError": 1500,
+    "sdk.agentic_rl.ConfigurationError": 1510,
+    "sdk.agentic_rl.BasePermissionError": 1700,
+}
 
 
 class _RootCauseMixin:
-    """Mixin that provides root-cause traversal and formatting for exceptions
-    that carry an error code."""
-
     @property
-    def root_cause(self) -> "Exception":
-        root: "Exception" = self  # type: ignore[assignment]
+    def root_cause(self) -> Exception:
+        root: Exception = self  # type: ignore[assignment]
         seen = {id(root)}
         while root.__cause__ and id(root.__cause__) not in seen:
             root = root.__cause__
@@ -21,7 +40,6 @@ class _RootCauseMixin:
         return root
 
     def _format_cause(self) -> str:
-        """Format root cause information if available."""
         if self.__cause__ is not None:
             root = self.root_cause
             if self is not root:
@@ -32,282 +50,326 @@ class _RootCauseMixin:
         return ""
 
 
-class AgenticRLError(_RootCauseMixin, Exception):
-    """Base class for all Agentic RL exceptions."""
+class AgenticRLError(_RootCauseMixin, _CatalogSdkError):
+    """Base class for AgenticRL failures in the v2 error family."""
 
-    def __init__(self, message: str, error_code: int = 1000):
-        super().__init__(message)
-        self.error_code = error_code
-        self.timestamp = datetime.now().isoformat()
-        self.message = message
-
-    def __str__(self):
-        base = f"[{self.error_code}] {self.message} (at {self.timestamp})"
-        return f"{base}{self._format_cause()}"
-
-
-class IOErrorWithCode(AgenticRLError):
-    """Raised for general I/O operation failures"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.Error"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1800,
+        error_code: Optional[int] = None,
+        **kwargs: Any,
+    ) -> None:
+        self._legacy_error_code = error_code
+        self.timestamp = datetime.now().isoformat()
+        super().__init__(message, **kwargs)
+
+    @classmethod
+    def from_catalog(
+        cls,
+        name: str,
+        *,
+        error_code: int,
+        variables: Optional[Dict[str, str]] = None,
+    ) -> "AgenticRLError":
+        error = sdk_error(name, variables)
+        return cls(
+            error.message,
+            error_code=error_code,
+            code=error.code,
+            solution=error.solution,
+            allow_retry=error.allow_retry,
+        )
+
+    @property
+    def error_code(self) -> int:
+        if self._legacy_error_code is not None:
+            return self._legacy_error_code
+        return _LEGACY_ERROR_CODES.get(self.code or "", 1000)
+
+    def __str__(self) -> str:
+        return f"{super().__str__()}{self._format_cause()}"
+
+
+class IOErrorWithCode(AgenticRLError):
+    _SDK_ERROR_NAME = "sdk.agentic_rl.IOErrorWithCode"
+
+    def __init__(
+        self,
+        message: str,
+        error_code: Optional[int] = None,
         path: Optional[str] = None,
         operation: Optional[str] = None,
-    ):
-        super().__init__(f"I/O error: {message}", error_code)
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(f"I/O error: {message}", error_code, **kwargs)
         self.path = path
         self.operation = operation
 
 
-class RuntimeErrorWithCode(_RootCauseMixin, RuntimeError):
-    """Enhanced RuntimeError that supports error codes for better error
-    categorization."""
-
-    def __init__(self, message: str, error_code: int = 0):
-        super().__init__(message)
-        self.error_code = error_code
-        self.message = message
-
-    def __str__(self):
-        return f"[{self.error_code}] {self.message}{self._format_cause()}"
+class RuntimeErrorWithCode(AgenticRLError):
+    _SDK_ERROR_NAME = "sdk.agentic_rl.RuntimeErrorWithCode"
 
 
-class ValueErrorWithCode(_RootCauseMixin, ValueError):
-    """Enhanced ValueError that supports error codes for better error
-    categorization."""
-
-    def __init__(self, message: str, error_code: int = 0):
-        super().__init__(message)
-        self.error_code = error_code
-        self.message = message
-
-    def __str__(self):
-        return f"[{self.error_code}] {self.message}{self._format_cause()}"
+class ValueErrorWithCode(AgenticRLError):
+    _SDK_ERROR_NAME = "sdk.agentic_rl.ValueErrorWithCode"
 
 
 class InputError(AgenticRLError):
-    """Raised when invalid input data is detected during validation"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.InputError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1100,
+        error_code: Optional[int] = None,
         field: Optional[str] = None,
-    ):
-        super().__init__(message, error_code)
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(message, error_code, **kwargs)
         self.field = field
 
 
 class OutputError(AgenticRLError):
-    """Raised when service response fails output validation checks"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.OutputError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1200,
+        error_code: Optional[int] = None,
         response: Optional[Dict] = None,
-    ):
-        super().__init__(message, error_code)
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(message, error_code, **kwargs)
         self.response = response
 
 
 class BaseConnectionError(AgenticRLError):
-    """Base class for connection-related errors"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.BaseConnectionError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1300,
+        error_code: Optional[int] = None,
         endpoint: Optional[str] = None,
-    ):
-        super().__init__(message, error_code)
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(message, error_code, **kwargs)
         self.endpoint = endpoint
 
 
 class OSSConnectionError(BaseConnectionError):
-    """Raised when connecting to OSS storage service fails"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.OSSConnectionError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1310,
-        endpoint: str = None,
-    ):
+        error_code: Optional[int] = None,
+        endpoint: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(
             f"OSS connection failed: {message}",
             error_code,
             endpoint,
+            **kwargs,
         )
 
 
 class OSSUploadError(BaseConnectionError):
-    """Raised when file upload operation to OSS fails"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.OSSUploadError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1320,
-        endpoint: str = None,
+        error_code: Optional[int] = None,
+        endpoint: Optional[str] = None,
         bucket: Optional[str] = None,
         object_key: Optional[str] = None,
         file_size: Optional[int] = None,
-    ):
-        super().__init__(f"OSS upload failed: {message}", error_code, endpoint)
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            f"OSS upload failed: {message}",
+            error_code,
+            endpoint,
+            **kwargs,
+        )
         self.bucket = bucket
         self.object_key = object_key
         self.file_size = file_size
 
 
 class DeploymentError(AgenticRLError):
-    """Base class for deployment-related errors"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.DeploymentError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1400,
+        error_code: Optional[int] = None,
         resource_id: Optional[str] = None,
-    ):
-        super().__init__(message, error_code)
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(message, error_code, **kwargs)
         self.resource_id = resource_id
 
 
 class RegistrationError(DeploymentError):
-    """Raised when function registration fails in the deployment system"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.RegistrationError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1410,
+        error_code: Optional[int] = None,
         resource_id: Optional[str] = None,
-    ):
+        **kwargs: Any,
+    ) -> None:
         super().__init__(
             f"Registration failed: {message}",
             error_code,
             resource_id,
+            **kwargs,
         )
 
 
 class DatasetsError(DeploymentError):
-    """Raised when update datasets fails in the deployment system"""
-
-    def __init__(self, message: str, error_code: int = 1460):
-        super().__init__(f"Datasets failed: {message}", error_code)
-
-
-class FunctionLoadError(DeploymentError):
-    """Raised when loading a registered function into runtime fails"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.DatasetsError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1420,
-        entity_id: str = None,
+        error_code: Optional[int] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(f"Datasets failed: {message}", error_code, **kwargs)
+
+
+class FunctionLoadError(DeploymentError):
+    _SDK_ERROR_NAME = "sdk.agentic_rl.FunctionLoadError"
+
+    def __init__(
+        self,
+        message: str,
+        error_code: Optional[int] = None,
+        entity_id: Optional[str] = None,
         error_log: Optional[str] = None,
-    ):
+        **kwargs: Any,
+    ) -> None:
         super().__init__(
             f"Function load failed: {message}",
             error_code,
             entity_id,
+            **kwargs,
         )
         self.entity_id = entity_id
         self.error_log = error_log
 
 
 class FunctionLayerError(DeploymentError):
-    """Raised when creating a layer of function fails"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.FunctionLayerError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1450,
-        layer_name: str = None,
+        error_code: Optional[int] = None,
+        layer_name: Optional[str] = None,
         error_log: Optional[str] = None,
-    ):
+        **kwargs: Any,
+    ) -> None:
         super().__init__(
             f"Function layer create failed: {message}",
             error_code,
             layer_name,
+            **kwargs,
         )
         self.layer_name = layer_name
         self.error_log = error_log
 
 
 class InstanceWarmupError(DeploymentError):
-    """Raised when function instance health check fails after deployment"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.InstanceWarmupError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1430,
-        instance_url: str = None,
+        error_code: Optional[int] = None,
+        instance_url: Optional[str] = None,
         timeout: float = 0.0,
         retry_after: Optional[float] = None,
-    ):
-        super().__init__(f"Instance warmup failed: {message}", error_code)
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            f"Instance warmup failed: {message}",
+            error_code,
+            **kwargs,
+        )
         self.instance_url = instance_url
         self.timeout = timeout
         self.retry_after = retry_after
 
 
 class InstanceQueryError(DeploymentError):
-    """Raised when querying function instance status fails"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.InstanceQueryError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1440,
-        instance_id: str = None,
+        error_code: Optional[int] = None,
+        instance_id: Optional[str] = None,
         query_attempts: int = 1,
-    ):
+        **kwargs: Any,
+    ) -> None:
         super().__init__(
             f"Instance query failed: {message}",
             error_code,
             instance_id,
+            **kwargs,
         )
         self.instance_id = instance_id
         self.query_attempts = query_attempts
 
 
 class ValidationError(AgenticRLError):
-    """Base class for data validation failures"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.ValidationError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1500,
+        error_code: Optional[int] = None,
         invalid_data: Optional[Dict] = None,
         validation_rules: Optional[Dict] = None,
-    ):
-        super().__init__(f"Validation failed: {message}", error_code)
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(f"Validation failed: {message}", error_code, **kwargs)
         self.invalid_data = invalid_data
         self.validation_rules = validation_rules
 
 
 class ConfigurationError(ValidationError):
-    """Raised when invalid system configuration is detected"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.ConfigurationError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1510,
+        error_code: Optional[int] = None,
         config_path: Optional[str] = None,
-    ):
-        super().__init__(message, error_code=error_code)
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(message, error_code=error_code, **kwargs)
         self.config_path = config_path
 
 
 class BasePermissionError(AgenticRLError):
-    """Raised when an operation lacks required permissions"""
+    _SDK_ERROR_NAME = "sdk.agentic_rl.BasePermissionError"
 
     def __init__(
         self,
         message: str,
-        error_code: int = 1700,
-        operation: str = None,
-        resource: str = None,
-    ):
-        super().__init__(f"Permission denied: {message}", error_code)
+        error_code: Optional[int] = None,
+        operation: Optional[str] = None,
+        resource: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(f"Permission denied: {message}", error_code, **kwargs)
         self.operation = operation
         self.resource = resource

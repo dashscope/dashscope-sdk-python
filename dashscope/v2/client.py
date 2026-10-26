@@ -153,33 +153,23 @@ class Client:
     def agentstudio(self):
         """Lazily mounted AgentStudio sub-SDK (design doc M3 3.8).
 
-        The client is wrapped in a transparent proxy (design doc M3 3.12)
-        that translates AgentStudio errors into the ``dashscope.v2``
-        exception family, so ``except dashscope.v2.errors.DashScopeError``
-        covers them. The proxy spoofs ``__class__`` and forwards
-        attributes, so ``isinstance(client.agentstudio, AgentStudioClient)``
-        and ``.transport`` access keep working.
-
-        AgentStudio ships its own transport rather than riding this
-        client's, so its requests keep the unmarked module tag
-        (``agentstudio``) instead of the v2 ``2`` marker -- the backend
-        already reports on that tag, and changing it would split the
-        server-side statistics.
+        AgentStudio raises ``dashscope.v2.errors`` natively. It ships its
+        own transport rather than riding this client's, so its requests
+        keep the unmarked module tag (``agentstudio``) instead of the v2
+        ``2`` marker -- the backend already reports on that tag, and
+        changing it would split the server-side statistics.
         """
         if self._agentstudio is None:
             # pylint: disable=import-outside-toplevel
             from dashscope.v2.agentstudio import Client as AgentStudioClient
-            from dashscope.v2.resources._agentstudio import wrap_agentstudio
 
             # agentstudio resolves its own base_url from workspace +
             # region (the v2 base_url does not propagate: the agentstudio
             # path differs), so forward both.
-            self._agentstudio = wrap_agentstudio(
-                AgentStudioClient(
-                    api_key=self._config.api_key,
-                    workspace=self._config.workspace,
-                    region=self._config.region,
-                ),
+            self._agentstudio = AgentStudioClient(
+                api_key=self._config.api_key,
+                workspace=self._config.workspace,
+                region=self._config.region,
             )
         return self._agentstudio
 
@@ -396,23 +386,19 @@ class AsyncClient:
     def agentstudio(self):
         """Lazily mounted AgentStudio sub-SDK (design doc M3 3.8).
 
-        See :attr:`Client.agentstudio`: the returned client is wrapped in
-        a transparent proxy that aligns AgentStudio errors with the
-        ``dashscope.v2`` exception family (design doc M3 3.12).
+        See :attr:`Client.agentstudio`; errors use the ``dashscope.v2``
+        exception family natively.
         """
         if self._agentstudio is None:
             # pylint: disable=import-outside-toplevel
             from dashscope.v2.agentstudio import AsyncClient as AsClient
-            from dashscope.v2.resources._agentstudio import wrap_agentstudio
 
             # See Client.agentstudio: agentstudio builds its own base_url
             # from workspace + region, so forward both.
-            self._agentstudio = wrap_agentstudio(
-                AsClient(
-                    api_key=self._config.api_key,
-                    workspace=self._config.workspace,
-                    region=self._config.region,
-                ),
+            self._agentstudio = AsClient(
+                api_key=self._config.api_key,
+                workspace=self._config.workspace,
+                region=self._config.region,
             )
         return self._agentstudio
 

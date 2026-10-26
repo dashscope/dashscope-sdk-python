@@ -7,10 +7,8 @@ is now a shim. Three contracts are pinned here:
 
 * the old import path -- including deep submodule paths -- resolves to the
   very same module and class objects, so nothing downstream sees a fork;
-* the pieces AgentStudio used to borrow from the 1.x ``common`` package now
-  come from the neutral ``dashscope._shared`` layer, with identity intact
-  (the exception base class and the mutable sdk-client override are both
-  load-bearing singletons);
+* shared validation and SDK identity helpers still come from the neutral
+  ``dashscope._shared`` layer, while exceptions come from ``v2.errors``;
 * AgentStudio keeps emitting the *unmarked* ``agentstudio`` module tag, and
   resolves its api key without reading the 1.x ``dashscope.api_key`` global.
 """
@@ -29,9 +27,9 @@ from dashscope.agentstudio.transport import build_headers
 from dashscope.legacy_1x.common import error as legacy_error
 from dashscope.legacy_1x.common import env as legacy_env
 from dashscope.legacy_1x.common import utils as legacy_utils
+from dashscope.v2 import errors as v2_errors
 from dashscope.v2.agentstudio import client as as_client
 from dashscope.v2.agentstudio import exceptions as impl_exc
-from dashscope.v2.resources._agentstudio import _is_resource, wrap_agentstudio
 
 BASE_URL = "https://as.test.local"
 
@@ -141,18 +139,10 @@ def test_deep_import_from_syntax_resolves():
 # ---------------------------------------------------------------------------
 
 
-def test_exception_base_class_identity_is_preserved():
-    """Both stacks must inherit from one and the same class object."""
-
-    from dashscope._shared._errors import DashScopeException
-
-    assert legacy_error.DashScopeException is DashScopeException
-    assert issubclass(
+def test_agentstudio_uses_the_v2_error_base():
+    assert impl_exc.AgentStudioError is v2_errors.DashScopeError
+    assert not issubclass(
         impl_exc.AgentStudioError,
-        legacy_error.DashScopeException,
-    )
-    assert issubclass(
-        legacy_error.InvalidParameter,
         legacy_error.DashScopeException,
     )
 
@@ -277,30 +267,3 @@ def test_missing_api_key_surfaces_at_request_time(_no_key_anywhere):
             uid=None,
             user_agent="ua",
         )
-
-
-# ---------------------------------------------------------------------------
-# The v2 error-alignment proxy still recognises sub-resources
-# ---------------------------------------------------------------------------
-
-
-def test_resource_detection_survives_the_move():
-    """``_RESOURCE_PACKAGE`` must track the new module path.
-
-    If it still pointed at ``dashscope.agentstudio.resources`` the proxy
-    would silently stop wrapping sub-resources, and their errors would
-    escape ``except dashscope.v2.errors.DashScopeError``.
-    """
-
-    client = _make_client()
-    assert _is_resource(client.agents)
-    assert _is_resource(client.sessions)
-    assert not _is_resource(client.transport)
-
-
-def test_wrapped_resource_is_proxied():
-    wrapped = wrap_agentstudio(_make_client())
-    assert wrapped.agents is not _make_client().agents
-    assert type(wrapped.agents).__module__.startswith(
-        "dashscope.v2.resources._agentstudio",
-    )

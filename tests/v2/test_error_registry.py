@@ -33,10 +33,8 @@ SDK = registry.SDK_ERRORS
 
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
-# Catalog entries whose ``name`` describes an operation outcome rather
-# than an exception type. 1.x signals these by raising a generic class
-# with a specific message and numeric ``error_code``, so they are
-# unreachable from ``type(exc).__name__`` and deliberately stay unused.
+# Operation outcomes raised through ``AgenticRLError.from_catalog`` rather
+# than dedicated exception classes.
 _CONDITION_ONLY = {
     "sdk.agentic_rl.FunctionRegistrationFailed",
     "sdk.agentic_rl.DatasetsUploadFailed",
@@ -219,7 +217,7 @@ def test_format_message_substitution():
 
 
 def test_agentic_rl_reachability_counts():
-    """18 exact class-name hits, plus a family fallback for the rest."""
+    """18 dedicated classes, plus condition-only and base-class entries."""
     rl = _classes(rl_errors)
     entries = [e for e in SDK if e.name.startswith("sdk.agentic_rl.")]
     assert len(entries) == 27
@@ -228,13 +226,12 @@ def test_agentic_rl_reachability_counts():
     exact = suffixes & rl
     assert len(exact) == 18, sorted(exact)
 
-    # The family fallback the two-tier lookup degrades to.
     assert "sdk.agentic_rl.Error" in _by_name(SDK)
 
-    unreachable = suffixes - rl
+    without_dedicated_classes = suffixes - rl
     expected = {name.rsplit(".", 1)[1] for name in _CONDITION_ONLY}
     expected.add("Error")
-    assert unreachable == expected
+    assert without_dedicated_classes == expected
 
 
 def test_every_1x_rl_exception_has_a_catalog_landing_point():
@@ -244,14 +241,19 @@ def test_every_1x_rl_exception_has_a_catalog_landing_point():
     ``sdk.agentic_rl.Error``; everything else matches by class name.
     """
     names = _by_name(SDK)
-    for cls_name in _classes(rl_errors):
+    local_classes = {
+        name
+        for name in _classes(rl_errors)
+        if getattr(rl_errors, name).__module__ == rl_errors.__name__
+    }
+    for cls_name in local_classes:
         candidate = f"sdk.agentic_rl.{cls_name}"
         assert candidate in names or cls_name == "AgenticRLError", cls_name
     assert "sdk.agentic_rl.Error" in names
 
 
-def test_agentstudio_transport_errors_fully_covered():
-    """The four non-HTTP agentstudio errors map 1:1 onto the catalog."""
+def test_agentstudio_sdk_error_entries_have_native_classes():
+    """The catalog's four AgentStudio entries all have native classes."""
     expected = {
         "APIConnectionError",
         "APITimeoutError",
@@ -264,12 +266,7 @@ def test_agentstudio_transport_errors_fully_covered():
 
 
 def test_agentstudio_has_no_family_fallback():
-    """Unlike agentic_rl, this family has no generic ``.Error`` entry.
-
-    Pinned because the sdk-side lookup cannot degrade gracefully here;
-    the HTTP-layer agentstudio errors carry a real ``status_code`` and
-    belong to the status mapping, not to ``SDK_ERRORS``.
-    """
+    """AgentStudio HTTP errors use statuses, not a generic SDK entry."""
     assert "sdk.agentstudio.Error" not in _by_name(SDK)
     status_classes = {
         name
@@ -329,9 +326,7 @@ def test_ws_family_entries():
         "sdk.ws.BinaryOwnerConflict",
         "sdk.ws.IllegalState",
     }
-    assert {
-        e.name for e in SDK if e.name.startswith("sdk.ws.")
-    } == expected
+    assert {e.name for e in SDK if e.name.startswith("sdk.ws.")} == expected
 
     from dashscope.v2 import errors as v2_errors
 

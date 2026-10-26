@@ -23,9 +23,9 @@ own side. Those come from the catalog's ``SDK_ERRORS`` table as
 ``sdk.ConnectionError`` / ``sdk.Timeout`` entries, the websocket
 transport errors (:class:`WsEventError` / :class:`WsStateError` /
 :class:`WsBinaryOwnerConflictError`) are backed by the ``sdk.ws.*``
-entries, and the mounts over sub-SDKs outside this error family (1.x
-agentic_rl, the 2.x AgentStudio sub-SDK) translate with
-:func:`error_from_sdk_exception`.
+entries. AgentStudio and AgenticRL also raise catalog-backed v2 errors
+natively; :func:`error_from_sdk_exception` remains available for mounts
+over external SDK families.
 """
 
 from __future__ import annotations

@@ -1,6 +1,21 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-"""Exception hierarchy for the AgentStudio SDK.
+"""AgentStudio errors: the ``dashscope.v2.errors`` family, no second hierarchy.
+
+The sub-SDK raises v2 errors natively, so the v2 mount needs no
+translation layer. Old class names stay importable as aliases of the
+v2 classes they map to; new code should use ``dashscope.v2.errors``.
+
+Mapping notes:
+
+- ``InvalidRequestError`` -> ``BadRequestError``,
+  ``OverloadedError`` -> ``ServiceUnavailableError``.
+- ``ConflictError`` (409) has no catalog entry: 409 falls back to the
+  ``APIStatusError`` base class, and the old name aliases that base.
+- ``AgentStudioError`` aliases ``DashScopeError``; the 1.x
+  ``DashScopeException`` lineage is gone.
+- ``StreamError`` / ``StreamClosedError`` are ``SdkError`` subclasses
+  backed by the catalog's ``sdk.agentstudio.*`` entries.
 
 The AgentStudio service returns errors in the canonical CMA shape::
 
@@ -20,157 +35,83 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Optional
 
-from dashscope._shared._errors import DashScopeException
+from dashscope.v2 import _error_registry as _registry
+from dashscope.v2 import errors as _v2_errors
+from dashscope.v2.errors import (  # noqa: F401
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AuthenticationError,
+    BadRequestError,
+    DashScopeError,
+    InternalServerError,
+    NotFoundError,
+    PermissionDeniedError,
+    RateLimitError,
+    SdkError,
+    ServiceUnavailableError,
+    _CatalogSdkError,
+    _STATUS_MAP,
+)
+
+# Deprecated aliases of the v2 classes (kept for the 1.x import path).
+AgentStudioError = DashScopeError
+InvalidRequestError = BadRequestError
+ConflictError = APIStatusError
+OverloadedError = ServiceUnavailableError
 
 
-class AgentStudioError(DashScopeException):
-    """Base exception for all AgentStudio SDK errors.
+class StreamError(_CatalogSdkError):
+    """The SSE stream encountered a fatal protocol error.
 
-    Attributes
-    ----------
-    code: str
-        Machine-readable error code (e.g. ``invalid_request_error``).
-    message: str
-        Human-readable error description from the server.
-    request_id: Optional[str]
-        Correlation identifier for log lookups (``req_<ULID>``).
-    status_code: Optional[int]
-        HTTP status code if the error originated from a HTTP response.
-    raw: Optional[Mapping[str, Any]]
-        Original response payload for debugging.
+    Backed by the catalog's ``sdk.agentstudio.StreamError`` entry:
+    ``code`` / ``solution`` / ``allow_retry`` default from it.
     """
 
-    code: str = "agentstudio_error"
-
-    def __init__(
-        self,
-        message: str,
-        *,
-        code: Optional[str] = None,
-        request_id: Optional[str] = None,
-        status_code: Optional[int] = None,
-        raw: Optional[Mapping[str, Any]] = None,
-    ) -> None:
-        super().__init__(message)
-        if code is not None:
-            self.code = code
-        self.message = message
-        self.request_id = request_id
-        self.status_code = status_code
-        self.raw = raw
-
-    def __repr__(self) -> str:  # pragma: no cover - debug helper
-        return (
-            f"{type(self).__name__}(code={self.code!r}, "
-            f"message={self.message!r}, request_id={self.request_id!r}, "
-            f"status_code={self.status_code!r})"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Connection / transport layer errors (no HTTP response received)
-# ---------------------------------------------------------------------------
-
-
-class APIConnectionError(AgentStudioError):
-    """Raised when the HTTP request fails before a response is read."""
-
-    code = "api_connection_error"
-
-
-class APITimeoutError(APIConnectionError):
-    """Raised on connect / read timeouts."""
-
-    code = "api_timeout_error"
-
-
-# ---------------------------------------------------------------------------
-# Server-side errors (HTTP response received)
-# ---------------------------------------------------------------------------
-
-
-class APIStatusError(AgentStudioError):
-    """Raised when the server returns a non-2xx status."""
-
-    code = "api_status_error"
-
-
-class InvalidRequestError(APIStatusError):
-    code = "invalid_request_error"
-
-
-class AuthenticationError(APIStatusError):
-    code = "authentication_error"
-
-
-class PermissionDeniedError(APIStatusError):
-    code = "permission_denied_error"
-
-
-class NotFoundError(APIStatusError):
-    code = "not_found_error"
-
-
-class ConflictError(APIStatusError):
-    code = "conflict_error"
-
-
-class RateLimitError(APIStatusError):
-    code = "rate_limit_error"
-
-
-class OverloadedError(APIStatusError):
-    code = "overloaded_error"
-
-
-class InternalServerError(APIStatusError):
-    code = "api_error"
-
-
-# ---------------------------------------------------------------------------
-# Streaming errors
-# ---------------------------------------------------------------------------
-
-
-class StreamError(AgentStudioError):
-    """Raised when an SSE stream encounters a fatal protocol error."""
-
-    code = "stream_error"
+    _SDK_ERROR_NAME = "sdk.agentstudio.StreamError"
 
 
 class StreamClosedError(StreamError):
-    """Raised when consumers attempt I/O on an already-closed stream."""
+    """Attempted I/O on an already-closed stream.
 
-    code = "stream_closed"
+    Backed by the catalog's ``sdk.agentstudio.StreamClosedError`` entry.
+    """
 
-
-# ---------------------------------------------------------------------------
-# Dispatcher
-# ---------------------------------------------------------------------------
+    _SDK_ERROR_NAME = "sdk.agentstudio.StreamClosedError"
 
 
-_STATUS_TO_DEFAULT: Dict[int, type] = {
-    400: InvalidRequestError,
-    401: AuthenticationError,
-    403: PermissionDeniedError,
-    404: NotFoundError,
-    409: ConflictError,
-    429: RateLimitError,
-    500: InternalServerError,
-    502: InternalServerError,
-    503: OverloadedError,
-    504: InternalServerError,
-}
+def _build_code_to_class() -> Dict[str, type]:
+    """Wire-code crosswalk derived from the catalog's anthropic codes.
 
-_CODE_TO_CLASS: Dict[str, type] = {
-    "invalid_request_error": InvalidRequestError,
-    "authentication_error": AuthenticationError,
-    "permission_denied_error": PermissionDeniedError,
-    "not_found_error": NotFoundError,
-    "conflict_error": ConflictError,
-    "rate_limit_error": RateLimitError,
-    "overloaded_error": OverloadedError,
-    "api_error": InternalServerError,
+    Two codes need explicit entries: the gateway's actual
+    ``permission_denied_error`` (the catalog field says
+    ``permission_error``), and ``conflict_error`` / 409, which has no
+    catalog entry and therefore lands on the base class.
+    """
+    out: Dict[str, type] = {}
+    for entry in _registry.PUBLIC_ERRORS:
+        cls = getattr(_v2_errors, entry.error_code, None)
+        if cls is not None:
+            out.setdefault(entry.anthropic_error_code, cls)
+    out["permission_denied_error"] = PermissionDeniedError
+    out["conflict_error"] = APIStatusError
+    return out
+
+
+_CODE_TO_CLASS = _build_code_to_class()
+
+# Default wire code when the body carries none (legacy behaviour).
+_STATUS_DEFAULT_CODE = {
+    400: "invalid_request_error",
+    401: "authentication_error",
+    403: "permission_denied_error",
+    404: "not_found_error",
+    409: "conflict_error",
+    429: "rate_limit_error",
+    500: "api_error",
+    502: "api_error",
+    503: "overloaded_error",
+    504: "timeout_error",
 }
 
 
@@ -179,13 +120,16 @@ def from_response(
     status_code: int,
     body: Any,
     headers: Optional[Mapping[str, str]] = None,
-) -> AgentStudioError:
-    """Build an :class:`AgentStudioError` instance from a HTTP response.
+) -> DashScopeError:
+    """Build a v2 error from a HTTP response.
 
     Accepts both the documented ``{type, error:{code,message}, request_id}``
     shape and the pre-release ``{type, error:{error_code, error_message}}``
     shape. Falls back to a Spring default ``{timestamp,status,error,path}``
     when the body is not JSON-serializable.
+
+    Class selection: the catalog-derived code crosswalk first, then the
+    v2 status map, then the ``APIStatusError`` base class.
 
     The ``x-request-id`` response header is preferred over the body
     ``request_id`` field (server-generated IDs are more reliable for tracing).
@@ -225,14 +169,11 @@ def from_response(
     if message is None:
         message = f"HTTP {status_code}"
     if code is None:
-        code = _STATUS_TO_DEFAULT.get(  # type: ignore[attr-defined]
-            status_code,
-            APIStatusError,
-        ).code
+        code = _STATUS_DEFAULT_CODE.get(status_code, "api_status_error")
 
     cls = (
         _CODE_TO_CLASS.get(code)
-        or _STATUS_TO_DEFAULT.get(status_code)
+        or _STATUS_MAP.get(status_code)
         or APIStatusError
     )
     return cls(
@@ -240,5 +181,5 @@ def from_response(
         code=code,
         request_id=request_id,
         status_code=status_code,
-        raw=body if isinstance(body, Mapping) else {"raw": body},
+        body=body if isinstance(body, Mapping) else {"raw": body},
     )

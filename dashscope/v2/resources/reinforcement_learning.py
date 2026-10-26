@@ -3,11 +3,9 @@
 """client.rl thin mount layer (design doc M3 3.7).
 
 The agentic-RL workflow lives in the 2.0 package
-(``dashscope.v2.finetune``); this layer only mounts it on the 2.0 Client
-and routes both halves through the v2 error model -- job management
-through the v2 transport, and the workflow steps by translating the RL
-exception family into ``SdkError`` (catalog ``code`` plus ``solution``).
-One ``except DashScopeError`` therefore covers both.
+(``dashscope.v2.finetune``); this layer only mounts it on the 2.0 Client.
+Job management and workflow steps both raise ``dashscope.v2.errors``
+natively, so one ``except DashScopeError`` covers both.
 
 Two halves, matching the rest of the SDK: ``rl.jobs`` is the training
 job lifecycle (``create`` submits and never blocks, ``wait`` blocks,
@@ -34,7 +32,6 @@ workflow-wrapping methods accept a per-call ``api_key`` but no
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import time
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
@@ -44,7 +41,6 @@ from dashscope.v2.errors import (
     DashScopeError,
     check_response,
     error_from_business_code,
-    error_from_sdk_exception,
 )
 from dashscope.v2.resources._jobs import (
     CANCELED,
@@ -81,9 +77,6 @@ __all__ = [
 # workflow implementation.
 from dashscope.v2.finetune import agentic_rl as _agentic_rl  # noqa: E402
 from dashscope.v2.finetune import reinforcement as _reinforcement  # noqa: E402
-from dashscope.v2.finetune.reinforcement.common import (  # noqa: E402
-    errors as _rl_errors,
-)
 
 
 class RegisteredFunctions(BaseModel):
@@ -114,35 +107,6 @@ class UploadedData(BaseModel):
 
     training_file_ids: List[str] = []
     validation_file_ids: List[str] = []
-
-
-_RL_FAMILY = "sdk.agentic_rl"
-
-# These three bases cover all 19 exception classes in common/errors.py:
-# AgenticRLError roots 17, and the two *WithCode classes derive from
-# RuntimeError / ValueError instead. Nothing wider is needed, since
-# common/utils.py's request helper already funnels transport, timeout
-# and unexpected failures into RuntimeErrorWithCode; catching more would
-# relabel bugs in this module as SDK errors. pydantic's ValidationError,
-# which is also a ValueError, stays outside on purpose.
-_RL_EXCEPTIONS = (
-    _rl_errors.AgenticRLError,
-    _rl_errors.RuntimeErrorWithCode,
-    _rl_errors.ValueErrorWithCode,
-)
-
-
-@contextlib.contextmanager
-def _translate_rl_errors():
-    """Keep agentic-RL workflow failures inside the v2 exception family.
-
-    A plain sync context manager, so it wraps ``asyncio.run(...)`` and
-    ``await ...`` bodies alike.
-    """
-    try:
-        yield
-    except _RL_EXCEPTIONS as exc:
-        raise error_from_sdk_exception(exc, family=_RL_FAMILY) from exc
 
 
 def _resolve_func_type(func_type: Union[str, Any]) -> Any:
@@ -273,12 +237,11 @@ class RlJobs:
         ``kwargs`` override individual keys of the training config loaded
         from ``config_path``, which is open-ended by design.
         """
-        with _translate_rl_errors():
-            rl = _new_agentic_rl(self._client, api_key=api_key)
-            if job_name is not None:
-                kwargs["job_name"] = job_name
-            rl.init(config_path=config_path, **kwargs)
-            result = asyncio.run(rl.run())
+        rl = _new_agentic_rl(self._client, api_key=api_key)
+        if job_name is not None:
+            kwargs["job_name"] = job_name
+        rl.init(config_path=config_path, **kwargs)
+        result = asyncio.run(rl.run())
         return _to_job(result)
 
     def fetch(
@@ -451,18 +414,17 @@ class Rl:
         lazy_load: bool = True,
         api_key: Optional[str] = None,
     ) -> RegisteredFunctions:
-        with _translate_rl_errors():
-            rl = _new_agentic_rl(self._client, api_key=api_key)
-            return asyncio.run(
-                _register_functions_workflow(
-                    rl,
-                    rollout_classpaths,
-                    reward_classpaths,
-                    group_reward_classpaths,
-                    workspace_dir,
-                    lazy_load,
-                ),
-            )
+        rl = _new_agentic_rl(self._client, api_key=api_key)
+        return asyncio.run(
+            _register_functions_workflow(
+                rl,
+                rollout_classpaths,
+                reward_classpaths,
+                group_reward_classpaths,
+                workspace_dir,
+                lazy_load,
+            ),
+        )
 
     def test_functions(
         self,
@@ -482,19 +444,18 @@ class Rl:
         parameters forward to the log-pulling step that runs after
         verification.
         """
-        with _translate_rl_errors():
-            return asyncio.run(
-                _agentic_rl.AgenticRL.test_functions(
-                    instance_id=instance_id,
-                    functype=_resolve_func_type(func_type),
-                    input_data=input_data,
-                    api_key=api_key or self._client.config.api_key or "",
-                    pull_logs=pull_logs,
-                    log_page_size=log_page_size,
-                    start_time=start_time,
-                    end_time=end_time,
-                ),
-            )
+        return asyncio.run(
+            _agentic_rl.AgenticRL.test_functions(
+                instance_id=instance_id,
+                functype=_resolve_func_type(func_type),
+                input_data=input_data,
+                api_key=api_key or self._client.config.api_key or "",
+                pull_logs=pull_logs,
+                log_page_size=log_page_size,
+                start_time=start_time,
+                end_time=end_time,
+            ),
+        )
 
     def upload_data(
         self,
@@ -503,14 +464,13 @@ class Rl:
         *,
         api_key: Optional[str] = None,
     ) -> UploadedData:
-        with _translate_rl_errors():
-            rl = _new_agentic_rl(self._client, api_key=api_key)
-            train_ids, val_ids = asyncio.run(
-                rl.upload_datasets(
-                    training_files=training_files,
-                    validation_files=validation_files,
-                ),
-            )
+        rl = _new_agentic_rl(self._client, api_key=api_key)
+        train_ids, val_ids = asyncio.run(
+            rl.upload_datasets(
+                training_files=training_files,
+                validation_files=validation_files,
+            ),
+        )
         return UploadedData(
             training_file_ids=train_ids,
             validation_file_ids=val_ids or [],
@@ -532,18 +492,17 @@ class Rl:
         Wraps ``asyncio.run``, so it must not be called from a running
         event loop — use :class:`AsyncRl` there.
         """
-        with _translate_rl_errors():
-            return asyncio.run(
-                _agentic_rl.AgenticRL.query_function_instance_logs(
-                    function_instance_id=function_instance_id,
-                    page_number=page_number,
-                    page_size=page_size,
-                    start_time=start_time,
-                    end_time=end_time,
-                    keywords=keywords,
-                    api_key=api_key or self._client.config.api_key or "",
-                ),
-            )
+        return asyncio.run(
+            _agentic_rl.AgenticRL.query_function_instance_logs(
+                function_instance_id=function_instance_id,
+                page_number=page_number,
+                page_size=page_size,
+                start_time=start_time,
+                end_time=end_time,
+                keywords=keywords,
+                api_key=api_key or self._client.config.api_key or "",
+            ),
+        )
 
     def query_all_function_instance_logs(
         self,
@@ -560,17 +519,16 @@ class Rl:
         Wraps ``asyncio.run``, so it must not be called from a running
         event loop — use :class:`AsyncRl` there.
         """
-        with _translate_rl_errors():
-            return asyncio.run(
-                _agentic_rl.AgenticRL.query_all_function_instance_logs(
-                    function_instance_id=function_instance_id,
-                    page_size=page_size,
-                    start_time=start_time,
-                    end_time=end_time,
-                    keywords=keywords,
-                    api_key=api_key or self._client.config.api_key or "",
-                ),
-            )
+        return asyncio.run(
+            _agentic_rl.AgenticRL.query_all_function_instance_logs(
+                function_instance_id=function_instance_id,
+                page_size=page_size,
+                start_time=start_time,
+                end_time=end_time,
+                keywords=keywords,
+                api_key=api_key or self._client.config.api_key or "",
+            ),
+        )
 
     def delete_function_instance(
         self,
@@ -583,13 +541,12 @@ class Rl:
         Wraps ``asyncio.run``, so it must not be called from a running
         event loop — use :class:`AsyncRl` there.
         """
-        with _translate_rl_errors():
-            return asyncio.run(
-                _agentic_rl.AgenticRL.delete_function_instance(
-                    function_instance_id=function_instance_id,
-                    api_key=api_key or self._client.config.api_key or "",
-                ),
-            )
+        return asyncio.run(
+            _agentic_rl.AgenticRL.delete_function_instance(
+                function_instance_id=function_instance_id,
+                api_key=api_key or self._client.config.api_key or "",
+            ),
+        )
 
 
 class AsyncRlJobs:
@@ -611,12 +568,11 @@ class AsyncRlJobs:
         ``kwargs`` override individual keys of the training config loaded
         from ``config_path``, which is open-ended by design.
         """
-        with _translate_rl_errors():
-            rl = _new_agentic_rl(self._client, api_key=api_key)
-            if job_name is not None:
-                kwargs["job_name"] = job_name
-            rl.init(config_path=config_path, **kwargs)
-            result = await rl.run()
+        rl = _new_agentic_rl(self._client, api_key=api_key)
+        if job_name is not None:
+            kwargs["job_name"] = job_name
+        rl.init(config_path=config_path, **kwargs)
+        result = await rl.run()
         return _to_job(result)
 
     async def fetch(
@@ -786,16 +742,15 @@ class AsyncRl:
         lazy_load: bool = True,
         api_key: Optional[str] = None,
     ) -> RegisteredFunctions:
-        with _translate_rl_errors():
-            rl = _new_agentic_rl(self._client, api_key=api_key)
-            return await _register_functions_workflow(
-                rl,
-                rollout_classpaths,
-                reward_classpaths,
-                group_reward_classpaths,
-                workspace_dir,
-                lazy_load,
-            )
+        rl = _new_agentic_rl(self._client, api_key=api_key)
+        return await _register_functions_workflow(
+            rl,
+            rollout_classpaths,
+            reward_classpaths,
+            group_reward_classpaths,
+            workspace_dir,
+            lazy_load,
+        )
 
     async def test_functions(
         self,
@@ -815,17 +770,16 @@ class AsyncRl:
         parameters forward to the log-pulling step that runs after
         verification.
         """
-        with _translate_rl_errors():
-            return await _agentic_rl.AgenticRL.test_functions(
-                instance_id=instance_id,
-                functype=_resolve_func_type(func_type),
-                input_data=input_data,
-                api_key=api_key or self._client.config.api_key or "",
-                pull_logs=pull_logs,
-                log_page_size=log_page_size,
-                start_time=start_time,
-                end_time=end_time,
-            )
+        return await _agentic_rl.AgenticRL.test_functions(
+            instance_id=instance_id,
+            functype=_resolve_func_type(func_type),
+            input_data=input_data,
+            api_key=api_key or self._client.config.api_key or "",
+            pull_logs=pull_logs,
+            log_page_size=log_page_size,
+            start_time=start_time,
+            end_time=end_time,
+        )
 
     async def upload_data(
         self,
@@ -834,12 +788,11 @@ class AsyncRl:
         *,
         api_key: Optional[str] = None,
     ) -> UploadedData:
-        with _translate_rl_errors():
-            rl = _new_agentic_rl(self._client, api_key=api_key)
-            train_ids, val_ids = await rl.upload_datasets(
-                training_files=training_files,
-                validation_files=validation_files,
-            )
+        rl = _new_agentic_rl(self._client, api_key=api_key)
+        train_ids, val_ids = await rl.upload_datasets(
+            training_files=training_files,
+            validation_files=validation_files,
+        )
         return UploadedData(
             training_file_ids=train_ids,
             validation_file_ids=val_ids or [],
@@ -857,16 +810,15 @@ class AsyncRl:
         api_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """One page of function-instance logs (raw log-query API dict)."""
-        with _translate_rl_errors():
-            return await _agentic_rl.AgenticRL.query_function_instance_logs(
-                function_instance_id=function_instance_id,
-                page_number=page_number,
-                page_size=page_size,
-                start_time=start_time,
-                end_time=end_time,
-                keywords=keywords,
-                api_key=api_key or self._client.config.api_key or "",
-            )
+        return await _agentic_rl.AgenticRL.query_function_instance_logs(
+            function_instance_id=function_instance_id,
+            page_number=page_number,
+            page_size=page_size,
+            start_time=start_time,
+            end_time=end_time,
+            keywords=keywords,
+            api_key=api_key or self._client.config.api_key or "",
+        )
 
     async def query_all_function_instance_logs(
         self,
@@ -879,17 +831,14 @@ class AsyncRl:
         api_key: Optional[str] = None,
     ) -> List[str]:
         """All function-instance logs, aggregated across pages."""
-        with _translate_rl_errors():
-            return (
-                await _agentic_rl.AgenticRL.query_all_function_instance_logs(
-                    function_instance_id=function_instance_id,
-                    page_size=page_size,
-                    start_time=start_time,
-                    end_time=end_time,
-                    keywords=keywords,
-                    api_key=api_key or self._client.config.api_key or "",
-                )
-            )
+        return await _agentic_rl.AgenticRL.query_all_function_instance_logs(
+            function_instance_id=function_instance_id,
+            page_size=page_size,
+            start_time=start_time,
+            end_time=end_time,
+            keywords=keywords,
+            api_key=api_key or self._client.config.api_key or "",
+        )
 
     async def delete_function_instance(
         self,
@@ -898,8 +847,7 @@ class AsyncRl:
         api_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Delete a function-instance (raw delete API dict)."""
-        with _translate_rl_errors():
-            return await _agentic_rl.AgenticRL.delete_function_instance(
-                function_instance_id=function_instance_id,
-                api_key=api_key or self._client.config.api_key or "",
-            )
+        return await _agentic_rl.AgenticRL.delete_function_instance(
+            function_instance_id=function_instance_id,
+            api_key=api_key or self._client.config.api_key or "",
+        )

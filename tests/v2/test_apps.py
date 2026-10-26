@@ -190,7 +190,7 @@ def test_agentstudio_mounted_lazily():
         workspace="ws-1",
     )
     mounted = client.agentstudio
-    assert isinstance(mounted, AgentStudioClient)
+    assert type(mounted) is AgentStudioClient
     assert client.agentstudio is mounted
     assert hasattr(mounted, "agents")
     assert hasattr(mounted, "sessions")
@@ -227,7 +227,7 @@ async def test_async_agentstudio_mount_follows_region():
         region="eu-central-1",
     )
     mounted = client.agentstudio
-    assert isinstance(mounted, AsAgentStudioClient)
+    assert type(mounted) is AsAgentStudioClient
     assert mounted.transport.base_url == (
         "https://ws-1.eu-central-1.maas.aliyuncs.com/api/v1/agentstudio"
     )

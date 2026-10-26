@@ -644,12 +644,12 @@ def test_rl_long_form_alias():
     assert async_client.reinforcement_learning is async_client.rl
 
 
-# -- RL exceptions translated into the v2 error family -------------------
+# -- RL exceptions are native members of the v2 error family --------------
 
 
 @pytest.fixture(name="fail_step")
 def fixture_fail_step(fake_agentic_rl, monkeypatch):
-    """Make one named step of the 1.x fake raise ``exc``."""
+    """Make one named step of the fake raise ``exc``."""
 
     # Steps the mount layer invokes as ``AgenticRL`` classmethods.
     classmethod_steps = {
@@ -677,24 +677,28 @@ def fixture_fail_step(fake_agentic_rl, monkeypatch):
     return _set
 
 
-def test_jobs_create_translates_1x_failure(fail_step):
-    fail_step("run", RuntimeErrorWithCode("submit blew up", error_code=3002))
+def test_jobs_create_propagates_the_native_failure(fail_step):
+    original = RuntimeErrorWithCode("submit blew up", error_code=3002)
+    fail_step("run", original)
     client = _make_client(lambda request: httpx.Response(200, json={}))
     with pytest.raises(SdkError) as ei:
         client.rl.jobs.create(config_path="init.yaml")
     err = ei.value
+    assert err is original
     assert err.code == "sdk.agentic_rl.RuntimeErrorWithCode"
+    assert err.error_code == 3002
     # SDK-side failures have no HTTP semantics, so no invented status.
     assert err.status_code is None
     assert "submit blew up" in err.message
-    assert isinstance(err.__cause__, RuntimeErrorWithCode)
 
 
-def test_translated_error_is_catchable_as_dashscope_error(fail_step):
-    fail_step("upload_datasets", OSSUploadError("bucket denied"))
+def test_native_error_is_catchable_as_dashscope_error(fail_step):
+    original = OSSUploadError("bucket denied")
+    fail_step("upload_datasets", original)
     client = _make_client(lambda request: httpx.Response(200, json={}))
     with pytest.raises(DashScopeError) as ei:
         client.rl.upload_data(training_files=["t.jsonl"])
+    assert ei.value is original
     assert isinstance(ei.value, SdkError)
 
 
@@ -709,9 +713,7 @@ def test_exact_catalog_hit_carries_its_own_solution(fail_step):
     assert "OSS bucket permissions" in err.solution
 
 
-def test_uncatalogued_rl_class_falls_back_to_the_family_entry(fail_step):
-    # AgenticRLError is the RL family's base but has no catalog entry of
-    # its own, so it must land on the family fallback, not escape raw.
+def test_rl_base_class_uses_the_family_entry(fail_step):
     fail_step("register_functions", AgenticRLError("something odd"))
     client = _make_client(lambda request: httpx.Response(200, json={}))
     with pytest.raises(SdkError) as ei:
@@ -719,7 +721,7 @@ def test_uncatalogued_rl_class_falls_back_to_the_family_entry(fail_step):
     assert ei.value.code == "sdk.agentic_rl.Error"
 
 
-def test_test_functions_translates(fail_step):
+def test_test_functions_propagates_native_error(fail_step):
     fail_step("test_functions", InstanceQueryError("no instance"))
     client = _make_client(lambda request: httpx.Response(200, json={}))
     with pytest.raises(SdkError) as ei:
@@ -731,7 +733,7 @@ def test_test_functions_translates(fail_step):
     assert ei.value.code == "sdk.agentic_rl.InstanceQueryError"
 
 
-def test_function_instance_delete_translates(fail_step):
+def test_function_instance_delete_propagates_native_error(fail_step):
     fail_step("delete_function_instance", InstanceQueryError("no instance"))
     client = _make_client(lambda request: httpx.Response(200, json={}))
     with pytest.raises(SdkError) as ei:
@@ -740,8 +742,6 @@ def test_function_instance_delete_translates(fail_step):
 
 
 def test_non_rl_exceptions_pass_through(fail_step):
-    # A bare ValueError is not part of the rl family, so relabelling it
-    # as an SDK error would hide bugs in the mount layer itself.
     fail_step("init", ValueError("plain python error"))
     client = _make_client(lambda request: httpx.Response(200, json={}))
     with pytest.raises(ValueError) as ei:
@@ -750,16 +750,18 @@ def test_non_rl_exceptions_pass_through(fail_step):
 
 
 @pytest.mark.asyncio
-async def test_async_jobs_create_translates(fail_step):
-    fail_step("run", RuntimeErrorWithCode("submit blew up", error_code=3002))
+async def test_async_jobs_create_propagates_native_error(fail_step):
+    original = RuntimeErrorWithCode("submit blew up", error_code=3002)
+    fail_step("run", original)
     client = _make_async_client(lambda request: httpx.Response(200, json={}))
     with pytest.raises(SdkError) as ei:
         await client.rl.jobs.create(config_path="init.yaml")
+    assert ei.value is original
     assert ei.value.code == "sdk.agentic_rl.RuntimeErrorWithCode"
 
 
 @pytest.mark.asyncio
-async def test_async_register_functions_translates(fail_step):
+async def test_async_register_functions_propagates_native_error(fail_step):
     fail_step("register_functions", OSSUploadError("layer upload failed"))
     client = _make_async_client(lambda request: httpx.Response(200, json={}))
     with pytest.raises(SdkError) as ei:

@@ -50,6 +50,16 @@ logger = logging.getLogger("dashscope.agentstudio.streaming")
 _DEFAULT_IDLE_TIMEOUT = 120.0
 
 
+def _raise_stream_error(exc: Exception) -> None:
+    if isinstance(exc, exceptions.AgentStudioError):
+        raise exc
+    if isinstance(exc, httpx.TimeoutException):
+        raise exceptions.APITimeoutError(str(exc)) from exc
+    if isinstance(exc, (httpx.NetworkError, httpx.RemoteProtocolError)):
+        raise exceptions.APIConnectionError(str(exc)) from exc
+    raise exc
+
+
 # ---------------------------------------------------------------------------
 # Iterators
 # ---------------------------------------------------------------------------
@@ -128,7 +138,7 @@ class EventStream:
                 if item is None:
                     return
                 if isinstance(item, Exception):
-                    raise item
+                    _raise_stream_error(item)
                 yield item
         finally:
             self.close()
@@ -211,7 +221,7 @@ class AsyncEventStream:
                 if item is None:
                     return
                 if isinstance(item, Exception):
-                    raise item
+                    _raise_stream_error(item)
                 yield item
         finally:
             await self.aclose()

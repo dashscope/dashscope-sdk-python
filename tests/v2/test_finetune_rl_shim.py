@@ -37,6 +37,9 @@ from dashscope.v2.finetune.agentic_rl import SubmitOutput, SubmitResult
 from dashscope.v2.finetune.reinforcement import DASHSCOPE_HTTP_BASE_URL
 from dashscope.v2.finetune.reinforcement import TrainingType
 from dashscope.v2.finetune.reinforcement.common.errors import (
+    _LEGACY_ERROR_CODES,
+    AgenticRLError,
+    RuntimeErrorWithCode,
     ValueErrorWithCode,
 )
 from dashscope.v2.resources import reinforcement_learning as _rl_mount
@@ -428,19 +431,53 @@ def test_the_v2_mount_points_at_the_v2_workflow_modules():
 
 def test_the_rl_error_module_is_shared_by_both_paths():
     legacy_errors = importlib.import_module(f"{LEGACY}.common.errors")
-    assert _rl_mount._rl_errors is legacy_errors
-    assert _rl_mount._rl_errors is importlib.import_module(
-        f"{V2}.common.errors",
+    v2_errors = importlib.import_module(f"{V2}.common.errors")
+    assert legacy_errors is v2_errors
+    assert legacy_errors.ValueErrorWithCode is ValueErrorWithCode
+
+
+@pytest.mark.parametrize(
+    ("catalog_name", "legacy_code"),
+    _LEGACY_ERROR_CODES.items(),
+)
+def test_rl_errors_have_native_catalog_and_legacy_code_defaults(
+    catalog_name,
+    legacy_code,
+):
+    errors = importlib.import_module(f"{V2}.common.errors")
+    cls_name = catalog_name.rsplit(".", 1)[1]
+    cls = AgenticRLError if cls_name == "Error" else getattr(errors, cls_name)
+    error = cls("failure")
+
+    assert isinstance(error, SdkError)
+    assert error.code == catalog_name
+    assert error.error_code == legacy_code
+    assert error.status_code is None
+
+
+def test_explicit_legacy_code_overrides_the_class_default():
+    error = ValueErrorWithCode("duplicate names", error_code=3004)
+
+    assert error.code == "sdk.agentic_rl.ValueErrorWithCode"
+    assert error.error_code == 3004
+    assert error.message == "duplicate names"
+
+
+def test_condition_only_catalog_entries_do_not_need_new_classes():
+    error = AgenticRLError.from_catalog(
+        "sdk.agentic_rl.DuplicateFunctionNames",
+        error_code=3004,
+        variables={"names": "rollout"},
     )
-    for name in _rl_mount._RL_EXCEPTIONS:
-        assert getattr(legacy_errors, name.__name__) is name
+
+    assert type(error) is AgenticRLError
+    assert error.code == "sdk.agentic_rl.DuplicateFunctionNames"
+    assert error.message == "Duplicate function names detected: rollout."
+    assert error.error_code == 3004
+    assert error.allow_retry is False
+    assert "unique name" in error.solution
 
 
-def test_translate_rl_errors_still_maps_the_family():
-    with pytest.raises(SdkError) as ei:
-        with _rl_mount._translate_rl_errors():
-            raise ValueErrorWithCode("duplicate names", error_code=3004)
-
-    assert ei.value.code == "sdk.agentic_rl.ValueErrorWithCode"
-    assert "duplicate names" in ei.value.message
-    assert isinstance(ei.value.__cause__, ValueErrorWithCode)
+def test_legacy_builtin_exception_inheritance_is_not_retained():
+    assert not issubclass(RuntimeErrorWithCode, RuntimeError)
+    assert not issubclass(ValueErrorWithCode, ValueError)

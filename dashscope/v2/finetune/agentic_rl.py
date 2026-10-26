@@ -66,6 +66,10 @@ from dashscope.v2.finetune.reinforcement.common.errors import (
 __all__ = ["AgenticRL", "SubmitOutput", "SubmitResult"]
 
 
+def _inner_code(exc: Exception) -> str:
+    return getattr(exc, "code", None) or type(exc).__name__
+
+
 class SubmitOutput:
     """The ``output`` payload nested in a submit response.
 
@@ -130,8 +134,8 @@ class AgenticRL(AgenticRLTuning):
         try:
             set_api_key(api_key)
         except Exception as e:
-            raise ValueErrorWithCode(
-                "Invalid API key configuration",
+            raise ValueErrorWithCode.from_catalog(
+                "sdk.InvalidApiKey",
                 error_code=3001,
             ) from e
 
@@ -186,9 +190,10 @@ class AgenticRL(AgenticRLTuning):
         except Exception as e:
             if hasattr(e, "error_code"):
                 raise
-            raise RegistrationError(
-                "Function registration failed",
+            raise RegistrationError.from_catalog(
+                "sdk.agentic_rl.FunctionRegistrationFailed",
                 error_code=3002,
+                variables={"inner_code": _inner_code(e)},
             ) from e
 
         return (
@@ -219,9 +224,10 @@ class AgenticRL(AgenticRLTuning):
             )
             logger.info("Datasets uploaded")
         except Exception as e:
-            raise DatasetsError(
-                "Datasets upload failed",
+            raise DatasetsError.from_catalog(
+                "sdk.agentic_rl.DatasetsUploadFailed",
                 error_code=3003,
+                variables={"inner_code": _inner_code(e)},
             ) from e
 
         return uploaded_training_ids, uploaded_validation_ids
@@ -282,10 +288,17 @@ class AgenticRL(AgenticRLTuning):
         )
         # names of functions
         if not self.tuning.check_function_names():
-            raise ValueErrorWithCode(
-                "Duplicate function names detected. All function names must "
-                "be unique.",
+            names = [
+                getattr(fc, "name", "<missing>")
+                for fc in self.tuning.functions
+            ]
+            duplicates = sorted(
+                {name for name in names if names.count(name) > 1},
+            )
+            raise ValueErrorWithCode.from_catalog(
+                "sdk.agentic_rl.DuplicateFunctionNames",
                 error_code=3004,
+                variables={"names": ", ".join(duplicates or names)},
             )
 
         # datasets
@@ -387,9 +400,10 @@ class AgenticRL(AgenticRLTuning):
         except Exception as e:
             if hasattr(e, "error_code"):
                 raise
-            raise RuntimeErrorWithCode(
-                "Job submission failed",
+            raise RuntimeErrorWithCode.from_catalog(
+                "sdk.agentic_rl.JobSubmissionFailed",
                 error_code=3005,
+                variables={"inner_code": _inner_code(e)},
             ) from e
 
     def submit_job(
@@ -492,9 +506,10 @@ class AgenticRL(AgenticRLTuning):
         except Exception as e:
             if hasattr(e, "error_code"):
                 raise
-            raise RuntimeErrorWithCode(
-                "RL tuning workflow failed",
+            raise RuntimeErrorWithCode.from_catalog(
+                "sdk.agentic_rl.WorkflowFailed",
                 error_code=3006,
+                variables={"inner_code": _inner_code(e)},
             ) from e
 
     @classmethod
@@ -536,9 +551,10 @@ class AgenticRL(AgenticRLTuning):
             elif functype == FunctionType.GROUP_REWARD:
                 value = GroupRewardInput.model_validate(input_data)
             else:
-                raise ValueErrorWithCode(
-                    f"Unsupported function type: {functype}",
+                raise ValueErrorWithCode.from_catalog(
+                    "sdk.agentic_rl.UnsupportedFunctionType",
                     error_code=3007,
+                    variables={"functype": str(functype)},
                 )
 
             logger.info(
@@ -565,9 +581,10 @@ class AgenticRL(AgenticRLTuning):
             return result
 
         except Exception as e:
-            raise ValidationError(
-                "Function test failed",
+            raise ValidationError.from_catalog(
+                "sdk.agentic_rl.FunctionTestFailed",
                 error_code=3008,
+                variables={"inner_code": _inner_code(e)},
             ) from e
 
     @classmethod
