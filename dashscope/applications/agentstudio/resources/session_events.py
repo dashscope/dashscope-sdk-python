@@ -24,7 +24,10 @@ from dashscope.applications.agentstudio.resources._helpers import (
     _events_path,
     _stream_path,
 )
-from dashscope.applications.agentstudio.streaming import AsyncEventStream, EventStream
+from dashscope.applications.agentstudio.streaming import (
+    AsyncEventStream,
+    EventStream,
+)
 from dashscope.applications.agentstudio.types import ServerEvent
 from dashscope.applications.agentstudio.types.params import (
     SessionEventListParams,

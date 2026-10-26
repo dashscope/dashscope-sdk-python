@@ -40,7 +40,7 @@ from dashscope.applications.finetune.reinforcement.common.log import logger
 from dashscope.applications.finetune.reinforcement.common.model_types import (
     FunctionType as FuncType,
 )
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from ..data.base_data_model import (
     BaseDataModel,
 )
 

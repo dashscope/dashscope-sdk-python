@@ -103,12 +103,9 @@ class TestTokenizerPaths:
         assert getattr(module, name) is not None
 
     def test_package_level_reexports(self):
-        import dashscope.tokenizers as tokenizers
+        from dashscope import tokenizers
         from dashscope.tokenizers.tokenization import Tokenization
-        from dashscope.tokenizers.tokenizer import (
-            get_tokenizer,
-            list_tokenizers,
-        )
+        from dashscope.tokenizers.tokenizer import list_tokenizers
         from dashscope.tokenizers.tokenizer_base import Tokenizer
 
         assert tokenizers.__all__ == [

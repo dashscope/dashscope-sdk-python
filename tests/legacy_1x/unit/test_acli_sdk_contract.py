@@ -317,7 +317,9 @@ def test_current_implementation_does_not_import_acli():
                 if _is_acli_internal(module)
             },
         )
-    assert not hits, f"the current implementation must not depend on acli: {hits}"
+    assert (
+        not hits
+    ), f"the current implementation must not depend on acli: {hits}"
 
 
 def test_package_root_does_not_import_acli():
@@ -331,9 +333,7 @@ def test_package_root_does_not_import_acli():
 
 def test_acli_lives_at_the_top_level():
     assert _ACLI.is_dir(), "dashscope/acli/ must stay at the top level"
-    moved_into_legacy = (
-        _REPO / "dashscope" / "legacy_1x" / "acli"
-    ).exists()
+    moved_into_legacy = (_REPO / "dashscope" / "legacy_1x" / "acli").exists()
     assert not moved_into_legacy, "acli must not land in the legacy bucket"
 
 

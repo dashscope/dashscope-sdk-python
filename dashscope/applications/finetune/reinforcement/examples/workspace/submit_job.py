@@ -48,8 +48,8 @@ Method Documentation:
 # client.init(config_path="rl-job.yaml", job_name="agentic-rl")
 # await client.run()  # Uses YAML configuration
 
-from dashscope.applications.finetune.agentic_rl import AgenticRL
-from dashscope.applications.finetune.reinforcement import (
+from dashscope.finetune.agentic_rl import AgenticRL
+from dashscope.finetune.reinforcement import (
     logger,
     DataSourceType,
     TrainingDataset,

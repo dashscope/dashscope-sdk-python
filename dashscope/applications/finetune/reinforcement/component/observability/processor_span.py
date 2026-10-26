@@ -35,10 +35,10 @@ from functools import wraps
 from typing import Any, Callable, Dict, Optional, TypeVar, cast
 
 from dashscope.applications.finetune.reinforcement.common.log import logger
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from ..data.base_data_model import (
     BaseDataModel,
 )
-from dashscope.applications.finetune.reinforcement.component.observability.tracing import (
+from ..observability.tracing import (
     _REWARD_SPAN_PREFIX,
     _ROLLOUT_SPAN_PREFIX,
     apply_processor_span_attributes_after,
@@ -233,7 +233,7 @@ def observe_processor(
 
     Replaces the explicit ``@trace_processor_span(logical_kind=...)`` style.
     """
-    from dashscope.applications.finetune.reinforcement.component.processor import (
+    from ..processor import (
         AbstractRewardProcessor,
         AbstractRolloutProcessor,
     )

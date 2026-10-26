@@ -4,13 +4,13 @@ GenAI span helpers (LoongSuite / ``loongsuite-util-genai``).
 
 Submodules by responsibility:
 
-- :mod:`~dashscope.applications.finetune.reinforcement.component.observability.genai.messages`  # noqa: E501
+- :mod:`~dashscope.finetune.reinforcement.component.observability.genai.messages`  # noqa: E501
   — message and tool_calls mapping
-- :mod:`~dashscope.applications.finetune.reinforcement.component.observability.genai.llm_openai`  # noqa: E501
+- :mod:`~dashscope.finetune.reinforcement.component.observability.genai.llm_openai`  # noqa: E501
   — OpenAI-compatible LLM client patching
-- :mod:`~dashscope.applications.finetune.reinforcement.component.observability.genai.llm_dashscope`  # noqa: E501
+- :mod:`~dashscope.finetune.reinforcement.component.observability.genai.llm_dashscope`  # noqa: E501
   — DashScope Generation patching
-- :mod:`~dashscope.applications.finetune.reinforcement.component.observability.genai.tools`
+- :mod:`~dashscope.finetune.reinforcement.component.observability.genai.tools`
   — tool tracing (decorator + patcher)
 
 Requires ``pip install loongsuite-util-genai`` and tracing env flags
@@ -18,30 +18,30 @@ Requires ``pip install loongsuite-util-genai`` and tracing env flags
 
 Optional: ``AGENTIC_RL_LOG_TRACE_ID=true`` enables ``trace_id`` diagnostic
 logs (default off);
-see :mod:`dashscope.applications.finetune.reinforcement.component.observability.tracing`.
+see :mod:`dashscope.finetune.reinforcement.component.observability.tracing`.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from dashscope.applications.finetune.reinforcement.component.observability.genai.llm_dashscope import (  # noqa: E501  # pylint: disable=line-too-long
+from ..genai.llm_dashscope import (  # noqa: E501  # pylint: disable=line-too-long
     instrument_dashscope_generation_call,
 )
-from dashscope.applications.finetune.reinforcement.component.observability.genai.llm_openai import (  # noqa: E501  # pylint: disable=line-too-long
+from ..genai.llm_openai import (  # noqa: E501  # pylint: disable=line-too-long
     instrument_openai_chat_completions,
 )
-from dashscope.applications.finetune.reinforcement.component.observability.genai.llm_span import (  # noqa: E501  # pylint: disable=line-too-long
+from ..genai.llm_span import (  # noqa: E501  # pylint: disable=line-too-long
     genai_llm_span,
     observe_llm,
     run_with_genai_llm_span,
 )
-from dashscope.applications.finetune.reinforcement.component.observability.genai.messages import (  # noqa: E501  # pylint: disable=line-too-long
+from ..genai.messages import (  # noqa: E501  # pylint: disable=line-too-long
     dashscope_response_to_output_messages,
     openai_chat_messages_to_input_messages,
     openai_completion_to_output_messages,
 )
-from dashscope.applications.finetune.reinforcement.component.observability.genai.tools import (  # noqa: E501  # pylint: disable=line-too-long
+from ..genai.tools import (  # noqa: E501  # pylint: disable=line-too-long
     observe_tool,
     trace_tool,
 )

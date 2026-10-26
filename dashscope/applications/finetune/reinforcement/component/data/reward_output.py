@@ -8,7 +8,7 @@ Data model definitions for Reward processor output results.
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from .base_data_model import (
     TaskStatus,
     _normalize_error_code,
 )

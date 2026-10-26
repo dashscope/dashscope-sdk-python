@@ -24,27 +24,27 @@ from dashscope.applications.finetune.reinforcement.common.log import logger
 from dashscope.applications.finetune.reinforcement.common.model_types import (
     FunctionType as FuncType,
 )
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from .data.base_data_model import (
     BaseDataModel,
 )
-from dashscope.applications.finetune.reinforcement.component.observability.tracing import (
+from .observability.tracing import (
     is_tracing_enabled,
     trace_processor_process,
     async_trace_processor_process,
 )
-from dashscope.applications.finetune.reinforcement.component.parser import (
+from .parser import (
     BaseRequestParser,
 )
-from dashscope.applications.finetune.reinforcement.component.parser import (
+from .parser import (
     GroupRewardRequestParser,
 )
-from dashscope.applications.finetune.reinforcement.component.parser import (
+from .parser import (
     RewardRequestParser,
 )
-from dashscope.applications.finetune.reinforcement.component.parser import (
+from .parser import (
     RolloutRequestParser,
 )
-from dashscope.applications.finetune.reinforcement.component.processor.abstract_processor import (  # noqa: E501  # pylint: disable=line-too-long
+from .processor.abstract_processor import (  # noqa: E501  # pylint: disable=line-too-long
     AbstractProcessor,
 )
 

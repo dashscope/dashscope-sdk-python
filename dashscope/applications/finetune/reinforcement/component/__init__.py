@@ -5,7 +5,7 @@
 # -------------------------------------------------------------------------- #
 #                               Base Components                              #
 # -------------------------------------------------------------------------- #
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from .data.base_data_model import (
     BaseDataModel,
     TaskStatus,
     ModelProtocol,
@@ -17,28 +17,28 @@ from dashscope.applications.finetune.reinforcement.component.data.base_data_mode
 # -------------------------------------------------------------------------- #
 #                                 Data Models                                #
 # -------------------------------------------------------------------------- #
-from dashscope.applications.finetune.reinforcement.component.data.reward_input import (
+from .data.reward_input import (
     RewardInput,
 )
-from dashscope.applications.finetune.reinforcement.component.data.reward_output import (
+from .data.reward_output import (
     Reward,
     RewardOutput,
 )
-from dashscope.applications.finetune.reinforcement.component.data.rollout_input import (
+from .data.rollout_input import (
     RolloutInput,
 )
-from dashscope.applications.finetune.reinforcement.component.data.rollout_output import (
+from .data.rollout_output import (
     RolloutOutput,
 )
 
 # -------------------------------------------------------------------------- #
 #                                   Demos                                    #
 # -------------------------------------------------------------------------- #
-from dashscope.applications.finetune.reinforcement.component.demo import (
+from .demo import (
     DemoRewardProcessor,
     DemoRolloutProcessor,
 )
-from dashscope.applications.finetune.reinforcement.component.func_decorator import (
+from .func_decorator import (
     reward_func,
     sub_reward_func,
     aggregate_func,
@@ -47,7 +47,7 @@ from dashscope.applications.finetune.reinforcement.component.func_decorator impo
 # -------------------------------------------------------------------------- #
 #                              Func Manager                                  #
 # -------------------------------------------------------------------------- #
-from dashscope.applications.finetune.reinforcement.component.func_manager import (
+from .func_manager import (
     FuncManager,
 )
 
@@ -55,30 +55,30 @@ from dashscope.applications.finetune.reinforcement.component.func_manager import
 #                                   Observability                            #
 # -------------------------------------------------------------------------- #
 # pylint: disable=no-name-in-module
-from dashscope.applications.finetune.reinforcement.component.observability import (
+from .observability import (
     observe_processor,
 )
-from dashscope.applications.finetune.reinforcement.component.parser.base_parser import (
+from .parser.base_parser import (
     BaseRequestParser,
 )
 
 # -------------------------------------------------------------------------- #
 #                                  Parsers                                   #
 # -------------------------------------------------------------------------- #
-from dashscope.applications.finetune.reinforcement.component.parser.reward_parser import (
+from .parser.reward_parser import (
     RewardRequestParser,
 )
-from dashscope.applications.finetune.reinforcement.component.parser.rollout_parser import (
+from .parser.rollout_parser import (
     RolloutRequestParser,
 )
 
 # -------------------------------------------------------------------------- #
 #                                Processors                                  #
 # -------------------------------------------------------------------------- #
-from dashscope.applications.finetune.reinforcement.component.processor import (
+from .processor import (
     AbstractRewardProcessor,
 )
-from dashscope.applications.finetune.reinforcement.component.processor import (
+from .processor import (
     AbstractRolloutProcessor,
 )
 

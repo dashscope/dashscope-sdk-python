@@ -9,17 +9,17 @@ Demonstrates simple rollout execution flow (simulating Agent invocation).
 import time
 
 from dashscope.applications.finetune.reinforcement.common.log import logger
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from ..data.base_data_model import (
     AgentOutput,
     TaskStatus,
 )
-from dashscope.applications.finetune.reinforcement.component.data.rollout_input import (
+from ..data.rollout_input import (
     RolloutInput,
 )
-from dashscope.applications.finetune.reinforcement.component.data.rollout_output import (
+from ..data.rollout_output import (
     RolloutOutput,
 )
-from dashscope.applications.finetune.reinforcement.component.processor.abstract_rollout_processor import (  # noqa: E501  # pylint: disable=line-too-long
+from ..processor.abstract_rollout_processor import (  # noqa: E501  # pylint: disable=line-too-long
     AbstractRolloutProcessor,
 )
 

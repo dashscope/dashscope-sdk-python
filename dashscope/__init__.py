@@ -200,9 +200,7 @@ def __getattr__(name):
 
 def __dir__():
     return sorted(
-        set(globals())
-        | set(_DEPRECATED_LAZY_IMPORTS)
-        | _LEGACY_LAZY_MODULES,
+        set(globals()) | set(_DEPRECATED_LAZY_IMPORTS) | _LEGACY_LAZY_MODULES,
     )
 
 

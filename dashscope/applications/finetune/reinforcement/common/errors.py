@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-ancestors
 """Native v2 errors for AgenticRL, with legacy numeric-code compatibility."""
 
 from datetime import datetime

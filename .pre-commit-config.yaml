@@ -97,6 +97,7 @@ repos:
           --disable=R0913,
           --disable=E0401,
           --disable=E1101,
+          --disable=E0611,  # Runtime meta-path aliases are invisible to astroid
           --disable=C0415,
           --disable=W0603,
           --disable=R1705,
@@ -142,6 +143,7 @@ repos:
           --disable=R0913,
           --disable=E0401,
           --disable=E1101,
+          --disable=E0611,  # Runtime meta-path aliases are invisible to astroid
           --disable=C0415,
           --disable=W0603,
           --disable=R1705,

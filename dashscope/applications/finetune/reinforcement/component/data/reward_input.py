@@ -12,7 +12,7 @@ from pydantic import ConfigDict, Field
 from dashscope.applications.finetune.reinforcement.common.model_types import (
     FunctionType as FuncType,
 )
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from .base_data_model import (
     BaseDataModel,
     AgentOutput,
     RequestMetadata,

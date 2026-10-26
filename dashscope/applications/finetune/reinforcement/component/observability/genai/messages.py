@@ -28,8 +28,12 @@ import os
 from typing import Any, Dict, List, Optional
 
 from dashscope.applications.finetune.reinforcement.common.log import logger
-from dashscope.applications.finetune.reinforcement.common.utils import deep_mask
-from dashscope.applications.finetune.reinforcement.component.observability import genai
+from dashscope.applications.finetune.reinforcement.common.utils import (
+    deep_mask,
+)
+from dashscope.applications.finetune.reinforcement.component.observability import (
+    genai,
+)
 
 # pylint: disable=protected-access
 _core = genai._core

@@ -35,8 +35,13 @@ from dashscope.applications.finetune.reinforcement import (
     TrainingDataset,
     ValidationDataset,
 )
-from dashscope.applications.finetune.reinforcement import AgenticRLTuning, TuningModel
-from dashscope.applications.finetune.reinforcement import DASHSCOPE_HTTP_BASE_URL
+from dashscope.applications.finetune.reinforcement import (
+    AgenticRLTuning,
+    TuningModel,
+)
+from dashscope.applications.finetune.reinforcement import (
+    DASHSCOPE_HTTP_BASE_URL,
+)
 from dashscope.applications.finetune.reinforcement import (
     FunctionType,
     DatasetsType,

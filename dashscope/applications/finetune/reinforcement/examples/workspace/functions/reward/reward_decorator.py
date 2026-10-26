@@ -12,15 +12,17 @@ import asyncio
 import time
 from typing import Dict
 
-from dashscope.applications.finetune.reinforcement import AbstractRewardProcessor
-from dashscope.applications.finetune.reinforcement import (
+from dashscope.finetune.reinforcement import (
+    AbstractRewardProcessor,
+)
+from dashscope.finetune.reinforcement import (
     RewardInput,
     RewardOutput,
     Reward,
     TaskStatus,
 )
-from dashscope.applications.finetune.reinforcement import logger
-from dashscope.applications.finetune.reinforcement import (
+from dashscope.finetune.reinforcement import logger
+from dashscope.finetune.reinforcement import (
     reward_func,
     sub_reward_func,
     aggregate_func,

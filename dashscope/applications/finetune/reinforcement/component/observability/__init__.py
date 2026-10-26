@@ -4,7 +4,7 @@
 This module provides a *stable public surface* while keeping heavy
 observability dependencies lazily imported.  User-facing imports such as::
 
-    from dashscope.applications.finetune.reinforcement.component.observability import (
+    from . import (
         observe_processor,
         trace_client,
         trace_tool,
@@ -81,7 +81,7 @@ def __getattr__(name: str) -> Any:
         "trace_client",
         "trace_tool",
     }:
-        from dashscope.applications.finetune.reinforcement.component.observability import (
+        from . import (
             genai as _genai,
         )
 
@@ -89,7 +89,7 @@ def __getattr__(name: str) -> Any:
 
     # Processor-span helpers
     if name in {"observe_processor", "trace_processor_span"}:
-        from dashscope.applications.finetune.reinforcement.component.observability import (
+        from . import (
             processor_span as _processor_span,
         )
 
@@ -113,7 +113,7 @@ def __getattr__(name: str) -> Any:
         "span_payload_preview",
         "trace_processor_process",
     }:
-        from dashscope.applications.finetune.reinforcement.component.observability import (
+        from . import (
             tracing as _tracing,
         )
 

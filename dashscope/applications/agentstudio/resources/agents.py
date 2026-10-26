@@ -15,7 +15,11 @@ from dashscope.applications.agentstudio.resources._helpers import (
     _coerce_agent,
     _coerce_agent_version,
 )
-from dashscope.applications.agentstudio.types import Agent, AgentVersion, ModelConfig
+from dashscope.applications.agentstudio.types import (
+    Agent,
+    AgentVersion,
+    ModelConfig,
+)
 from dashscope.applications.agentstudio.types.params import (
     AgentCreateParams,
     AgentListParams,

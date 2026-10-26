@@ -8,10 +8,10 @@ Data model definitions for GroupReward processor output results.
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from .base_data_model import (
     TaskStatus,
 )
-from dashscope.applications.finetune.reinforcement.component.data.reward_output import (
+from .reward_output import (
     Reward,
 )
 

@@ -85,7 +85,9 @@ def test_public_names_are_exported():
 
 
 def test_client_classes_have_root_module_ownership():
-    assert impl.Client.__module__ == "dashscope.applications.agentstudio.client"
+    assert (
+        impl.Client.__module__ == "dashscope.applications.agentstudio.client"
+    )
     assert impl.AsyncClient.__module__ == (
         "dashscope.applications.agentstudio.client"
     )
@@ -124,7 +126,9 @@ def test_deep_import_from_syntax_resolves():
     assert Agents.__module__ == (
         "dashscope.applications.agentstudio.resources.agents"
     )
-    assert Agent.__module__ == "dashscope.applications.agentstudio.types.models"
+    assert (
+        Agent.__module__ == "dashscope.applications.agentstudio.types.models"
+    )
 
 
 # ---------------------------------------------------------------------------

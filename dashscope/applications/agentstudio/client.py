@@ -13,7 +13,10 @@ from dashscope._shared._validation import (
     validate_region,
     validate_workspace_id,
 )
-from dashscope.applications.agentstudio.resources.agents import Agents, AsyncAgents
+from dashscope.applications.agentstudio.resources.agents import (
+    Agents,
+    AsyncAgents,
+)
 from dashscope.applications.agentstudio.resources.deployments import (
     AsyncDeploymentRuns,
     AsyncDeployments,
@@ -24,15 +27,30 @@ from dashscope.applications.agentstudio.resources.environments import (
     Environments,
     AsyncEnvironments,
 )
-from dashscope.applications.agentstudio.resources.files import Files, AsyncFiles
+from dashscope.applications.agentstudio.resources.files import (
+    Files,
+    AsyncFiles,
+)
 from dashscope.applications.agentstudio.resources.memory_stores import (
     MemoryStores,
     AsyncMemoryStores,
 )
-from dashscope.applications.agentstudio.resources.security import Security, AsyncSecurity
-from dashscope.applications.agentstudio.resources.sessions import Sessions, AsyncSessions
-from dashscope.applications.agentstudio.resources.skills import Skills, AsyncSkills
-from dashscope.applications.agentstudio.resources.vaults import Vaults, AsyncVaults
+from dashscope.applications.agentstudio.resources.security import (
+    Security,
+    AsyncSecurity,
+)
+from dashscope.applications.agentstudio.resources.sessions import (
+    Sessions,
+    AsyncSessions,
+)
+from dashscope.applications.agentstudio.resources.skills import (
+    Skills,
+    AsyncSkills,
+)
+from dashscope.applications.agentstudio.resources.vaults import (
+    Vaults,
+    AsyncVaults,
+)
 from dashscope.applications.agentstudio.resources.webhook_endpoints import (
     AsyncWebhookEndpoints,
     WebhookEndpoints,
@@ -43,7 +61,10 @@ from dashscope.applications.agentstudio.constants import (
     AGENTSTUDIO_DEFAULT_TIMEOUT,
     AGENTSTUDIO_MAX_RETRIES,
 )
-from dashscope.applications.agentstudio.transport import SyncTransport, AsyncTransport
+from dashscope.applications.agentstudio.transport import (
+    SyncTransport,
+    AsyncTransport,
+)
 from dashscope._config import _api_key_from_file, settings
 
 

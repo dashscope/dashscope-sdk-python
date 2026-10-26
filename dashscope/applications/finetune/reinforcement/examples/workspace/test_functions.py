@@ -37,14 +37,14 @@ test_functions():
 
 import json
 
-from dashscope.applications.finetune.reinforcement import (
+from dashscope.finetune.reinforcement import (
     logger,
     TaskStatus,
     FunctionType,
     AgenticRLFunctionComponent,
     FunctionComponentModel,
 )
-from dashscope.applications.finetune.agentic_rl import AgenticRL
+from dashscope.finetune.agentic_rl import AgenticRL
 
 
 async def main_functions():

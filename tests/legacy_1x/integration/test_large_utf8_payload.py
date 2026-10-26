@@ -16,7 +16,9 @@ import pytest
 from dashscope.legacy_1x.aigc.generation import Generation, AioGeneration
 
 WEBSEARCH_JSON = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+    os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    ),
     "websearch.json",
 )
 

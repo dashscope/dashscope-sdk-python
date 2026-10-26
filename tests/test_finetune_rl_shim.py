@@ -26,7 +26,9 @@ import pytest
 import dashscope
 from dashscope._shared import _sdk_ident
 from dashscope._shared._sdk_ident import set_sdk_client
-from dashscope.legacy_1x.finetune.agentic_rl import AgenticRL as LegacyAgenticRL
+from dashscope.legacy_1x.finetune.agentic_rl import (
+    AgenticRL as LegacyAgenticRL,
+)
 from dashscope.version import __version__
 from dashscope.errors import SdkError
 from dashscope.finetune import _submit
@@ -160,9 +162,12 @@ def test_server_module_resolves_without_importing_fastapi(alias):
     submit_path = f"{alias}.component.server.server"
     spec = importlib.util.find_spec(submit_path)
     assert spec is not None
-    assert "dashscope/applications/finetune/reinforcement" in spec.origin.replace(
-        "\\",
-        "/",
+    assert (
+        "dashscope/applications/finetune/reinforcement"
+        in spec.origin.replace(
+            "\\",
+            "/",
+        )
     )
     assert spec.loader.get_code(submit_path) is not None
     assert "fastapi" not in sys.modules

@@ -2,7 +2,7 @@
 # ========================================================================== #
 #                              Base Components                               #
 # ========================================================================== #
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from .base_data_model import (
     BaseDataModel,
     TaskStatus,
     ModelProtocol,
@@ -12,10 +12,10 @@ from dashscope.applications.finetune.reinforcement.component.data.base_data_mode
     RequestMetadata,
     AgentOutput,
 )
-from dashscope.applications.finetune.reinforcement.component.data.group_reward_input import (  # noqa: E501
+from .group_reward_input import (  # noqa: E501
     GroupRewardInput,
 )
-from dashscope.applications.finetune.reinforcement.component.data.group_reward_output import (  # noqa: E501
+from .group_reward_output import (  # noqa: E501
     GroupRewardOutput,
     GroupReward,
 )
@@ -23,21 +23,21 @@ from dashscope.applications.finetune.reinforcement.component.data.group_reward_o
 # ========================================================================== #
 #                              Input Models                                  #
 # ========================================================================== #
-from dashscope.applications.finetune.reinforcement.component.data.reward_input import (
+from .reward_input import (
     RewardInput,
 )
 
 # ========================================================================== #
 #                              Output Models                                 #
 # ========================================================================== #
-from dashscope.applications.finetune.reinforcement.component.data.reward_output import (
+from .reward_output import (
     RewardOutput,
     Reward,
 )
-from dashscope.applications.finetune.reinforcement.component.data.rollout_input import (
+from .rollout_input import (
     RolloutInput,
 )
-from dashscope.applications.finetune.reinforcement.component.data.rollout_output import (
+from .rollout_output import (
     RolloutOutput,
 )
 

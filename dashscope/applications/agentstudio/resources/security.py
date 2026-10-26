@@ -12,8 +12,13 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Sequence
 
-from dashscope.applications.agentstudio.types import SecurityAlertList, SecurityOverview
-from dashscope.applications.agentstudio.types.params import SecurityListAgentLogsParams
+from dashscope.applications.agentstudio.types import (
+    SecurityAlertList,
+    SecurityOverview,
+)
+from dashscope.applications.agentstudio.types.params import (
+    SecurityListAgentLogsParams,
+)
 
 _PATH_SECURITY_OVERVIEW = "/security/overview"
 _PATH_SECURITY_AGENT_LOGS = "/security/agent_logs"

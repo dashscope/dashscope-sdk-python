@@ -8,7 +8,7 @@ Base class definitions for request parameter parsing.
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from ..data.base_data_model import (
     BaseDataModel,
 )
 

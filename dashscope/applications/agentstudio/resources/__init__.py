@@ -15,7 +15,10 @@ Usage::
     client.sessions.events.send(session.id, [user_message("hello")])
 """
 
-from dashscope.applications.agentstudio.resources.agents import Agents, AsyncAgents
+from dashscope.applications.agentstudio.resources.agents import (
+    Agents,
+    AsyncAgents,
+)
 from dashscope.applications.agentstudio.resources.deployments import (
     AsyncDeploymentRuns,
     AsyncDeployments,
@@ -26,7 +29,10 @@ from dashscope.applications.agentstudio.resources.environments import (
     Environments,
     AsyncEnvironments,
 )
-from dashscope.applications.agentstudio.resources.files import Files, AsyncFiles
+from dashscope.applications.agentstudio.resources.files import (
+    Files,
+    AsyncFiles,
+)
 from dashscope.applications.agentstudio.resources.memory_stores import (
     AsyncMemories,
     AsyncMemoryStores,
@@ -41,7 +47,10 @@ from dashscope.applications.agentstudio.resources.session_events import (
     _AioTypedEventStream,
     _TypedEventStream,
 )
-from dashscope.applications.agentstudio.resources.sessions import Sessions, AsyncSessions
+from dashscope.applications.agentstudio.resources.sessions import (
+    Sessions,
+    AsyncSessions,
+)
 from dashscope.applications.agentstudio.resources.skills import (
     AsyncSkillVersions,
     AsyncSkills,

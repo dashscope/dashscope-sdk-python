@@ -29,19 +29,22 @@ from langgraph.prebuilt import ToolNode
 # Public names are provided lazily via __getattr__; __all__ entries are not
 # bindings.
 # pylint: disable=undefined-all-variable
-from dashscope.applications.finetune.reinforcement import RolloutInput, RolloutOutput
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from dashscope.finetune.reinforcement import (
+    RolloutInput,
+    RolloutOutput,
+)
+from dashscope.finetune.reinforcement.component.data.base_data_model import (
     AgentOutput,
     TaskStatus,
 )
 
 # pylint: disable=no-name-in-module
-from dashscope.applications.finetune.reinforcement.component.observability import (
+from dashscope.finetune.reinforcement.component.observability import (
     observe_processor,
     trace_client,
     trace_tool,
 )
-from dashscope.applications.finetune.reinforcement.component.processor import (
+from dashscope.finetune.reinforcement.component.processor import (
     AbstractRolloutProcessor,
 )
 
@@ -438,7 +441,7 @@ class CalcXRolloutProcessor(AbstractRolloutProcessor):
 
 
 if __name__ == "__main__":
-    from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (  # noqa: E501
+    from dashscope.finetune.reinforcement.component.data.base_data_model import (  # noqa: E501  # pylint: disable=line-too-long
         ModelResource,
     )
     import os

@@ -62,6 +62,7 @@ def _canonical_name(name):
     return None
 
 
+# pylint: disable=abstract-method,unused-argument
 class _AliasLoader(importlib.abc.Loader):
     def __init__(self, alias_name, canonical_name, canonical_spec):
         self._alias_name = alias_name
@@ -83,6 +84,7 @@ class _AliasLoader(importlib.abc.Loader):
         return loader.get_code(self._canonical_name)
 
 
+# pylint: disable=unused-argument
 class _AliasFinder(importlib.abc.MetaPathFinder):
     _dashscope_legacy_1x_alias_finder = True
 

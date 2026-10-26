@@ -20,7 +20,10 @@ from dashscope.applications.agentstudio.resources._helpers import (
     _session_resource_item_path,
     _session_resources_path,
 )
-from dashscope.applications.agentstudio.types import DeleteResponse, SessionResource
+from dashscope.applications.agentstudio.types import (
+    DeleteResponse,
+    SessionResource,
+)
 from dashscope.applications.agentstudio.types.params import (
     SessionResourceAddParams,
     SessionResourceListParams,

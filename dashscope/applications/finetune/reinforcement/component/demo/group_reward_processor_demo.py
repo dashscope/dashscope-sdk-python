@@ -7,20 +7,20 @@ Demonstrates rule-based scoring for multiple Agent outputs in a group.
 """
 
 from dashscope.applications.finetune.reinforcement.common.log import logger
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from ..data.base_data_model import (
     TaskStatus,
 )
-from dashscope.applications.finetune.reinforcement.component.data.group_reward_input import (  # noqa: E501
+from ..data.group_reward_input import (  # noqa: E501
     GroupRewardInput,
 )
-from dashscope.applications.finetune.reinforcement.component.data.group_reward_output import (  # noqa: E501
+from ..data.group_reward_output import (  # noqa: E501
     GroupRewardOutput,
     GroupReward,
 )
-from dashscope.applications.finetune.reinforcement.component.data.reward_output import (
+from ..data.reward_output import (
     Reward,
 )
-from dashscope.applications.finetune.reinforcement.component.processor.abstract_group_reward_processor import (  # noqa: E501  # pylint: disable=line-too-long
+from ..processor.abstract_group_reward_processor import (  # noqa: E501  # pylint: disable=line-too-long
     AbstractGroupRewardProcessor,
 )
 

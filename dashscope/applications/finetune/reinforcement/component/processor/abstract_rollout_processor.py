@@ -9,13 +9,13 @@ inference/rollout logic.
 
 from abc import abstractmethod
 
-from dashscope.applications.finetune.reinforcement.component.data.rollout_input import (
+from ..data.rollout_input import (
     RolloutInput,
 )
-from dashscope.applications.finetune.reinforcement.component.data.rollout_output import (
+from ..data.rollout_output import (
     RolloutOutput,
 )
-from dashscope.applications.finetune.reinforcement.component.processor.abstract_processor import (  # noqa: E501  # pylint: disable=line-too-long
+from ..processor.abstract_processor import (  # noqa: E501  # pylint: disable=line-too-long
     AbstractProcessor,
 )
 

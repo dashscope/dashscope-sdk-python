@@ -38,7 +38,10 @@ FC_API_KEY = os.environ.get("FC_API_KEY", DASHSCOPE_API_KEY)
 # The logger name is an observability contract: user log filters and
 # existing pipelines match on it, so it keeps the published name even
 # though the package itself now lives under ``dashscope``.
-LOGGER_NAME = os.environ.get("LOGGER_NAME", "dashscope.applications.finetune.reinforcement")
+LOGGER_NAME = os.environ.get(
+    "LOGGER_NAME",
+    "dashscope.applications.finetune.reinforcement",
+)
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "info").upper()
 LOGGER_FILTER_FIELDS = {
     "trigger_token",

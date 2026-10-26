@@ -9,7 +9,7 @@ Corresponds to the RolloutOutput structure in protocol.py.
 from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from .base_data_model import (
     TaskStatus,
     AgentOutput,
     _normalize_error_code,

@@ -14,7 +14,10 @@ from dashscope.applications.agentstudio.pagination import (
 from dashscope.applications.agentstudio.resources._helpers import (
     _coerce_env,
 )
-from dashscope.applications.agentstudio.types import DeleteResponse, Environment
+from dashscope.applications.agentstudio.types import (
+    DeleteResponse,
+    Environment,
+)
 from dashscope.applications.agentstudio.types.params import (
     EnvironmentCreateParams,
     EnvironmentListParams,

@@ -37,6 +37,8 @@ from typing import Any, Dict, Mapping, Optional
 
 from dashscope import _error_registry as _registry
 from dashscope import errors as _v2_errors
+
+# pylint: disable-next=unused-import
 from dashscope.errors import (  # noqa: F401
     APIConnectionError,
     APIStatusError,

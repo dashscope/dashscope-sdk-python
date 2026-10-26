@@ -36,22 +36,25 @@ import time
 from types import SimpleNamespace
 from typing import Any, Dict, List
 
-from dashscope.applications.finetune.reinforcement import RolloutInput, RolloutOutput
-from dashscope.applications.finetune.reinforcement import logger
-from dashscope.applications.finetune.reinforcement.component.data.base_data_model import (
+from dashscope.finetune.reinforcement import (
+    RolloutInput,
+    RolloutOutput,
+)
+from dashscope.finetune.reinforcement import logger
+from dashscope.finetune.reinforcement.component.data.base_data_model import (
     AgentOutput,
     TaskStatus,
 )
 
 # pylint: disable=no-name-in-module
-from dashscope.applications.finetune.reinforcement.component.observability import (
+from dashscope.finetune.reinforcement.component.observability import (
     observe_processor,
     observe_llm,
     observe_tool,
     trace_client,
     trace_tool,
 )
-from dashscope.applications.finetune.reinforcement.component.processor import (
+from dashscope.finetune.reinforcement.component.processor import (
     AbstractRolloutProcessor,
 )
 

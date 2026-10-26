@@ -12,16 +12,16 @@ from typing import Any, Callable, Dict, Iterator, Optional, TypeVar
 
 from opentelemetry.trace.status import Status, StatusCode
 
-from dashscope.applications.finetune.reinforcement.component.observability.genai._core import (  # noqa: E501
+from ..genai._core import (  # noqa: E501
     GENAI_AVAILABLE,
     get_handler,
 )
-from dashscope.applications.finetune.reinforcement.component.observability.genai.messages import (  # noqa: E501  # pylint: disable=line-too-long
+from ..genai.messages import (  # noqa: E501  # pylint: disable=line-too-long
     dashscope_response_to_output_messages,
     openai_chat_messages_to_input_messages,
     openai_completion_to_output_messages,
 )
-from dashscope.applications.finetune.reinforcement.component.observability.tracing import (
+from ..tracing import (
     is_tracing_enabled,
 )
 

@@ -699,7 +699,7 @@ def test_response_error_is_sdk_side_only():
     assert issubclass(ResponseError, APIStatusError)
     assert ResponseError.status_code == 500
     assert ResponseError not in _STATUS_MAP.values()
-    assert ResponseError not in {cls for cls in _CODE_MAP.values()}
+    assert ResponseError not in set(_CODE_MAP.values())
 
 
 @pytest.mark.parametrize(

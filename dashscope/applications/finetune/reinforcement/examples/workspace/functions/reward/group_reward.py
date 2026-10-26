@@ -8,15 +8,15 @@ Demonstrates rule-based scoring for multiple Agent outputs in a group.
 
 from __future__ import annotations
 
-from dashscope.applications.finetune.reinforcement import (
+from dashscope.finetune.reinforcement import (
     GroupRewardInput,
     GroupRewardOutput,
     GroupReward,
     Reward,
     TaskStatus,
 )
-from dashscope.applications.finetune.reinforcement import logger
-from dashscope.applications.finetune.reinforcement.component.processor import (
+from dashscope.finetune.reinforcement import logger
+from dashscope.finetune.reinforcement.component.processor import (
     AbstractGroupRewardProcessor,
 )
 

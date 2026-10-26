@@ -18,7 +18,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Optional, Sequence, Union
 
-from dashscope.applications.agentstudio.types.models import BaseModel, ModelConfig
+from dashscope.applications.agentstudio.types.models import (
+    BaseModel,
+    ModelConfig,
+)
 
 _NOT_GIVEN = object()
 

@@ -43,6 +43,29 @@ def close_shared_aio_session() -> None: ...
 def close_shared_sync_session() -> None: ...
 def set_region(region: str, workspace_id: Optional[str] = ...) -> None: ...
 
+# Lazily resolved compatibility modules.
+aigc: Any
+agentstudio: Any
+api_entities: Any
+app: Any
+applications: Any
+assistants: Any
+audio: Any
+cli: Any
+common: Any
+embeddings: Any
+files: Any
+finetune: Any
+io: Any
+model: Any
+models: Any
+multimodal: Any
+nlp: Any
+protocol: Any
+rerank: Any
+threads: Any
+utils: Any
+
 # ---------------------------------------------------------------------------
 # Response types
 # ---------------------------------------------------------------------------
