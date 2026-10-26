@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     print("----- decision request -----")
     # Question values may also be the typed models ChoiceQuestion /
-    # NoulQuestion / ScoreQuestion from dashscope.v2.resources.decision;
+    # NoulQuestion / ScoreQuestion from dashscope.resources.decision;
     # raw dicts below show the exact wire shape (and pass future fields
     # through untouched).
     resp = client.decision.create(

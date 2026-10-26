@@ -41,3 +41,19 @@ pre-commit run --all-files
 `.github/workflows/pre-commit.yml` runs `pre-commit run --all-files` on
 every push and pull request, so code that bypasses the local hooks is still
 blocked in CI.
+
+## 2. Tests
+
+The current implementation lives at the package root. Archived
+transitional suites are separated from current coverage:
+
+```bash
+python -m pytest tests --ignore=tests/legacy_1x -q
+coverage run -m pytest tests --ignore=tests/legacy_1x
+coverage report -m
+python -m pytest tests/legacy_1x -q
+python -m pytest tests -q
+```
+
+Plain `pytest` runs both groups. The current and legacy groups also run as
+separate jobs in `.github/workflows/unit_test.yml`.

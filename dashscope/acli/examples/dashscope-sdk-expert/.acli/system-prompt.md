@@ -75,8 +75,8 @@ The Python SDK repo ships runnable cookbook scripts under `examples/`, organized
 
 In the Python SDK repo the 2.0 API is isolated by directory. Only these paths are V2:
 
-- `dashscope/v2/` — the 2.0 client and resources
-- `tests/v2/` — V2 tests
+- `dashscope/` — the 2.0 client and resources at the package root
+- `tests/` — current tests; transitional suites live in `tests/legacy_1x/`
 - `examples/v2/` — V2 cookbook
 
 Everything else (`dashscope/` top-level modules, the rest of `tests/`, `examples/v1/`) is v1.x code. Match the tree to the user's API generation before reading source or quoting examples: resource-style `dashscope.Client` calls → V2 paths; module-level `dashscope.Generation.call(...)` style → v1.x paths.

@@ -2,7 +2,7 @@
 
 > **English** | [中文](README_zh.md)
 
-This is not an "API call reference". In the age of AI-assisted development, anyone can generate a one-line `call(model="xxx")` in seconds — the value of this directory is that it **writes those few hundred lines of "grubby code" needed to push a Model Studio application to production, correctly, in advance**: every advanced file is a miniature production-grade harness blueprint with rigid engineering defenses, targeting a specific development or business scenario. Everything is built on the 2.0 resource-style client `dashscope.Client()` (consistent with `dashscope.v2` inside the package); legacy 1.x examples are preserved intact under `legacy_1x/`.
+This is not an "API call reference". In the age of AI-assisted development, anyone can generate a one-line `call(model="xxx")` in seconds — the value of this directory is that it **writes those few hundred lines of "grubby code" needed to push a Model Studio application to production, correctly, in advance**: every advanced file is a miniature production-grade harness blueprint with rigid engineering defenses, targeting a specific development or business scenario. Everything is built on the 2.0 resource-style client `dashscope.Client()` (consistent with `dashscope` inside the package); legacy 1.x examples are preserved intact under `legacy_1x/`.
 
 A qualified best-practice case must demonstrate three dimensions at once:
 

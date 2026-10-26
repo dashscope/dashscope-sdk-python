@@ -81,7 +81,7 @@ The demo runs a three-turn dialogue whose second turn — "can this order be ref
 
 ### A real pit you will step into without reading the source
 
-> **Streaming requests do not go through the SDK's auto-retry.** `open_stream` in `dashscope/v2/transport/http.py` checks the initial status once and returns (source comment: "only the initial status is checked here, no retries"), while the plain `request` runs the `max_retries` backoff loop. So a streaming RAG that does not handle 429/503 itself throws the exception straight at the user. The harness's `retry_with_backoff` exists precisely for this gap.
+> **Streaming requests do not go through the SDK's auto-retry.** `open_stream` in `dashscope/transport/http.py` checks the initial status once and returns (source comment: "only the initial status is checked here, no retries"), while the plain `request` runs the `max_retries` backoff loop. So a streaming RAG that does not handle 429/503 itself throws the exception straight at the user. The harness's `retry_with_backoff` exists precisely for this gap.
 
 Likewise, a stream is a **one-shot iterator**: consuming `text_stream` and then calling `get_final_message()` yields an empty tail, while the usage counters live in the **last chunk**, not the first. `_consume_stream` therefore iterates exactly once, printing the deltas and folding in usage at the same time.
 
@@ -113,7 +113,7 @@ The offline demo runs in order:
 
 ## Case: high-concurrency realtime meeting transcription base
 
-`realtime_audio_meeting_harness.py` rebuilds the legacy TingWu realtime script (`legacy_1x/tingwu_realtime.py`, a test-flavored style of callbacks + `time.sleep` polling) into a **meeting-platform-grade concurrency supervisor**: transcribe N meeting rooms in realtime at the same time, each room with its own state machine and transcript, and no single room's disconnect or moderation block can drag the others down. It also runs offline by default — a scripted duplex socket is injected through TingWu realtime's `connector=` (the same seam used by `tests/v2/test_tingwu.py`), so without a microphone or a key you can watch concurrency, reconnects and degradation actually happen.
+`realtime_audio_meeting_harness.py` rebuilds the legacy TingWu realtime script (`legacy_1x/tingwu_realtime.py`, a test-flavored style of callbacks + `time.sleep` polling) into a **meeting-platform-grade concurrency supervisor**: transcribe N meeting rooms in realtime at the same time, each room with its own state machine and transcript, and no single room's disconnect or moderation block can drag the others down. It also runs offline by default — a scripted duplex socket is injected through TingWu realtime's `connector=` (the same seam used by `tests/test_tingwu.py`), so without a microphone or a key you can watch concurrency, reconnects and degradation actually happen.
 
 ### The four production dimensions
 
@@ -126,7 +126,7 @@ The offline demo runs in order:
 
 ### A real pit you will step into without reading the source
 
-> **The realtime family cannot be multiplexed.** The header comment of `dashscope/v2/transport/ws_connection.py` states it: the realtime protocol has no task id — one socket is one session, closed when the session ends — so it always opens a dedicated connection per session. (The multiplexable `WsConnection` only serves the JSON-framed asr/tts/translation tasks, and binary uplink is single-owner.) Therefore the correct shape of "high-concurrency realtime audio" is **one dedicated connection per meeting plus a supervising thread pool**, not stuffing multiple audio streams into one socket — the protocol simply cannot do that. The harness's `MeetingSupervisor` uses a bounded thread pool to tie "concurrency" to "active sockets / blast radius" as admission control.
+> **The realtime family cannot be multiplexed.** The header comment of `dashscope/transport/ws_connection.py` states it: the realtime protocol has no task id — one socket is one session, closed when the session ends — so it always opens a dedicated connection per session. (The multiplexable `WsConnection` only serves the JSON-framed asr/tts/translation tasks, and binary uplink is single-owner.) Therefore the correct shape of "high-concurrency realtime audio" is **one dedicated connection per meeting plus a supervising thread pool**, not stuffing multiple audio streams into one socket — the protocol simply cannot do that. The harness's `MeetingSupervisor` uses a bounded thread pool to tie "concurrency" to "active sockets / blast radius" as admission control.
 
 Likewise, when a socket drops mid-stream, `WsSession.recv` raises `APIConnectionError` ("closed before task-finished"), while a `task-failed` event is mapped through the error catalog into a business exception with `status_code=200` (e.g. `ContentFilterError`). `_is_reconnectable` distinguishes exactly on this: the former reconnects, the latter degrades — the offline demo's `room-gamma` (after a drop-and-reconnect, the half sentence `今天我们讨论` is completed into `今天我们讨论第三季度的路线图。`) and `room-delta` (a content-moderation `task-failed` that degrades immediately) demonstrate these two paths respectively.
 
@@ -166,11 +166,11 @@ The offline demo runs 4 rooms concurrently, reports `completed` / `degraded` sep
 
 ### A real pit you will step into without reading the source
 
-> **DashScope can report a failure with HTTP 200.** `ResponseBase` in `dashscope/v2/types/common.py` carries `code` / `message` / `is_error` on every response, and with `raise_on_error=False` the SDK fills that envelope instead of raising. A triage loop that only wraps `try/except` will treat a failed call as a successful one with empty answers — and auto-route the ticket on nothing. The harness therefore checks `response.is_error` even in the default raising mode: belt and suspenders, because the day someone flips `raise_on_error=False` the guard must already be in place.
+> **DashScope can report a failure with HTTP 200.** `ResponseBase` in `dashscope/types/common.py` carries `code` / `message` / `is_error` on every response, and with `raise_on_error=False` the SDK fills that envelope instead of raising. A triage loop that only wraps `try/except` will treat a failed call as a successful one with empty answers — and auto-route the ticket on nothing. The harness therefore checks `response.is_error` even in the default raising mode: belt and suspenders, because the day someone flips `raise_on_error=False` the guard must already be in place.
 
 Likewise, **`score` answers are probability-weighted level indices, not integer classes** — `2.3` means "between level 2 and 3, leaning 2", and `legend` maps an index back to your level text. Cut lines like `P1_SCORE = 2.5` are therefore thresholds on a continuous axis, which is exactly what severity bands want.
 
-And a routing note: the System One endpoint lives under the **compatible-mode path on every gateway** (derived by `compatible_mode_base_url` in `dashscope/v2/_config.py`), so changing the client's chat `protocol` does not move it.
+And a routing note: the System One endpoint lives under the **compatible-mode path on every gateway** (derived by `compatible_mode_base_url` in `dashscope/_config.py`), so changing the client's chat `protocol` does not move it.
 
 ### Run
 

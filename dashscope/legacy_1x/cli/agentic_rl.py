@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from dashscope.finetune.agentic_rl import AgenticRL, SubmitResult
+from dashscope.legacy_1x.finetune.agentic_rl import AgenticRL, SubmitResult
 from dashscope.finetune.reinforcement import (
     serialize_for_output,
     FunctionType,

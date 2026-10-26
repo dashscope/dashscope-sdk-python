@@ -10,7 +10,7 @@ from dashscope.legacy_1x.api_entities.dashscope_response import (
 from dashscope.legacy_1x.client.base_api import BaseAsyncApi
 from dashscope.legacy_1x.common.error import InvalidParameter
 from dashscope.legacy_1x.common.logging import logger
-from dashscope.finetune.finetunes import FineTunes
+from dashscope.legacy_1x.finetune.finetunes import FineTunes
 
 
 class AsrPhraseManager(BaseAsyncApi):

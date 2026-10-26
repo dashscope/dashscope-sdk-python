@@ -65,8 +65,8 @@ class build_py(_build_py):
 
 
 # Hoisted to a module-level name (like ``name``/``url`` above) so the
-# static packaging audit in tests/unit/test_packaging_metadata.py keeps
-# seeing only literal-evaluable setup() kwargs.
+# static packaging audit in tests/legacy_1x/unit/test_packaging_metadata.py
+# keeps seeing only literal-evaluable setup() kwargs.
 cmdclass = {"build_py": build_py}
 
 
@@ -126,5 +126,7 @@ setuptools.setup(
     },
     zip_safe=False,
     cmdclass=cmdclass,
-    entry_points={"console_scripts": ["dashscope = dashscope.cli:main"]},
+    entry_points={
+        "console_scripts": ["dashscope = dashscope.legacy_1x.cli:main"],
+    },
 )

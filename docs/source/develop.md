@@ -32,3 +32,17 @@ If you only want to format and lint your code, you can run
 ```bash
 make linter
 ```
+
+## 2. Tests
+
+Run the current root implementation, archived compatibility suites, or the
+complete suite with:
+
+```bash
+python -m pytest tests --ignore=tests/legacy_1x -q
+python -m pytest tests/legacy_1x -q
+python -m pytest tests -q
+```
+
+Current coverage uses `coverage run -m pytest tests
+--ignore=tests/legacy_1x`, followed by `coverage report -m`.

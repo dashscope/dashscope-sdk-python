@@ -41,7 +41,6 @@ from dashscope.legacy_1x.api_entities.aio_session import (
 from dashscope.legacy_1x.api_entities.http_request import (
     close_shared_sync_session,
 )
-from dashscope.legacy_1x.common.api_key import save_api_key
 from dashscope.legacy_1x.common.env import (
     MAAS_REGIONS,
     api_key,
@@ -51,8 +50,8 @@ from dashscope.legacy_1x.common.env import (
     base_websocket_api_url,
     validate_workspace_id,
 )
-from dashscope.finetune.deployments import Deployments
-from dashscope.finetune.finetunes import FineTunes
+from dashscope.legacy_1x.finetune.deployments import Deployments
+from dashscope.legacy_1x.finetune.finetunes import FineTunes
 from dashscope.legacy_1x.embeddings.batch_text_embedding import (
     BatchTextEmbedding,
 )
@@ -78,8 +77,13 @@ from dashscope.tokenizers import (
     list_tokenizers,
 )
 
-# dashscope 2.0 public surface (implementation lives in dashscope/v2/).
-from dashscope.v2 import AsyncClient, Client, WsConnection, chat, settings
+# dashscope 2.0 public surface.
+from dashscope import errors
+from dashscope._config import Config, Settings, save_api_key, settings
+from dashscope._quickstart import chat
+from dashscope.client import AsyncClient, Client
+from dashscope.errors import DashScopeError, ErrorCode
+from dashscope.transport.ws_connection import WsConnection, WsTask
 
 # cn-beijing defaults to the legacy dashscope.aliyuncs.com endpoints;
 # its MaaS URLs are only reachable via an explicit set_region() call.
@@ -229,8 +233,14 @@ __all__ = [
     # dashscope 2.0
     "AsyncClient",
     "Client",
+    "Config",
+    "DashScopeError",
+    "ErrorCode",
+    "Settings",
     "WsConnection",
+    "WsTask",
     "chat",
+    "errors",
     "set_region",
 ]
 

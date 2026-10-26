@@ -13,7 +13,7 @@ description: Quick reference for fine-tuning and deployment (FineTunes/Files/Dep
 | --- | --- | --- |
 | SFT supervised fine-tuning | `FineTunes.call(..., mode="sft")` | `mode` is written into the request body as `training_type`; the source docstring lists values `sft` / `efficient_sft` |
 | CPT continued pre-training / DPO preference optimization | `FineTunes.call` | The SDK does not enumerate CPT/DPO literals; pass them through `mode`/`hyper_parameters` per the server-side docs |
-| AgenticRL reinforcement fine-tuning (GSPO) | `dashscope.finetune.agentic_rl.AgenticRL` | `training_type="reinforcement"`, `hyper_parameters["algorithm"]="gspo"` |
+| AgenticRL reinforcement fine-tuning (GSPO) | `dashscope.legacy_1x.finetune.agentic_rl.AgenticRL` | `training_type="reinforcement"`, `hyper_parameters["algorithm"]="gspo"` |
 
 ## Standard Workflow (upload file → create fine-tune job → poll status → deploy → invoke)
 

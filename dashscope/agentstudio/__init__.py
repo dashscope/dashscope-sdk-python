@@ -1,58 +1,164 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-"""Compatibility shim; the implementation moved to ``dashscope.v2.agentstudio``.
+"""AgentStudio sub-SDK for the dashscope Python client.
 
-The AgentStudio sub-SDK is owned by the 2.0 package. This module keeps the
-historical import path working: every public name is re-exported, and every
-submodule is aliased in ``sys.modules`` so deep imports such as
-``from dashscope.agentstudio.resources.agents import Agents`` resolve to the
-very same module object -- and therefore the very same classes -- as the
-``dashscope.v2.agentstudio`` path.
+The ``agentstudio`` package wraps the AgentStudio managed-agent HTTP
+API.  All resource classes are accessed through a client instance::
 
-Import from ``dashscope.v2.agentstudio`` in new code.
+    from dashscope.agentstudio import Client
+    from dashscope.agentstudio.types import (
+        user_message, user_tool_result,
+    )
+
+Example
+-------
+>>> from dashscope.agentstudio import Client
+>>> from dashscope.agentstudio.types import user_message
+>>> client = Client(api_key="sk-xxx")
+>>> agent = client.agents.create(name="demo", model="qwen-plus")
+>>> session = client.sessions.create(agent=agent.id)
+>>> client.sessions.events.send(session.id, [user_message("Hello!")])
+>>> with client.sessions.events.stream(session.id) as stream:
+...     for event in stream:
+...         print(event.type, event.to_dict())
+...         if event.type == "session_status":
+...             break
 """
 
-import pkgutil
-import sys
+# yapf: disable
 
-# Importing the package runs its own eager imports, so every submodule is
-# already in sys.modules by the time the walk below starts.
-from dashscope.v2 import agentstudio as _impl
-
-# pylint: disable-next=wildcard-import,unused-wildcard-import
-from dashscope.v2.agentstudio import *  # noqa: F401,F403
-
-# The wildcard only carries the names in the implementation's __all__, which
-# lists classes and helpers but not its submodules. Naming them here keeps
-# ``from dashscope.agentstudio import exceptions`` resolvable statically; at
-# runtime they are already imported by the package's own eager imports.
-# pylint: disable-next=unused-import
-from dashscope.v2.agentstudio import (  # noqa: F401
-    client,
-    constants,
-    exceptions,
-    pagination,
-    resources,
-    streaming,
-    transport,
-    types,
+from .client import Client, AsyncClient
+from .transport import APIResponse, RequestOptions
+from . import types
+from .exceptions import (
+    AgentStudioError,
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AuthenticationError,
+    ConflictError,
+    InternalServerError,
+    InvalidRequestError,
+    NotFoundError,
+    OverloadedError,
+    PermissionDeniedError,
+    RateLimitError,
+    StreamClosedError,
+    StreamError,
+)
+from .pagination import (
+    AsyncCursorPage,
+    CursorPage,
+)
+from .types import (
+    Memory,
+    MemoryStore,
+    MemoryVersion,
+    Message,
+    PermissionPolicy,
+    SecurityAlert,
+    SecurityAlertList,
+    SecurityOverview,
+    ServerEvent,
+    SessionResource,
+    StopReason,
+    user_define_outcome,
+    user_interrupt,
+    user_message,
+    user_tool_approval_response,
+    user_custom_tool_result,
+    user_tool_result,
+)
+from .types.params import (
+    AgentCreateParams,
+    AgentUpdateParams,
+    SessionCreateParams,
+    SessionUpdateParams,
+    EnvironmentCreateParams,
+    EnvironmentUpdateParams,
+    DeploymentCreateParams,
+    DeploymentUpdateParams,
+    SessionEventSendParams,
+    WebhookEndpointCreateParams,
+    WebhookEndpointUpdateParams,
+    WebhookEventListParams,
+)
+from .constants import (
+    PermissionPolicyType,
+    SSEEventType,
+    SessionStatus,
+    StopReasonType,
+    WebhookDeliveryStatus,
+    WebhookDisabledReason,
+    WebhookEventType,
+    WebhookStatus,
 )
 
-_V2_PACKAGE = _impl.__name__
-
-__all__ = list(_impl.__all__)
-
-# Alias each submodule under the old dotted path. Registering in
-# sys.modules alone is not enough: the import system skips a module it
-# finds there, so the attribute on the parent would never be set and
-# ``dashscope.agentstudio.resources`` would raise AttributeError.
-for _info in pkgutil.walk_packages(_impl.__path__, prefix=_V2_PACKAGE + "."):
-    _module = sys.modules.get(_info.name)
-    if _module is None:  # pragma: no cover - walk_packages imports as it goes
-        continue
-    _alias = __name__ + _info.name[len(_V2_PACKAGE) :]
-    sys.modules.setdefault(_alias, _module)
-    _parent_name, _, _leaf = _alias.rpartition(".")
-    _parent = sys.modules.get(_parent_name)
-    if _parent is not None:
-        setattr(_parent, _leaf, _module)
+__all__ = [
+    # client
+    "Client",
+    "AsyncClient",
+    # base types
+    "RequestOptions",
+    "APIResponse",
+    # exceptions
+    "AgentStudioError",
+    "APIConnectionError",
+    "APIStatusError",
+    "APITimeoutError",
+    "AuthenticationError",
+    "ConflictError",
+    "InternalServerError",
+    "InvalidRequestError",
+    "NotFoundError",
+    "OverloadedError",
+    "PermissionDeniedError",
+    "RateLimitError",
+    "StreamError",
+    "StreamClosedError",
+    # pagination
+    "CursorPage",
+    "AsyncCursorPage",
+    # unified message type
+    "Memory",
+    "MemoryStore",
+    "MemoryVersion",
+    "Message",
+    "PermissionPolicy",
+    "SecurityAlert",
+    "SecurityAlertList",
+    "SecurityOverview",
+    "ServerEvent",
+    "SessionResource",
+    "StopReason",
+    # client event helpers (re-exported for convenience)
+    "user_message",
+    "user_interrupt",
+    "user_tool_approval_response",
+    "user_custom_tool_result",
+    "user_tool_result",
+    "user_define_outcome",
+    # typing module
+    "types",
+    # params (commonly used request-body types)
+    "AgentCreateParams",
+    "AgentUpdateParams",
+    "SessionCreateParams",
+    "SessionUpdateParams",
+    "EnvironmentCreateParams",
+    "EnvironmentUpdateParams",
+    "DeploymentCreateParams",
+    "DeploymentUpdateParams",
+    "SessionEventSendParams",
+    "WebhookEndpointCreateParams",
+    "WebhookEndpointUpdateParams",
+    "WebhookEventListParams",
+    "WebhookStatus",
+    "WebhookDisabledReason",
+    "WebhookDeliveryStatus",
+    "WebhookEventType",
+    "SSEEventType",
+    "SessionStatus",
+    "StopReasonType",
+    "PermissionPolicyType",
+]

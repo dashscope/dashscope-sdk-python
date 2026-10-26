@@ -194,7 +194,7 @@ for text in stream.text_stream:            # 内容增量
 失败默认抛出类型化的 `DashScopeError`（非 2xx 的 HTTP 状态码，以及 HTTP 200 但业务报错，都会归入这里）：
 
 ```python
-from dashscope.v2 import errors
+from dashscope import errors
 
 try:
     client.chat.completions.create(model="qwen-plus", messages=["hi"])
@@ -446,6 +446,29 @@ examples/
 | `dashscope.api_key = "sk-xxx"` | `dashscope.Client(api_key=...)` 或 `dashscope.settings.api_key = ...` |
 | `dashscope.set_region(region, workspace_id)` | `dashscope.Client(region=..., workspace=...)` |
 | OpenAI 兼容通过 `dashscope.aigc.chat_completion.Completions` | `dashscope.Client(protocol="openai")` |
+
+### 包布局与兼容策略
+
+2.0 实现直接位于 `dashscope` 根包，原 `dashscope.v2` 命名空间已移除。
+包根已有的 1.x 导出继续可用；`dashscope.aigc`、`dashscope.client` 等旧
+deep import 已移至 `dashscope.legacy_1x` 下。2.0 Agentic RL 工作流位于
+`dashscope.finetune`，1.x 任务管理接口位于 `dashscope.legacy_1x.finetune`。
+
+`dashscope.save_api_key` 现在来自 `dashscope._config`，仍接受可选的 key
+文件路径，并会展开 `~`、创建缺失的父目录、按 UTF-8 写入。当前客户端使用
+独立的 `dashscope._logging` logger 层级，不会重新配置共享的 `dashscope`
+根 logger。
+
+### 开发测试
+
+```bash
+python -m pytest tests --ignore=tests/legacy_1x -q  # 当前实现
+python -m pytest tests/legacy_1x -q                 # 归档兼容套件
+python -m pytest tests -q                           # 全量
+```
+
+当前实现的 coverage 使用 `coverage run -m pytest tests
+--ignore=tests/legacy_1x`，随后执行 `coverage report -m`。
 
 ## 许可证
 

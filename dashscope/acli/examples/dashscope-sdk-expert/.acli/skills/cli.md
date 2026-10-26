@@ -29,7 +29,7 @@ This file is authoritative for answering `dashscope` CLI usage questions (based 
 | multimodal-embedding | create | Multimodal embeddings (text/image/audio) | dashscope.MultiModalEmbedding |
 | transcription | create | Audio file transcription (async task) | dashscope.Transcription |
 | speech-synthesis | create | Speech synthesis TTS | dashscope.HttpSpeechSynthesizer |
-| rl (hidden alias agentic-rl) | run/get/cancel/logs/list/register_functions/test_functions/upload_data | Agentic RL fine-tuning | dashscope.finetune.agentic_rl.AgenticRL |
+| rl (hidden alias agentic-rl) | run/get/cancel/logs/list/register_functions/test_functions/upload_data | Agentic RL fine-tuning | dashscope.legacy_1x.finetune.agentic_rl.AgenticRL |
 
 Note: code-generation and understanding still exist in the source but are deprecated/discontinued and are not registered in the CLI.
 

@@ -14,11 +14,18 @@ from typing import (
 # ---------------------------------------------------------------------------
 # dashscope 2.0
 # ---------------------------------------------------------------------------
-from dashscope.v2 import AsyncClient as AsyncClient
-from dashscope.v2 import Client as Client
-from dashscope.v2 import WsConnection as WsConnection
-from dashscope.v2 import chat as chat
-from dashscope.v2 import settings as settings
+from dashscope import errors as errors
+from dashscope._config import Config as Config
+from dashscope._config import Settings as Settings
+from dashscope._config import save_api_key as save_api_key
+from dashscope._config import settings as settings
+from dashscope._quickstart import chat as chat
+from dashscope.client import AsyncClient as AsyncClient
+from dashscope.client import Client as Client
+from dashscope.errors import DashScopeError as DashScopeError
+from dashscope.errors import ErrorCode as ErrorCode
+from dashscope.transport.ws_connection import WsConnection as WsConnection
+from dashscope.transport.ws_connection import WsTask as WsTask
 
 # ---------------------------------------------------------------------------
 # Config
@@ -29,7 +36,9 @@ base_compatible_api_url: str
 base_http_api_url: str
 base_websocket_api_url: str
 
-def save_api_key(api_key: str, file_path: Optional[str] = ...) -> None: ...
+def save_api_key(
+    api_key: str, api_key_file_path: Optional[str] = ...
+) -> None: ...
 def close_shared_aio_session() -> None: ...
 def close_shared_sync_session() -> None: ...
 def set_region(region: str, workspace_id: Optional[str] = ...) -> None: ...

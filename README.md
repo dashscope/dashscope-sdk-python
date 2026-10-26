@@ -194,7 +194,7 @@ By default each frame is incremental. Pass `incremental_output=False` to receive
 Failures raise a typed `DashScopeError` by default (both non-2xx HTTP statuses and HTTP-200-with-a-business-error land here):
 
 ```python
-from dashscope.v2 import errors
+from dashscope import errors
 
 try:
     client.chat.completions.create(model="qwen-plus", messages=["hi"])
@@ -446,6 +446,32 @@ The 1.x module-level API is unchanged and still supported — you can adopt 2.0 
 | `dashscope.api_key = "sk-xxx"` | `dashscope.Client(api_key=...)` or `dashscope.settings.api_key = ...` |
 | `dashscope.set_region(region, workspace_id)` | `dashscope.Client(region=..., workspace=...)` |
 | OpenAI-compatible via `dashscope.aigc.chat_completion.Completions` | `dashscope.Client(protocol="openai")` |
+
+### Package layout and compatibility
+
+The 2.0 implementation is directly under `dashscope`; the former
+`dashscope.v2` namespace has been removed. Existing root 1.x exports remain
+available. Old deep modules such as `dashscope.aigc` and `dashscope.client`
+have moved under `dashscope.legacy_1x`. The 2.0 Agentic RL workflow lives in
+`dashscope.finetune`; its 1.x job-management surface is under
+`dashscope.legacy_1x.finetune`.
+
+`dashscope.save_api_key` now comes from `dashscope._config`. It accepts an
+optional key-file path, expands `~`, creates missing parent directories, and
+writes UTF-8. Logs from the current client use the independent
+`dashscope._logging` logger hierarchy and do not reconfigure the shared
+`dashscope` root logger.
+
+### Development tests
+
+```bash
+python -m pytest tests --ignore=tests/legacy_1x -q  # current
+python -m pytest tests/legacy_1x -q                 # archived compatibility
+python -m pytest tests -q                           # everything
+```
+
+For current coverage, run `coverage run -m pytest tests
+--ignore=tests/legacy_1x`, then `coverage report -m`.
 
 ## License
 

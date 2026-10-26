@@ -9,7 +9,7 @@ on:
       - 'main'
 
 jobs:
-  test:
+  current:
     if: ${{ !(github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'docs:')) }}
 
     runs-on: ${{ matrix.os }}
@@ -17,7 +17,6 @@ jobs:
       matrix:
         os: [ ubuntu-latest ]
         python-version: [ '3.9', '3.12', '3.13', '3.14' ]
-
 
     steps:
       - name: Checkout repository
@@ -55,10 +54,55 @@ jobs:
         run: |
           python -m pip list --format=columns
 
-      - name: Run tests with coverage
+      - name: Run current tests with coverage
         run: |
-          coverage run -m pytest tests/unit
+          coverage run -m pytest tests --ignore=tests/legacy_1x
 
       - name: Generate coverage report
         run: |
           coverage report -m
+
+  legacy:
+    if: ${{ !(github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'docs:')) }}
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        python-version: [ '3.9', '3.12', '3.13', '3.14' ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Update setuptools
+        run: |
+          pip install --upgrade pip
+          pip install setuptools==68.2.2 wheel==0.41.2
+
+      - name: Set PYTHONPATH
+        run: |
+          echo "PYTHONPATH=$PYTHONPATH:${{ github.workspace }}/src" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          export PIP_DEFAULT_TIMEOUT=300
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
+
+      - name: Run archived legacy tests
+        run: |
+          python -m pytest tests/legacy_1x

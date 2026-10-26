@@ -7,7 +7,7 @@ Resilience happens at two levels:
 
 1. WITHIN a region the SDK already retries transient 429 / 5xx with
    Retry-After-aware exponential backoff -- see ``Client(max_retries=)``
-   and ``dashscope/v2/transport/_retry.py``. You do not reimplement it.
+   and ``dashscope/transport/_retry.py``. You do not reimplement it.
 2. ACROSS regions this recipe adds a per-region circuit breaker and
    fails over to the next healthy region when one keeps erroring, so a
    whole-region outage does not take your application down.
@@ -23,7 +23,7 @@ import time
 import httpx
 
 import dashscope
-from dashscope.v2 import errors
+from dashscope import errors
 
 # Fail over across these regions, in order. Both have a dedicated
 # shared gateway, so no workspace is required for the demo.

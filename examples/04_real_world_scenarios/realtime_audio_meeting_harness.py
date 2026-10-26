@@ -12,7 +12,7 @@ runnable blueprint:
 1. **Concurrency that respects the protocol.** Realtime TingWu is NOT
    multiplexable: its wire protocol carries no task id, so one websocket
    is exactly one session and closes when the session ends (see the
-   module note in dashscope/v2/transport/ws_connection.py). Concurrency
+   module note in dashscope/transport/ws_connection.py). Concurrency
    therefore means one *dedicated* connection + worker per meeting, and
    the pool size is the admission control that caps how many live
    sockets -- and how much blast radius -- you hold open at once.
@@ -33,7 +33,7 @@ runnable blueprint:
 
 It runs **fully offline and deterministically by default** by injecting
 a scripted duplex socket through TingWu's ``connector=`` seam (the same
-seam tests/v2/test_tingwu.py uses), so you can *see* the concurrency,
+seam tests/test_tingwu.py uses), so you can *see* the concurrency,
 reconnect and degradation without a microphone or a token. Set
 ``MEETING_HARNESS_LIVE=1`` to point the exact same engine at the real
 gateway with ``DASHSCOPE_API_KEY`` + ``DASHSCOPE_TINGWU_APP_ID``.
@@ -45,7 +45,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import dashscope
-from dashscope.v2 import errors
+from dashscope import errors
 
 # ---- configuration (override via env) ---- #
 MODEL = os.environ.get("DASHSCOPE_TINGWU_MODEL", "tingwu-turbo")
@@ -307,7 +307,7 @@ _SPEECH_END = _event("result-generated", {"action": "speech-end"})
 class FakeDuplexSocket:
     """A scripted duplex websocket that replays a canned event inbox.
 
-    Mirrors tests/v2/test_tingwu.py's FakeWebSocket. ``recv`` returns the
+    Mirrors tests/test_tingwu.py's FakeWebSocket. ``recv`` returns the
     next JSON frame, or ``None`` once the inbox is exhausted -- which the
     SDK maps to ``APIConnectionError`` ("closed before task-finished"),
     so an inbox that stops short of ``speech-end`` simulates a mid-stream

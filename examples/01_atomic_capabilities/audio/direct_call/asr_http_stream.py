@@ -10,7 +10,7 @@ from pathlib import Path
 from httpx_sse import EventSource
 
 from dashscope import Client
-from dashscope.v2.errors import DashScopeError
+from dashscope.errors import DashScopeError
 from ._common import open_wav, positive_seconds
 from .asr_file import https_url
 

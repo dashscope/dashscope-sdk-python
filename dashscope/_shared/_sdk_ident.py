@@ -14,7 +14,7 @@ for whichever stack held the copy, so it lives here -- one source of
 truth, same reason as the session id in ``_shared._sdk_session``.
 
 The 2.0 transport builds its own header in
-``dashscope.v2.transport._ident`` because it appends a trailing
+``dashscope.transport._ident`` because it appends a trailing
 generation marker (``aigc`` -> ``aigc2``) that this unmarked 1.x shape
 must not carry. Sub-SDKs that predate the marker -- AgentStudio, whose
 ``agentstudio`` tag the backend already reports on -- keep using this
@@ -25,7 +25,7 @@ it is the other half of the request identity, and it must agree with
 ``get_sdk_headers`` on the version segment. It is the *1.x shape*
 (``dashscope/<version>; python/...; platform/...; processor/...``) and is
 deliberately not shared with the 2.0 transport's own
-``dashscope.v2.transport.http.default_user_agent()``
+``dashscope.transport.http.default_user_agent()``
 (``dashscope-v2-python/<version>``). Those are two distinct backend
 contracts, not two spellings of one value, so they must not be merged.
 

@@ -15,7 +15,7 @@ real knowledge-base service must get right into one runnable blueprint:
 3. **Rigid resilience** -- the SDK retries transient 429/5xx *within* a
    region for normal calls (``Client(max_retries=)``), but a STREAMING
    call is NOT retried by the SDK (``transport.open_stream`` checks the
-   status once and returns -- see dashscope/v2/transport/http.py). So the
+   status once and returns -- see dashscope/transport/http.py). So the
    harness owns exponential backoff for the streaming generate step, and
    layers a per-region circuit breaker + cross-region failover on top.
 4. **Graceful degradation** -- 429 / content-filter / total-outage are
@@ -39,7 +39,7 @@ import time
 import httpx
 
 import dashscope
-from dashscope.v2 import errors
+from dashscope import errors
 
 # ---- configuration (override via env) ---- #
 EMBED_MODEL = os.environ.get("DASHSCOPE_EMBED_MODEL", "text-embedding-v4")

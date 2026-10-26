@@ -8,7 +8,7 @@ send message -> stream events -> archive session.
 AgentStudio is shared by the 1.x and 2.0 SDK generations: the 2.0
 client mounts it as ``client.agentstudio`` (workspace and region
 forward from the client config) and translates its errors into the
-``dashscope.v2`` exception family, so one ``client`` covers both the
+``dashscope`` exception family, so one ``client`` covers both the
 2.0 resources and AgentStudio.
 
 `memory_stores_demo` covers the memory store flow (create store ->
@@ -22,7 +22,8 @@ AgentStudio workspace (defaults to trial).
 import os
 
 import dashscope
-from dashscope.agentstudio import ModelConfig, user_message
+from dashscope.agentstudio import user_message
+from dashscope.agentstudio.types import ModelConfig
 
 
 def make_client():

@@ -1,28 +1,266 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) Alibaba, Inc. and its affiliates.
-"""Legacy alias for :mod:`dashscope.reinforcement`.
+try:
+    import pydantic  # noqa: F401
+    import tenacity  # noqa: F401
+    import yaml  # noqa: F401
+except ImportError as _rl_dep_err:
+    raise ImportError(
+        "Agentic RL fine-tuning dependencies are missing from this "
+        "install. Reinstall with: pip install -U dashscope",
+    ) from _rl_dep_err
 
-The public compatibility package owns the lazy module aliasing; this path
-only registers its prefix so existing dotted-path consumers keep resolving
-to the same v2 module objects.
-"""
-
-# Import the v2 exports directly rather than wildcard-importing the public
-# shim, whose __all__ includes the deliberately lazy CLI ``app``.
-from dashscope import reinforcement as _public
-from dashscope.v2.finetune.reinforcement import *  # noqa: F401,F403
-from dashscope.v2.finetune.reinforcement import (  # noqa: F401
-    common,
-    component,
+from .common.constants import (
+    BAILIAN_FILE_API,
+    BAILIAN_FILE_TIMEOUT,
+    DASHSCOPE_API_KEY,
+    DASHSCOPE_HTTP_BASE_URL,
+    LOG_LEVEL,
+    FC_API_KEY,
+    FC_DELETE_API,
+    FC_FILES_START,
+    FC_LOAD_API,
+    FC_PYPI_LIB,
+    FC_PYPI_REPO,
+    FC_QUERY_API,
+    FC_QUERY_LOG_API,
+    FC_REGISTER_REWARD_API,
+    FC_REGISTER_ROLLOUT_API,
+    FC_REGISTER_GROUP_REWARD_API,
+    FC_SERVER_CLASSPATH,
+    FC_UPLOAD_OSS_API,
+    FC_WORKERS_COUNT,
+    FC_LAYER_CREATE_API,
+    FC_LAYER_QUERY_API,
+    FC_LAYER_USED,
+    FC_LAYER_NAME,
+    FC_REQUIREMENTS_FILE,
+    FC_ZIP_EXCLUDE_PATTERNS,
+    FC_OSS_FILE_SIZE_WARNING,
+    DATASETS_FILE_SIZE_WARNING,
+    HTTP_REQUEST_TIMEOUT,
+    LOGGER_FILTER_FIELDS,
+)
+from .common.errors import (
+    AgenticRLError,
+    InputError,
+    OutputError,
+    BaseConnectionError,
+    OSSConnectionError,
+    OSSUploadError,
+    DeploymentError,
+    RegistrationError,
+    FunctionLoadError,
+    InstanceWarmupError,
+    InstanceQueryError,
+    FunctionLayerError,
+    ValidationError,
+    ConfigurationError,
+    BasePermissionError,
+    IOErrorWithCode,
+    RuntimeErrorWithCode,
+    ValueErrorWithCode,
+)
+from .common.log import logger
+from .common.model import (
+    FunctionComponentModel,
+    TuningModel,
+    FoundationModel,
+    FunctionComponentRuntime,
+    AgenticRLFunctionComponent,
+    RolloutFunctionComponent,
+    RewardFunctionComponent,
+    GroupRewardFunctionComponent,
+    Datasets,
+    Dataset,
+    TrainingDataset,
+    ValidationDataset,
+    MountStorage,
+    Training,
+    Observability,
+    AgenticRLTuning,
+    Models,
+)
+from .common.model_types import (
+    FileSpec,
+    FunctionType,
+    DatasetsType,
+    DataSourceType,
+    RequestFC,
+    ResponseFC,
+    Status,
+    StatusType,
+    TrainingType,
+)
+from .common.utils import (
+    check_file,
+    client_fc,
+    create_deployment_files,
+    deep_mask,
+    generate_random_id,
+    get_filepath_classname,
+    upload_zip_to_oss_and_by_signed_url,
+    set_api_key,
+    to_bailian_data,
+    zip_dir,
+    get_func_type_id,
+    deep_remove_none,
+    extract_reward_weights,
+    get_weights_from_file,
+    serialize_for_output,
+)
+from .component import (
+    reward_func,
+    sub_reward_func,
+    aggregate_func,
+)
+from .component.data import (
+    AgentOutput,
+    Reward,
+    RewardInput,
+    RewardOutput,
+    RolloutInput,
+    RolloutOutput,
+    GroupReward,
+    GroupRewardInput,
+    GroupRewardOutput,
+    TaskStatus,
+)
+from .component.func_decorator import (
+    RewardProcessorMeta,
+)
+from .component.processor import (
+    AbstractRolloutProcessor,
+)
+from .component.processor import (
+    AbstractRewardProcessor,
+)
+from .component.processor import (
+    AbstractGroupRewardProcessor,
 )
 
-__all__ = list(_public.__all__)
+
+__all__ = [
+    # Constants
+    "BAILIAN_FILE_API",
+    "BAILIAN_FILE_TIMEOUT",
+    "DASHSCOPE_API_KEY",
+    "DASHSCOPE_HTTP_BASE_URL",
+    "LOG_LEVEL",
+    "FC_API_KEY",
+    "FC_DELETE_API",
+    "FC_FILES_START",
+    "FC_LOAD_API",
+    "FC_PYPI_LIB",
+    "FC_PYPI_REPO",
+    "FC_QUERY_API",
+    "FC_QUERY_LOG_API",
+    "FC_REGISTER_REWARD_API",
+    "FC_REGISTER_ROLLOUT_API",
+    "FC_REGISTER_GROUP_REWARD_API",
+    "FC_SERVER_CLASSPATH",
+    "FC_UPLOAD_OSS_API",
+    "FC_WORKERS_COUNT",
+    "FC_LAYER_CREATE_API",
+    "FC_LAYER_QUERY_API",
+    "FC_LAYER_USED",
+    "FC_LAYER_NAME",
+    "FC_REQUIREMENTS_FILE",
+    "FC_ZIP_EXCLUDE_PATTERNS",
+    "FC_OSS_FILE_SIZE_WARNING",
+    "DATASETS_FILE_SIZE_WARNING",
+    "HTTP_REQUEST_TIMEOUT",
+    "LOGGER_FILTER_FIELDS",
+    # Errors
+    "AgenticRLError",
+    "InputError",
+    "OutputError",
+    "BaseConnectionError",
+    "OSSConnectionError",
+    "OSSUploadError",
+    "DeploymentError",
+    "RegistrationError",
+    "FunctionLoadError",
+    "FunctionLayerError",
+    "InstanceWarmupError",
+    "InstanceQueryError",
+    "ValidationError",
+    "ConfigurationError",
+    "BasePermissionError",
+    "IOErrorWithCode",
+    "RuntimeErrorWithCode",
+    "ValueErrorWithCode",
+    # Logging
+    "logger",
+    # Utilities
+    "check_file",
+    "client_fc",
+    "create_deployment_files",
+    "deep_mask",
+    "generate_random_id",
+    "get_filepath_classname",
+    "set_api_key",
+    "to_bailian_data",
+    "upload_zip_to_oss_and_by_signed_url",
+    "zip_dir",
+    "get_func_type_id",
+    "deep_remove_none",
+    "extract_reward_weights",
+    "get_weights_from_file",
+    "serialize_for_output",
+    # Model Types
+    "FileSpec",
+    "FunctionType",
+    "DatasetsType",
+    "DataSourceType",
+    "RequestFC",
+    "ResponseFC",
+    "Status",
+    "StatusType",
+    "TrainingType",
+    # Data models
+    "RolloutInput",
+    "RolloutOutput",
+    "RewardInput",
+    "RewardOutput",
+    "GroupRewardInput",
+    "GroupRewardOutput",
+    "GroupReward",
+    "Reward",
+    "AgentOutput",
+    "TaskStatus",
+    # Func Manager
+    "reward_func",
+    "sub_reward_func",
+    "aggregate_func",
+    "RewardProcessorMeta",
+    "AbstractRolloutProcessor",
+    "AbstractRewardProcessor",
+    "AbstractGroupRewardProcessor",
+    # Core Models
+    "FunctionComponentModel",
+    "TuningModel",
+    "FoundationModel",
+    "FunctionComponentRuntime",
+    "AgenticRLFunctionComponent",
+    "RolloutFunctionComponent",
+    "RewardFunctionComponent",
+    "GroupRewardFunctionComponent",
+    "Datasets",
+    "Dataset",
+    "TrainingDataset",
+    "ValidationDataset",
+    "MountStorage",
+    "Training",
+    "Observability",
+    "AgenticRLTuning",
+    "Models",
+    "app",
+]
 
 
 def __getattr__(name):
     if name == "app":
-        return _public.app
+        from dashscope.legacy_1x.cli.agentic_rl import app
+
+        return app
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-_public._register_alias(__name__)

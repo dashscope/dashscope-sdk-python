@@ -1,41 +1,43 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-"""Compatibility re-export; the implementation moved to the 2.0 package.
 
-The offline tokenizer factory lives only in
-``dashscope.v2.tokenizers.tokenizer``, next to the bundled vocab, so both
-stacks share one copy of the code and of the vocab. Import from there in
-new code.
+import os
+from typing import List
 
-Note that :func:`get_tokenizer` raises ``ValueError`` for an unknown model;
-it used to raise ``dashscope.legacy_1x.common.error.UnsupportedModel``, which the 2.0
-leaf must not depend on.
+from .qwen_tokenizer import QwenTokenizer
+from .tokenizer_base import Tokenizer
 
-``Tokenizer`` and ``QwenTokenizer`` are re-exported because the old module
-imported them into its own namespace. The old module-level ``current_path``
-and ``root_path`` are deliberately not restored: they only located the
-vocab, which no longer ships next to this file.
-"""
-
-# pylint: disable-next=unused-import
-from dashscope.v2.tokenizers.tokenizer import (  # noqa: F401
-    QWEN_SERIALS,
-    get_tokenizer,
-    list_tokenizers,
+QWEN_SERIALS = ["qwen-7b-chat", "qwen-turbo", "qwen-plus", "qwen-max"]
+# The vocab ships next to this module, so the leaf stays relocatable.
+_VOCAB_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "qwen.tiktoken",
 )
 
-# pylint: disable-next=unused-import
-from dashscope.v2.tokenizers.qwen_tokenizer import (  # noqa: F401
-    QwenTokenizer,
-)
 
-# pylint: disable-next=unused-import
-from dashscope.v2.tokenizers.tokenizer_base import Tokenizer  # noqa: F401
+def get_tokenizer(model: str) -> Tokenizer:
+    """Get a tokenizer based on model name.
 
-__all__ = [
-    "QWEN_SERIALS",
-    "QwenTokenizer",
-    "Tokenizer",
-    "get_tokenizer",
-    "list_tokenizers",
-]
+    Args:
+        model (str): The model name.
+
+    Raises:
+        ValueError: Not support model
+
+    Returns:
+        Tokenizer: The  `Tokenizer` of the model.
+    """
+    if model.startswith("qwen"):
+        return QwenTokenizer(_VOCAB_PATH)
+    raise ValueError(
+        f"Not support model: {model}, currently only support qwen models.",
+    )
+
+
+def list_tokenizers() -> List[str]:
+    """List support models
+
+    Returns:
+        List[str]: The model list.
+    """
+    return QWEN_SERIALS
