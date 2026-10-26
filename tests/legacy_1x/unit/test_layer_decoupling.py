@@ -22,16 +22,16 @@ _CURRENT = (
     _DASHSCOPE / "_error_registry.py",
     _DASHSCOPE / "_logging.py",
     _DASHSCOPE / "_quickstart.py",
-    _DASHSCOPE / "finetune" / "agentic_rl.py",
+    _DASHSCOPE / "applications" / "finetune" / "agentic_rl.py",
     _DASHSCOPE / "client.py",
     _DASHSCOPE / "errors.py",
-    _DASHSCOPE / "finetune" / "_submit.py",
+    _DASHSCOPE / "applications" / "finetune" / "_submit.py",
     _DASHSCOPE / "protocols",
     _DASHSCOPE / "resources",
     _DASHSCOPE / "transport",
     _DASHSCOPE / "types",
-    _DASHSCOPE / "agentstudio",
-    _DASHSCOPE / "finetune" / "reinforcement",
+    _DASHSCOPE / "applications" / "agentstudio",
+    _DASHSCOPE / "applications" / "finetune" / "reinforcement",
     _DASHSCOPE / "tokenizers" / "tokenizer.py",
     _DASHSCOPE / "tokenizers" / "tokenizer_base.py",
     _DASHSCOPE / "tokenizers" / "qwen_tokenizer.py",
@@ -44,6 +44,7 @@ _NEUTRAL_PACKAGES = frozenset(
         "_shared",
         "acli",
         "agentstudio",
+        "applications",
         "finetune",
         "protocols",
         "resources",
@@ -71,7 +72,7 @@ _SKIP_PARTS = frozenset({"examples"})
 
 _COMPATIBILITY_IMPORTS = {
     (
-        "dashscope/finetune/reinforcement/__init__.py",
+        "dashscope/applications/finetune/reinforcement/__init__.py",
         "dashscope.legacy_1x.cli.agentic_rl",
     ),
 }

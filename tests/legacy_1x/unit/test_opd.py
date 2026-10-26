@@ -110,7 +110,7 @@ def test_teacher_model_can_come_from_yaml(rl_client, tmp_path):
 def test_opd_example_reuses_supported_rl_configuration(rl_client):
     config = (
         Path(__file__).parents[3]
-        / "dashscope/finetune/reinforcement/examples/workspace"
+        / "dashscope/applications/finetune/reinforcement/examples/workspace"
         / "opd-job.yaml"
     )
     config_text = config.read_text(encoding="utf-8")
@@ -158,7 +158,7 @@ def test_opd_example_reuses_supported_rl_configuration(rl_client):
 async def test_opd_example_uploads_local_datasets(rl_client):
     config = (
         Path(__file__).parents[3]
-        / "dashscope/finetune/reinforcement/examples/workspace"
+        / "dashscope/applications/finetune/reinforcement/examples/workspace"
         / "opd-job.yaml"
     )
     rl_client.init(config_path=str(config))
@@ -180,7 +180,7 @@ async def test_opd_example_uploads_local_datasets(rl_client):
 def test_regular_rl_example_keeps_resources_and_rl_hyperparameters(rl_client):
     config = (
         Path(__file__).parents[3]
-        / "dashscope/finetune/reinforcement/examples/workspace"
+        / "dashscope/applications/finetune/reinforcement/examples/workspace"
         / "rl-job.yaml"
     )
     rl_client.init(config_path=str(config))

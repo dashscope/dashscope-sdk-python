@@ -40,6 +40,9 @@ from dashscope.transport import (
 from dashscope.transport.ws import Connector
 from dashscope.transport.ws_connection import WsConnection
 
+# Historical dashscope.client.* children resolve through the 1.x alias finder.
+__path__ = []
+
 
 def _http_limits(config: Config) -> httpx.Limits:
     """Connection-pool sizes for the client's own httpx client."""

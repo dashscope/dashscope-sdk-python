@@ -15,6 +15,10 @@ warnings.filterwarnings(
     category=Warning,
 )
 
+from dashscope.legacy_1x._shim import install as _install_legacy_aliases
+
+_install_legacy_aliases()
+
 from dashscope.version import __version__
 from dashscope.legacy_1x.aigc.code_generation import CodeGeneration
 from dashscope.legacy_1x.aigc.conversation import (
@@ -153,20 +157,53 @@ _DEPRECATED_LAZY_IMPORTS = {
     "Threads": "dashscope.legacy_1x.threads",
 }
 
+_LEGACY_LAZY_MODULES = frozenset(
+    {
+        "aigc",
+        "agentstudio",
+        "api_entities",
+        "app",
+        "applications",
+        "assistants",
+        "audio",
+        "cli",
+        "common",
+        "embeddings",
+        "files",
+        "finetune",
+        "io",
+        "model",
+        "models",
+        "multimodal",
+        "nlp",
+        "protocol",
+        "rerank",
+        "threads",
+        "utils",
+    },
+)
+
 
 def __getattr__(name):
     module_name = _DEPRECATED_LAZY_IMPORTS.get(name)
-    if module_name is None:
+    if module_name is not None:
+        value = getattr(importlib.import_module(module_name), name)
+    elif name in _LEGACY_LAZY_MODULES:
+        value = importlib.import_module(f"dashscope.{name}")
+    else:
         raise AttributeError(
             f"module {__name__!r} has no attribute {name!r}",
         )
-    value = getattr(importlib.import_module(module_name), name)
     globals()[name] = value
     return value
 
 
 def __dir__():
-    return sorted(set(globals()) | set(_DEPRECATED_LAZY_IMPORTS))
+    return sorted(
+        set(globals())
+        | set(_DEPRECATED_LAZY_IMPORTS)
+        | _LEGACY_LAZY_MODULES,
+    )
 
 
 __all__ = [

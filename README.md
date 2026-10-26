@@ -450,10 +450,13 @@ The 1.x module-level API is unchanged and still supported — you can adopt 2.0 
 ### Package layout and compatibility
 
 The 2.0 implementation is directly under `dashscope`; the former
-`dashscope.v2` namespace has been removed. Existing root 1.x exports remain
-available. Old deep modules such as `dashscope.aigc` and `dashscope.client`
-have moved under `dashscope.legacy_1x`. The 2.0 Agentic RL workflow lives in
-`dashscope.finetune`; its 1.x job-management surface is under
+`dashscope.v2` namespace has been removed. AgentStudio and FineTune/Agentic RL
+implementations are grouped under `dashscope.applications`, while the public
+`dashscope.agentstudio` and `dashscope.finetune` import paths remain available
+through lazy aliases. Existing root 1.x exports remain available. Historical
+deep modules such as `dashscope.aigc`, `dashscope.client.base_api`, and
+`dashscope.files` also remain available through lazy aliases to
+`dashscope.legacy_1x`. The 1.x Agentic RL job-management surface is under
 `dashscope.legacy_1x.finetune`.
 
 `dashscope.save_api_key` now comes from `dashscope._config`. It accepts an

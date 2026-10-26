@@ -5,7 +5,7 @@ description: Quick reference for fine-tuning and deployment (FineTunes/Files/Dep
 
 # Fine-tuning and Deployment
 
-> Quick-reference note: all parameter names and return fields on this page follow the SDK source code (`dashscope/finetune/`, `dashscope/files.py`, `dashscope/common/`). Check the signatures on this page before answering; if unsure, verify on the spot with `inspect.signature` instead of relying on memory.
+> Quick-reference note: all parameter names and return fields on this page follow the SDK source code (`dashscope/applications/finetune/`, `dashscope/legacy_1x/finetune/`, `dashscope/legacy_1x/files.py`, `dashscope/legacy_1x/common/`). Check the signatures on this page before answering; if unsure, verify on the spot with `inspect.signature` instead of relying on memory.
 
 ## Use Cases and Training Modes (SFT/CPT/DPO/AgenticRL)
 
@@ -26,7 +26,7 @@ description: Quick reference for fine-tuning and deployment (FineTunes/Files/Dep
 
 ## SDK APIs (source of truth: the source code)
 
-### FineTunes (`dashscope/finetune/finetunes.py`, SUB_PATH="fine-tunes")
+### FineTunes (`dashscope/legacy_1x/finetune/finetunes.py`, SUB_PATH="fine-tunes")
 
 The creation method is named `call` (the SDK has no `create` method):
 `FineTunes.call(model, training_file_ids, validation_file_ids=None, mode=None, hyper_parameters={}, api_key=None, workspace=None, **kwargs) -> FineTune`
@@ -42,7 +42,7 @@ The creation method is named `call` (the SDK has no `create` method):
 
 Other methods: `get(job_id) -> FineTune`; `list(page_no=1, page_size=10) -> FineTuneList`; `cancel(job_id) -> FineTuneCancel`; `delete(job_id) -> FineTuneDelete`; `wait(job_id)` polls until `SUCCEEDED/FAILED/CANCELED`.
 
-### Deployments (`dashscope/finetune/deployments.py`, SUB_PATH="deployments")
+### Deployments (`dashscope/legacy_1x/finetune/deployments.py`, SUB_PATH="deployments")
 
 - `Deployments.call(model, capacity, version=None, suffix=None, ...) -> Deployment`: request body keys are `model_name/capacity/model_version/suffix`; fine-tuned models do not need `version`; with `suffix` set, the deployment name is `model_suffix`
 - `get(deployed_model)`, `list(page_no=1, page_size=10)`, `delete(deployed_model)`, `scale(deployed_model, capacity)`
@@ -52,7 +52,7 @@ Other methods: `get(job_id) -> FineTune`; `list(page_no=1, page_size=10) -> Fine
 - `Files.upload(file_path, purpose="fine_tune", description=None, ...) -> DashScopeAPIResponse`: see `FilePurpose` for `purpose` values (`fine_tune`/`assistants`); for `fine_tune`, the JSONL is validated locally first and invalid files raise `InvalidFileFormat` directly
 - `list(page=1, page_size=10)`, `get(file_id)`, `delete(file_id)`; all return `DashScopeAPIResponse`
 
-### AgenticRL (`dashscope/finetune/agentic_rl.py`, brief)
+### AgenticRL (`dashscope/applications/finetune/agentic_rl.py`, brief)
 
 - Usage: `client = AgenticRL(api_key=None)` → optionally `client.init(config_path="job.yaml")` (YAML-driven) → `await client.run(...)` completes "register functions → upload datasets → submit job" in one step; or call `register_functions()` / `upload_datasets()` / `submit_job()` step by step
 - Key concepts: `RolloutFunctionComponent`/`RewardFunctionComponent` function components; `TrainingDataset`/`ValidationDataset` (`data_source_type`: `file_id`/`download_url`/`oss_mount`); `hyper_parameters` (`algorithm="gspo"`, `n_rollouts`, `kl_loss_coef`, `learning_rate`, etc.); `resources` (e.g. `mtu_spec_code`)

@@ -160,7 +160,7 @@ def test_server_module_resolves_without_importing_fastapi(alias):
     submit_path = f"{alias}.component.server.server"
     spec = importlib.util.find_spec(submit_path)
     assert spec is not None
-    assert "dashscope/finetune/reinforcement" in spec.origin.replace(
+    assert "dashscope/applications/finetune/reinforcement" in spec.origin.replace(
         "\\",
         "/",
     )
@@ -387,7 +387,10 @@ def test_the_v2_mount_points_at_the_v2_workflow_modules():
 
 def test_the_rl_error_module_uses_the_public_path():
     public_errors = importlib.import_module(f"{PUBLIC}.common.errors")
-    assert public_errors.__name__ == f"{PUBLIC}.common.errors"
+    canonical_errors = importlib.import_module(
+        "dashscope.applications.finetune.reinforcement.common.errors",
+    )
+    assert public_errors is canonical_errors
     assert public_errors.ValueErrorWithCode is ValueErrorWithCode
 
 

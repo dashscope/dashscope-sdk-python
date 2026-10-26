@@ -8,6 +8,7 @@ validation, unified errors and SDK identity must keep their existing behavior.
 
 from __future__ import annotations
 
+import importlib
 import sys
 
 import pytest
@@ -84,8 +85,10 @@ def test_public_names_are_exported():
 
 
 def test_client_classes_have_root_module_ownership():
-    assert impl.Client.__module__ == "dashscope.agentstudio.client"
-    assert impl.AsyncClient.__module__ == "dashscope.agentstudio.client"
+    assert impl.Client.__module__ == "dashscope.applications.agentstudio.client"
+    assert impl.AsyncClient.__module__ == (
+        "dashscope.applications.agentstudio.client"
+    )
 
 
 def test_exception_aliases_use_root_errors():
@@ -97,8 +100,10 @@ def test_exception_aliases_use_root_errors():
 @pytest.mark.parametrize("name", SUBMODULES)
 def test_deep_imports_resolve_to_root_modules(name):
     module_name = f"dashscope.agentstudio.{name}"
-    __import__(module_name)
-    assert sys.modules[module_name].__name__ == module_name
+    canonical_name = f"dashscope.applications.agentstudio.{name}"
+    assert importlib.import_module(module_name) is importlib.import_module(
+        canonical_name,
+    )
 
 
 @pytest.mark.parametrize("name", SUBMODULES)
@@ -116,8 +121,10 @@ def test_deep_import_from_syntax_resolves():
     from dashscope.agentstudio.resources.agents import Agents
     from dashscope.agentstudio.types.models import Agent
 
-    assert Agents.__module__ == "dashscope.agentstudio.resources.agents"
-    assert Agent.__module__ == "dashscope.agentstudio.types.models"
+    assert Agents.__module__ == (
+        "dashscope.applications.agentstudio.resources.agents"
+    )
+    assert Agent.__module__ == "dashscope.applications.agentstudio.types.models"
 
 
 # ---------------------------------------------------------------------------

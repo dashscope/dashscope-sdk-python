@@ -45,8 +45,8 @@ _CURRENT = (
     _REPO / "dashscope" / "resources",
     _REPO / "dashscope" / "transport",
     _REPO / "dashscope" / "types",
-    _REPO / "dashscope" / "agentstudio",
-    _REPO / "dashscope" / "finetune",
+    _REPO / "dashscope" / "applications" / "agentstudio",
+    _REPO / "dashscope" / "applications" / "finetune",
 )
 _ROOT_INIT = _REPO / "dashscope" / "__init__.py"
 
