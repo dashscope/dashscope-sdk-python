@@ -45,6 +45,15 @@ _TERMINAL_STATUSES = (
 )
 
 
+def _terminal_status(event: Any) -> bool:
+    """True when a ``session_status`` event reports that the run is over."""
+    if getattr(event, "type", None) != SSEEventType.SESSION_STATUS:
+        return False
+    block = event.content[0] if event.content else None
+    data = getattr(block, "data", None) or {}
+    return data.get("session_status") in _TERMINAL_STATUSES
+
+
 class SessionEvents:
     """Session event send / list / stream."""
 
@@ -125,9 +134,13 @@ class SessionEvents:
     ) -> "_TypedEventStream":
         """Open the SSE stream and return an iterator of typed events.
 
-        ``event_deltas`` opts into incremental text streaming for the given
-        event types (``"message"`` and/or ``"reasoning"``; aliases
-        ``"agent.message"`` / ``"agent.thinking"``).
+        ``event_deltas`` opts into incremental streaming for the given event
+        types (``"message"`` and/or ``"reasoning"``; aliases ``"agent.message"``
+        / ``"agent.thinking"``); anything else the server rejects. The stream is
+        read once, so ``text_deltas`` can be taken from it only; a second pass
+        raises rather than returning nothing. A chunk stream is not a reliable
+        source for final text: a reconnect replays only persisted events, so use
+        ``text_stream``.
         """
         params: Optional[Dict[str, Any]] = None
         if event_deltas:
@@ -146,7 +159,13 @@ class SessionEvents:
 
 
 class _TypedEventStream:
-    """Wrap :class:`EventStream` so iterating yields :class:`ServerEvent`."""
+    """Wrap :class:`EventStream` so iterating yields :class:`ServerEvent`.
+
+    A stream is read once: a second pass would silently yield nothing, so it
+    raises instead. Call ``sessions.events.stream()`` again to read the events.
+    """
+
+    _passed = False
 
     def __init__(self, stream: EventStream) -> None:
         self._stream = stream
@@ -179,6 +198,15 @@ class _TypedEventStream:
         self.close()
 
     def __iter__(self) -> Iterator[ServerEvent]:
+        if self._passed:
+            raise RuntimeError(
+                "this stream is single-pass and was already consumed; call "
+                "sessions.events.stream() again to read it again",
+            )
+        self._passed = True
+        return self._iter()
+
+    def _iter(self) -> Iterator[ServerEvent]:
         for payload in self._stream:
             yield _coerce_event(payload)
 
@@ -196,30 +224,27 @@ class _TypedEventStream:
                         text = getattr(block, "text", "")
                         if text:
                             yield text
-            elif getattr(event, "type", None) == SSEEventType.SESSION_STATUS:
-                block = event.content[0] if event.content else None
-                d = getattr(block, "data", None) or {}
-                if d.get("session_status") in _TERMINAL_STATUSES:
-                    return
+            elif _terminal_status(event):
+                return
 
     @property
     def text_deltas(self):
         """Iterate over incremental text chunks from ``event_delta`` frames.
 
         Requires the stream to be opened with ``event_deltas``; otherwise
-        yields nothing (use :attr:`text_stream` for terminal full text).
+        yields nothing (use :attr:`text_stream` for terminal full text, which is
+        also what a reconnect can rebuild — chunks are not replayed).
         """
+        return self._text_deltas()
+
+    def _text_deltas(self):
         for event in self:
-            etype = getattr(event, "type", None)
-            if etype == "event_delta":
+            if getattr(event, "type", None) == "event_delta":
                 text = event.delta_text
                 if text:
                     yield text
-            elif etype == SSEEventType.SESSION_STATUS:
-                block = event.content[0] if event.content else None
-                d = getattr(block, "data", None) or {}
-                if d.get("session_status") in _TERMINAL_STATUSES:
-                    return
+            elif _terminal_status(event):
+                return
 
     def close(self) -> None:
         self._stream.close()
@@ -331,7 +356,15 @@ class _AioTypedEventStream:
     async def __aexit__(self, *exc: Any) -> None:
         await self.aclose()
 
+    _passed = False
+
     def __aiter__(self) -> AsyncIterator[ServerEvent]:
+        if self._passed:
+            raise RuntimeError(
+                "this stream is single-pass and was already consumed; call "
+                "sessions.events.stream() again to read it again",
+            )
+        self._passed = True
         return self._aiter()
 
     async def _aiter(self) -> AsyncIterator[ServerEvent]:
@@ -358,20 +391,17 @@ class _AioTypedEventStream:
 
     @property
     def text_deltas(self):
+        """Async incremental text chunks from ``event_delta`` frames."""
         return self._text_deltas()
 
     async def _text_deltas(self):
         async for event in self:
-            etype = getattr(event, "type", None)
-            if etype == "event_delta":
+            if getattr(event, "type", None) == "event_delta":
                 text = event.delta_text
                 if text:
                     yield text
-            elif etype == SSEEventType.SESSION_STATUS:
-                block = event.content[0] if event.content else None
-                d = getattr(block, "data", None) or {}
-                if d.get("session_status") in _TERMINAL_STATUSES:
-                    return
+            elif _terminal_status(event):
+                return
 
     async def aclose(self) -> None:
         await self._stream.aclose()

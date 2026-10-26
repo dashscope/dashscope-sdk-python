@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Unit tests for Vault, Credential, DeleteResponse, Agent.system_prompt."""
 
+import pytest
+
 from dashscope.agentstudio.resources._helpers import (
     _coerce_vault,
     _coerce_credential,
@@ -12,6 +14,7 @@ from dashscope.agentstudio.types import (
     DeleteResponse,
     Environment,
     File,
+    ModelConfig,
     Networking,
     Vault,
 )
@@ -179,6 +182,106 @@ def test_agent_system_prompt_none_when_system_unset():
     agent = Agent(id="agent_1", name="demo", model={"id": "qwen-plus"})
     assert agent.system is None
     assert agent.system_prompt is None
+
+
+# ---------------------------------------------------------------------------
+# Agent model config (model.id + inference params)
+# ---------------------------------------------------------------------------
+
+
+_FULL_MODEL = {
+    "id": "qwen3-max",
+    "name": "Qwen3 Max",
+    "temperature": 0.7,
+    "max_tokens": 8192,
+    "enable_thinking": True,
+    "thinking_budget": 2048,
+}
+
+
+def test_agent_model_hydrates_into_model_config():
+    """The ``model`` object is typed, so inference params are attribute-readable."""
+    agent = Agent(id="agent_1", model=dict(_FULL_MODEL))
+    assert isinstance(agent.model, ModelConfig)
+    assert agent.model.id == "qwen3-max"
+    assert agent.model.name == "Qwen3 Max"
+    assert agent.model.temperature == 0.7
+    assert agent.model.max_tokens == 8192
+    assert agent.model.enable_thinking is True
+    assert agent.model.thinking_budget == 2048
+    assert agent.model_id == "qwen3-max"
+
+
+def test_agent_model_reads_typed_and_serializes_via_to_dict():
+    """Attributes carry wire names; ``to_dict()`` is the dict view."""
+    agent = Agent(id="agent_1", model=dict(_FULL_MODEL))
+    assert agent.model.to_dict() == _FULL_MODEL
+    assert agent.model.max_tokens == 8192
+    with pytest.raises(TypeError):
+        _ = agent.model["id"]
+
+
+def test_agent_model_omits_unset_params_and_keeps_unknown_fields():
+    """Unset fields omitted; unknown fields preserved."""
+    agent = Agent(id="agent_1", model={"id": "qwen3-max", "vendor": "qwen"})
+    assert agent.model.to_dict() == {"id": "qwen3-max", "vendor": "qwen"}
+    assert agent.model.temperature is None
+    assert agent.model_id == "qwen3-max"
+
+
+def test_agent_model_absent_stays_none():
+    agent = Agent(id="agent_1", name="demo")
+    assert agent.model is None
+    assert agent.model_id is None
+
+
+def test_agent_model_accepts_model_config_on_construction():
+    """A ModelConfig round-trips back into an Agent."""
+    config = ModelConfig(**_FULL_MODEL)
+    agent = Agent(id="agent_1", model=config)
+    assert agent.model is config
+    assert Agent(**agent.to_dict()).model.temperature == 0.7
+
+
+def test_model_config_copy_with_keeps_the_rest():
+    """copy_with() is the read-modify-write helper for update."""
+    config = ModelConfig(**_FULL_MODEL)
+    tuned = config.copy_with(temperature=0.1)
+    assert tuned.temperature == 0.1
+    assert tuned.to_dict() == dict(_FULL_MODEL, temperature=0.1)
+    assert config.temperature == 0.7  # original untouched
+    assert isinstance(tuned, ModelConfig)
+
+
+def test_model_config_copy_with_can_drop_and_reject_typos():
+    config = ModelConfig(**_FULL_MODEL)
+    # None drops the field: "let the server apply its default"
+    assert (
+        "thinking_budget"
+        not in config.copy_with(
+            thinking_budget=None,
+        ).to_dict()
+    )
+    # typos fail loudly instead of being sent as unknown wire fields
+    with pytest.raises(ValueError, match="unknown model config field"):
+        config.copy_with(temp=0.5)
+
+
+def test_model_config_unknown_fields_survive_copy_with():
+    """Forward-compat fields survive copy_with and can be retuned."""
+    config = ModelConfig(id="qwen3-max", vendor="qwen")
+    assert config.copy_with(temperature=0.5).to_dict() == {
+        "id": "qwen3-max",
+        "vendor": "qwen",
+        "temperature": 0.5,
+    }
+    assert config.copy_with(vendor="other").to_dict() == {
+        "id": "qwen3-max",
+        "vendor": "other",
+    }
+    # still not a way to invent wire fields: neither known nor carried
+    with pytest.raises(ValueError, match="unknown model config field"):
+        config.copy_with(vendorx="nope")
 
 
 # ---------------------------------------------------------------------------

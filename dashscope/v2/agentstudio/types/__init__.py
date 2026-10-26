@@ -30,6 +30,7 @@ from dashscope.v2.agentstudio.types.models import (  # noqa: F401
     AgentVersion,
     MultiAgentConfig,
     MultiAgentRosterEntry,
+    ModelConfig,
     Credential,
     CredentialAuth,
     Memory,

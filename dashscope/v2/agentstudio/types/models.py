@@ -446,6 +446,44 @@ class MultiAgentConfig(BaseModel):
         super().__init__(**kwargs)
 
 
+class ModelConfig(BaseModel):
+    """Model configuration of an agent (the ``model`` field).
+
+    Wire names as-is: ``id`` required, inference params optional (unset ones
+    are omitted so the server default applies), ranges validated server-side.
+    ``name`` is console-only: the public API neither accepts nor returns it.
+    Read or write the wire dict with :meth:`to_dict`.
+    """
+
+    _fields = (
+        "id",
+        "name",
+        "temperature",
+        "max_tokens",
+        "enable_thinking",
+        "thinking_budget",
+    )
+
+    def copy_with(self, **changes: Any) -> "ModelConfig":
+        """Copy with ``changes`` applied (``None`` drops a field).
+
+        Update replaces the whole config, so this changes one knob without
+        clearing the rest.  A name outside :attr:`_fields` has to be carried
+        by this config already, so a forward-compat field can be retuned and
+        a typo still cannot.
+        """
+        unknown = set(changes) - set(self._fields) - set(self.to_dict())
+        if unknown:
+            raise ValueError(
+                "unknown model config field(s): " + ", ".join(sorted(unknown)),
+            )
+        payload = self.to_dict()
+        payload.update(changes)
+        return ModelConfig(
+            **{k: v for k, v in payload.items() if v is not None},
+        )
+
+
 class Agent(BaseModel):
     _fields = (
         "id",
@@ -468,6 +506,9 @@ class Agent(BaseModel):
     )
 
     def __init__(self, **kwargs: Any) -> None:
+        model = kwargs.get("model")
+        if isinstance(model, Mapping):
+            kwargs["model"] = ModelConfig(**dict(model))
         multiagent = kwargs.get("multiagent")
         if isinstance(multiagent, Mapping):
             kwargs["multiagent"] = MultiAgentConfig(**dict(multiagent))
@@ -477,6 +518,16 @@ class Agent(BaseModel):
     def system_prompt(self) -> Optional[str]:
         """Alias: server field is ``system``, kept for SDK user convenience."""
         return self.system
+
+    @property
+    def model_id(self) -> Optional[str]:
+        """Convenience: the model id carried by ``model`` (None if unset)."""
+        model = self.model
+        if isinstance(model, ModelConfig):
+            return model.id
+        if isinstance(model, Mapping):
+            return model.get("id")
+        return model if isinstance(model, str) else None
 
 
 class AgentVersion(BaseModel):
