@@ -6,6 +6,8 @@ This example shows how to build a scenario-specific AI expert agent using **Agen
 
 **Core idea: configuration-driven, zero Python glue.** The agent's identity, capabilities, skills, and knowledge index are all defined by files under `.acli/`; download the example and run `acli` directly to start.
 
+**SDK baseline:** new Python examples use DashScope **2.0.3** (`dashscope.Client` / `AsyncClient`) and `dashscope.errors`. The skills also retain 1.x guidance for maintaining existing `Generation.call`-style code; installing 2.0 does not require rewriting working 1.x applications.
+
 ## Directory Structure
 
 ```
@@ -16,12 +18,12 @@ dashscope-sdk-expert/
     ├── hooks.toml               # Event hooks
     ├── system-prompt.md         # System prompt (agent persona and behavior rules)
     └── skills/                  # Skill templates (loaded by the model on demand via use_skill)
-        ├── text-generation.md   # Text generation (Generation / OpenAI-compatible, Python+Java)
-        ├── multimodal.md        # Multimodal (MultiModalConversation/ImageSynthesis/VideoSynthesis)
-        ├── speech.md            # Speech (SpeechSynthesizer/Transcription)
-        ├── retrieval.md         # Retrieval (Embedding/TextReRank/RAG)
-        ├── fine-tuning.md       # Fine-tuning & deployment (SFT/CPT/DPO/Deployments)
-        ├── agent.md             # Agent (Application/Assistants/plugins & MCP)
+        ├── text-generation.md   # Chat, decision & 1.x Generation (Python+Java)
+        ├── multimodal.md        # Multimodal chat, images & videos
+        ├── speech.md            # 2.0 audio, TingWu & 1.x speech compatibility
+        ├── retrieval.md         # Embeddings, rerank & tokenization
+        ├── fine-tuning.md       # Files, fine-tunes, deployments & Agentic RL
+        ├── agent.md             # Apps, AgentStudio & 1.x Assistants compatibility
         ├── cli.md               # dashscope CLI command reference
         ├── sdk-example.md       # Generate SDK code examples
         ├── api-doc.md           # View API parameter docs
@@ -43,8 +45,10 @@ acli example download dashscope-sdk-expert
 # Start — no cd, no Python launcher script needed
 acli
 acli --tui
-acli -c "How do I use Generation.call?"
+acli -c "Show a DashScope 2.0 streaming chat example with error handling"
 ```
+
+For legacy maintenance, ask for example: `acli -c "Fix this Generation.call code without migrating it to 2.0"`.
 
 ## The Configuration-Driven Approach
 
@@ -55,13 +59,13 @@ Defines the agent's identity, knowledge scope, and behavior rules. This is the c
 ```markdown
 You are DashScope SDK Expert, an intelligent assistant for the DashScope Python SDK...
 
-## Grounded Knowledge First
-Before answering, ALWAYS verify against the actual installed SDK...
+### Choose 1.x vs 2.0 from the user's context
+For new Python code, recommend 2.0 resource APIs and `dashscope.errors`...
 ```
 
 ### 2. skills/ — Domain Knowledge Base (Loaded on Demand)
 
-The SDK/CLI's public interface knowledge lives directly in domain skills: one file per domain, with model lists, Python and Java SDK signatures, input/output structures, and error codes. When answering API questions, the model loads the matching skill via `use_skill` on demand — **nothing stays permanently in the system prompt** — cutting first-turn input tokens by about 16k characters; details not covered by a skill fall back to `inspect.signature` / `help()` against the installed package.
+The SDK/CLI's public interface knowledge lives directly in domain skills: one file per domain, with current 2.0.3 resource signatures, 1.x compatibility notes, Java references, input/output structures, and error handling. When answering API questions, the model loads the matching skill via `use_skill` on demand — **nothing stays permanently in the system prompt** — cutting first-turn input tokens by about 16k characters; details not covered by a skill fall back to `inspect.signature` / `help()` against the installed package.
 
 ### 3. skills/ — Task Templates
 
