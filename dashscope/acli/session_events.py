@@ -24,14 +24,55 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from dashscope.acli.utils.sanitizer import sanitize
 
 # Bump when the on-disk event schema changes in a breaking way.
 SCHEMA_VERSION = 1
 
 EVENTS_FILENAME = "events.jsonl"
+_EVENT_FILE_LOCK = threading.RLock()
+
+
+@contextmanager
+def _exclusive_lock(path: Path):
+    """Cross-process lock on a stable sidecar inode.
+
+    Locking the event file itself is insufficient because snapshot compaction
+    replaces that inode. A separate ``.lock`` file serializes append and
+    compaction across processes; the RLock covers platforms without flock and
+    nested calls in the current process.
+    """
+    lock_path = path.with_name(path.name + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with _EVENT_FILE_LOCK, open(lock_path, "a+b") as lock_file:
+        if os.name == "nt":  # pragma: no cover - exercised on Windows CI
+            import msvcrt
+
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b"0")
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def latest_snapshot_messages(
@@ -80,15 +121,21 @@ class SessionEventLog:
 
     def _append(self, event_type: str, data: dict) -> None:
         self._file.parent.mkdir(parents=True, exist_ok=True)
-        entry = {
-            "v": SCHEMA_VERSION,
-            "seq": self._next_seq(),
-            "ts": datetime.now().isoformat(),
-            "type": event_type,
-            "data": data,
-        }
-        with open(self._file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        with _exclusive_lock(self._file):
+            entry = {
+                "v": SCHEMA_VERSION,
+                "seq": self._next_seq(),
+                "ts": datetime.now().isoformat(),
+                "type": event_type,
+                # Event snapshots are a persistence boundary just like
+                # history.json. Redact here so every producer (turn summaries,
+                # snapshots, lifecycle events, future extensions) gets the
+                # same protection; replay cannot resurrect plaintext secrets.
+                "data": sanitize(data),
+            }
+            with open(self._file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                f.flush()
 
     def _next_seq(self) -> int:
         """1 + number of non-blank lines currently in the log."""
@@ -166,10 +213,22 @@ class SessionEventLog:
         the newest ``keep`` snapshots, renumbering ``seq`` to stay
         line-ordered. The rewrite goes through a tmp file and
         ``os.replace``, so a crash mid-compaction leaves the original
-        log intact.
+        log intact. Append and compaction share a stable sidecar lock.
 
         Best-effort: returns True only when the file was rewritten.
         """
+        try:
+            with _exclusive_lock(self._file):
+                return self._compact_snapshots_locked(keep, snapshot_type)
+        except OSError:
+            return False
+
+    def _compact_snapshots_locked(
+        self,
+        keep: int,
+        snapshot_type: str,
+    ) -> bool:
+        """Compaction implementation; caller holds ``_exclusive_lock``."""
         try:
             entries = self.read_raw()
         except OSError:
@@ -181,7 +240,9 @@ class SessionEventLog:
             return False
         drop = set(snapshot_idx[: len(snapshot_idx) - keep])
         kept = [e for i, e in enumerate(entries) if i not in drop]
-        tmp = self._file.with_suffix(self._file.suffix + ".tmp")
+        tmp = self._file.with_name(
+            f"{self._file.name}.{os.getpid()}.tmp",
+        )
         try:
             with open(tmp, "w", encoding="utf-8") as f:
                 for seq, entry in enumerate(kept, start=1):

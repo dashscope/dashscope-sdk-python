@@ -252,6 +252,17 @@ class OutputLog(RichLog):
         self._follow_output = True
         return super().scroll_end(*args, **kwargs)
 
+    def selection_updated(self, selection: Selection | None) -> None:
+        """Invalidate Textual's line cache when selection styling changes.
+
+        Textual 8 caches RichLog strips independently of the Screen selection
+        reactive. ``Widget.refresh()`` alone can leave the old unselected line
+        in ``StylesCache``, so the selection exists and copies correctly but
+        has no visible highlight.
+        """
+        self._styles_cache.clear()
+        super().selection_updated(selection)
+
     def render_line(self, y: int) -> Strip:
         scroll_x, scroll_y = self.scroll_offset
         line_y = scroll_y + y

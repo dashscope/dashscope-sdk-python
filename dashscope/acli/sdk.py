@@ -19,7 +19,6 @@ Example::
 from __future__ import annotations
 
 import asyncio
-import uuid
 from pathlib import Path
 from typing import AsyncIterator, Optional
 
@@ -30,10 +29,10 @@ from dashscope.acli.providers import get_provider_chain
 
 
 def _ensure_tools_imported() -> None:
-    """Import tool modules so the registry is populated."""
-    import dashscope.acli.tools.filesystem  # noqa: F401
-    import dashscope.acli.tools.shell  # noqa: F401
-    import dashscope.acli.tools.web_search  # noqa: F401
+    """Import every static built-in tool module."""
+    from dashscope.acli.runtime import import_builtin_tools
+
+    import_builtin_tools()
 
 
 def load_config(
@@ -62,40 +61,64 @@ def create_agent(
     config: Optional[Config] = None,
     system_prompt: Optional[str] = None,
     session_id: Optional[str] = None,
+    *,
+    oneshot: bool = False,
 ) -> Agent:
     """Create an ``Agent`` instance ready for programmatic use.
 
     Args:
         config: acli configuration.  If None, loads default config.
         system_prompt: Optional system prompt override.
-        session_id: Optional session identifier.  If provided, the agent's
-            in-memory conversation is persisted under
-            ``.acli/session/{session_id}/history.json``.
+        session_id: Optional safe topic identifier. If provided, conversation
+            history is persisted under ``.acli/session/<id>/history.json``.
+        oneshot: Enable autonomous one-shot guards and acceptance behavior.
     """
     _ensure_tools_imported()
     config = config or load_config()
 
     from dashscope.acli.cli import _compose_system_prompt, _load_system_prompt
+    from dashscope.acli.hooks import create_hook_bus
+    from dashscope.acli.runtime import (
+        create_runtime_memory,
+        prepare_extensions,
+        wire_agent_runtime,
+    )
+    from dashscope.acli.session import get_session_manager
+    from dashscope.acli.tools.platform import disabled_capabilities_hint
 
+    prepare_extensions(config)
     resolved_prompt = _compose_system_prompt(
         system_prompt or _load_system_prompt(),
     )
     provider = get_provider_chain(config)
-    executor = Executor()
+    executor = Executor(
+        auto_approve=config.auto_approve,
+        confirm_mode=config.confirm_mode,
+    )
+    hook_bus = create_hook_bus()
+    memory = create_runtime_memory(config)
 
     session_path: Optional[Path] = None
     if session_id:
-        session_path = Path(".acli") / "session" / session_id / "history.json"
+        session_path = get_session_manager().get_history_path(session_id)
 
-    return Agent(
+    agent = Agent(
         provider=provider,
         executor=executor,
         max_turns=config.max_turns,
+        memory=memory,
+        user_name=config.user_name,
         provider_name=config.provider,
         model_name=config.model,
         system_prompt=resolved_prompt,
         session_path=session_path,
+        disabled_caps_provider=lambda: disabled_capabilities_hint(config),
+        directives_provider=lambda: config.user_directives,
+        hook_bus=hook_bus,
+        oneshot=oneshot,
     )
+    wire_agent_runtime(config, agent, hook_bus)
+    return agent
 
 
 async def run_stream(
@@ -125,13 +148,14 @@ async def run_once(
     This is the easiest entry point for scripts and CI: it streams the full
     agent turn, executes any tool calls, and returns the final assistant text.
     """
-    parts: list[str] = []
-    async for chunk in run_stream(
-        prompt,
+    agent = create_agent(
         config=config,
         system_prompt=system_prompt,
-        session_id=session_id or str(uuid.uuid4())[:8],
-    ):
+        session_id=session_id,
+        oneshot=True,
+    )
+    parts: list[str] = []
+    async for chunk in agent.run_stream(prompt):
         parts.append(chunk)
     return "".join(parts)
 

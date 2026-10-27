@@ -284,57 +284,58 @@ def register_session_tools(
         config.save_workspace()
         return f"Disconnected {service}"
 
-    registry.register_mcp_tool(
-        name="mcp_list_services",
-        description=(
-            "List available MCP cloud services "
-            "(time, code execution, doc parsing, etc.)"
-        ),
-        parameters={"type": "object", "properties": {}},
-        call_fn=mcp_list_services,
-    )
-    registry.register(
-        ToolDefinition(
-            name="mcp_connect",
+    if not config.privacy_mode:
+        registry.register_mcp_tool(
+            name="mcp_list_services",
             description=(
-                "Connect an MCP cloud service "
-                "(its tools become available once connected)"
+                "List available MCP cloud services "
+                "(time, code execution, doc parsing, etc.)"
             ),
-            permission=PermissionLevel.CONFIRM,
-            func=mcp_connect,
-            parameters={
-                "type": "object",
-                "properties": {
-                    "service": {
-                        "type": "string",
-                        "description": (
-                            "Service name, e.g. time, "
-                            "code-interpreter, doc-analysis"
-                        ),
+            parameters={"type": "object", "properties": {}},
+            call_fn=mcp_list_services,
+        )
+        registry.register(
+            ToolDefinition(
+                name="mcp_connect",
+                description=(
+                    "Connect an MCP cloud service "
+                    "(its tools become available once connected)"
+                ),
+                permission=PermissionLevel.CONFIRM,
+                func=mcp_connect,
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "service": {
+                            "type": "string",
+                            "description": (
+                                "Service name, e.g. time, "
+                                "code-interpreter, doc-analysis"
+                            ),
+                        },
                     },
+                    "required": ["service"],
                 },
-                "required": ["service"],
-            },
-        ),
-    )
-    registry.register(
-        ToolDefinition(
-            name="mcp_disconnect",
-            description="Disconnect an MCP cloud service",
-            permission=PermissionLevel.CONFIRM,
-            func=mcp_disconnect,
-            parameters={
-                "type": "object",
-                "properties": {
-                    "service": {
-                        "type": "string",
-                        "description": "Service name",
+            ),
+        )
+        registry.register(
+            ToolDefinition(
+                name="mcp_disconnect",
+                description="Disconnect an MCP cloud service",
+                permission=PermissionLevel.CONFIRM,
+                func=mcp_disconnect,
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "service": {
+                            "type": "string",
+                            "description": "Service name",
+                        },
                     },
+                    "required": ["service"],
                 },
-                "required": ["service"],
-            },
-        ),
-    )
+            ),
+        )
 
     # ===== Plan Management =====
 

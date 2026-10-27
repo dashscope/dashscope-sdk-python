@@ -235,14 +235,12 @@ class DelegationConfig:
 class Config:
     provider: str = "tongyi"
     model: str = "qwen3.8-max"
-    # Dual-LLM: when thinking_model is set, Plan/Thinking loop phases route to
-    # the thinking model; Execute uses the execution model (provider/model
-    # above).
-    # Empty = single-model mode (default, backward compatible).
+    # Legacy compatibility fields. The experimental DualLLMRouter and
+    # structured LoopEngine were removed; non-default values are preserved on
+    # disk but get_provider_chain emits an explicit warning instead of silently
+    # pretending they affect execution.
     thinking_provider: str = ""
     thinking_model: str = ""
-    # Loop mode: "auto" = LLM-driven flat loop (default); "structured" =
-    # 6-phase closed cycle (Target→Plan→Execute→Evaluate→Feedback→Thinking).
     loop_mode: str = "auto"
     tongyi_api_key: str = ""
     anthropic_api_key: str = ""

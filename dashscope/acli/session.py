@@ -179,14 +179,18 @@ class SessionManager:
         return self.set_scene(merged, topic)
 
     def event_log(self, topic: str | None = None) -> SessionEventLog:
-        """Return the append-only event log for a topic (default: current).
+        """Return the append-only event log for a safe topic.
 
-        The sidecar is advisory: callers may append lifecycle/turn events
-        without affecting the history.json read/write path.
+        Topic validation belongs at this public boundary. Several best-effort
+        callers accept a topic argument directly; allowing ``../`` here would
+        write an event stream outside ``session/`` even though create/switch
+        correctly reject the same name.
         """
-        return SessionEventLog(
-            self._events_file(topic or self.current_topic),
-        )
+        topic = topic or self.current_topic
+        topic_dir = self._safe_topic_dir(topic)
+        if topic_dir is None:
+            raise ValueError(f"unsafe session topic: {topic!r}")
+        return SessionEventLog(topic_dir / EVENTS_FILENAME)
 
     def record_turn_event(
         self,
@@ -450,9 +454,12 @@ class SessionManager:
             return False
 
     def get_history_path(self, topic: str | None = None) -> Path:
-        """Get the history.json path for a topic (default: current)."""
+        """Get the history path for a safe topic (default: current)."""
         topic = topic or self.current_topic
-        return self._history_file(topic)
+        topic_dir = self._safe_topic_dir(topic)
+        if topic_dir is None:
+            raise ValueError(f"unsafe session topic: {topic!r}")
+        return topic_dir / "history.json"
 
     def get_input_history_path(self, topic: str | None = None) -> Path:
         """Get the input-history path for a topic (default: current)."""

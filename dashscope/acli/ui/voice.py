@@ -58,10 +58,7 @@ class _RealtimeASR:
 
     def __init__(self, api_key: str, model: str):
         os.environ.setdefault("DASHSCOPE_API_KEY", api_key)
-        from dashscope.legacy_1x.audio.asr import (
-            Recognition,
-            RecognitionCallback,
-        )
+        from dashscope.audio.asr import Recognition, RecognitionCallback
 
         self._model = model
         self._Recognition = Recognition

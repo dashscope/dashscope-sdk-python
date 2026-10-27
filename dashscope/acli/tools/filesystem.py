@@ -49,6 +49,77 @@ _IMAGE_BINARY_EXTS = {
 }
 
 
+def _read_text_window(
+    path: str,
+    offset: int | None,
+    limit: int | None,
+) -> str:
+    """Read a numbered text window with bounded memory."""
+
+    # offset is 1-based so it matches the line numbers printed below; None
+    # and <=1 both mean "from the top". Keep memory bounded while scanning:
+    # the previous f.readlines() implementation loaded a multi-gigabyte file
+    # in full even though the tool only returns a 200-line / 100k-char window.
+    start = max((offset or 1) - 1, 0)
+    window = limit if limit and limit > 0 else _READ_DEFAULT_LINES
+    body_parts: list[str] = []
+    body_chars = 0
+    included = 0
+    total = 0
+    collecting = True
+
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        while True:
+            # Bound a single physical-line allocation as well. If the line is
+            # longer, consume the remainder in chunks but keep it one logical
+            # line for numbering/offset purposes.
+            line = f.readline(_READ_MAX_CHARS + 1)
+            if not line:
+                break
+            logical = line
+            while line and not line.endswith("\n"):
+                line = f.readline(_READ_MAX_CHARS + 1)
+            total += 1
+
+            if not collecting or total <= start or included >= window:
+                continue
+
+            rendered = f"{total:>4}\t{logical.rstrip()}"
+            separator = 1 if body_parts else 0
+            remaining = _READ_MAX_CHARS - body_chars - separator
+            if remaining <= 0:
+                collecting = False
+                continue
+            if len(rendered) > remaining:
+                # Preserve the old behavior for one extremely long first line:
+                # return a bounded prefix. For later lines, stop at the last
+                # complete line so a continuation offset remains truthful.
+                if not body_parts:
+                    body_parts.append(rendered[:remaining])
+                    body_chars += min(len(rendered), remaining)
+                    included += 1
+                collecting = False
+                continue
+            body_parts.append(rendered)
+            body_chars += separator + len(rendered)
+            included += 1
+
+    if start >= total:
+        return (
+            f"[offset {start + 1} is past the end of {path} ({total} lines)]"
+        )
+
+    body = "\n".join(body_parts)
+    end = start + included
+    omitted = total - end
+    if omitted > 0:
+        body += (
+            f"\n[omitted {omitted} of {total} lines — "
+            f"read_file path={path} offset={end + 1} to continue]"
+        )
+    return body
+
+
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
@@ -91,40 +162,7 @@ def read_file(
             "file/identify instead.]"
         )
 
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        lines = f.readlines()
-
-    total = len(lines)
-    # offset is 1-based so it matches the line numbers printed below; None
-    # and <=1 both mean "from the top".
-    start = max((offset or 1) - 1, 0)
-    if start >= total:
-        return (
-            f"[offset {start + 1} is past the end of {path} ({total} lines)]"
-        )
-
-    window = limit if limit and limit > 0 else _READ_DEFAULT_LINES
-    end = min(start + window, total)
-    body = "\n".join(
-        f"{i:>4}\t{line.rstrip()}"
-        for i, line in enumerate(lines[start:end], start=start + 1)
-    )
-
-    if len(body) > _READ_MAX_CHARS:
-        cut = body[:_READ_MAX_CHARS]
-        # Back off to the last complete line so the window never ends on a
-        # half-line whose number would mislead a follow-up offset.
-        last_newline = cut.rfind("\n")
-        body = cut[:last_newline] if last_newline > 0 else cut
-        end = start + (body.count("\n") + 1 if body else 0)
-
-    omitted = total - end
-    if omitted > 0:
-        body += (
-            f"\n[omitted {omitted} of {total} lines — "
-            f"read_file path={path} offset={end + 1} to continue]"
-        )
-    return body
+    return _read_text_window(path, offset, limit)
 
 
 @tool(

@@ -126,6 +126,9 @@ _SESSION_ALWAYS_ON = frozenset(
         "mcp_connect",
         "mcp_disconnect",
         "use_skill",
+        "create_plan",
+        "complete_step",
+        "get_plan_status",
     },
 )
 
@@ -341,21 +344,32 @@ Tool = ToolDefinition  # alias for backwards-compatibility
 class ToolRegistry:
     def __init__(self):
         self._tools: dict[str, ToolDefinition] = {}
+        # Monotonic mutation counter. Agent loops use it to detect tools that
+        # were connected/enabled mid-turn and rebuild the provider schema.
+        self._version = 0
+
+    @property
+    def version(self) -> int:
+        """Registry mutation version for cheap schema invalidation."""
+        return self._version
 
     def register(self, tool_def: ToolDefinition):
         """Register a tool. When used as a decorator with a ToolDefinition,
         returns a decorator."""
         if isinstance(tool_def, ToolDefinition):
             self._tools[tool_def.name] = tool_def
+            self._version += 1
 
             def decorator(func: Callable) -> Callable:
                 self._tools[tool_def.name].func = func
+                self._version += 1
                 func._tool_definition = tool_def
                 return func
 
             return decorator
         # Called with a callable directly (legacy)
         self._tools[tool_def.name] = tool_def
+        self._version += 1
         return None
 
     def register_mcp_tool(
@@ -373,9 +387,12 @@ class ToolRegistry:
             parameters=parameters,
         )
         self._tools[name] = tool_def
+        self._version += 1
 
     def unregister(self, name: str):
-        self._tools.pop(name, None)
+        if name in self._tools:
+            self._tools.pop(name)
+            self._version += 1
 
     def get(self, name: str) -> ToolDefinition | None:
         return self._tools.get(name)

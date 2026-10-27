@@ -3,7 +3,7 @@
 
 Supports both streaming playback (low-latency, audio starts before synthesis
 finishes) and one-shot synthesis.  Uses
-``dashscope.legacy_1x.audio.tts_v2.SpeechSynthesizer``.
+``dashscope.audio.tts_v2.SpeechSynthesizer``.
 """
 # pylint: disable=too-many-return-statements,too-many-branches
 # pylint: disable=too-many-statements
@@ -284,7 +284,7 @@ class TTSPlayer:
             dashscope.api_key = self.api_key
 
         try:
-            from dashscope.legacy_1x.audio.tts_v2 import (
+            from dashscope.audio.tts_v2 import (
                 AudioFormat,
                 ResultCallback,
                 SpeechSynthesizer,
