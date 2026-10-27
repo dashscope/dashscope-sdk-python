@@ -74,7 +74,7 @@ from dashscope.legacy_1x.files import Files
 from dashscope.legacy_1x.models import Models
 from dashscope.legacy_1x.nlp.understanding import Understanding
 from dashscope.legacy_1x.rerank import AioTextReRank, TextReRank
-from dashscope.tokenizers import (
+from dashscope.legacy_1x.tokenizers import (
     Tokenization,
     Tokenizer,
     get_tokenizer,

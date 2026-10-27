@@ -3,7 +3,7 @@
 """client.rl thin mount layer (design doc M3 3.7).
 
 The agentic-RL workflow lives in the 2.0 package
-(``dashscope.finetune``); this layer only mounts it on the 2.0 Client.
+(``dashscope.applications.finetune``); this layer only mounts it on the 2.0 Client.
 Job management and workflow steps both raise ``dashscope.errors``
 natively, so one ``except DashScopeError`` covers both.
 
@@ -73,10 +73,11 @@ __all__ = [
 ]
 
 # Imported below via the module object so tests can monkeypatch
-# ``dashscope.finetune.agentic_rl.AgenticRL`` without touching the
-# workflow implementation.
-from dashscope.finetune import agentic_rl as _agentic_rl  # noqa: E402
-from dashscope.finetune import reinforcement as _reinforcement  # noqa: E402
+# the shared application core without traversing the historical 1.x alias.
+from dashscope.applications.finetune import agentic_rl as _agentic_rl  # noqa: E402
+from dashscope.applications.finetune import (  # noqa: E402
+    reinforcement as _reinforcement,
+)
 
 
 class RegisteredFunctions(BaseModel):

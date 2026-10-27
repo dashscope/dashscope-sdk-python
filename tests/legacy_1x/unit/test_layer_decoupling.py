@@ -32,9 +32,6 @@ _CURRENT = (
     _DASHSCOPE / "types",
     _DASHSCOPE / "applications" / "agentstudio",
     _DASHSCOPE / "applications" / "finetune" / "reinforcement",
-    _DASHSCOPE / "tokenizers" / "tokenizer.py",
-    _DASHSCOPE / "tokenizers" / "tokenizer_base.py",
-    _DASHSCOPE / "tokenizers" / "qwen_tokenizer.py",
 )
 
 _VERSION_FILE = "dashscope/version.py"
@@ -50,7 +47,6 @@ _NEUTRAL_PACKAGES = frozenset(
         "resources",
         "transport",
         "types",
-        "tokenizers",
     },
 )
 

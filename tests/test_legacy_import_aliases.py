@@ -45,7 +45,7 @@ import dashscope
 packages = (
     'aigc', 'api_entities', 'app', 'assistants', 'audio', 'cli',
     'common', 'embeddings', 'io', 'multimodal', 'nlp', 'protocol',
-    'rerank', 'threads', 'utils',
+    'rerank', 'threads', 'tokenizers', 'utils',
 )
 modules = ('files', 'model', 'models')
 for name in packages + modules:
@@ -117,31 +117,32 @@ def test_client_and_legacy_base_api_coexist():
 @pytest.mark.parametrize(
     ("old_name", "canonical_name"),
     [
-        ("dashscope.agentstudio", "dashscope.applications.agentstudio"),
+        ("dashscope.agentstudio", "dashscope.legacy_1x.agentstudio"),
         (
             "dashscope.agentstudio.types.models",
             "dashscope.applications.agentstudio.types.models",
         ),
         (
             "dashscope.finetune.agentic_rl",
-            "dashscope.applications.finetune.agentic_rl",
+            "dashscope.legacy_1x.finetune.agentic_rl",
         ),
         (
             "dashscope.finetune.reinforcement.common.errors",
-            "dashscope.applications.finetune.reinforcement.common.errors",
+            "dashscope.legacy_1x.finetune.reinforcement.common.errors",
         ),
     ],
 )
-def test_application_public_paths_are_aliases(old_name, canonical_name):
+def test_historical_paths_select_the_1x_facades(old_name, canonical_name):
     assert importlib.import_module(old_name) is importlib.import_module(
         canonical_name,
     )
 
 
-def test_agentic_rl_current_contract_is_unchanged():
+def test_agentic_rl_historical_contract_is_unchanged():
     module = importlib.import_module("dashscope.finetune.agentic_rl")
-    assert not hasattr(module.AgenticRL, "list")
-    assert module.SubmitResult is not None
+    for verb in ("cancel", "list", "get", "delete", "logs"):
+        assert hasattr(module.AgenticRL, verb)
+    assert module.AgenticRL.__module__.startswith("dashscope.legacy_1x")
 
 
 def test_plain_import_preserves_cli_and_assistants_laziness():

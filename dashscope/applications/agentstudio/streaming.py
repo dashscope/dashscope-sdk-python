@@ -39,7 +39,7 @@ from typing import Any, AsyncIterator, Dict, Iterator, Optional
 import httpx
 from httpx_sse import EventSource
 
-from dashscope.applications.agentstudio import exceptions
+from dashscope.applications.agentstudio import exceptions as _default_exceptions
 
 # A child of the "dashscope" logger, so the level and handler installed by
 # dashscope.legacy_1x.common.logging.enable_logging() still reach these warnings via
@@ -50,13 +50,16 @@ logger = logging.getLogger("dashscope.applications.agentstudio.streaming")
 _DEFAULT_IDLE_TIMEOUT = 120.0
 
 
-def _raise_stream_error(exc: Exception) -> None:
-    if isinstance(exc, exceptions.AgentStudioError):
+def _raise_stream_error(
+    exc: Exception,
+    exceptions_module: Any = _default_exceptions,
+) -> None:
+    if isinstance(exc, exceptions_module.AgentStudioError):
         raise exc
     if isinstance(exc, httpx.TimeoutException):
-        raise exceptions.APITimeoutError(str(exc)) from exc
+        raise exceptions_module.APITimeoutError(str(exc)) from exc
     if isinstance(exc, (httpx.NetworkError, httpx.RemoteProtocolError)):
-        raise exceptions.APIConnectionError(str(exc)) from exc
+        raise exceptions_module.APIConnectionError(str(exc)) from exc
     raise exc
 
 
@@ -83,6 +86,7 @@ class EventStream:
 
     response: httpx.Response
     idle_timeout: Optional[float] = _DEFAULT_IDLE_TIMEOUT
+    exceptions_module: Any = _default_exceptions
     _event_source: EventSource = field(init=False)
     _closed: bool = False
     _producer: Optional[threading.Thread] = field(init=False, default=None)
@@ -101,7 +105,7 @@ class EventStream:
 
     def _iter(self) -> Iterator[Dict[str, Any]]:
         if self._closed:
-            raise exceptions.StreamClosedError("stream already closed")
+            raise self.exceptions_module.StreamClosedError("stream already closed")
         q: "queue.Queue[Any]" = queue.Queue()
 
         def _produce() -> None:
@@ -138,7 +142,7 @@ class EventStream:
                 if item is None:
                     return
                 if isinstance(item, Exception):
-                    _raise_stream_error(item)
+                    _raise_stream_error(item, self.exceptions_module)
                 yield item
         finally:
             self.close()
@@ -164,6 +168,7 @@ class AsyncEventStream:
 
     response: httpx.Response
     idle_timeout: Optional[float] = _DEFAULT_IDLE_TIMEOUT
+    exceptions_module: Any = _default_exceptions
     _event_source: EventSource = field(init=False)
     _closed: bool = False
     _producer: Optional[asyncio.Task] = field(init=False, default=None)
@@ -182,7 +187,7 @@ class AsyncEventStream:
 
     async def _aiter(self) -> AsyncIterator[Dict[str, Any]]:
         if self._closed:
-            raise exceptions.StreamClosedError("stream already closed")
+            raise self.exceptions_module.StreamClosedError("stream already closed")
         q: "asyncio.Queue[Any]" = asyncio.Queue()
 
         async def _produce() -> None:
@@ -221,7 +226,7 @@ class AsyncEventStream:
                 if item is None:
                     return
                 if isinstance(item, Exception):
-                    _raise_stream_error(item)
+                    _raise_stream_error(item, self.exceptions_module)
                 yield item
         finally:
             await self.aclose()

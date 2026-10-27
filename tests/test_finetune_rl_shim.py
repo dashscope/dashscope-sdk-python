@@ -2,9 +2,9 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 """The finetune RL implementation and its 1.x compatibility surface.
 
-``dashscope.finetune.reinforcement`` and ``dashscope.finetune.agentic_rl``
-own the 2.0 workflow. ``dashscope.legacy_1x.finetune.agentic_rl`` keeps the
-1.x return types and job verbs. The tests also pin Function Compute,
+``dashscope.applications.finetune`` owns the single workflow core.
+The historical ``dashscope.finetune`` paths expose the 1.x facade, while
+``client.rl`` exposes the 2.0 facade. The tests also pin Function Compute,
 ``uvicorn`` / ``python -m``, lazy optional dependencies and the submit wire
 format.
 """
@@ -31,12 +31,12 @@ from dashscope.legacy_1x.finetune.agentic_rl import (
 )
 from dashscope.version import __version__
 from dashscope.errors import SdkError
-from dashscope.finetune import _submit
-from dashscope.finetune.agentic_rl import AgenticRL as V2AgenticRL
-from dashscope.finetune.agentic_rl import SubmitOutput, SubmitResult
-from dashscope.finetune.reinforcement import DASHSCOPE_HTTP_BASE_URL
-from dashscope.finetune.reinforcement import TrainingType
-from dashscope.finetune.reinforcement.common.errors import (
+from dashscope.applications.finetune import _submit
+from dashscope.applications.finetune.agentic_rl import AgenticRL as V2AgenticRL
+from dashscope.applications.finetune.agentic_rl import SubmitOutput, SubmitResult
+from dashscope.applications.finetune.reinforcement import DASHSCOPE_HTTP_BASE_URL
+from dashscope.applications.finetune.reinforcement import TrainingType
+from dashscope.applications.finetune.reinforcement.common.errors import (
     _LEGACY_ERROR_CODES,
     AgenticRLError,
     RuntimeErrorWithCode,
@@ -45,8 +45,8 @@ from dashscope.finetune.reinforcement.common.errors import (
 from dashscope.resources import reinforcement_learning as _rl_mount
 
 PUBLIC = "dashscope.finetune.reinforcement"
-V2 = PUBLIC
-PATHS = [PUBLIC]
+V2 = "dashscope.applications.finetune.reinforcement"
+PATHS = [PUBLIC, V2]
 
 ENVELOPE = {
     "status_code": 200,
@@ -89,7 +89,7 @@ class _StubTuning:
 def _stub(cls, api_key="sk-submit"):
     # ``set_api_key`` writes DASHSCOPE_API_KEY for real; these tests are
     # about the submit call, not about credential discovery.
-    with patch("dashscope.finetune.agentic_rl.set_api_key"):
+    with patch("dashscope.applications.finetune.agentic_rl.set_api_key"):
         instance = cls(api_key=api_key)
     instance.tuning = _StubTuning()
     return instance
@@ -314,7 +314,7 @@ def test_submit_falls_back_to_the_environment(monkeypatch, post_calls):
 
 def test_current_submit_returns_submit_result_and_feeds_to_job():
     with patch(
-        "dashscope.finetune._submit.post_submit",
+        "dashscope.applications.finetune._submit.post_submit",
         return_value=dict(ENVELOPE),
     ):
         result = _stub(V2AgenticRL).submit_job()
@@ -338,7 +338,7 @@ def test_legacy_submit_returns_the_finetune_dataclass():
     from dashscope.legacy_1x.finetune.customize_types import FineTune
 
     with patch(
-        "dashscope.finetune._submit.post_submit",
+        "dashscope.applications.finetune._submit.post_submit",
         return_value=dict(ENVELOPE),
     ):
         result = _stub(LegacyAgenticRL).submit_job()
@@ -360,7 +360,7 @@ def test_a_failed_submit_is_an_envelope_not_an_exception():
         "headers": {},
     }
     with patch(
-        "dashscope.finetune._submit.post_submit",
+        "dashscope.applications.finetune._submit.post_submit",
         return_value=dict(failure),
     ):
         result = _stub(V2AgenticRL).submit_job()
@@ -373,8 +373,8 @@ def test_a_failed_submit_is_an_envelope_not_an_exception():
 # -- single implementation ------------------------------------------------
 
 
-def test_public_package_contains_the_unique_implementation():
-    public = importlib.import_module(PUBLIC)
+def test_application_package_contains_the_unique_implementation():
+    public = importlib.import_module(V2)
     package_dir = pathlib.Path(public.__file__).parent
     assert package_dir.name == "reinforcement"
     assert package_dir.parent.name == "finetune"
@@ -385,18 +385,17 @@ def test_public_package_contains_the_unique_implementation():
 
 def test_the_v2_mount_points_at_the_v2_workflow_modules():
     assert _rl_mount._agentic_rl is importlib.import_module(
-        "dashscope.finetune.agentic_rl",
+        "dashscope.applications.finetune.agentic_rl",
     )
     assert _rl_mount._reinforcement is importlib.import_module(V2)
 
 
-def test_the_rl_error_module_uses_the_public_path():
-    public_errors = importlib.import_module(f"{PUBLIC}.common.errors")
-    canonical_errors = importlib.import_module(
-        "dashscope.applications.finetune.reinforcement.common.errors",
-    )
-    assert public_errors is canonical_errors
-    assert public_errors.ValueErrorWithCode is ValueErrorWithCode
+def test_the_two_rl_error_modules_are_versioned():
+    legacy_errors = importlib.import_module(f"{PUBLIC}.common.errors")
+    canonical_errors = importlib.import_module(f"{V2}.common.errors")
+    assert legacy_errors is not canonical_errors
+    assert legacy_errors.ValueErrorWithCode is not ValueErrorWithCode
+    assert canonical_errors.ValueErrorWithCode is ValueErrorWithCode
 
 
 @pytest.mark.parametrize(

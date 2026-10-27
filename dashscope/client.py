@@ -53,6 +53,21 @@ def _http_limits(config: Config) -> httpx.Limits:
     )
 
 
+def _agentstudio_base_url(config: Config) -> Optional[str]:
+    """Derive AgentStudio's service root from an explicit main base URL.
+
+    Default workspace gateways are resolved by the AgentStudio core itself.
+    A configured main service root ends at ``/api/v1``; AgentStudio is mounted
+    below it at ``/agentstudio``.
+    """
+    if config.configured_base_url is None:
+        return None
+    base = config.configured_base_url.rstrip("/")
+    if base.endswith("/agentstudio"):
+        return base
+    return f"{base}/agentstudio"
+
+
 class Client:
     """Synchronous dashscope 2.0 client.
 
@@ -164,7 +179,7 @@ class Client:
         """
         if self._agentstudio is None:
             # pylint: disable=import-outside-toplevel
-            from dashscope.agentstudio import Client as AgentStudioClient
+            from dashscope.applications.agentstudio import Client as AgentStudioClient
 
             # agentstudio resolves its own base_url from workspace +
             # region (the v2 base_url does not propagate: the agentstudio
@@ -173,6 +188,10 @@ class Client:
                 api_key=self._config.api_key,
                 workspace=self._config.workspace,
                 region=self._config.region,
+                base_url=_agentstudio_base_url(self._config),
+                timeout=self._config.timeout,
+                max_retries=self._config.max_retries,
+                http_client=self._transport.http_client,
             )
         return self._agentstudio
 
@@ -255,6 +274,8 @@ class Client:
         connector: Optional[Connector] = None,
         timeout: Optional[float] = None,
         module: Optional[str] = None,
+        task_queue_size: int = 1024,
+        ping_interval: Optional[float] = 30.0,
     ) -> WsConnection:
         """Open a shared duplex websocket carrying multiple tasks.
 
@@ -277,6 +298,8 @@ class Client:
             connector=connector,
             timeout=config.timeout if timeout is None else timeout,
             module=module,
+            task_queue_size=task_queue_size,
+            ping_interval=ping_interval,
         )
 
     def __enter__(self) -> "Client":
@@ -394,7 +417,7 @@ class AsyncClient:
         """
         if self._agentstudio is None:
             # pylint: disable=import-outside-toplevel
-            from dashscope.agentstudio import AsyncClient as AsClient
+            from dashscope.applications.agentstudio import AsyncClient as AsClient
 
             # See Client.agentstudio: agentstudio builds its own base_url
             # from workspace + region, so forward both.
@@ -402,6 +425,10 @@ class AsyncClient:
                 api_key=self._config.api_key,
                 workspace=self._config.workspace,
                 region=self._config.region,
+                base_url=_agentstudio_base_url(self._config),
+                timeout=self._config.timeout,
+                max_retries=self._config.max_retries,
+                http_client=self._transport.http_client,
             )
         return self._agentstudio
 

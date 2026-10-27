@@ -600,7 +600,7 @@ def test_smoke_rl_and_apps_and_agentstudio():
     assert client.rl.jobs.logs("ft-1").content == "ok"
     app = client.apps.completions.create(app_id="app-1", prompt="hi")
     assert app.text == "app says hi"
-    from dashscope.agentstudio import Client as AgentStudioClient
+    from dashscope.applications.agentstudio import Client as AgentStudioClient
 
     mounted = client.agentstudio
     assert isinstance(mounted, AgentStudioClient)

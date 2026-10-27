@@ -28,7 +28,7 @@ from typing import Any, Dict, IO, Mapping, Optional, Tuple, Union
 import httpx
 
 from dashscope._shared._sdk_ident import get_sdk_headers
-from dashscope.applications.agentstudio import exceptions
+from dashscope.applications.agentstudio import exceptions as _default_exceptions
 from dashscope.applications.agentstudio.constants import (
     AGENTSTUDIO_DEFAULT_TIMEOUT,
     AGENTSTUDIO_MAX_RETRIES,
@@ -185,7 +185,10 @@ def _should_retry(status_code: int, headers: Mapping[str, str]) -> bool:
     return status_code in (408, 409, 429) or status_code >= 500
 
 
-def _should_retry_exception(err: BaseException) -> Tuple[bool, Optional[Any]]:
+def _should_retry_exception(
+    err: BaseException,
+    exceptions_module: Any = _default_exceptions,
+) -> Tuple[bool, Optional[Any]]:
     """Walk the ``__cause__`` chain to decide if an exception is retryable.
 
     Returns ``(should_retry, response_or_none)``.
@@ -194,7 +197,7 @@ def _should_retry_exception(err: BaseException) -> Tuple[bool, Optional[Any]]:
     current: Optional[BaseException] = err
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        if isinstance(current, exceptions.AgentStudioError):
+        if isinstance(current, exceptions_module.AgentStudioError):
             return False, None
         if isinstance(current, httpx.TimeoutException):
             return True, None
@@ -216,11 +219,12 @@ def build_headers(
     user_agent: str,
     extra: Optional[Mapping[str, str]] = None,
     json_body: bool = True,
+    _exceptions_module: Any = _default_exceptions,
 ) -> Dict[str, str]:
     """Compose the canonical AgentStudio request headers."""
 
     if not api_key:
-        raise exceptions.AuthenticationError(
+        raise _exceptions_module.AuthenticationError(
             "api_key is required. Pass it via Client(api_key=...) or "
             "the DASHSCOPE_API_KEY environment variable.",
             code="authentication_error",
@@ -262,6 +266,7 @@ class SyncTransport:
         timeout: Union[float, httpx.Timeout, Tuple[float, float], None],
         max_retries: int = AGENTSTUDIO_MAX_RETRIES,
         http_client: Optional[httpx.Client] = None,
+        exceptions_module: Any = _default_exceptions,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -270,6 +275,7 @@ class SyncTransport:
         self.user_agent = user_agent
         self.timeout = timeout
         self.max_retries = max_retries
+        self.exceptions = exceptions_module
         self._owns_client = http_client is None
         if http_client is not None:
             self._client = http_client
@@ -336,6 +342,7 @@ class SyncTransport:
                 files is None
                 and method.upper() not in ("GET", "HEAD", "DELETE")
             ),
+            _exceptions_module=self.exceptions,
         )
         if files is not None:
             headers.pop("Content-Type", None)
@@ -363,14 +370,14 @@ class SyncTransport:
             except httpx.TimeoutException as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
-                    raise exceptions.APITimeoutError(str(exc)) from exc
+                    raise self.exceptions.APITimeoutError(str(exc)) from exc
             except Exception as exc:
-                if isinstance(exc, exceptions.AgentStudioError):
+                if isinstance(exc, self.exceptions.AgentStudioError):
                     raise
-                should_retry, _ = _should_retry_exception(exc)
+                should_retry, _ = _should_retry_exception(exc, self.exceptions)
                 last_exc = exc
                 if attempt >= self.max_retries or not should_retry:
-                    raise exceptions.APIConnectionError(str(exc)) from exc
+                    raise self.exceptions.APIConnectionError(str(exc)) from exc
             else:
                 if stream:
                     if resp.status_code >= 400:
@@ -381,7 +388,7 @@ class SyncTransport:
                     resp.status_code,
                     resp.headers,
                 ):
-                    last_exc = exceptions.APIStatusError(
+                    last_exc = self.exceptions.APIStatusError(
                         f"HTTP {resp.status_code}",
                         status_code=resp.status_code,
                     )
@@ -399,7 +406,7 @@ class SyncTransport:
                     resp.close()
             time.sleep(_backoff(attempt))
             attempt += 1
-        raise exceptions.APIConnectionError(
+        raise self.exceptions.APIConnectionError(
             str(last_exc) if last_exc else "unknown",
         )
 
@@ -428,7 +435,7 @@ class SyncTransport:
                 header_rid,
                 str(payload)[:500],
             )
-            raise exceptions.from_response(
+            raise self.exceptions.from_response(
                 status_code=resp.status_code,
                 body=payload,
                 headers=resp.headers,
@@ -488,6 +495,7 @@ class AsyncTransport:
         timeout: Union[float, httpx.Timeout, Tuple[float, float], None],
         max_retries: int = AGENTSTUDIO_MAX_RETRIES,
         http_client: Optional[httpx.AsyncClient] = None,
+        exceptions_module: Any = _default_exceptions,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -496,6 +504,7 @@ class AsyncTransport:
         self.user_agent = user_agent
         self.timeout = timeout
         self.max_retries = max_retries
+        self.exceptions = exceptions_module
         self._owns_client = http_client is None
         if http_client is not None:
             self._client = http_client
@@ -561,6 +570,7 @@ class AsyncTransport:
                 files is None
                 and method.upper() not in ("GET", "HEAD", "DELETE")
             ),
+            _exceptions_module=self.exceptions,
         )
         if files is not None:
             headers.pop("Content-Type", None)
@@ -587,14 +597,14 @@ class AsyncTransport:
             except httpx.TimeoutException as exc:
                 last_exc = exc
                 if attempt >= self.max_retries:
-                    raise exceptions.APITimeoutError(str(exc)) from exc
+                    raise self.exceptions.APITimeoutError(str(exc)) from exc
             except Exception as exc:
-                if isinstance(exc, exceptions.AgentStudioError):
+                if isinstance(exc, self.exceptions.AgentStudioError):
                     raise
-                should_retry, _ = _should_retry_exception(exc)
+                should_retry, _ = _should_retry_exception(exc, self.exceptions)
                 last_exc = exc
                 if attempt >= self.max_retries or not should_retry:
-                    raise exceptions.APIConnectionError(str(exc)) from exc
+                    raise self.exceptions.APIConnectionError(str(exc)) from exc
             else:
                 if stream:
                     if resp.status_code >= 400:
@@ -605,7 +615,7 @@ class AsyncTransport:
                     resp.status_code,
                     resp.headers,
                 ):
-                    last_exc = exceptions.APIStatusError(
+                    last_exc = self.exceptions.APIStatusError(
                         f"HTTP {resp.status_code}",
                         status_code=resp.status_code,
                     )
@@ -623,7 +633,7 @@ class AsyncTransport:
                     await resp.aclose()
             await asyncio.sleep(_backoff(attempt))
             attempt += 1
-        raise exceptions.APIConnectionError(
+        raise self.exceptions.APIConnectionError(
             str(last_exc) if last_exc else "unknown",
         )
 
@@ -652,7 +662,7 @@ class AsyncTransport:
                 header_rid,
                 str(payload)[:500],
             )
-            raise exceptions.from_response(
+            raise self.exceptions.from_response(
                 status_code=resp.status_code,
                 body=payload,
                 headers=resp.headers,

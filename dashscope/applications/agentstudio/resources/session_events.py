@@ -157,7 +157,10 @@ class SessionEvents:
             timeout=timeout or AGENTSTUDIO_DEFAULT_TIMEOUT,
         )
         return _TypedEventStream(
-            EventStream(response=resp),
+            self._client._event_stream_cls(
+                response=resp,
+                exceptions_module=self._client.transport.exceptions,
+            ),
         )
 
 
@@ -345,7 +348,10 @@ class AsyncSessionEvents:
             timeout=timeout or AGENTSTUDIO_DEFAULT_TIMEOUT,
         )
         return _AioTypedEventStream(
-            AsyncEventStream(response=resp),
+            self._client._event_stream_cls(
+                response=resp,
+                exceptions_module=self._client.transport.exceptions,
+            ),
         )
 
 

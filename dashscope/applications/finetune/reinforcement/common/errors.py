@@ -7,6 +7,28 @@ from typing import Any, Dict, Optional
 
 from dashscope.errors import _CatalogSdkError, sdk_error
 
+from dashscope.applications.finetune.reinforcement.common._legacy_errors import (
+    AgenticRLError as _LegacyAgenticRLError,
+    BaseConnectionError as _LegacyBaseConnectionError,
+    BasePermissionError as _LegacyBasePermissionError,
+    ConfigurationError as _LegacyConfigurationError,
+    DatasetsError as _LegacyDatasetsError,
+    DeploymentError as _LegacyDeploymentError,
+    FunctionLayerError as _LegacyFunctionLayerError,
+    FunctionLoadError as _LegacyFunctionLoadError,
+    IOErrorWithCode as _LegacyIOErrorWithCode,
+    InputError as _LegacyInputError,
+    InstanceQueryError as _LegacyInstanceQueryError,
+    InstanceWarmupError as _LegacyInstanceWarmupError,
+    OSSConnectionError as _LegacyOSSConnectionError,
+    OSSUploadError as _LegacyOSSUploadError,
+    OutputError as _LegacyOutputError,
+    RegistrationError as _LegacyRegistrationError,
+    RuntimeErrorWithCode as _LegacyRuntimeErrorWithCode,
+    ValidationError as _LegacyValidationError,
+    ValueErrorWithCode as _LegacyValueErrorWithCode,
+)
+
 _LEGACY_ERROR_CODES = {
     "sdk.agentic_rl.Error": 1000,
     "sdk.agentic_rl.IOErrorWithCode": 1800,
@@ -51,7 +73,11 @@ class _RootCauseMixin:
         return ""
 
 
-class AgenticRLError(_RootCauseMixin, _CatalogSdkError):
+class AgenticRLError(
+    _RootCauseMixin,
+    _CatalogSdkError,
+    _LegacyAgenticRLError,
+):
     """Base class for AgenticRL failures in the v2 error family."""
 
     _SDK_ERROR_NAME = "sdk.agentic_rl.Error"
@@ -65,6 +91,10 @@ class AgenticRLError(_RootCauseMixin, _CatalogSdkError):
         self._legacy_error_code = error_code
         self.timestamp = datetime.now().isoformat()
         super().__init__(message, **kwargs)
+        # Legacy compatibility bases run inside the cooperative MRO and set
+        # their own defaults. Restore the v2/catalog selection requested by
+        # this constructor after that initialization completes.
+        self._legacy_error_code = error_code
 
     @classmethod
     def from_catalog(
@@ -89,11 +119,15 @@ class AgenticRLError(_RootCauseMixin, _CatalogSdkError):
             return self._legacy_error_code
         return _LEGACY_ERROR_CODES.get(self.code or "", 1000)
 
+    @error_code.setter
+    def error_code(self, value: int) -> None:
+        self._legacy_error_code = value
+
     def __str__(self) -> str:
         return f"{super().__str__()}{self._format_cause()}"
 
 
-class IOErrorWithCode(AgenticRLError):
+class IOErrorWithCode(AgenticRLError, _LegacyIOErrorWithCode):
     _SDK_ERROR_NAME = "sdk.agentic_rl.IOErrorWithCode"
 
     def __init__(
@@ -109,15 +143,15 @@ class IOErrorWithCode(AgenticRLError):
         self.operation = operation
 
 
-class RuntimeErrorWithCode(AgenticRLError, RuntimeError):
+class RuntimeErrorWithCode(AgenticRLError, _LegacyRuntimeErrorWithCode):
     _SDK_ERROR_NAME = "sdk.agentic_rl.RuntimeErrorWithCode"
 
 
-class ValueErrorWithCode(AgenticRLError, ValueError):
+class ValueErrorWithCode(AgenticRLError, _LegacyValueErrorWithCode):
     _SDK_ERROR_NAME = "sdk.agentic_rl.ValueErrorWithCode"
 
 
-class InputError(AgenticRLError):
+class InputError(AgenticRLError, _LegacyInputError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.InputError"
 
     def __init__(
@@ -131,7 +165,7 @@ class InputError(AgenticRLError):
         self.field = field
 
 
-class OutputError(AgenticRLError):
+class OutputError(AgenticRLError, _LegacyOutputError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.OutputError"
 
     def __init__(
@@ -145,7 +179,7 @@ class OutputError(AgenticRLError):
         self.response = response
 
 
-class BaseConnectionError(AgenticRLError):
+class BaseConnectionError(AgenticRLError, _LegacyBaseConnectionError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.BaseConnectionError"
 
     def __init__(
@@ -159,7 +193,7 @@ class BaseConnectionError(AgenticRLError):
         self.endpoint = endpoint
 
 
-class OSSConnectionError(BaseConnectionError):
+class OSSConnectionError(BaseConnectionError, _LegacyOSSConnectionError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.OSSConnectionError"
 
     def __init__(
@@ -177,7 +211,7 @@ class OSSConnectionError(BaseConnectionError):
         )
 
 
-class OSSUploadError(BaseConnectionError):
+class OSSUploadError(BaseConnectionError, _LegacyOSSUploadError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.OSSUploadError"
 
     def __init__(
@@ -201,7 +235,7 @@ class OSSUploadError(BaseConnectionError):
         self.file_size = file_size
 
 
-class DeploymentError(AgenticRLError):
+class DeploymentError(AgenticRLError, _LegacyDeploymentError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.DeploymentError"
 
     def __init__(
@@ -215,7 +249,7 @@ class DeploymentError(AgenticRLError):
         self.resource_id = resource_id
 
 
-class RegistrationError(DeploymentError):
+class RegistrationError(DeploymentError, _LegacyRegistrationError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.RegistrationError"
 
     def __init__(
@@ -233,7 +267,7 @@ class RegistrationError(DeploymentError):
         )
 
 
-class DatasetsError(DeploymentError):
+class DatasetsError(DeploymentError, _LegacyDatasetsError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.DatasetsError"
 
     def __init__(
@@ -245,7 +279,7 @@ class DatasetsError(DeploymentError):
         super().__init__(f"Datasets failed: {message}", error_code, **kwargs)
 
 
-class FunctionLoadError(DeploymentError):
+class FunctionLoadError(DeploymentError, _LegacyFunctionLoadError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.FunctionLoadError"
 
     def __init__(
@@ -266,7 +300,7 @@ class FunctionLoadError(DeploymentError):
         self.error_log = error_log
 
 
-class FunctionLayerError(DeploymentError):
+class FunctionLayerError(DeploymentError, _LegacyFunctionLayerError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.FunctionLayerError"
 
     def __init__(
@@ -287,7 +321,7 @@ class FunctionLayerError(DeploymentError):
         self.error_log = error_log
 
 
-class InstanceWarmupError(DeploymentError):
+class InstanceWarmupError(DeploymentError, _LegacyInstanceWarmupError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.InstanceWarmupError"
 
     def __init__(
@@ -309,7 +343,7 @@ class InstanceWarmupError(DeploymentError):
         self.retry_after = retry_after
 
 
-class InstanceQueryError(DeploymentError):
+class InstanceQueryError(DeploymentError, _LegacyInstanceQueryError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.InstanceQueryError"
 
     def __init__(
@@ -330,7 +364,7 @@ class InstanceQueryError(DeploymentError):
         self.query_attempts = query_attempts
 
 
-class ValidationError(AgenticRLError):
+class ValidationError(AgenticRLError, _LegacyValidationError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.ValidationError"
 
     def __init__(
@@ -346,7 +380,7 @@ class ValidationError(AgenticRLError):
         self.validation_rules = validation_rules
 
 
-class ConfigurationError(ValidationError):
+class ConfigurationError(ValidationError, _LegacyConfigurationError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.ConfigurationError"
 
     def __init__(
@@ -360,7 +394,7 @@ class ConfigurationError(ValidationError):
         self.config_path = config_path
 
 
-class BasePermissionError(AgenticRLError):
+class BasePermissionError(AgenticRLError, _LegacyBasePermissionError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.BasePermissionError"
 
     def __init__(

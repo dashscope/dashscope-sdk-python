@@ -183,7 +183,7 @@ def test_create_streaming_yields_chunks_and_raises_on_error():
 
 
 def test_agentstudio_mounted_lazily():
-    from dashscope.agentstudio import Client as AgentStudioClient
+    from dashscope.applications.agentstudio import Client as AgentStudioClient
 
     client = _make_client(
         lambda request: httpx.Response(200, json={}),
@@ -194,32 +194,26 @@ def test_agentstudio_mounted_lazily():
     assert client.agentstudio is mounted
     assert hasattr(mounted, "agents")
     assert hasattr(mounted, "sessions")
-    # No region configured -> the mount keeps the cn-beijing default.
-    assert mounted.transport.base_url == (
-        "https://ws-1.cn-beijing.maas.aliyuncs.com/api/v1/agentstudio"
-    )
+    # An explicit main base URL is propagated to the AgentStudio service root.
+    assert mounted.transport.base_url == f"{BASE_URL}/agentstudio"
     mounted.close()
 
 
 def test_agentstudio_mount_follows_region():
-    # agentstudio resolves its own base_url from workspace + region (the
-    # v2 base_url escape hatch does not propagate), so the v2 region must
-    # reach the mount instead of silently defaulting to cn-beijing.
+    # Explicit base_url wins over workspace/region, as on every v2 resource.
     client = _make_client(
         lambda request: httpx.Response(200, json={}),
         workspace="ws-1",
         region="ap-southeast-1",
     )
     mounted = client.agentstudio
-    assert mounted.transport.base_url == (
-        "https://ws-1.ap-southeast-1.maas.aliyuncs.com/api/v1/agentstudio"
-    )
+    assert mounted.transport.base_url == f"{BASE_URL}/agentstudio"
     mounted.close()
 
 
 @pytest.mark.asyncio
 async def test_async_agentstudio_mount_follows_region():
-    from dashscope.agentstudio import AsyncClient as AsAgentStudioClient
+    from dashscope.applications.agentstudio import AsyncClient as AsAgentStudioClient
 
     client = _make_async_client(
         lambda request: httpx.Response(200, json={}),
@@ -228,10 +222,23 @@ async def test_async_agentstudio_mount_follows_region():
     )
     mounted = client.agentstudio
     assert type(mounted) is AsAgentStudioClient
-    assert mounted.transport.base_url == (
-        "https://ws-1.eu-central-1.maas.aliyuncs.com/api/v1/agentstudio"
-    )
+    assert mounted.transport.base_url == f"{BASE_URL}/agentstudio"
     await mounted.aclose()
+
+
+def test_agentstudio_mount_shares_owned_pool_and_client_options():
+    client = Client(
+        api_key="sk-test",
+        base_url=BASE_URL,
+        timeout=9.0,
+        max_retries=4,
+    )
+    mounted = client.agentstudio
+    assert mounted.transport._client is client.transport.http_client
+    assert mounted.transport.timeout == 9.0
+    assert mounted.transport.max_retries == 4
+    client.close()
+    assert mounted.transport.is_closed is True
 
 
 @pytest.mark.asyncio
@@ -306,7 +313,7 @@ async def test_async_create_streaming_yields_error_event_when_not_raising():
     assert chunks[-1].code == "Throttling"
 
 
-def test_close_closes_mounted_agentstudio():
+def test_close_preserves_caller_owned_mounted_pool():
     client = _make_client(
         lambda request: httpx.Response(200, json={}),
         workspace="ws-1",
@@ -314,12 +321,13 @@ def test_close_closes_mounted_agentstudio():
     mounted = client.agentstudio
     assert mounted.transport.is_closed is False
     client.close()
-    assert mounted.transport.is_closed is True
+    assert mounted.transport.is_closed is False
     assert client._agentstudio is None  # pylint: disable=protected-access
+    client.transport.http_client.close()
 
 
 @pytest.mark.asyncio
-async def test_aclose_closes_mounted_agentstudio():
+async def test_aclose_preserves_caller_owned_mounted_pool():
     client = _make_async_client(
         lambda request: httpx.Response(200, json={}),
         workspace="ws-1",
@@ -327,8 +335,9 @@ async def test_aclose_closes_mounted_agentstudio():
     mounted = client.agentstudio
     assert mounted.transport.is_closed is False
     await client.aclose()
-    assert mounted.transport.is_closed is True
+    assert mounted.transport.is_closed is False
     assert client._agentstudio is None  # pylint: disable=protected-access
+    await client.transport.http_client.aclose()
 
 
 @pytest.mark.asyncio

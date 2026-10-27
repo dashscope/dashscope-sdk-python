@@ -17,11 +17,11 @@ import json
 import httpx
 import pytest
 
-from dashscope.agentstudio import AsyncClient as AsAgentStudioClient
-from dashscope.agentstudio import Client as AgentStudioClient
-from dashscope.agentstudio import exceptions as as_exc
-from dashscope.agentstudio.pagination import AsyncCursorPage, CursorPage
-from dashscope.agentstudio.types import ServerEvent, Session
+from dashscope.applications.agentstudio import AsyncClient as AsAgentStudioClient
+from dashscope.applications.agentstudio import Client as AgentStudioClient
+from dashscope.applications.agentstudio import exceptions as as_exc
+from dashscope.applications.agentstudio.pagination import AsyncCursorPage, CursorPage
+from dashscope.applications.agentstudio.types import ServerEvent, Session
 from dashscope import errors as v2_errors
 
 BASE_URL = "https://as.test.local"

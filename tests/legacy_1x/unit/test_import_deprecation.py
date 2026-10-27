@@ -41,6 +41,17 @@ def test_plain_import_emits_no_deprecation_warning():
     assert result.returncode == 0, result.stderr
 
 
+def test_legacy_errors_keep_their_runtime_behavior_under_warning_errors():
+    result = _run(
+        "from dashscope.common.error import InvalidParameter; "
+        "raise InvalidParameter('bad')",
+        error_on_deprecation=True,
+    )
+    assert result.returncode != 0
+    assert "InvalidParameter: bad" in result.stderr
+    assert "PendingDeprecationWarning" not in result.stderr
+
+
 def test_non_assistants_usage_emits_no_deprecation_warning():
     result = _run(
         "import dashscope; dashscope.Generation; dashscope.TextEmbedding",

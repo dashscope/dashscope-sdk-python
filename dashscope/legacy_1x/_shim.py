@@ -10,7 +10,7 @@ import importlib.util
 import sys
 
 
-_APPLICATION_ROOTS = frozenset({"agentstudio", "finetune"})
+_APPLICATION_ROOTS = frozenset({"finetune"})
 
 _PACKAGE_ROOTS = frozenset(
     {
@@ -28,14 +28,38 @@ _PACKAGE_ROOTS = frozenset(
         "protocol",
         "rerank",
         "threads",
+        "tokenizers",
         "utils",
     },
 )
 
 _EXACT_MODULES = {
+    "dashscope.agentstudio": "dashscope.legacy_1x.agentstudio",
+    "dashscope.agentstudio.client": "dashscope.legacy_1x.agentstudio.client",
+    "dashscope.agentstudio.exceptions": (
+        "dashscope.legacy_1x.agentstudio.exceptions"
+    ),
+    "dashscope.agentstudio.streaming": (
+        "dashscope.legacy_1x.agentstudio.streaming"
+    ),
+    "dashscope.agentstudio.transport": (
+        "dashscope.legacy_1x.agentstudio.transport"
+    ),
     "dashscope.files": "dashscope.legacy_1x.files",
     "dashscope.model": "dashscope.legacy_1x.model",
     "dashscope.models": "dashscope.legacy_1x.models",
+    "dashscope.finetune.agentic_rl": (
+        "dashscope.legacy_1x.finetune.agentic_rl"
+    ),
+    "dashscope.finetune.reinforcement": (
+        "dashscope.legacy_1x.finetune.reinforcement"
+    ),
+    "dashscope.finetune.reinforcement.common": (
+        "dashscope.legacy_1x.finetune.reinforcement.common"
+    ),
+    "dashscope.finetune.reinforcement.common.errors": (
+        "dashscope.legacy_1x.finetune.reinforcement.common.errors"
+    ),
     "dashscope.finetune.customize_types": (
         "dashscope.legacy_1x.finetune.customize_types"
     ),
@@ -66,6 +90,9 @@ def _canonical_name(name):
         return _EXACT_MODULES[name]
     if name.startswith("dashscope.client."):
         return "dashscope.legacy_1x.client." + name[len("dashscope.client.") :]
+    if name.startswith("dashscope.agentstudio."):
+        suffix = name[len("dashscope.agentstudio.") :]
+        return "dashscope.applications.agentstudio." + suffix
     parts = name.split(".")
     if len(parts) > 1 and parts[0] == "dashscope":
         if parts[1] in _APPLICATION_ROOTS:

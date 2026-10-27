@@ -65,10 +65,12 @@ def test_legacy_exports_untouched():
     assert hasattr(dashscope, "save_api_key")
 
 
-def test_tokenizers_use_one_root_implementation():
+def test_tokenizers_keep_the_historical_legacy_implementation():
     from dashscope.tokenizers import get_tokenizer, list_tokenizers
 
-    assert get_tokenizer.__module__ == "dashscope.tokenizers.tokenizer"
+    assert get_tokenizer.__module__ == (
+        "dashscope.legacy_1x.tokenizers.tokenizer"
+    )
     assert dashscope.get_tokenizer is get_tokenizer
     assert dashscope.list_tokenizers is list_tokenizers
     for name in ("get_tokenizer", "list_tokenizers"):
@@ -95,7 +97,7 @@ def test_root_get_tokenizer_encodes_locally():
     assert ids and all(isinstance(i, int) for i in ids)
     assert tokenizer.decode(ids) == "hello world"
     assert "qwen-turbo" in dashscope.list_tokenizers()
-    with pytest.raises(ValueError):
+    with pytest.raises(dashscope.common.error.UnsupportedModel):
         dashscope.get_tokenizer("not-a-qwen-model")
 
 

@@ -9,6 +9,7 @@ from typing import Any, Optional, Tuple, Union
 
 import httpx
 
+from dashscope.applications.agentstudio import exceptions as _default_exceptions
 from dashscope._shared._validation import (
     validate_region,
     validate_workspace_id,
@@ -64,6 +65,10 @@ from dashscope.applications.agentstudio.constants import (
 from dashscope.applications.agentstudio.transport import (
     SyncTransport,
     AsyncTransport,
+)
+from dashscope.applications.agentstudio.streaming import (
+    AsyncEventStream,
+    EventStream,
 )
 from dashscope._config import _api_key_from_file, settings
 
@@ -172,6 +177,10 @@ class Client:
         ] = None,
         max_retries: int = AGENTSTUDIO_MAX_RETRIES,
         http_client: Optional[httpx.Client] = None,
+        _exceptions_module: Any = _default_exceptions,
+        _api_key_resolver: Any = _default_api_key,
+        _transport_cls: Any = SyncTransport,
+        _event_stream_cls: Any = EventStream,
     ) -> None:
         resolved_workspace = workspace or os.environ.get("DASHSCOPE_WORKSPACE")
         resolved_base = _resolve_base_url(
@@ -179,15 +188,17 @@ class Client:
             resolved_workspace,
             region,
         )
-        self.transport = SyncTransport(
+        self._event_stream_cls = _event_stream_cls
+        self.transport = _transport_cls(
             base_url=resolved_base,
-            api_key=api_key or _default_api_key(),
+            api_key=api_key or _api_key_resolver(),
             workspace=resolved_workspace,
             uid=uid or os.environ.get("DASHSCOPE_UID"),
             user_agent=_user_agent(resolved_base),
             timeout=timeout or AGENTSTUDIO_DEFAULT_TIMEOUT,
             max_retries=max_retries,
             http_client=http_client,
+            exceptions_module=_exceptions_module,
         )
         self.agents = Agents(self)
         self.deployments = Deployments(self)
@@ -248,6 +259,10 @@ class AsyncClient:
         ] = None,
         max_retries: int = AGENTSTUDIO_MAX_RETRIES,
         http_client: Optional[httpx.AsyncClient] = None,
+        _exceptions_module: Any = _default_exceptions,
+        _api_key_resolver: Any = _default_api_key,
+        _transport_cls: Any = AsyncTransport,
+        _event_stream_cls: Any = AsyncEventStream,
     ) -> None:
         resolved_workspace = workspace or os.environ.get("DASHSCOPE_WORKSPACE")
         resolved_base = _resolve_base_url(
@@ -255,15 +270,17 @@ class AsyncClient:
             resolved_workspace,
             region,
         )
-        self.transport = AsyncTransport(
+        self._event_stream_cls = _event_stream_cls
+        self.transport = _transport_cls(
             base_url=resolved_base,
-            api_key=api_key or _default_api_key(),
+            api_key=api_key or _api_key_resolver(),
             workspace=resolved_workspace,
             uid=uid or os.environ.get("DASHSCOPE_UID"),
             user_agent=_user_agent(resolved_base),
             timeout=timeout or AGENTSTUDIO_DEFAULT_TIMEOUT,
             max_retries=max_retries,
             http_client=http_client,
+            exceptions_module=_exceptions_module,
         )
         self.agents = AsyncAgents(self)
         self.deployments = AsyncDeployments(self)

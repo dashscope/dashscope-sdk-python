@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-"""Tests for AgentStudio's root implementation and public contracts.
-
-The public package owns the only implementation. Deep imports, shared
-validation, unified errors and SDK identity must keep their existing behavior.
-"""
+"""Tests for AgentStudio's shared core and two public facades."""
 
 from __future__ import annotations
 
@@ -14,14 +10,20 @@ import sys
 import pytest
 
 import dashscope.agentstudio as impl
+from dashscope.applications import agentstudio as v2_impl
 from dashscope import errors as sdk_errors
 from dashscope._shared import _sdk_ident, _validation
 from dashscope.agentstudio.transport import build_headers
+from dashscope.applications.agentstudio.transport import (
+    build_headers as build_v2_headers,
+)
 from dashscope.legacy_1x.common import error as legacy_error
 from dashscope.legacy_1x.common import env as legacy_env
 from dashscope.legacy_1x.common import utils as legacy_utils
-from dashscope.agentstudio import client as as_client
+from dashscope.agentstudio import client as legacy_client
 from dashscope.agentstudio import exceptions as impl_exc
+from dashscope.applications.agentstudio import client as as_client
+from dashscope.applications.agentstudio import exceptions as v2_exc
 
 BASE_URL = "https://as.test.local"
 
@@ -84,27 +86,31 @@ def test_public_names_are_exported():
         assert getattr(impl, name) is not None, name
 
 
-def test_client_classes_have_root_module_ownership():
-    assert (
-        impl.Client.__module__ == "dashscope.applications.agentstudio.client"
-    )
-    assert impl.AsyncClient.__module__ == (
-        "dashscope.applications.agentstudio.client"
-    )
+def test_client_classes_are_versioned_facades():
+    assert impl.Client.__module__ == "dashscope.legacy_1x.agentstudio.client"
+    assert impl.AsyncClient.__module__ == "dashscope.legacy_1x.agentstudio.client"
+    assert v2_impl.Client.__module__ == "dashscope.applications.agentstudio.client"
+    assert v2_impl.AsyncClient.__module__ == "dashscope.applications.agentstudio.client"
 
 
-def test_exception_aliases_use_root_errors():
-    assert impl_exc.AgentStudioError is sdk_errors.DashScopeError
-    assert impl_exc.AuthenticationError is sdk_errors.AuthenticationError
-    assert impl_exc.NotFoundError is sdk_errors.NotFoundError
+def test_exception_families_are_versioned():
+    assert impl_exc.AgentStudioError is not sdk_errors.DashScopeError
+    assert issubclass(impl_exc.AgentStudioError, legacy_error.DashScopeException)
+    assert v2_exc.AgentStudioError is sdk_errors.DashScopeError
+    assert v2_exc.AuthenticationError is sdk_errors.AuthenticationError
 
 
 @pytest.mark.parametrize("name", SUBMODULES)
-def test_deep_imports_resolve_to_root_modules(name):
+def test_deep_imports_resolve_to_facade_or_shared_core(name):
     module_name = f"dashscope.agentstudio.{name}"
-    canonical_name = f"dashscope.applications.agentstudio.{name}"
+    facade_modules = {"client", "exceptions", "streaming", "transport"}
+    root = (
+        "dashscope.legacy_1x.agentstudio"
+        if name in facade_modules
+        else "dashscope.applications.agentstudio"
+    )
     assert importlib.import_module(module_name) is importlib.import_module(
-        canonical_name,
+        f"{root}.{name}",
     )
 
 
@@ -136,16 +142,9 @@ def test_deep_import_from_syntax_resolves():
 # ---------------------------------------------------------------------------
 
 
-def test_agentstudio_uses_the_unified_error_base():
-    assert impl_exc.AgentStudioError is sdk_errors.DashScopeError
-    # The unified 2.0 base roots into the shared DashScopeException, so a
-    # single ``except DashScopeException`` catches AgentStudio errors too --
-    # the invariant documented in ``dashscope/_shared/_errors.py`` and the
-    # behavior the 1.x ``AgentStudioError(DashScopeException)`` had.
-    assert issubclass(
-        impl_exc.AgentStudioError,
-        legacy_error.DashScopeException,
-    )
+def test_both_agentstudio_error_bases_remain_catchable():
+    assert issubclass(impl_exc.AgentStudioError, legacy_error.DashScopeException)
+    assert issubclass(v2_exc.AgentStudioError, sdk_errors.DashScopeError)
 
 
 def test_validators_are_shared_and_still_reject_host_breakouts():
@@ -229,8 +228,15 @@ def test_session_id_is_shared_with_the_v2_transport():
 
 
 # ---------------------------------------------------------------------------
-# api key resolution no longer reads the 1.x ``dashscope.api_key`` global
+# 2.0 API-key resolution is independent of the historical facade
 # ---------------------------------------------------------------------------
+
+
+def test_legacy_client_uses_the_historical_key_resolver(monkeypatch):
+    monkeypatch.setattr(legacy_client, "get_default_api_key", lambda: "sk-old")
+    client = impl.Client(base_url=BASE_URL)
+    assert client.transport.api_key == "sk-old"
+    client.close()
 
 
 @pytest.fixture
@@ -260,10 +266,10 @@ def test_missing_api_key_resolves_to_none(_no_key_anywhere):
 def test_missing_api_key_surfaces_at_request_time(_no_key_anywhere):
     """Construction succeeds; the transport raises the native error."""
 
-    client = impl.Client(base_url=BASE_URL)
+    client = v2_impl.Client(base_url=BASE_URL)
     assert client.transport.api_key is None
-    with pytest.raises(impl_exc.AuthenticationError):
-        build_headers(
+    with pytest.raises(v2_exc.AuthenticationError):
+        build_v2_headers(
             api_key=client.transport.api_key,
             uid=None,
             user_agent="ua",

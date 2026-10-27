@@ -450,9 +450,24 @@ examples/
 ### 包布局与兼容策略
 
 2.0 实现直接位于 `dashscope` 根包，原 `dashscope.v2` 命名空间已移除。
-包根已有的 1.x 导出继续可用；`dashscope.aigc`、`dashscope.client` 等旧
-deep import 已移至 `dashscope.legacy_1x` 下。2.0 Agentic RL 工作流位于
-`dashscope.finetune`，1.x 任务管理接口位于 `dashscope.legacy_1x.finetune`。
+AgentStudio 与 FineTune/Agentic RL 的唯一业务核心位于
+`dashscope.applications`，其上保留两套薄 Facade：
+
+- 历史 `dashscope.agentstudio` 与 `dashscope.finetune.agentic_rl` 路径继续
+  提供 1.x 的方法、返回类型和旧异常；
+- `client.agentstudio` 与 `client.rl` 提供 2.0 资源接口、httpx 传输和
+  `dashscope.errors` 新异常。
+
+`dashscope.aigc`、`dashscope.client.base_api`、`dashscope.files`、
+`dashscope.tokenizers` 等其他旧路径继续通过懒加载别名指向
+`dashscope.legacy_1x`。本地 `get_tokenizer` 因此保持 1.x 异常契约；2.0 的远程
+分词计数由独立的 `client.tokenization` 资源提供。应用核心目录属于内部实现，
+2.0 业务代码应通过主 Client 资源树调用。
+
+历史 Agentic RL 的 `submit_job` 仍返回 `FineTune`，并保留
+`cancel/list/get/delete/logs`；2.0 的任务生命周期位于 `client.rl.jobs`。
+历史 `dashscope.agentstudio.Client` 继续抛旧 `AgentStudioError` 并保留
+`raw`，而 `client.agentstudio` 使用新 errors，失败响应通过 `body` 暴露。
 
 > **破坏性变更（Agentic RL）：** 公开路径 `dashscope.finetune.agentic_rl`
 > 现在解析到 **2.0** 的 `AgenticRL` —— `submit_job` 返回 `SubmitResult`

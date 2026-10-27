@@ -4,6 +4,7 @@
 import os
 from typing import List
 
+from dashscope.legacy_1x.common.error import UnsupportedModel
 from .qwen_tokenizer import QwenTokenizer
 from .tokenizer_base import Tokenizer
 
@@ -22,14 +23,14 @@ def get_tokenizer(model: str) -> Tokenizer:
         model (str): The model name.
 
     Raises:
-        ValueError: Not support model
+        UnsupportedModel: Not support model
 
     Returns:
         Tokenizer: The  `Tokenizer` of the model.
     """
     if model.startswith("qwen"):
         return QwenTokenizer(_VOCAB_PATH)
-    raise ValueError(
+    raise UnsupportedModel(
         f"Not support model: {model}, currently only support qwen models.",
     )
 

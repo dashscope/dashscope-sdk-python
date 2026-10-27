@@ -10,8 +10,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from dashscope.finetune import agentic_rl as agentic_rl_module
-from dashscope.finetune.reinforcement.common.errors import (
+from dashscope.applications.finetune import agentic_rl as agentic_rl_module
+from dashscope.applications.finetune.reinforcement.common.errors import (
     AgenticRLError,
     InstanceQueryError,
     OSSUploadError,
