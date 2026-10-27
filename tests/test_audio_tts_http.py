@@ -849,9 +849,7 @@ def test_http_optional_values_and_call_auth(method, explicit):
     assert requests[0].extensions["timeout"]["read"] == 0
     assert requests[1].headers["authorization"] == "Bearer sk-test"
     assert requests[1].headers["x-dashscope-workspace"] == "pool-ws"
-    assert (
-        requests[1].extensions["timeout"]["read"] == client.config.timeout
-    )
+    assert requests[1].extensions["timeout"]["read"] == client.config.timeout
     assert all(request.url.host == "api.test.local" for request in requests)
     expected_sse = "enable" if method == "stream" else None
     assert requests[0].headers.get("x-dashscope-sse") == expected_sse

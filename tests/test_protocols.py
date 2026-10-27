@@ -1262,7 +1262,9 @@ def test_anthropic_preserves_interleaved_thinking_blocks_for_replay():
         model="qwen3-max",
         messages=[{"role": "user", "content": "hi"}, message.model_dump()],
     )
-    assert request.body["messages"][1]["content"][:2] == message.reasoning_blocks
+    assert (
+        request.body["messages"][1]["content"][:2] == message.reasoning_blocks
+    )
 
 
 def test_anthropic_parse_completion_thinking():

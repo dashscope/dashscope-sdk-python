@@ -9,7 +9,9 @@ from typing import Any, Optional, Tuple, Union
 
 import httpx
 
-from dashscope.applications.agentstudio import exceptions as _default_exceptions
+from dashscope.applications.agentstudio import (
+    exceptions as _default_exceptions,
+)
 from dashscope._shared._validation import (
     validate_region,
     validate_workspace_id,

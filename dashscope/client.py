@@ -179,7 +179,9 @@ class Client:
         """
         if self._agentstudio is None:
             # pylint: disable=import-outside-toplevel
-            from dashscope.applications.agentstudio import Client as AgentStudioClient
+            from dashscope.applications.agentstudio import (
+                Client as AgentStudioClient,
+            )
 
             # agentstudio resolves its own base_url from workspace +
             # region (the v2 base_url does not propagate: the agentstudio
@@ -417,7 +419,9 @@ class AsyncClient:
         """
         if self._agentstudio is None:
             # pylint: disable=import-outside-toplevel
-            from dashscope.applications.agentstudio import AsyncClient as AsClient
+            from dashscope.applications.agentstudio import (
+                AsyncClient as AsClient,
+            )
 
             # See Client.agentstudio: agentstudio builds its own base_url
             # from workspace + region, so forward both.

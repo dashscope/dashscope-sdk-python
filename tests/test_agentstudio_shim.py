@@ -88,14 +88,25 @@ def test_public_names_are_exported():
 
 def test_client_classes_are_versioned_facades():
     assert impl.Client.__module__ == "dashscope.legacy_1x.agentstudio.client"
-    assert impl.AsyncClient.__module__ == "dashscope.legacy_1x.agentstudio.client"
-    assert v2_impl.Client.__module__ == "dashscope.applications.agentstudio.client"
-    assert v2_impl.AsyncClient.__module__ == "dashscope.applications.agentstudio.client"
+    assert (
+        impl.AsyncClient.__module__ == "dashscope.legacy_1x.agentstudio.client"
+    )
+    assert (
+        v2_impl.Client.__module__
+        == "dashscope.applications.agentstudio.client"
+    )
+    assert (
+        v2_impl.AsyncClient.__module__
+        == "dashscope.applications.agentstudio.client"
+    )
 
 
 def test_exception_families_are_versioned():
     assert impl_exc.AgentStudioError is not sdk_errors.DashScopeError
-    assert issubclass(impl_exc.AgentStudioError, legacy_error.DashScopeException)
+    assert issubclass(
+        impl_exc.AgentStudioError,
+        legacy_error.DashScopeException,
+    )
     assert v2_exc.AgentStudioError is sdk_errors.DashScopeError
     assert v2_exc.AuthenticationError is sdk_errors.AuthenticationError
 
@@ -143,7 +154,10 @@ def test_deep_import_from_syntax_resolves():
 
 
 def test_both_agentstudio_error_bases_remain_catchable():
-    assert issubclass(impl_exc.AgentStudioError, legacy_error.DashScopeException)
+    assert issubclass(
+        impl_exc.AgentStudioError,
+        legacy_error.DashScopeException,
+    )
     assert issubclass(v2_exc.AgentStudioError, sdk_errors.DashScopeError)
 
 

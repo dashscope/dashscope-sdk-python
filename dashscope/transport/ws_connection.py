@@ -119,7 +119,7 @@ class WsTask(_EventProcessor):
                 self._error = item[1]
             try:
                 self._queue.put_nowait(item)
-            except queue.Full:
+            except queue.Full as exc:
                 if item[0] == _ERROR:
                     # Preserve terminal visibility without allowing an
                     # unbounded backlog to retain audio forever.
@@ -131,7 +131,7 @@ class WsTask(_EventProcessor):
                 else:
                     raise WsStateError(
                         detail="websocket task receive queue is full",
-                    )
+                    ) from exc
 
     def _frame(self, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         return {

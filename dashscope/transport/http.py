@@ -168,7 +168,8 @@ class SyncTransport:
         self._default_headers = _build_headers(api_key, workspace, user_agent)
         self._default_timeout = _resolve_timeout(timeout, default_timeout)
         self._request_timeout = (
-            None if http_client is not None and timeout is None
+            None
+            if http_client is not None and timeout is None
             else self._default_timeout
         )
         self._client = http_client or httpx.Client(
@@ -404,7 +405,8 @@ class AsyncTransport:
         self._default_headers = _build_headers(api_key, workspace, user_agent)
         self._default_timeout = _resolve_timeout(timeout, default_timeout)
         self._request_timeout = (
-            None if http_client is not None and timeout is None
+            None
+            if http_client is not None and timeout is None
             else self._default_timeout
         )
         self._client = http_client or httpx.AsyncClient(

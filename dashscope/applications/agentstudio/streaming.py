@@ -39,7 +39,9 @@ from typing import Any, AsyncIterator, Dict, Iterator, Optional
 import httpx
 from httpx_sse import EventSource
 
-from dashscope.applications.agentstudio import exceptions as _default_exceptions
+from dashscope.applications.agentstudio import (
+    exceptions as _default_exceptions,
+)
 
 # A child of the "dashscope" logger, so the level and handler installed by
 # dashscope.legacy_1x.common.logging.enable_logging() still reach these warnings via
@@ -105,7 +107,9 @@ class EventStream:
 
     def _iter(self) -> Iterator[Dict[str, Any]]:
         if self._closed:
-            raise self.exceptions_module.StreamClosedError("stream already closed")
+            raise self.exceptions_module.StreamClosedError(
+                "stream already closed",
+            )
         q: "queue.Queue[Any]" = queue.Queue()
 
         def _produce() -> None:
@@ -187,7 +191,9 @@ class AsyncEventStream:
 
     async def _aiter(self) -> AsyncIterator[Dict[str, Any]]:
         if self._closed:
-            raise self.exceptions_module.StreamClosedError("stream already closed")
+            raise self.exceptions_module.StreamClosedError(
+                "stream already closed",
+            )
         q: "asyncio.Queue[Any]" = asyncio.Queue()
 
         async def _produce() -> None:

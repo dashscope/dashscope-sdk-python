@@ -33,8 +33,13 @@ from dashscope.version import __version__
 from dashscope.errors import SdkError
 from dashscope.applications.finetune import _submit
 from dashscope.applications.finetune.agentic_rl import AgenticRL as V2AgenticRL
-from dashscope.applications.finetune.agentic_rl import SubmitOutput, SubmitResult
-from dashscope.applications.finetune.reinforcement import DASHSCOPE_HTTP_BASE_URL
+from dashscope.applications.finetune.agentic_rl import (
+    SubmitOutput,
+    SubmitResult,
+)
+from dashscope.applications.finetune.reinforcement import (
+    DASHSCOPE_HTTP_BASE_URL,
+)
 from dashscope.applications.finetune.reinforcement import TrainingType
 from dashscope.applications.finetune.reinforcement.common.errors import (
     _LEGACY_ERROR_CODES,

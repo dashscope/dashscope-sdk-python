@@ -32,6 +32,7 @@ from dashscope.legacy_1x.agentstudio.transport import (
 from dashscope.legacy_1x.common.api_key import get_default_api_key
 
 # Historical module-level helpers remain importable from this facade.
+# pylint: disable=protected-access
 _resolve_base_url = _core_client._resolve_base_url
 _user_agent = _core_client._user_agent
 

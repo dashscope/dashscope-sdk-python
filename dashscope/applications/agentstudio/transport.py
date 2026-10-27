@@ -28,7 +28,9 @@ from typing import Any, Dict, IO, Mapping, Optional, Tuple, Union
 import httpx
 
 from dashscope._shared._sdk_ident import get_sdk_headers
-from dashscope.applications.agentstudio import exceptions as _default_exceptions
+from dashscope.applications.agentstudio import (
+    exceptions as _default_exceptions,
+)
 from dashscope.applications.agentstudio.constants import (
     AGENTSTUDIO_DEFAULT_TIMEOUT,
     AGENTSTUDIO_MAX_RETRIES,

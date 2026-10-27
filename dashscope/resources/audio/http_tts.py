@@ -335,7 +335,11 @@ class HttpSynthesisStream:
 class AsyncHttpSynthesisStream:
     """Async typed iterator over HTTP synthesis SSE parts."""
 
-    def __init__(self, inner: AsyncIterator[HttpSynthesisChunk], response) -> None:
+    def __init__(
+        self,
+        inner: AsyncIterator[HttpSynthesisChunk],
+        response,
+    ) -> None:
         self._inner = inner
         self._response = response
 
@@ -362,16 +366,21 @@ class AsyncHttpTts:
         response = await self._client.transport.request(
             "POST",
             _path_for(model),
-            json=_build_body(text, model=model, voice=voice, **{
-                key: kwargs.pop(key, None)
-                for key in (
-                    "format",
-                    "sample_rate",
-                    "language_type",
-                    "parameters",
-                    "extra_input",
-                )
-            }),
+            json=_build_body(
+                text,
+                model=model,
+                voice=voice,
+                **{
+                    key: kwargs.pop(key, None)
+                    for key in (
+                        "format",
+                        "sample_rate",
+                        "language_type",
+                        "parameters",
+                        "extra_input",
+                    )
+                },
+            ),
             headers=kwargs.pop("headers", None),
             timeout=kwargs.pop("timeout", None),
             sdk_module=MODULE,
@@ -397,16 +406,21 @@ class AsyncHttpTts:
         response = await self._client.transport.open_stream(
             "POST",
             _path_for(model),
-            json=_build_body(text, model=model, voice=voice, **{
-                key: kwargs.pop(key, None)
-                for key in (
-                    "format",
-                    "sample_rate",
-                    "language_type",
-                    "parameters",
-                    "extra_input",
-                )
-            }),
+            json=_build_body(
+                text,
+                model=model,
+                voice=voice,
+                **{
+                    key: kwargs.pop(key, None)
+                    for key in (
+                        "format",
+                        "sample_rate",
+                        "language_type",
+                        "parameters",
+                        "extra_input",
+                    )
+                },
+            ),
             headers=headers,
             timeout=kwargs.pop("timeout", None),
             sdk_module=MODULE,

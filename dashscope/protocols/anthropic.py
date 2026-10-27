@@ -281,7 +281,9 @@ def _split_messages(
                         system_blocks.append({"type": "text", "text": part})
                     else:
                         part_type = (
-                            part.get("type") if isinstance(part, dict) else None
+                            part.get("type")
+                            if isinstance(part, dict)
+                            else None
                         )
                         raise ValueError(
                             "Anthropic system messages support text parts only; "

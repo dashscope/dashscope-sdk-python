@@ -143,11 +143,17 @@ class IOErrorWithCode(AgenticRLError, _LegacyIOErrorWithCode):
         self.operation = operation
 
 
-class RuntimeErrorWithCode(AgenticRLError, _LegacyRuntimeErrorWithCode):
+class RuntimeErrorWithCode(  # type: ignore[misc]
+    AgenticRLError,
+    _LegacyRuntimeErrorWithCode,
+):
     _SDK_ERROR_NAME = "sdk.agentic_rl.RuntimeErrorWithCode"
 
 
-class ValueErrorWithCode(AgenticRLError, _LegacyValueErrorWithCode):
+class ValueErrorWithCode(  # type: ignore[misc]
+    AgenticRLError,
+    _LegacyValueErrorWithCode,
+):
     _SDK_ERROR_NAME = "sdk.agentic_rl.ValueErrorWithCode"
 
 

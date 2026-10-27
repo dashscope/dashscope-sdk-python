@@ -74,7 +74,9 @@ __all__ = [
 
 # Imported below via the module object so tests can monkeypatch
 # the shared application core without traversing the historical 1.x alias.
-from dashscope.applications.finetune import agentic_rl as _agentic_rl  # noqa: E402
+from dashscope.applications.finetune import (
+    agentic_rl as _agentic_rl,
+)  # noqa: E402
 from dashscope.applications.finetune import (  # noqa: E402
     reinforcement as _reinforcement,
 )

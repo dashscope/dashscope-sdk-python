@@ -34,6 +34,7 @@ _PACKAGE_ROOTS = frozenset(
 )
 
 _EXACT_MODULES = {
+    "dashscope.finetune": "dashscope.legacy_1x.finetune",
     "dashscope.agentstudio": "dashscope.legacy_1x.agentstudio",
     "dashscope.agentstudio.client": "dashscope.legacy_1x.agentstudio.client",
     "dashscope.agentstudio.exceptions": (

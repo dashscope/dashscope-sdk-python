@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
+# pylint: disable=unused-import
 """Compatibility shim plus the 1.x surface; the implementation moved to
 ``dashscope.applications.finetune.agentic_rl``.
 
@@ -18,7 +19,7 @@ New 2.0 code reaches the workflow through ``client.rl``.
 
 import functools
 import inspect
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, cast
 
 from dashscope.legacy_1x.finetune.customize_types import (
     FineTune,
@@ -27,8 +28,13 @@ from dashscope.legacy_1x.finetune.customize_types import (
     FineTuneList,
 )
 from dashscope.legacy_1x.finetune.finetunes import FineTunes
-from dashscope.applications.finetune.agentic_rl import AgenticRL as _AgenticRLBase
-from dashscope.applications.finetune.agentic_rl import SubmitOutput, SubmitResult
+from dashscope.applications.finetune.agentic_rl import (
+    AgenticRL as _AgenticRLBase,
+)
+from dashscope.applications.finetune.agentic_rl import (
+    SubmitOutput,
+    SubmitResult,
+)
 
 # Re-export every name this module historically carried.
 # pylint: disable-next=unused-import
@@ -94,7 +100,7 @@ def _to_legacy_error(exc: _CoreAgenticRLError) -> AgenticRLError:
     legacy.__dict__.update(exc.__dict__)
     legacy.message = getattr(exc, "message", str(exc))
     legacy.error_code = getattr(exc, "error_code", 1000)
-    return legacy
+    return cast(AgenticRLError, legacy)
 
 
 def _translate_sync(method):

@@ -2,6 +2,9 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 """SessionEvents and AsyncSessionEvents resource classes."""
 
+# Facade and resource objects are one internal AgentStudio implementation.
+# pylint: disable=protected-access
+
 from __future__ import annotations
 
 from typing import (

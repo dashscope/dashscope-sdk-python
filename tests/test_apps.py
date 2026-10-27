@@ -213,7 +213,9 @@ def test_agentstudio_mount_follows_region():
 
 @pytest.mark.asyncio
 async def test_async_agentstudio_mount_follows_region():
-    from dashscope.applications.agentstudio import AsyncClient as AsAgentStudioClient
+    from dashscope.applications.agentstudio import (
+        AsyncClient as AsAgentStudioClient,
+    )
 
     client = _make_async_client(
         lambda request: httpx.Response(200, json={}),
