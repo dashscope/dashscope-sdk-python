@@ -535,7 +535,7 @@ def _bind_tool_arguments(
         bound = sig.bind_partial(*args, **kwargs)
         bound.apply_defaults()
         param_names = list(sig.parameters.keys())
-        raw = Dict(bound.arguments)
+        raw = dict(bound.arguments)
         if param_names and param_names[0] in ("self", "cls"):
             raw = {k: v for k, v in raw.items() if k not in ("self", "cls")}
         return _json_serializable(raw)
