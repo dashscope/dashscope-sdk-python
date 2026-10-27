@@ -11,6 +11,7 @@ import threading
 import pytest
 
 from dashscope.errors import (
+    APITimeoutError,
     APIConnectionError,
     DashScopeError,
     WsBinaryOwnerConflictError,
@@ -307,7 +308,7 @@ def test_finish_task_and_cancel_semantics():
 def test_recv_timeout_raises():
     conn, _ = _make_connection()
     task = conn.open_task(timeout=0.05)
-    with pytest.raises(TimeoutError):
+    with pytest.raises(APITimeoutError):
         task.recv()
     conn.close()
 
@@ -770,7 +771,7 @@ def test_task_handshake_timeout_detaches_without_killing_connection(
 ):
     conn = bounded_connection()
     task = conn.open_task(timeout=0.02)
-    with pytest.raises(TimeoutError):
+    with pytest.raises(APITimeoutError):
         task.run_task(
             task_group="audio",
             task="asr",
@@ -793,7 +794,7 @@ def test_task_timeout_is_isolated_and_explicit_close_releases_owners(
     _started(conn, second)
     first.send_binary(b"first")
     first.claim_binary_downlink()
-    with pytest.raises(TimeoutError):
+    with pytest.raises(APITimeoutError):
         first.recv()
     first.close()
     second.send_binary(b"second")

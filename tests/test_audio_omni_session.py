@@ -17,6 +17,7 @@ from websocket import (
 
 from dashscope import Client
 from dashscope.errors import (
+    APITimeoutError,
     APIConnectionError,
     BadRequestError,
     RateLimitError,
@@ -555,9 +556,9 @@ def test_handshake_failure_can_be_retried(client, monkeypatch):
 
     monkeypatch.setattr("websocket.create_connection", create_connection)
     session = client.audio.realtime.connect(model="omni")
-    with pytest.raises(WebSocketTimeoutException) as caught:
+    with pytest.raises(APITimeoutError) as caught:
         session.__enter__()
-    assert caught.value is failure
+    assert caught.value.__cause__ is failure
     with pytest.raises(RuntimeError, match="not open"):
         session.recv_event()
     with session:
@@ -757,9 +758,15 @@ def test_recv_transport_failure_closes_and_propagates(
         session.end_session()
     ws.inbox.append(failure)
     ws.close_error = OSError("cleanup failed")
-    with pytest.raises(type(failure)) as caught:
+    expected = (
+        APITimeoutError
+        if isinstance(failure, WebSocketTimeoutException)
+        else type(failure)
+    )
+    with pytest.raises(expected) as caught:
         session.recv_event()
-    assert caught.value is failure
+    if expected is not APITimeoutError:
+        assert caught.value is failure
     assert ws.close_calls == 1
 
 

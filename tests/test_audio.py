@@ -14,6 +14,7 @@ import pytest
 
 from dashscope import AsyncClient, Client
 from dashscope.errors import (
+    APITimeoutError,
     APIConnectionError,
     DashScopeError,
     WsStateError,
@@ -526,7 +527,7 @@ def test_recognition_timeout_closes_socket(during_start):
         model="fun-asr-realtime",
         connector=lambda url, headers: ws,
     )
-    with pytest.raises(WebSocketTimeoutException):
+    with pytest.raises(APITimeoutError):
         with rec:
             next(rec.events())
     assert ws.closed

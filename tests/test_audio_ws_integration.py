@@ -19,6 +19,7 @@ from websocket import WebSocketConnectionClosedException
 
 from dashscope import Client
 from dashscope.errors import (
+    APITimeoutError,
     APIConnectionError,
     BadRequestError,
     RateLimitError,
@@ -1277,7 +1278,7 @@ def test_livetranslate_response_done_does_not_replace_finish_ack(
     "failure, expected_error",
     [
         ("invalid-json", json.JSONDecodeError),
-        ("receive-timeout", websocket.WebSocketTimeoutException),
+        ("receive-timeout", APITimeoutError),
         ("tcp-abort", APIConnectionError),
         ("close-frame", APIConnectionError),
     ],
@@ -1357,7 +1358,7 @@ def test_run_task_faults_after_partial_output(
     "failure, expected_error",
     [
         ("invalid-json", json.JSONDecodeError),
-        ("receive-timeout", websocket.WebSocketTimeoutException),
+        ("receive-timeout", APITimeoutError),
         ("tcp-abort", APIConnectionError),
     ],
 )

@@ -17,6 +17,7 @@ from websocket import (
 
 from dashscope import Client
 from dashscope.errors import (
+    APITimeoutError,
     BadRequestError,
     DashScopeError,
     RateLimitError,
@@ -504,5 +505,5 @@ def test_realtime_recv_raises_on_transport_error():
         model="qwen-omni-turbo-realtime",
         connector=lambda url, headers: ws,
     ) as rt:
-        with pytest.raises(WebSocketTimeoutException):
+        with pytest.raises(APITimeoutError):
             rt.recv_event()

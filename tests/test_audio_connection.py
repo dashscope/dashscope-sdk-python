@@ -10,7 +10,11 @@ import queue
 import pytest
 
 from dashscope.client import Client
-from dashscope.errors import DashScopeError, WsBinaryOwnerConflictError
+from dashscope.errors import (
+    APITimeoutError,
+    DashScopeError,
+    WsBinaryOwnerConflictError,
+)
 
 BASE_URL = "https://api.test.local/api/v1"
 WS_URL = "wss://ws.test.local/api-ws/v1/inference"
@@ -432,7 +436,7 @@ def test_shared_recognition_start_failure_detaches_and_allows_retry(
         timeout=0.05,
     )
     try:
-        expected = TimeoutError if reply == "timeout" else DashScopeError
+        expected = APITimeoutError if reply == "timeout" else DashScopeError
         with pytest.raises(expected):
             rec.start()
         assert not conn._tasks

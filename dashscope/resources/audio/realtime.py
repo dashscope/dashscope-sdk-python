@@ -13,7 +13,11 @@ from typing import Any, Dict, Iterator, List, Mapping, Optional, Union, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dashscope._config import WS_REALTIME_PATH, workspace_ws_url
-from dashscope.errors import APIConnectionError, error_from_business_code
+from dashscope.errors import (
+    APIConnectionError,
+    APITimeoutError,
+    error_from_business_code,
+)
 from dashscope.transport import default_user_agent
 from dashscope.transport._ident import sdk_headers
 from dashscope.transport.ws import Connector, _close_websocket
@@ -180,9 +184,13 @@ class RealtimeSession:
                     self._ws = self._connector(self._url, self._headers)
                 if self._timeout is not None:
                     self._ws.settimeout(self._timeout)
-            except BaseException:
+            except BaseException as exc:
                 self.close()
                 self._reset_state()
+                from websocket import WebSocketTimeoutException
+
+                if isinstance(exc, WebSocketTimeoutException):
+                    raise APITimeoutError(detail=str(exc)) from exc
                 raise
             self._reset_state()
         return self
@@ -659,6 +667,7 @@ class RealtimeSession:
         """Receive a raw event; unfinished responses cannot end silently."""
         from websocket import (  # pylint: disable=import-outside-toplevel
             WebSocketConnectionClosedException,
+            WebSocketTimeoutException,
         )
 
         # Network reads must not hold the lock needed by send_event() or close().
@@ -676,6 +685,8 @@ class RealtimeSession:
                     raw = ws.recv()
                 except WebSocketConnectionClosedException:
                     raw = None
+                except WebSocketTimeoutException as exc:
+                    raise APITimeoutError(detail=str(exc)) from exc
                 with self._lock:
                     if generation != self._generation:
                         return None

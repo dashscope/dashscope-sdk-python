@@ -100,10 +100,19 @@ def _connect(
     connector: Optional[Connector],
     timeout: Optional[float],
 ) -> Any:
-    if connector is None:
-        ws = _default_connector(url, headers, timeout=timeout)
-    else:
-        ws = connector(url, headers)
+    try:
+        if connector is None:
+            ws = _default_connector(url, headers, timeout=timeout)
+        else:
+            ws = connector(url, headers)
+    except BaseException as exc:
+        from websocket import WebSocketTimeoutException
+
+        if isinstance(exc, WebSocketTimeoutException):
+            from dashscope.errors import APITimeoutError
+
+            raise APITimeoutError(detail=str(exc)) from exc
+        raise
     try:
         if timeout is not None:
             ws.settimeout(timeout)
@@ -124,12 +133,17 @@ def _recv_frame(ws: Any) -> Any:
     """
     from websocket import (  # pylint: disable=import-outside-toplevel
         WebSocketConnectionClosedException,
+        WebSocketTimeoutException,
     )
 
     try:
         return ws.recv()
     except WebSocketConnectionClosedException:
         return None
+    except WebSocketTimeoutException as exc:
+        from dashscope.errors import APITimeoutError
+
+        raise APITimeoutError(detail=str(exc)) from exc
 
 
 class _EventProcessor:

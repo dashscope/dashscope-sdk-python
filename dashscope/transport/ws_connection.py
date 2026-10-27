@@ -42,6 +42,7 @@ from dashscope._config import (
 )
 from dashscope.errors import (
     APIConnectionError,
+    APITimeoutError,
     WsBinaryOwnerConflictError,
     WsStateError,
 )
@@ -78,11 +79,14 @@ class WsTask(_EventProcessor):
         connection: "WsConnection",
         task_id: str,
         timeout: Optional[float],
+        queue_size: int,
     ) -> None:
         self._conn = connection
         self._task_id = task_id
         self._timeout = timeout
-        self._queue: "queue.SimpleQueue[_QueueItem]" = queue.SimpleQueue()
+        self._queue: "queue.Queue[_QueueItem]" = queue.Queue(
+            maxsize=queue_size,
+        )
         self._request_id = task_id
         self._lock = threading.Lock()
         self._run_sent = False
@@ -113,7 +117,21 @@ class WsTask(_EventProcessor):
         if not self._closed and self._error is None:
             if item[0] == _ERROR:
                 self._error = item[1]
-            self._queue.put(item)
+            try:
+                self._queue.put_nowait(item)
+            except queue.Full:
+                if item[0] == _ERROR:
+                    # Preserve terminal visibility without allowing an
+                    # unbounded backlog to retain audio forever.
+                    try:
+                        self._queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                    self._queue.put_nowait(item)
+                else:
+                    raise WsStateError(
+                        detail="websocket task receive queue is full",
+                    )
 
     def _frame(self, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         return {
@@ -230,8 +248,8 @@ class WsTask(_EventProcessor):
         try:
             kind, payload = self._queue.get(timeout=self._timeout)
         except queue.Empty:
-            raise TimeoutError(
-                "timed out waiting for a websocket event",
+            raise APITimeoutError(
+                detail="timed out waiting for a websocket event",
             ) from None
         if kind == _ERROR:
             # Requeue the terminal marker so subsequent readers also fail.
@@ -265,15 +283,24 @@ class WsConnection:
         connector: Optional[Connector] = None,
         timeout: Optional[float] = None,
         module: Optional[str] = None,
+        task_queue_size: int = 1024,
+        ping_interval: Optional[float] = 30.0,
     ) -> None:
         if timeout is not None and timeout <= 0:
             raise ValueError("timeout must be positive")
+        if task_queue_size <= 0:
+            raise ValueError("task_queue_size must be positive")
+        if ping_interval is not None and ping_interval <= 0:
+            raise ValueError("ping_interval must be positive")
         self._url = (
             url
             or settings.websocket_base_url
             or workspace_ws_url(workspace, WS_INFERENCE_PATH, region)
         )
         self._timeout = timeout
+        self._task_queue_size = task_queue_size
+        self._ping_interval = ping_interval
+        self._heartbeat_stop = threading.Event()
         self._tasks: Dict[str, WsTask] = {}
         self._lock = threading.Lock()
         self._send_lock = threading.Lock()
@@ -300,6 +327,14 @@ class WsConnection:
                 daemon=True,
             )
             self._reader.start()
+            ping = getattr(self._ws, "ping", None)
+            if self._ping_interval is not None and callable(ping):
+                self._heartbeat = threading.Thread(
+                    target=self._heartbeat_main,
+                    name="dashscope-ws-heartbeat",
+                    daemon=True,
+                )
+                self._heartbeat.start()
         except BaseException:
             self.close()
             raise
@@ -318,6 +353,7 @@ class WsConnection:
                 self,
                 uuid.uuid4().hex,
                 self._timeout if timeout is None else timeout,
+                self._task_queue_size,
             )
             self._tasks[task.task_id] = task
             return task
@@ -385,6 +421,18 @@ class WsConnection:
                 self._tasks.pop(task.task_id)
             self._release_binary(task)
 
+    def _heartbeat_main(self) -> None:
+        assert self._ping_interval is not None
+        while not self._heartbeat_stop.wait(self._ping_interval):
+            try:
+                with self._send_lock:
+                    if self._closed:
+                        return
+                    self._ws.ping()
+            except BaseException as exc:
+                self._fail(APIConnectionError(str(exc)))
+                return
+
     def _reader_main(self) -> None:
         try:
             while True:
@@ -451,6 +499,7 @@ class WsConnection:
                 # just the shutdown echo.
                 return
             self._closed = True
+            self._heartbeat_stop.set()
             self._binary_uplink_owner = None
             self._binary_downlink_owner = None
         _close_websocket(self._ws)
@@ -472,3 +521,10 @@ class WsConnection:
             and threading.current_thread() is not reader
         ):
             reader.join(timeout=2)
+        heartbeat = getattr(self, "_heartbeat", None)
+        if (
+            heartbeat is not None
+            and heartbeat.is_alive()
+            and threading.current_thread() is not heartbeat
+        ):
+            heartbeat.join(timeout=2)
