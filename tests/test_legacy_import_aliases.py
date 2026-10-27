@@ -60,6 +60,17 @@ for name in ('customize_types', 'deployments', 'finetunes'):
         f'dashscope.legacy_1x.finetune.{name}',
     )
     assert old is canonical, name
+
+# ``from dashscope.finetune import <sub>`` resolves the child against the
+# shared canonical ``__name__``; guard the 1.x-only submodules stay reachable.
+from dashscope.finetune import customize_types, deployments, finetunes
+for name, mod in (
+    ('customize_types', customize_types),
+    ('deployments', deployments),
+    ('finetunes', finetunes),
+):
+    legacy = importlib.import_module(f'dashscope.legacy_1x.finetune.{name}')
+    assert mod is legacy, name
 """,
     )
 

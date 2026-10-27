@@ -43,6 +43,19 @@ _EXACT_MODULES = {
         "dashscope.legacy_1x.finetune.deployments"
     ),
     "dashscope.finetune.finetunes": "dashscope.legacy_1x.finetune.finetunes",
+    # ``dashscope.finetune`` aliases the shared ``dashscope.applications.finetune``
+    # module object, so ``from dashscope.finetune import <sub>`` resolves the child
+    # against that canonical ``__name__`` rather than the alias prefix above. Map the
+    # canonical names too, otherwise those 1.x-only submodules raise ImportError.
+    "dashscope.applications.finetune.customize_types": (
+        "dashscope.legacy_1x.finetune.customize_types"
+    ),
+    "dashscope.applications.finetune.deployments": (
+        "dashscope.legacy_1x.finetune.deployments"
+    ),
+    "dashscope.applications.finetune.finetunes": (
+        "dashscope.legacy_1x.finetune.finetunes"
+    ),
 }
 
 _FINDER_MARKER = "_dashscope_legacy_1x_alias_finder"

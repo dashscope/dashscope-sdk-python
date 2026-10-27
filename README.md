@@ -482,6 +482,22 @@ code=sdk.…` form (the numeric code is still available via `err.error_code` and
 the timestamp via `err.timestamp`), so log parsers keyed on the old format need
 updating.
 
+> **Breaking (AgentStudio errors):** `ConflictError` is now an alias of
+> `APIStatusError` rather than a 409-specific subclass, so `except ConflictError`
+> catches *every* status error (400/401/404/429/5xx), not just conflicts. Match on
+> `err.status_code == 409` if you need the old behaviour. The Agentic RL
+> `error_code` is now a read-only property — assigning `err.error_code = …`
+> raises `AttributeError`.
+
+> **Breaking (`submit_job` / realtime WebSocket):** `submit_job` forwards extra
+> keyword arguments straight to the transport, so the 1.x `request_timeout=` is
+> renamed `timeout=`, and `workspace=` / `headers=` / `stream=` are no longer
+> accepted (passing any of them raises `TypeError`). The realtime WebSocket state
+> errors (`WsStateError`, `WsBinaryOwnerConflictError`) now derive from
+> `DashScopeError` instead of `RuntimeError`, so a bare `except RuntimeError` no
+> longer catches them — catch `errors.DashScopeError` (or the specific class)
+> instead.
+
 `dashscope.save_api_key` now comes from `dashscope._config`. It accepts an
 optional key-file path, expands `~`, creates missing parent directories, and
 writes UTF-8. Logs from the current client use the independent

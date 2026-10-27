@@ -454,6 +454,42 @@ examples/
 deep import 已移至 `dashscope.legacy_1x` 下。2.0 Agentic RL 工作流位于
 `dashscope.finetune`，1.x 任务管理接口位于 `dashscope.legacy_1x.finetune`。
 
+> **破坏性变更（Agentic RL）：** 公开路径 `dashscope.finetune.agentic_rl`
+> 现在解析到 **2.0** 的 `AgenticRL` —— `submit_job` 返回 `SubmitResult`
+> （不再是 1.x 的 `FineTune`），且该类不再带任务管理动词。2.0 的任务生命
+> 周期在客户端上（`client.rl.jobs.create()`、`.wait()`、`.list()`、
+> `.cancel()`、`.delete()`、`.logs()`）。依赖 1.x 类接口
+> （`AgenticRL.cancel(...)`、`.get(...)`、`submit_job` → `FineTune`）的代码
+> 应改为导入 `dashscope.legacy_1x.finetune.agentic_rl`，它保留五个动词
+> （`cancel`/`list`/`get`/`delete`/`logs`）与 `FineTune` 返回值。
+
+AgentStudio 与 Agentic RL 的异常已统一到 2.0 错误体系：`AgentStudioError`
+现在是 `dashscope.errors.DashScopeError` 的别名，Agentic RL 的 `*WithCode`
+错误继承自 `AgenticRLError`。原 AgentStudio 的 `raw` 响应属性改以 `body`
+暴露（`err.raw` → `err.body`）；`RuntimeErrorWithCode` / `ValueErrorWithCode`
+仍可作为其包装的内置 `RuntimeError` / `ValueError` 被捕获。由于两套栈现在
+共享 `dashscope._shared._errors.DashScopeException` 基类，一个
+`except DashScopeException` 即可同时捕获 1.x、2.0 与 AgentStudio 错误。
+Agentic RL 的 `*WithCode` 错误 `str()` 渲染也变了 —— 1.x 的
+`[1800] I/O error: …` 前缀被替换为 2.0 的 `<IOErrorWithCode> … | code=sdk.…`
+形式（数值码仍可通过 `err.error_code` 获取、时间戳通过 `err.timestamp`），
+依赖旧格式的日志解析需要更新。
+
+> **破坏性变更（AgentStudio 错误）：** `ConflictError` 现在是
+> `APIStatusError` 的别名，而不再是仅对应 409 的子类，因此
+> `except ConflictError` 会捕获**所有**状态错误（400/401/404/429/5xx），
+> 而不仅是冲突。若需要旧行为，请改用 `err.status_code == 409` 判断。
+> Agentic RL 的 `error_code` 现在是只读 property —— 赋值
+> `err.error_code = …` 会抛 `AttributeError`。
+
+> **破坏性变更（`submit_job` / realtime WebSocket）：** `submit_job` 会把
+> 额外关键字参数直接转发给传输层，因此 1.x 的 `request_timeout=` 改名为
+> `timeout=`，且不再接受 `workspace=` / `headers=` / `stream=`（传入任一
+> 都会抛 `TypeError`）。realtime WebSocket 状态错误（`WsStateError`、
+> `WsBinaryOwnerConflictError`）现在继承自 `DashScopeError` 而非
+> `RuntimeError`，因此裸 `except RuntimeError` 不再能捕获它们 —— 请改捕获
+> `errors.DashScopeError`（或具体的错误类）。
+
 `dashscope.save_api_key` 现在来自 `dashscope._config`，仍接受可选的 key
 文件路径，并会展开 `~`、创建缺失的父目录、按 UTF-8 写入。当前客户端使用
 独立的 `dashscope._logging` logger 层级，不会重新配置共享的 `dashscope`
