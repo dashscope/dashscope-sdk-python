@@ -57,8 +57,8 @@ _ROOT_INIT = _REPO / "dashscope" / "__init__.py"
 _ALLOWLIST = frozenset(
     {
         "dashscope",
-        "dashscope.legacy_1x.audio.asr",
-        "dashscope.legacy_1x.audio.tts_v2",
+        "dashscope.audio.asr",
+        "dashscope.audio.tts_v2",
     },
 )
 
@@ -254,21 +254,21 @@ def test_every_name_acli_imports_from_the_sdk_resolves():
 
 
 def test_tts_v2_exposes_the_names_acli_uses():
-    module = importlib.import_module("dashscope.legacy_1x.audio.tts_v2")
+    module = importlib.import_module("dashscope.audio.tts_v2")
     for name in ("AudioFormat", "ResultCallback", "SpeechSynthesizer"):
         assert hasattr(
             module,
             name,
-        ), f"dashscope.legacy_1x.audio.tts_v2.{name} is gone"
+        ), f"dashscope.audio.tts_v2.{name} is gone"
 
 
 def test_asr_exposes_the_names_acli_uses():
-    module = importlib.import_module("dashscope.legacy_1x.audio.asr")
+    module = importlib.import_module("dashscope.audio.asr")
     for name in ("Recognition", "RecognitionCallback"):
         assert hasattr(
             module,
             name,
-        ), f"dashscope.legacy_1x.audio.asr.{name} is gone"
+        ), f"dashscope.audio.asr.{name} is gone"
 
 
 # ---------------------------------------------------------------------------
