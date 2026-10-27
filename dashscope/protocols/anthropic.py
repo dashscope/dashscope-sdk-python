@@ -162,9 +162,7 @@ def _translate_message(message: Dict[str, Any]) -> Dict[str, Any]:
     out: Dict[str, Any] = {"role": role}
     if role == "assistant":
         blocks: List[Dict[str, Any]] = []
-        thinking = _thinking_block(message)
-        if thinking is not None:
-            blocks.append(thinking)
+        blocks.extend(_thinking_blocks(message))
         if message.get("tool_calls") or blocks:
             if isinstance(content, list):
                 # Parts lists keep their non-text parts; collapsing
@@ -182,19 +180,26 @@ def _translate_message(message: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _thinking_block(message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    # Strict Anthropic-compatible endpoints reject thinking blocks
-    # without a valid signature, and require signed ones replayed
-    # verbatim on later turns; unsigned reasoning stays dropped.
+def _thinking_blocks(message: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return signed thinking blocks exactly as received when available."""
+    preserved = message.get("reasoning_blocks")
+    if preserved is not None:
+        if not isinstance(preserved, list) or not all(
+            isinstance(block, dict) for block in preserved
+        ):
+            raise ValueError("reasoning_blocks must be a list of objects")
+        return [dict(block) for block in preserved]
     thinking = message.get("reasoning_content")
     signature = message.get("reasoning_signature")
     if thinking and signature:
-        return {
-            "type": "thinking",
-            "thinking": thinking,
-            "signature": signature,
-        }
-    return None
+        return [
+            {
+                "type": "thinking",
+                "thinking": thinking,
+                "signature": signature,
+            },
+        ]
+    return []
 
 
 def _translate_tools(
@@ -275,7 +280,13 @@ def _split_messages(
                     elif isinstance(part, str):
                         system_blocks.append({"type": "text", "text": part})
                     else:
-                        system_blocks.append({"type": "text", "text": ""})
+                        part_type = (
+                            part.get("type") if isinstance(part, dict) else None
+                        )
+                        raise ValueError(
+                            "Anthropic system messages support text parts only; "
+                            f"got {part_type!r}",
+                        )
             else:
                 system_blocks.append(
                     {"type": "text", "text": _text_of(content)},
@@ -632,7 +643,7 @@ class AnthropicProtocol(ChatProtocol):
     def parse_completion(self, payload: Dict[str, Any]) -> ChatCompletion:
         text_parts: List[str] = []
         thinking_parts: List[str] = []
-        signature_parts: List[str] = []
+        thinking_blocks: List[Dict[str, Any]] = []
         tool_calls: List[Dict[str, Any]] = []
         for block in payload.get("content") or []:
             if block.get("type") == "text":
@@ -644,8 +655,9 @@ class AnthropicProtocol(ChatProtocol):
                 # text and stays dropped (verbatim replay of it is
                 # unsupported by the flat canonical model).
                 thinking_parts.append(block.get("thinking", ""))
-                if block.get("signature"):
-                    signature_parts.append(block["signature"])
+                thinking_blocks.append(dict(block))
+            elif block.get("type") == "redacted_thinking":
+                thinking_blocks.append(dict(block))
             elif block.get("type") == "tool_use":
                 tool_calls.append(
                     {
@@ -667,12 +679,15 @@ class AnthropicProtocol(ChatProtocol):
         reasoning_content = "".join(thinking_parts)
         if reasoning_content:
             message["reasoning_content"] = reasoning_content
-        # Flat canonical model: a single thinking block round-trips;
-        # interleaved-thinking responses (several signed blocks) are
-        # reduced like their text and cannot be replayed faithfully.
-        reasoning_signature = "".join(signature_parts)
-        if reasoning_signature:
-            message["reasoning_signature"] = reasoning_signature
+        if thinking_blocks:
+            message["reasoning_blocks"] = thinking_blocks
+        signed = [
+            block
+            for block in thinking_blocks
+            if block.get("type") == "thinking" and block.get("signature")
+        ]
+        if len(signed) == 1:
+            message["reasoning_signature"] = signed[0]["signature"]
         if tool_calls:
             message["tool_calls"] = tool_calls
         stop_reason = payload.get("stop_reason")

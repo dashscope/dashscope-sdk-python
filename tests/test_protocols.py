@@ -1227,6 +1227,44 @@ def test_anthropic_stream_usage_keeps_cache_counters():
     assert ended.usage.cache_read_input_tokens == 64
 
 
+def test_anthropic_rejects_non_text_system_parts():
+    protocol = AnthropicProtocol()
+    with pytest.raises(ValueError, match="system messages support text"):
+        protocol.build_chat_request(
+            model="qwen3-max",
+            messages=[
+                {
+                    "role": "system",
+                    "content": [{"type": "image", "url": "https://x"}],
+                },
+                {"role": "user", "content": "hi"},
+            ],
+        )
+
+
+def test_anthropic_preserves_interleaved_thinking_blocks_for_replay():
+    protocol = AnthropicProtocol()
+    payload = {
+        "id": "msg-1",
+        "content": [
+            {"type": "thinking", "thinking": "a", "signature": "sig-a"},
+            {"type": "text", "text": "middle"},
+            {"type": "thinking", "thinking": "b", "signature": "sig-b"},
+        ],
+    }
+    message = protocol.parse_completion(payload).choices[0].message
+    assert message.reasoning_signature is None
+    assert [b["signature"] for b in message.reasoning_blocks] == [
+        "sig-a",
+        "sig-b",
+    ]
+    request = protocol.build_chat_request(
+        model="qwen3-max",
+        messages=[{"role": "user", "content": "hi"}, message.model_dump()],
+    )
+    assert request.body["messages"][1]["content"][:2] == message.reasoning_blocks
+
+
 def test_anthropic_parse_completion_thinking():
     # Parity with the streaming thinking_delta path: thinking blocks
     # surface as reasoning_content instead of being silently dropped,
