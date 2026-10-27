@@ -109,11 +109,11 @@ class IOErrorWithCode(AgenticRLError):
         self.operation = operation
 
 
-class RuntimeErrorWithCode(AgenticRLError):
+class RuntimeErrorWithCode(AgenticRLError, RuntimeError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.RuntimeErrorWithCode"
 
 
-class ValueErrorWithCode(AgenticRLError):
+class ValueErrorWithCode(AgenticRLError, ValueError):
     _SDK_ERROR_NAME = "sdk.agentic_rl.ValueErrorWithCode"
 
 

@@ -39,6 +39,7 @@ import httpx
 
 from dashscope import _error_registry as _registry
 from dashscope._error_registry import PublicError, SdkErrorDef
+from dashscope._shared._errors import DashScopeException
 
 
 class ErrorCode(str, Enum):
@@ -59,8 +60,13 @@ class ErrorCode(str, Enum):
     ARREARAGE = "Arrearage"
 
 
-class DashScopeError(Exception):
-    """Base class for all dashscope 2.0 SDK errors."""
+class DashScopeError(DashScopeException):
+    """Base class for all dashscope 2.0 SDK errors.
+
+    Roots into the shared :class:`~dashscope._shared._errors.DashScopeException`
+    so a single ``except DashScopeException`` catches errors from both the 1.x
+    API classes and the 2.0 client (including the AgentStudio sub-SDK).
+    """
 
     def __init__(
         self,

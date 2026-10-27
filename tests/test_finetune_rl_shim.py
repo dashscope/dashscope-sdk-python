@@ -441,6 +441,16 @@ def test_condition_only_catalog_entries_do_not_need_new_classes():
     assert "unique name" in error.solution
 
 
-def test_legacy_builtin_exception_inheritance_is_not_retained():
-    assert not issubclass(RuntimeErrorWithCode, RuntimeError)
-    assert not issubclass(ValueErrorWithCode, ValueError)
+def test_legacy_builtin_exception_inheritance_is_retained():
+    # 1.x contract: these stayed catchable as the builtins they wrap, so
+    # ``except RuntimeError`` / ``except ValueError`` keep working, while the
+    # v2 unification means they are still ``AgenticRLError`` too.
+    assert issubclass(RuntimeErrorWithCode, RuntimeError)
+    assert issubclass(ValueErrorWithCode, ValueError)
+    assert issubclass(RuntimeErrorWithCode, AgenticRLError)
+    assert issubclass(ValueErrorWithCode, AgenticRLError)
+
+    with pytest.raises(ValueError):
+        raise ValueErrorWithCode("bad value")
+    with pytest.raises(RuntimeError):
+        raise RuntimeErrorWithCode("bad state")

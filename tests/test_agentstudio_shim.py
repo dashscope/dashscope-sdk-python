@@ -138,7 +138,11 @@ def test_deep_import_from_syntax_resolves():
 
 def test_agentstudio_uses_the_unified_error_base():
     assert impl_exc.AgentStudioError is sdk_errors.DashScopeError
-    assert not issubclass(
+    # The unified 2.0 base roots into the shared DashScopeException, so a
+    # single ``except DashScopeException`` catches AgentStudio errors too --
+    # the invariant documented in ``dashscope/_shared/_errors.py`` and the
+    # behavior the 1.x ``AgentStudioError(DashScopeException)`` had.
+    assert issubclass(
         impl_exc.AgentStudioError,
         legacy_error.DashScopeException,
     )

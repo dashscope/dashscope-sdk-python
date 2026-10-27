@@ -36,9 +36,6 @@ base_compatible_api_url: str
 base_http_api_url: str
 base_websocket_api_url: str
 
-def save_api_key(
-    api_key: str, api_key_file_path: Optional[str] = ...
-) -> None: ...
 def close_shared_aio_session() -> None: ...
 def close_shared_sync_session() -> None: ...
 def set_region(region: str, workspace_id: Optional[str] = ...) -> None: ...
@@ -73,7 +70,10 @@ class Message:
     role: str
     content: Union[str, List[Any]]
     def __init__(
-        self, role: str, content: Union[str, List[Any]] = None, **kwargs: Any
+        self,
+        role: str,
+        content: Optional[Union[str, List[Any]]] = None,
+        **kwargs: Any,
     ) -> None: ...
 
 class DashScopeAPIResponse:

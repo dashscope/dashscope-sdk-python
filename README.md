@@ -4,7 +4,7 @@
 
 The DashScope Python SDK is the official client for [Alibaba Cloud Model Studio (Bailian)](https://www.alibabacloud.com/help/en/model-studio/), covering text generation, multi-modal understanding, embeddings, reranking, image/video generation, speech synthesis & recognition, fine-tuning, agentic RL, applications and more.
 
-**Version 2.0** introduces a resource-style client — `dashscope.Client()` — modeled on the ergonomics of the OpenAI SDK: one client holds a shared connection pool, every capability hangs off it as a typed resource (`client.chat`, `client.images`, `client.audio`, …), responses are typed objects instead of raw dicts, and failures raise exceptions by default. The 1.x module-level API (`dashscope.Generation`, …) is unchanged and still fully supported, so 2.0 is purely additive.
+**Version 2.0** introduces a resource-style client — `dashscope.Client()` — modeled on the ergonomics of the OpenAI SDK: one client holds a shared connection pool, every capability hangs off it as a typed resource (`client.chat`, `client.images`, `client.audio`, …), responses are typed objects instead of raw dicts, and failures raise exceptions by default. The core 1.x module-level API (`dashscope.Generation`, …) is unchanged and still fully supported. A few surfaces were *restructured* rather than purely added — most notably the AgentStudio and FineTune/Agentic RL import paths, where `dashscope.finetune.agentic_rl` now resolves to the 2.0 class (`submit_job` returns `SubmitResult`; job lifecycle lives on `client.rl`) and the 1.x class-based surface (`cancel`/`list`/`get`/`delete`/`logs`, `submit_job` → `FineTune`) moved to `dashscope.legacy_1x.finetune.agentic_rl`. See [Package layout and compatibility](#package-layout-and-compatibility) for the full list.
 
 ## What's new in 2.0
 
@@ -456,8 +456,31 @@ implementations are grouped under `dashscope.applications`, while the public
 through lazy aliases. Existing root 1.x exports remain available. Historical
 deep modules such as `dashscope.aigc`, `dashscope.client.base_api`, and
 `dashscope.files` also remain available through lazy aliases to
-`dashscope.legacy_1x`. The 1.x Agentic RL job-management surface is under
-`dashscope.legacy_1x.finetune`.
+`dashscope.legacy_1x`.
+
+> **Breaking (Agentic RL):** the public `dashscope.finetune.agentic_rl` path now
+> resolves to the **2.0** `AgenticRL` — `submit_job` returns `SubmitResult`
+> (not the 1.x `FineTune`) and the class no longer carries the job-management
+> verbs. On 2.0 the job lifecycle lives on the client
+> (`client.rl.jobs.create()`, `.wait()`, `.list()`, `.cancel()`, `.delete()`,
+> `.logs()`). Code that relied on the 1.x class-based surface
+> (`AgenticRL.cancel(...)`, `.get(...)`, `submit_job` → `FineTune`) should import
+> `dashscope.legacy_1x.finetune.agentic_rl` instead, which keeps the five verbs
+> (`cancel`/`list`/`get`/`delete`/`logs`) and the `FineTune` return.
+
+AgentStudio and Agentic RL exceptions are unified into the 2.0 error family:
+`AgentStudioError` is now an alias of `dashscope.errors.DashScopeError`, and the
+Agentic RL `*WithCode` errors subclass `AgenticRLError`. The former AgentStudio
+`raw` response attribute is exposed as `body` (`err.raw` → `err.body`); the
+`RuntimeErrorWithCode` / `ValueErrorWithCode` classes remain catchable as the
+built-in `RuntimeError` / `ValueError` they wrap. Because both stacks now share
+the `dashscope._shared._errors.DashScopeException` base, a single
+`except DashScopeException` catches 1.x, 2.0 and AgentStudio errors alike. The
+Agentic RL `*WithCode` errors also render differently in `str()` — the 1.x
+`[1800] I/O error: …` prefix is replaced by the 2.0 `<IOErrorWithCode> … |
+code=sdk.…` form (the numeric code is still available via `err.error_code` and
+the timestamp via `err.timestamp`), so log parsers keyed on the old format need
+updating.
 
 `dashscope.save_api_key` now comes from `dashscope._config`. It accepts an
 optional key-file path, expands `~`, creates missing parent directories, and
