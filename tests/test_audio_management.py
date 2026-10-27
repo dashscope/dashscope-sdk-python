@@ -908,10 +908,10 @@ def test_management_call_auth_is_single_valued_and_does_not_leak(
     assert requests[0].headers.get_list("authorization") == ["Bearer call-key"]
     assert requests[0].headers.get_list("x-dashscope-workspace") == ["call-ws"]
     assert requests[0].extensions["timeout"]["read"] == 0
-    assert requests[1].headers["authorization"] == "Bearer pool-key"
+    assert requests[1].headers["authorization"] == "Bearer sk-test"
     assert requests[1].headers["x-dashscope-workspace"] == "pool-ws"
     assert (
-        requests[1].extensions["timeout"]["read"] == http_client.timeout.read
+        requests[1].extensions["timeout"]["read"] == client.config.timeout
     )
     assert all(request.url.host == "api.test.local" for request in requests)
     assert headers == original

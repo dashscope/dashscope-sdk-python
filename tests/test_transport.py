@@ -155,14 +155,14 @@ def test_timeout_maps_to_api_timeout_error(no_sleep):
     assert rec.calls == 3
 
 
-def test_open_stream_transport_error_mapped(no_sleep):
+def test_open_stream_transport_error_mapped_after_retries(no_sleep):
     rec = _Recorder()
-    t = _make_sync(rec, [httpx.ConnectError("boom")], max_retries=2)
+    errors = [httpx.ConnectError("boom") for _ in range(3)]
+    t = _make_sync(rec, errors, max_retries=2)
     with pytest.raises(APIConnectionError) as exc_info:
         t.open_stream("POST", "/x")
     assert exc_info.value.code == "sdk.ConnectionError"
-    # Streams are never retried.
-    assert rec.calls == 1
+    assert rec.calls == 3
 
 
 _SSE_ERROR_BODY = (
@@ -245,6 +245,57 @@ def test_default_headers(no_sleep):
     assert sent["authorization"] == "Bearer sk-test"
     assert sent["x-dashscope-workspace"] == "ws-1"
     assert sent["user-agent"] == "ua-test"
+
+
+def test_injected_http_client_still_receives_client_configuration(no_sleep):
+    rec = _Recorder()
+    http_client = httpx.Client(
+        transport=httpx.MockTransport(rec.handler([])),
+        base_url="https://wrong.test/root",
+    )
+    transport = SyncTransport(
+        base_url=BASE_URL,
+        api_key="sk-configured",
+        workspace="ws-configured",
+        user_agent="ua-configured",
+        timeout=17.0,
+        http_client=http_client,
+    )
+    transport.request("GET", "/x")
+    request = rec.requests[0]
+    assert request.url == f"{BASE_URL}/x"
+    assert request.headers["authorization"] == "Bearer sk-configured"
+    assert request.headers["x-dashscope-workspace"] == "ws-configured"
+    assert request.headers["user-agent"] == "ua-configured"
+    assert request.extensions["timeout"]["read"] == 17.0
+    http_client.close()
+
+
+@pytest.mark.asyncio
+async def test_injected_async_client_still_receives_client_configuration(
+    no_sleep,
+):
+    rec = _Recorder()
+    http_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(rec.handler([])),
+        base_url="https://wrong.test/root",
+    )
+    transport = AsyncTransport(
+        base_url=BASE_URL,
+        api_key="sk-configured",
+        workspace="ws-configured",
+        user_agent="ua-configured",
+        timeout=19.0,
+        http_client=http_client,
+    )
+    await transport.request("GET", "/x")
+    request = rec.requests[0]
+    assert request.url == f"{BASE_URL}/x"
+    assert request.headers["authorization"] == "Bearer sk-configured"
+    assert request.headers["x-dashscope-workspace"] == "ws-configured"
+    assert request.headers["user-agent"] == "ua-configured"
+    assert request.extensions["timeout"]["read"] == 19.0
+    await http_client.aclose()
 
 
 def test_build_headers_and_timeout():
@@ -635,6 +686,36 @@ async def test_async_call_auth_wins_case_insensitively(method, lowercase):
     assert second.headers.get_list("x-dashscope-workspace") == ["pool-ws"]
 
 
+def test_sync_open_stream_retries_initial_status(no_sleep):
+    rec = _Recorder()
+    transport = _make_sync(rec, [(503, {}), (200, {})], max_retries=1)
+    response = transport.open_stream("GET", "/x")
+    try:
+        assert response.status_code == 200
+        assert rec.calls == 2
+    finally:
+        response.close()
+
+
+@pytest.mark.asyncio
+async def test_async_open_stream_retries_initial_status(no_sleep):
+    rec = _Recorder()
+    mock = httpx.MockTransport(rec.handler([(503, {}), (200, {})]))
+    http_client = httpx.AsyncClient(transport=mock, base_url=BASE_URL)
+    transport = AsyncTransport(
+        base_url=BASE_URL,
+        http_client=http_client,
+        max_retries=1,
+    )
+    response = await transport.open_stream("GET", "/x")
+    try:
+        assert response.status_code == 200
+        assert rec.calls == 2
+    finally:
+        await response.aclose()
+        await http_client.aclose()
+
+
 class _TrackedSyncStream(httpx.SyncByteStream):
     def __init__(self, read_error):
         self.read_error = read_error
@@ -687,9 +768,18 @@ def test_sync_open_stream_status_and_response_ownership(status, read_error):
         transport=httpx.MockTransport(handler),
         base_url=BASE_URL,
     ) as http_client:
-        transport = SyncTransport(base_url=BASE_URL, http_client=http_client)
+        transport = SyncTransport(
+            base_url=BASE_URL,
+            http_client=http_client,
+            max_retries=0,
+        )
         if status >= 400:
-            with pytest.raises(read_error or APIStatusError) as caught:
+            expected = APIStatusError
+            if read_error is httpx.ReadError:
+                expected = APIConnectionError
+            elif read_error is httpx.ReadTimeout:
+                expected = APITimeoutError
+            with pytest.raises(expected) as caught:
                 transport.open_stream("GET", "/x")
             if read_error is None:
                 assert caught.value.status_code == status
@@ -737,9 +827,18 @@ async def test_async_open_stream_status_and_response_ownership(
         transport=httpx.MockTransport(handler),
         base_url=BASE_URL,
     ) as http_client:
-        transport = AsyncTransport(base_url=BASE_URL, http_client=http_client)
+        transport = AsyncTransport(
+            base_url=BASE_URL,
+            http_client=http_client,
+            max_retries=0,
+        )
         if status >= 400:
-            with pytest.raises(read_error or APIStatusError) as caught:
+            expected = APIStatusError
+            if read_error is httpx.ReadError:
+                expected = APIConnectionError
+            elif read_error is httpx.ReadTimeout:
+                expected = APITimeoutError
+            with pytest.raises(expected) as caught:
                 await transport.open_stream("GET", "/x")
             if read_error is None:
                 assert caught.value.status_code == status

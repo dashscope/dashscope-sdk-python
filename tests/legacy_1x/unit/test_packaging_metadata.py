@@ -294,3 +294,8 @@ def test_repo_classifiers_cover_every_python_carrying_real_traffic():
     if shares is None:
         pytest.skip("pypistats unreachable")
     assert not repo_audit(shares)
+
+
+def test_python_39_config_reader_is_a_core_dependency():
+    requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    assert 'tomli>=1.1.0; python_version < "3.11"' in requirements

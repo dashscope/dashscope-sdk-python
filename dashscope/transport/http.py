@@ -113,6 +113,24 @@ def _merge_auth_headers(
     )
 
 
+def _request_headers(
+    defaults: Mapping[str, str],
+    sdk: Mapping[str, str],
+    headers: Optional[Mapping[str, str]],
+    api_key: Optional[str],
+    workspace: Optional[str],
+) -> dict:
+    """Merge Client defaults, SDK identity and per-call overrides.
+
+    This is deliberately request-scoped so an injected ``http_client`` still
+    receives the Client's credentials and user agent. Caller headers and
+    per-call credentials win case-insensitively.
+    """
+    per_call = _merge_auth_headers(headers, api_key, workspace)
+    configured = _with_sdk_headers(defaults, per_call)
+    return _with_sdk_headers(sdk, configured)
+
+
 def _abs_url(base_url: Optional[str], path: str) -> str:
     # Per-request base_url override: an absolute URL replaces the
     # client-level base_url in httpx's URL merging. Used by the
@@ -146,10 +164,17 @@ class SyncTransport:
         limits: Optional[httpx.Limits] = None,
     ) -> None:
         self._owns_client = http_client is None
+        self._base_url = base_url.rstrip("/")
+        self._default_headers = _build_headers(api_key, workspace, user_agent)
+        self._default_timeout = _resolve_timeout(timeout, default_timeout)
+        self._request_timeout = (
+            None if http_client is not None and timeout is None
+            else self._default_timeout
+        )
         self._client = http_client or httpx.Client(
-            base_url=base_url,
-            headers=_build_headers(api_key, workspace, user_agent),
-            timeout=_resolve_timeout(timeout, default_timeout),
+            base_url=self._base_url,
+            headers=self._default_headers,
+            timeout=self._default_timeout,
             **({"limits": limits} if limits is not None else {}),
         )
         self._max_retries = max(max_retries, 0)
@@ -176,7 +201,7 @@ class SyncTransport:
         workspace: Optional[str] = None,
         sdk_module: Optional[str] = None,
     ) -> httpx.Response:
-        url = _abs_url(base_url, path)
+        url = _abs_url(base_url or self._base_url, path)
         for attempt in range(self._max_retries + 1):
             try:
                 response = self._client.request(
@@ -187,11 +212,16 @@ class SyncTransport:
                     data=data,
                     files=files,
                     params=params,
-                    headers=_with_sdk_headers(
+                    headers=_request_headers(
+                        self._default_headers,
                         sdk_headers(sdk_module),
-                        _merge_auth_headers(headers, api_key, workspace),
+                        headers,
+                        api_key,
+                        workspace,
                     ),
-                    **_timeout_kwarg(timeout),
+                    **_timeout_kwarg(
+                        self._request_timeout if timeout is None else timeout,
+                    ),
                 )
             except httpx.TransportError as exc:
                 if attempt >= self._max_retries:
@@ -257,44 +287,98 @@ class SyncTransport:
         workspace: Optional[str] = None,
         sdk_module: Optional[str] = None,
     ) -> httpx.Response:
-        # Streaming responses surface errors inside the event stream;
-        # only the initial status is checked here, no retries. This
-        # no-retry contract is pinned by tests/test_transport.py and
-        # relied on by examples/04_real_world_scenarios/
-        # production_ready_rag_harness.py, which layers its own stream
-        # backoff on top -- update that example if retries are added.
-        # The caller owns the response and must close it.
-        try:
-            response = self._client.send(
-                self._client.build_request(
-                    method,
-                    _abs_url(base_url, path),
-                    json=json,
-                    params=params,
-                    headers=_with_sdk_headers(
-                        sdk_headers(sdk_module),
-                        _merge_auth_headers(headers, api_key, workspace),
-                    ),
-                    **_timeout_kwarg(timeout),
-                ),
-                stream=True,
-            )
-        except httpx.TransportError as exc:
-            raise _map_transport_error(exc) from exc
-        if response.status_code >= 400:
+        """Open a stream, retrying only before a successful stream exists.
+
+        Initial connection failures and retryable HTTP statuses are safe to
+        replay because no event has reached the caller yet. Once a successful
+        response is returned, ownership transfers to the caller and the SDK
+        never retries or replays stream contents.
+        """
+        url = _abs_url(base_url or self._base_url, path)
+        for attempt in range(self._max_retries + 1):
             try:
-                response.read()
-                check_response(response)
-            finally:
-                response.close()
-        logger.debug(
-            "stream %s %s -> %d (request_id=%s)",
-            method,
-            path,
-            response.status_code,
-            response.headers.get("x-request-id"),
-        )
-        return response
+                response = self._client.send(
+                    self._client.build_request(
+                        method,
+                        url,
+                        json=json,
+                        params=params,
+                        headers=_request_headers(
+                            self._default_headers,
+                            sdk_headers(sdk_module),
+                            headers,
+                            api_key,
+                            workspace,
+                        ),
+                        **_timeout_kwarg(
+                            self._request_timeout
+                            if timeout is None
+                            else timeout,
+                        ),
+                    ),
+                    stream=True,
+                )
+            except httpx.TransportError as exc:
+                if attempt >= self._max_retries:
+                    raise _map_transport_error(exc) from exc
+                delay = backoff_delay(attempt, None)
+                logger.info(
+                    "retrying stream %s %s in %.2fs (attempt %d/%d): %s: %s",
+                    method,
+                    path,
+                    delay,
+                    attempt + 1,
+                    self._max_retries,
+                    type(exc).__name__,
+                    exc,
+                )
+                _sleep(delay)
+                continue
+
+            if should_retry(response.status_code, response.headers) and (
+                attempt < self._max_retries
+            ):
+                delay = backoff_delay(attempt, response.headers)
+                request_id = response.headers.get("x-request-id")
+                try:
+                    response.read()
+                except httpx.TransportError:
+                    # The response was never exposed to the caller; a broken
+                    # retryable error body does not make replay unsafe.
+                    pass
+                finally:
+                    response.close()
+                logger.info(
+                    "retrying stream %s %s in %.2fs (attempt %d/%d): "
+                    "status %d (request_id=%s)",
+                    method,
+                    path,
+                    delay,
+                    attempt + 1,
+                    self._max_retries,
+                    response.status_code,
+                    request_id,
+                )
+                _sleep(delay)
+                continue
+
+            if response.status_code >= 400:
+                try:
+                    response.read()
+                    check_response(response)
+                except httpx.TransportError as exc:
+                    raise _map_transport_error(exc) from exc
+                finally:
+                    response.close()
+            logger.debug(
+                "stream %s %s -> %d (request_id=%s)",
+                method,
+                path,
+                response.status_code,
+                response.headers.get("x-request-id"),
+            )
+            return response
+        raise AssertionError("unreachable")
 
     def close(self) -> None:
         if self._owns_client:
@@ -316,10 +400,17 @@ class AsyncTransport:
         limits: Optional[httpx.Limits] = None,
     ) -> None:
         self._owns_client = http_client is None
+        self._base_url = base_url.rstrip("/")
+        self._default_headers = _build_headers(api_key, workspace, user_agent)
+        self._default_timeout = _resolve_timeout(timeout, default_timeout)
+        self._request_timeout = (
+            None if http_client is not None and timeout is None
+            else self._default_timeout
+        )
         self._client = http_client or httpx.AsyncClient(
-            base_url=base_url,
-            headers=_build_headers(api_key, workspace, user_agent),
-            timeout=_resolve_timeout(timeout, default_timeout),
+            base_url=self._base_url,
+            headers=self._default_headers,
+            timeout=self._default_timeout,
             **({"limits": limits} if limits is not None else {}),
         )
         self._max_retries = max(max_retries, 0)
@@ -346,7 +437,7 @@ class AsyncTransport:
         workspace: Optional[str] = None,
         sdk_module: Optional[str] = None,
     ) -> httpx.Response:
-        url = _abs_url(base_url, path)
+        url = _abs_url(base_url or self._base_url, path)
         for attempt in range(self._max_retries + 1):
             try:
                 response = await self._client.request(
@@ -357,11 +448,16 @@ class AsyncTransport:
                     data=data,
                     files=files,
                     params=params,
-                    headers=_with_sdk_headers(
+                    headers=_request_headers(
+                        self._default_headers,
                         sdk_headers(sdk_module),
-                        _merge_auth_headers(headers, api_key, workspace),
+                        headers,
+                        api_key,
+                        workspace,
                     ),
-                    **_timeout_kwarg(timeout),
+                    **_timeout_kwarg(
+                        self._request_timeout if timeout is None else timeout,
+                    ),
                 )
             except httpx.TransportError as exc:
                 if attempt >= self._max_retries:
@@ -427,36 +523,86 @@ class AsyncTransport:
         workspace: Optional[str] = None,
         sdk_module: Optional[str] = None,
     ) -> httpx.Response:
-        # Same no-retry contract as the sync open_stream above.
-        request = self._client.build_request(
-            method,
-            _abs_url(base_url, path),
-            json=json,
-            params=params,
-            headers=_with_sdk_headers(
-                sdk_headers(sdk_module),
-                _merge_auth_headers(headers, api_key, workspace),
-            ),
-            **_timeout_kwarg(timeout),
-        )
-        try:
-            response = await self._client.send(request, stream=True)
-        except httpx.TransportError as exc:
-            raise _map_transport_error(exc) from exc
-        if response.status_code >= 400:
+        """Async twin of :meth:`SyncTransport.open_stream`."""
+        url = _abs_url(base_url or self._base_url, path)
+        for attempt in range(self._max_retries + 1):
+            request = self._client.build_request(
+                method,
+                url,
+                json=json,
+                params=params,
+                headers=_request_headers(
+                    self._default_headers,
+                    sdk_headers(sdk_module),
+                    headers,
+                    api_key,
+                    workspace,
+                ),
+                **_timeout_kwarg(
+                    self._request_timeout if timeout is None else timeout,
+                ),
+            )
             try:
-                await response.aread()
-                check_response(response)
-            finally:
-                await response.aclose()
-        logger.debug(
-            "stream %s %s -> %d (request_id=%s)",
-            method,
-            path,
-            response.status_code,
-            response.headers.get("x-request-id"),
-        )
-        return response
+                response = await self._client.send(request, stream=True)
+            except httpx.TransportError as exc:
+                if attempt >= self._max_retries:
+                    raise _map_transport_error(exc) from exc
+                delay = backoff_delay(attempt, None)
+                logger.info(
+                    "retrying stream %s %s in %.2fs (attempt %d/%d): %s: %s",
+                    method,
+                    path,
+                    delay,
+                    attempt + 1,
+                    self._max_retries,
+                    type(exc).__name__,
+                    exc,
+                )
+                await _asleep(delay)
+                continue
+
+            if should_retry(response.status_code, response.headers) and (
+                attempt < self._max_retries
+            ):
+                delay = backoff_delay(attempt, response.headers)
+                request_id = response.headers.get("x-request-id")
+                try:
+                    await response.aread()
+                except httpx.TransportError:
+                    pass
+                finally:
+                    await response.aclose()
+                logger.info(
+                    "retrying stream %s %s in %.2fs (attempt %d/%d): "
+                    "status %d (request_id=%s)",
+                    method,
+                    path,
+                    delay,
+                    attempt + 1,
+                    self._max_retries,
+                    response.status_code,
+                    request_id,
+                )
+                await _asleep(delay)
+                continue
+
+            if response.status_code >= 400:
+                try:
+                    await response.aread()
+                    check_response(response)
+                except httpx.TransportError as exc:
+                    raise _map_transport_error(exc) from exc
+                finally:
+                    await response.aclose()
+            logger.debug(
+                "stream %s %s -> %d (request_id=%s)",
+                method,
+                path,
+                response.status_code,
+                response.headers.get("x-request-id"),
+            )
+            return response
+        raise AssertionError("unreachable")
 
     async def aclose(self) -> None:
         if self._owns_client:
