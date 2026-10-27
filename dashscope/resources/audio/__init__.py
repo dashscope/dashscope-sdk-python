@@ -10,6 +10,9 @@ and the management plane ``client.audio.vocabularies`` / ``phrases`` /
 ``voices`` / ``voice_design``.
 """
 
+import asyncio
+from types import SimpleNamespace
+
 from dashscope.resources.audio.asr import (
     Asr,
     AsyncAsr,
@@ -27,6 +30,7 @@ from dashscope.resources.audio.customization import (
     Voices,
 )
 from dashscope.resources.audio.http_tts import (
+    AsyncHttpTts,
     HttpSynthesis,
     HttpSynthesisChunk,
     HttpSynthesisStream,
@@ -43,6 +47,7 @@ from dashscope.resources.audio.tts import SynthesisSession, Tts
 __all__ = [
     "Asr",
     "AsyncAsr",
+    "AsyncHttpTts",
     "AsyncAudio",
     "Audio",
     "DesignedVoice",
@@ -67,6 +72,48 @@ __all__ = [
     "VoiceList",
     "Voices",
 ]
+
+
+class _ThreadBridgeTransport:
+    def __init__(self, transport, loop) -> None:
+        self._transport = transport
+        self._loop = loop
+
+    def request(self, *args, **kwargs):
+        future = asyncio.run_coroutine_threadsafe(
+            self._transport.request(*args, **kwargs),
+            self._loop,
+        )
+        return future.result()
+
+
+class _AsyncResourceProxy:
+    """Run sync response parsing in a worker while reusing AsyncTransport."""
+
+    def __init__(self, client, resource_cls) -> None:
+        self._client = client
+        self._resource_cls = resource_cls
+
+    def __getattr__(self, name):
+        async def call(*args, **kwargs):
+            loop = asyncio.get_running_loop()
+            bridge_client = SimpleNamespace(
+                transport=_ThreadBridgeTransport(self._client.transport, loop),
+                raise_on_error=self._client.raise_on_error,
+            )
+            resource = self._resource_cls(bridge_client)
+            return await asyncio.to_thread(
+                getattr(resource, name),
+                *args,
+                **kwargs,
+            )
+
+        return call
+
+
+class _AsyncTts:
+    def __init__(self, client) -> None:
+        self.http = AsyncHttpTts(client)
 
 
 class Audio:
@@ -99,3 +146,8 @@ class AsyncAudio:
 
     def __init__(self, client) -> None:
         self.asr = AsyncAsr(client)
+        self.tts = _AsyncTts(client)
+        self.vocabularies = _AsyncResourceProxy(client, Vocabularies)
+        self.phrases = _AsyncResourceProxy(client, Phrases)
+        self.voices = _AsyncResourceProxy(client, Voices)
+        self.voice_design = _AsyncResourceProxy(client, VoiceDesign)

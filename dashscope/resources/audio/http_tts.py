@@ -20,6 +20,7 @@ import base64
 import json
 from typing import (
     Any,
+    AsyncIterator,
     Dict,
     Generator,
     Iterator,
@@ -329,6 +330,120 @@ class HttpSynthesisStream:
             self._inner.close()
         finally:
             self._response.close()
+
+
+class AsyncHttpSynthesisStream:
+    """Async typed iterator over HTTP synthesis SSE parts."""
+
+    def __init__(self, inner: AsyncIterator[HttpSynthesisChunk], response) -> None:
+        self._inner = inner
+        self._response = response
+
+    def __aiter__(self):
+        return self._inner
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        return dict(self._response.headers)
+
+    async def aclose(self) -> None:
+        await self._response.aclose()
+
+
+class AsyncHttpTts:
+    """Async HTTP TTS using the AsyncClient's own connection pool."""
+
+    def __init__(self, client) -> None:
+        self._client = client
+
+    async def synthesize(self, text: str, **kwargs) -> HttpSynthesis:
+        model = kwargs.pop("model")
+        voice = kwargs.pop("voice")
+        response = await self._client.transport.request(
+            "POST",
+            _path_for(model),
+            json=_build_body(text, model=model, voice=voice, **{
+                key: kwargs.pop(key, None)
+                for key in (
+                    "format",
+                    "sample_rate",
+                    "language_type",
+                    "parameters",
+                    "extra_input",
+                )
+            }),
+            headers=kwargs.pop("headers", None),
+            timeout=kwargs.pop("timeout", None),
+            sdk_module=MODULE,
+            api_key=kwargs.pop("api_key", None),
+            workspace=kwargs.pop("workspace", None),
+        )
+        return with_headers(
+            _synthesis_from_body(
+                response_body(
+                    response,
+                    raise_on_error=self._client.raise_on_error,
+                ),
+                response.headers.get("x-request-id", ""),
+            ),
+            response,
+        )
+
+    async def stream(self, text: str, **kwargs) -> AsyncHttpSynthesisStream:
+        model = kwargs.pop("model")
+        voice = kwargs.pop("voice")
+        headers = dict(_SSE_HEADER)
+        headers.update(kwargs.pop("headers", None) or {})
+        response = await self._client.transport.open_stream(
+            "POST",
+            _path_for(model),
+            json=_build_body(text, model=model, voice=voice, **{
+                key: kwargs.pop(key, None)
+                for key in (
+                    "format",
+                    "sample_rate",
+                    "language_type",
+                    "parameters",
+                    "extra_input",
+                )
+            }),
+            headers=headers,
+            timeout=kwargs.pop("timeout", None),
+            sdk_module=MODULE,
+            api_key=kwargs.pop("api_key", None),
+            workspace=kwargs.pop("workspace", None),
+        )
+
+        async def events():
+            decoder = _SSEDecoder()
+            header_id = response.headers.get("x-request-id", "")
+            try:
+                async for line in response.aiter_lines():
+                    frame = decoder.feed(line)
+                    if frame is None:
+                        continue
+                    is_error, status, data = frame
+                    if is_error:
+                        raise _audio_stream_error(
+                            status,
+                            data,
+                            response.headers,
+                        )
+                    yield _chunk_from_data(data, header_id)
+                frame = decoder.feed("")
+                if frame is not None:
+                    is_error, status, data = frame
+                    if is_error:
+                        raise _audio_stream_error(
+                            status,
+                            data,
+                            response.headers,
+                        )
+                    yield _chunk_from_data(data, header_id)
+            finally:
+                await response.aclose()
+
+        return AsyncHttpSynthesisStream(events(), response)
 
 
 class HttpTts:
