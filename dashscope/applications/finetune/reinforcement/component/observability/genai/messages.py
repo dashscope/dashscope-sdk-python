@@ -458,6 +458,23 @@ def openai_chat_messages_to_input_messages(
     return out
 
 
+def _reasoning_part(msg: Any) -> Any:
+    """Return a ``Reasoning`` part when the message carries thinking content.
+
+    ``None`` when the GenAI util is unavailable or the field is absent, so
+    callers keep their existing part ordering logic.
+    """
+    if _core.Reasoning is None or msg is None:
+        return None
+    if isinstance(msg, Dict):
+        reasoning = msg.get("reasoning_content")
+    else:
+        reasoning = getattr(msg, "reasoning_content", None)
+    if not isinstance(reasoning, str) or not reasoning:
+        return None
+    return _core.Reasoning(content=reasoning)
+
+
 def openai_completion_to_output_messages(  # pylint: disable=too-many-branches
     completion: Any,
 ) -> List[Any]:
@@ -517,6 +534,9 @@ def openai_completion_to_output_messages(  # pylint: disable=too-many-branches
                 tool_calls = getattr(msg, "tool_calls", None)
             if tool_calls:
                 parts.extend(tool_calls_to_parts(tool_calls))
+            reasoning_part = _reasoning_part(msg)
+            if reasoning_part is not None:
+                parts.insert(0, reasoning_part)
         if not parts:
             parts.append(_core.Text(content=""))
         result.append(
@@ -565,6 +585,9 @@ def dashscope_response_to_output_messages(response: Any) -> List[Any]:
                     )
                 if tool_calls:
                     parts.extend(tool_calls_to_parts(tool_calls))
+                reasoning_part = _reasoning_part(msg)
+                if reasoning_part is not None:
+                    parts.insert(0, reasoning_part)
             if not parts:
                 parts.append(_core.Text(content=""))
             result.append(
