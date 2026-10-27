@@ -4,87 +4,201 @@ description: Quick reference for multimodal (MultiModalConversation/ImageSynthes
 ---
 # Multimodal
 
-Locate before answering: understanding tasks use `MultiModalConversation` (sync/streaming); generation tasks use `ImageSynthesis`/`VideoSynthesis` (async tasks). Parameter names must follow the source code in `dashscope/aigc/`; never answer from memory.
+For new Python code, target **DashScope SDK 2.0.3** and use `dashscope.Client` / `dashscope.AsyncClient`. The 2.0 resources live in the root `dashscope` package; **`dashscope.v2` does not exist**. Set `DASHSCOPE_API_KEY` before running the examples. Use the explicitly marked 1.x section only for legacy maintenance, and do not mix 2.0 flattened responses with 1.x `.output` responses.
 
-## Applicable Models and Scenarios
+Authoritative sources: `dashscope/resources/multimodal/chat.py`, `images.py`, `videos.py`, and `_jobs.py`.
 
-- Understanding (image/video understanding, OCR, function calling): `qwen3-vl-flash`, `qwen3-vl-plus`, qwen-ocr series, etc. (the `Models` class in source only has the constant `qwen_vl_chat_v1`; pass others as strings).
-- Text-to-image / image editing (`ImageSynthesis`, task=`text2image`): `qwen-image-3.0`, `qwen-image-edit-plus` (image editing, automatically switches to image2image task).
-- Video generation (`VideoSynthesis`, task=`video-generation`): `wan2.2-t2v-plus` (text-to-video), `wan2.2-i2v-plus` (image-to-video), `wan2.2-kf2v-flash` (first/last frame).
+## 2.0.3 Resources and Models
 
-## SDK Interfaces
+- Multimodal understanding: `client.multimodal.chat.create`. Models include current Qwen VL/OCR model names; pass the model as a string and verify service-side availability.
+- Image generation/editing: `client.images.generate` for submit-and-wait, or `client.images.jobs.create/fetch/wait` for explicit task control.
+- Video generation: `client.videos.generate` or `client.videos.jobs.create/fetch/wait`.
+- `AsyncClient` mounts the same resources. `await` each operation, and use `async with dashscope.AsyncClient() as client` to close connections.
 
-| Class | Key Methods | Notes |
-|---|---|---|
-| `MultiModalConversation` | `call(model, messages, ...)` | `stream=True` returns a Generator, otherwise returns a response object; async version `AioMultiModalConversation.call` |
-| `ImageSynthesis` | `call / async_call / fetch(task) / wait(task) / cancel(task) / list(...)` | `call` blocks until results are ready; `sync_call` only supports wan2.2-t2i-flash/plus |
-| `VideoSynthesis` | Same as above (no `list` difference, parameters below) | Same async task flow |
+`client.chat.completions.create` automatically routes messages containing image/audio/video parts to the multimodal endpoint. `client.multimodal.chat.create` always selects that endpoint in the native protocol, including text-only calls to VL models. Compatible protocols translate media on their own chat path.
 
-Async task flow: `async_call(...)` returns a task (`output.task_id`, `task_status=PENDING`) → `fetch(task)` for a single query or `wait(task)` to poll until a terminal state; `cancel(task)` can only cancel `PENDING`. The `task` parameter accepts a task_id string or the response object from async_call. `task_status` values: `PENDING/RUNNING/SUCCEEDED/FAILED/CANCELED/UNKNOWN`.
+## Multimodal Chat
 
-Key parameters of `MultiModalConversation.call` (all optional, in source signature order): `messages`, `text`, `voice`, `language_type`, `stream`, `temperature`[0,2), `top_p`(0,1], `top_k`, `max_tokens`, `seed`, `stop`, `repetition_penalty`, `presence_penalty`, `result_format`("message"/"text"), `incremental_output`, `enable_search`, `tools`, `tool_choice`, `enable_thinking`, `n`(1-4), `ocr_options`, `logprobs`, `top_logprobs`; plus `api_key`, `workspace`. **Empty `model` raises `ModelRequired`; both messages and text empty raises `ValueError`.**
-
-Key parameters of `ImageSynthesis.call/async_call`: `prompt` (required, empty raises `InputRequired`), `negative_prompt`, `size`("width*height" e.g. "1024*1024"), `n`, `seed`, `style` (auto/photography/anime etc.), `prompt_extend`, `watermark`, `ref_img`, `sketch_image_url` (sketch), `base_image_url`+`mask_image_url` (imageedit), `ref_strength`[0,1], `ref_mode`(repaint/refonly).
-
-Key parameters of `VideoSynthesis.call/async_call`: `prompt`, `negative_prompt`, `img_url` (image-to-video), `audio_url`, `first_frame_url`/`last_frame_url` (or `head_frame`/`tail_frame`), `media`, `reference_urls`, `template`, `size`("1280*720"), `duration` (seconds, default 5), `resolution`("720P"/"1080P"), `ratio`("16:9"), `seed`, `prompt_extend`, `watermark`, `shot_type`, `audio_setting`.
-
-## Input/Output
-
-Multimodal messages (content is an array of dicts; local paths or URLs both work, the SDK auto-uploads to OSS and adds header `X-DashScope-OssResourceResolve: enable`):
+`create` has the same keyword-only signature and `ChatCompletion` / `ChatStream` return types as `client.chat.completions.create`:
 
 ```python
-messages = [{"role": "user", "content": [
-    {"image": "https://.../a.jpg"},   # or {"video": [...]} / {"audio": ...}
-    {"text": "Describe this image"},
-]}]
+create(*, model: str, messages: str | list[MessageInput], stream: bool = False,
+    tools=None, temperature=None, top_p=None, max_tokens=None, stop=None,
+    seed=None, repetition_penalty=None, presence_penalty=None,
+    enable_thinking=None, response_format=None, top_k=None, tool_choice=None,
+    n=None, logprobs=None, top_logprobs=None, thinking_budget=None,
+    enable_search=None, search_options=None, parallel_tool_calls=None,
+    incremental_output=None, parameters=None, timeout=None,
+    api_key=None, workspace=None)
 ```
 
-Responses uniformly contain `status_code / request_id / code / message / output / usage` (on error `output` is None; first check `status_code==200` i.e. `HTTPStatus.OK`):
+Use `parameters={...}` for model-specific options not present in the signature. Media content is a list of parts. With the native protocol, local paths and `file://` URIs are uploaded to OSS before the request.
 
-- `MultiModalConversationResponse.output`: `choices[0].message.content` (content array isomorphic to the input), `finish_reason`, `text`; `usage`: `input_tokens`/`output_tokens`/`characters`.
-- `ImageSynthesisResponse.output`: `task_id`, `task_status`, `results` (each contains `url`); `usage.image_count`.
-- `VideoSynthesisResponse.output`: `task_id`, `task_status`, `video_url`; `usage`: `video_count`/`video_duration`/`video_ratio`.
+```python
+import dashscope
 
-## Minimal Examples
+messages = [{
+    "role": "user",
+    "content": [
+        {"image": "https://example.com/cat.jpg"},
+        {"text": "Describe this image"},
+    ],
+}]
 
-Image-text understanding:
+with dashscope.Client() as client:
+    response = client.multimodal.chat.create(
+        model="qwen-vl-plus",
+        messages=messages,
+    )
+    print(response.output_text)
+
+    stream = client.multimodal.chat.create(
+        model="qwen-vl-plus",
+        messages=messages,
+        stream=True,
+    )
+    try:
+        for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                print(chunk.choices[0].delta.content, end="", flush=True)
+    finally:
+        stream.close()
+```
+
+The 2.0 response flattens list-form multimodal text into a string. Read `response.choices[0].message.content` or `response.output_text`, plus flat `usage` / `request_id`; **do not read `.output`**. Streaming chunks use `choices[i].delta`, with the same incremental/cumulative `incremental_output` semantics as text chat.
+
+## Images and Videos
+
+### Actual resource signatures
+
+Both `generate` methods return a finished `Job`. Their `jobs.create` methods accept the same model/input/generation fields but only submit; their `timeout` is the submit HTTP timeout. `generate` additionally has `submit_timeout`, `poll_interval`, and `max_interval`, and its `timeout` is the total wait budget.
+
+```python
+client.images.generate(
+    *, model: str, prompt: str, negative_prompt=None, n=None, size=None,
+    image_urls=None, extra_input=None, function=None, seed=None, style=None,
+    prompt_extend=None, watermark=None, parameters=None,
+    timeout=86400.0, submit_timeout=None, poll_interval=1.0,
+    max_interval=8.0, api_key=None, workspace=None,
+) -> Job
+
+client.videos.generate(
+    *, model: str, prompt=None, image_url=None, media=None, extra_input=None,
+    function=None, seed=None, size=None, duration=None, resolution=None,
+    ratio=None, prompt_extend=None, watermark=None, parameters=None,
+    timeout=86400.0, submit_timeout=None, poll_interval=1.0,
+    max_interval=8.0, api_key=None, workspace=None,
+) -> Job
+
+client.images.jobs.fetch(task_id: str, *, timeout=None, api_key=None, workspace=None)
+client.videos.jobs.fetch(task_id: str, *, timeout=None, api_key=None, workspace=None)
+client.images.jobs.wait(job_or_task_id, *, poll_interval=1.0, max_interval=8.0,
+                        timeout=86400.0, api_key=None, workspace=None)
+client.videos.jobs.wait(job_or_task_id, *, poll_interval=1.0, max_interval=8.0,
+                        timeout=86400.0, api_key=None, workspace=None)
+```
+
+- Image `size` accepts `1024*1024` and normalizes `1024x1024` to the wire form. `image_urls` supplies reference images for supported models; use `extra_input` for model-specific input fields and `parameters` for model-specific generation options.
+- Image protocol selection is automatic by model name. Legacy text2image models use asynchronous tasks; `wan2.6-t2i*` / `wan2.6-image*` use the multimodal-generation protocol. A synchronous multimodal `generate` is capped by `submit_timeout`, not polling settings.
+- Video `image_url` is the public name for the legacy wire field `img_url`. Older models accept `prompt` and/or `image_url`. `wan2.7-i2v*` requires `media` or `image_url`; media items use asset types `first_frame`, `last_frame`, `driving_audio`, and `first_clip`. `image_url` is shorthand for one `first_frame` item and must not duplicate one already in `media`.
+- Unlike 1.x video behavior, explicitly pass `prompt_extend=True` when prompt extension is wanted.
+
+### Runnable examples
+
+```python
+import dashscope
+
+with dashscope.Client() as client:
+    image_job = client.images.generate(
+        model="wanx2.1-t2i-turbo",
+        prompt="一只在月球上弹吉他的猫，水彩风格",
+        size="1024*1024",
+        timeout=600.0,
+    )
+    print(image_job.status, image_job.image_urls)
+
+    video_job = client.videos.generate(
+        model="wan2.7-t2v",
+        prompt="一只小猫在草地上奔跑",
+        size="1280*720",
+        timeout=900.0,
+    )
+    print(video_job.status, video_job.video_url)
+```
+
+Explicit submission, polling, and waiting:
+
+```python
+import dashscope
+
+with dashscope.Client() as client:
+    submitted = client.images.jobs.create(
+        model="wanx2.1-t2i-turbo",
+        prompt="一只猫",
+        size="1024*1024",
+    )
+    snapshot = client.images.jobs.fetch(submitted.task_id)
+    print(snapshot.status)
+
+    done = client.images.jobs.wait(submitted, timeout=600.0)
+    print(done.image_urls)
+```
+
+`Job` exposes flat `task_id`, `status`, `results`, `result_url`, `image_urls`, `video_url`, `usage`, and the shared response envelope. Each item in `results` can expose `url` (and service-specific extra fields). Status values are `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELED`, and `UNKNOWN`; use `job.succeeded` / `job.finished` for checks. `wait` polls with exponential backoff. With default error handling, `create` / `fetch` raise on `FAILED`, and `wait` raises on `FAILED` or `CANCELED`; `UNKNOWN` is terminal and is returned.
+
+## Errors (brief)
+
+- In 2.0, catch `dashscope.errors.DashScopeError` or a more specific subclass. If using `raise_on_error=False`, inspect `response.is_error` / `code` / `message`; for jobs also inspect `status`.
+- In 1.x, keep checking `status_code`, `code`, and `message` on the response, including task failure information under the 1.x `output` contract.
+
+## 1.x Compatibility and Maintenance Guide
+
+These APIs retain their old response shapes; do not rewrite only the response access while leaving the old entry point in place.
+
+| 1.x entry point | Maintenance notes |
+| --- | --- |
+| `MultiModalConversation.call` / `AioMultiModalConversation.call` | `stream=True` returns a generator/async generator; otherwise returns `MultiModalConversationResponse` |
+| `ImageSynthesis.call/async_call/fetch/wait/cancel/list` | `call` submits and waits; `async_call` only submits; `sync_call` is limited to supported wan2.2 t2i models |
+| `VideoSynthesis.call/async_call/fetch/wait/cancel/list` | Same asynchronous task pattern for video |
+
+For `MultiModalConversation.call`, key parameters remain `model`, `messages`, `text`, `voice`, `language_type`, `stream`, sampling options, `result_format`, `incremental_output`, `enable_search`, tools, thinking options, `ocr_options`, and logprobs. Empty `model` raises `ModelRequired`; empty `messages` and `text` raises `ValueError`.
+
+For `ImageSynthesis`, old inputs include `prompt` (required), `negative_prompt`, `size`, `n`, `seed`, `style`, `prompt_extend`, `watermark`, `ref_img`, `sketch_image_url`, `base_image_url`, `mask_image_url`, `ref_strength`, and `ref_mode`. For `VideoSynthesis`, old inputs include `prompt`, `negative_prompt`, `img_url`, `audio_url`, `first_frame_url` / `last_frame_url` (or `head_frame` / `tail_frame`), `media`, `reference_urls`, `template`, `size`, `duration`, `resolution`, `ratio`, `seed`, `prompt_extend`, `watermark`, `shot_type`, and `audio_setting`. Keep model-specific validation when repairing these calls.
+
+The 1.x task flow is `async_call(...)` → `fetch(task)` for one snapshot or `wait(task)` until terminal; `task` can be a task ID or previous response. `cancel` applies only to `PENDING`. Old response contracts are:
+
+- `MultiModalConversationResponse.output.choices[0].message.content` (a content-part list), plus `output.text` where supplied.
+- `ImageSynthesisResponse.output.task_id/task_status/results`; each result has `url`.
+- `VideoSynthesisResponse.output.task_id/task_status/video_url`.
+- All expose `status_code`, `request_id`, `code`, `message`, and `usage`; check `status_code == HTTPStatus.OK` before reading `output`.
+
+Do not use a context manager for these 1.x classmethod calls:
 
 ```python
 from http import HTTPStatus
-from dashscope import MultiModalConversation
+from dashscope import ImageSynthesis, MultiModalConversation
 
-rsp = MultiModalConversation.call(model="qwen3-vl-flash", messages=messages)
-if rsp.status_code == HTTPStatus.OK:
-    print(rsp.output.choices[0].message.content[0]["text"])
-```
-
-Text-to-image async task:
-
-```python
-from dashscope import ImageSynthesis
-
-rsp = ImageSynthesis.async_call(
-    model="qwen-image-3.0",
-    prompt="A cat running under the moonlight", n=2, size="1024*1024",
+response = MultiModalConversation.call(
+    model="qwen-vl-plus",
+    messages=[{"role": "user", "content": [
+        {"image": "https://example.com/cat.jpg"},
+        {"text": "Describe this image"},
+    ]}],
 )
-rsp = ImageSynthesis.wait(rsp)          # poll until SUCCEEDED/FAILED
-if rsp.output.task_status == "SUCCEEDED":
-    for r in rsp.output.results:
-        print(r.url)
+if response.status_code == HTTPStatus.OK:
+    print(response.output.choices[0].message.content)
+
+job = ImageSynthesis.async_call(
+    model="qwen-image-3.0",
+    prompt="A cat running under the moonlight",
+    n=2,
+    size="1024*1024",
+)
+job = ImageSynthesis.wait(job)
+if job.status_code == HTTPStatus.OK and job.output.task_status == "SUCCEEDED":
+    for result in job.output.results:
+        print(result.url)
 ```
-
-## Common Error Codes
-
-| Error Code | HTTP Status | Meaning | Handling |
-|---|---|---|---|
-| InvalidApiKey | 401 | API Key missing/invalid | Check `dashscope.api_key` or the `DASHSCOPE_API_KEY` environment variable |
-| InvalidParameter | 400 | Invalid parameter (size/format/field name) | Check each item against the parameter tables in this file; locally also raises `InvalidParameter` exception |
-| DataInspectionFailed | 400 | prompt/image failed content moderation | Rewrite the prompt or change the input image |
-| Throttling | 429 | Rate limit triggered | Retry with exponential backoff, reduce concurrency, confirm quota |
-| InternalError | 500 | Server-side error | Retry with `request_id` or file a ticket |
-| Task FAILED | 200 | Async task execution failed | Read `output.task_status` and the failure info in `output`, then adjust input and retry |
-
-Local validation exceptions (no request sent): `ModelRequired` (missing model), `InputRequired` (missing prompt), `ValueError` (messages/text both empty). Network/server exceptions may raise `RequestFailure` (contains `http_code`).
 
 ## Java SDK
 

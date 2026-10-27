@@ -4,83 +4,142 @@ description: Quick reference for Agent APIs (agentstudio-hosted Agent/Applicatio
 ---
 # Agent
 
+For Python SDK 2.0.3, use `dashscope.Client` / `dashscope.AsyncClient` at the package root; `dashscope.v2` does not exist. Close the client with a context manager or `close()`/`aclose()`. New application calls use `client.apps.completions`; hosted-agent management uses the lazily mounted `client.agentstudio`. Assistants APIs below are exclusively for 1.x maintenance.
+
 ## Use Cases and Selection
-- `dashscope.Application`: calls applications published in the Bailian console (AppBuilder/RAG/workflow/plugin apps) directly by `app_id`; no need to manage models or tools — the simplest option.
-- `dashscope.agentstudio`: full lifecycle management of AgentStudio-hosted Agents (agents/sessions/environments/files/skills/deployments), with SSE event streaming, client-side tools and MCP; suitable when you need a hosted runtime and multi-turn sessions.
-- `dashscope.Assistants/Threads/Runs`: OpenAI-like Assistants API. **Deprecated** (DeprecationWarning in source; migrate to the Responses API); use only for maintaining legacy code.
 
-## SDK APIs
-### agentstudio (`from dashscope.agentstudio import Client, AsyncClient`)
-- `Client(api_key=, workspace=, region=None, base_url=None, uid=None, timeout=None, max_retries=2)`; if base_url is not given, `workspace` (or env var `DASHSCOPE_WORKSPACE`) is required; base_url can also be set via `DASHSCOPE_AGENTSTUDIO_URL`/`AGENTSTUDIO_URL`; default region `cn-beijing`, timeout 600s.
-- Resource entry points: `client.agents / .sessions / .environments / .files / .skills / .vaults / .deployments / .deployment_runs`.
-- `agents.create(*, name, model, description=None, system_prompt=None, tools=None, mcp_servers=None, skills=None, multiagent=None, metadata=None)` → `Agent`; `model` is a `ModelConfig(id=…, temperature=…, max_tokens=…, enable_thinking=…, thinking_budget=…)` (bare id string = `ModelConfig(id=…)`); `retrieve(agent_id, *, version=None)` (alias `get`); `update(agent_id, *, version, name, model=None, ...)` — version must equal the current version (HTTP 409), `name` is required (`AGENT_005`), and a sent `model` replaces the whole config (keep the rest via `agent.model.copy_with(...)`); `archive(agent_id)`; `list(*, limit, page, include_archived)` → `CursorPage`; `list_versions(agent_id)`.
-- `sessions.create(*, agent, environment_id=None, title=None, resources=None, metadata=None)` → `Session`; also `retrieve/update(title, metadata)/list(*, limit, page, agent_id, statuses, created_at_gt/gte/lt/lte)/archive/delete`.
-- `environments.create(*, name, config, description=None, scope="organization", metadata=None)`; `files.upload(file, *, mime_type=None, progress=None)` (file accepts a path/binary stream/(name, fileobj)); `skills.create(*, file_id=None, file=None, mime_type=None)`, `skills.versions.create(skill_id, ...)`.
+- **Bailian applications:** `client.apps.completions.create(...)` invokes an AppBuilder/RAG/workflow/plugin application by `app_id`; application tools and flows remain configured in the console.
+- **AgentStudio:** `client.agentstudio` manages hosted agents, sessions, environments, files, skills, deployments, and related resources, with typed models and SSE execution streams.
+- **Assistants / Threads / Messages / Runs / Steps:** deprecated 1.x compatibility APIs for repairing existing applications only. There is no 2.0 `Responses` resource, so do not recommend migrating these APIs to Responses. Choose Apps or AgentStudio for new hosted-agent scenarios based on the required service, not a nonexistent resource.
 
-### agentstudio SSE Streaming Execution (Core)
-1. `client.sessions.events.send(session_id, events)`: sends an event list (at least 1 event, otherwise `ValueError`); request body is `{"input": [...]}`. Use the constructors in `types`: `user_message(text_or_blocks, *, session_thread_id=None, metadata=None)`, `user_interrupt()`, `user_tool_confirmation()`, `user_tool_result()`, `user_custom_tool_result()`, `user_define_outcome()`.
-2. `with client.sessions.events.stream(session_id, *, timeout=None) as stream:` opens the SSE stream (GET `/sessions/{id}/events/stream`); iterating yields `Message` (`ServerEvent`) objects: `event.type`, `event.content` (block list), `event.stop_reason`, `event.session_status`.
-3. `stream.text_stream`: yields only the text of blocks with `type=="text"` from `message` events, and stops automatically when `session_status` becomes `idle/terminated/rescheduling` — the most convenient option.
-- Event types (`SSEEventType`): clients may send `message/interrupt/tool_confirmation/function_call_output/tool_call_output/define_outcome`; the server additionally sends `reasoning/tool_call/tool_call_output/mcp_call/mcp_call_output/session_status/error/thread_*/model_request_*/outcome_evaluation`, etc. Session state machine: `idle → running → (rescheduling) → idle | terminated`.
+## Bailian Applications (`client.apps`)
 
-### Application (Bailian App)
-`Application.call(app_id, prompt=None, history=None, workspace=None, api_key=None, messages=None, **kwargs)`; `app_id` is required (raises `InputRequired` if missing); at least one of `prompt` or `messages` is required. kwargs: `stream`, `incremental_output`, `session_id` (for multi-turn continuation, pass the session_id from the previous response), `biz_params` (flow/plugin business parameters), `has_thoughts`, `doc_tag_codes`, `doc_reference_type` (`simple`/`indexed`), `memory_id`, `image_list`, `file_list`, `rag_options`, `temperature/top_p/top_k/seed`.
-
-### Assistants / Threads / Runs (Deprecated)
-- `Assistants.call/create(*, model, name=None, description=None, instructions=None, tools=None, file_ids=[], metadata=None, workspace=None, api_key=None, top_p/top_k/temperature/max_tokens=None)`; `retrieve/list/update/delete`.
-- `Threads.create(*, messages=None, metadata=None)`; `Messages.create(thread_id, *, content, role="user", file_ids=[], metadata=None)`.
-- `Runs.create(thread_id, *, assistant_id, instructions=None, tools=None, stream=False, ...)`; `Runs.create_thread_and_run(*, assistant_id, thread=None, stream=False, ...)`; `Runs.retrieve(run_id, *, thread_id)`; `Runs.submit_tool_outputs(run_id, *, thread_id, tool_outputs, stream=False)`; `Runs.cancel(...)`.
-
-## Inputs/Outputs
-- **Application**: returns `ApplicationResponse` (`status_code/request_id/code/message`); `output` is an `ApplicationOutput`: `text` (answer text), `finish_reason`, `session_id` (returned for multi-turn), `thoughts` (plugin/RAG process when has_thoughts=True), `doc_references`, `workflow_message`; `usage.models[]` contains `model_id/input_tokens/output_tokens`. With `stream=True` a generator is returned; with `stream=True` and `incremental_output=False` the SDK automatically merges deltas into full output. **Failures do not raise exceptions** — you must check `response.status_code == HTTPStatus.OK`, otherwise read `code/message`.
-- **agentstudio event stream**: each event is a `Message` (fields `id/type/role/content/metadata/status/session_thread_id/...`); `content` is a block list with block.type ∈ `text/image/audio/data/file/refusal/error`. The block.data of a `session_status` event contains `session_status` and `stop_reason` (e.g. `{"type": "end_turn"}`).
-- **Assistants Run state machine**: `queued → in_progress → (requires_action) → completed | failed | cancelled | expired` (plus `cancelling`); on `requires_action`, take tool calls from `run.required_action.submit_tool_outputs`, execute them, send results back via `Runs.submit_tool_outputs`, and poll `retrieve` until `completed`.
-
-## Plugin and MCP Integration
-- agentstudio: pass a list of function/plugin schemas to `tools` of `agents.create` and a list of MCP server configs to `mcp_servers`; the runtime automatically emits `tool_call`/`mcp_call` events; after executing local tools, send results back with `user_tool_result(...)`/`user_tool_confirmation(...)` events.
-- Application: plugins are bound to the app in the Bailian console; callers only pass plugin/flow parameters via `biz_params`; set `has_thoughts=True` to see the invocation process.
-- Assistants: `tools=[{"type": ...}]`, combined with the Run `requires_action` loop.
-
-## Minimal Examples
-```python
-from http import HTTPStatus
-from dashscope import Application
-resp = Application.call(app_id="YOUR_APP_ID", prompt="Introduce Bailian", has_thoughts=True)
-if resp.status_code == HTTPStatus.OK:
-    print(resp.output.text, resp.output.session_id)
-else:
-    print(resp.request_id, resp.code, resp.message)
+```text
+client.apps.completions.create(
+    *, app_id, prompt=None, messages=None, stream=False, session_id=None,
+    biz_params=None, has_thoughts=None, ..., parameters=None, timeout=None,
+)
 ```
+
+Supply `prompt` or `messages`; when both are present, `prompt` becomes the latest user message. Other supported options include document/memory/image/file inputs, `rag_options`, `incremental_output`, model controls, and service-specific `parameters`. For a continued conversation, pass the previous result's `session_id`.
+
 ```python
-from dashscope.agentstudio import Client
+import dashscope
+
+with dashscope.Client() as client:  # reads DASHSCOPE_API_KEY by default
+    result = client.apps.completions.create(
+        app_id="YOUR_APP_ID",
+        prompt="Introduce Bailian",
+        has_thoughts=True,
+    )
+    print(result.text)
+    print(result.session_id, result.finish_reason)
+```
+
+`AppCompletion` exposes flat `text`, `finish_reason`, `session_id`, `thoughts`, `doc_references`, `workflow_message`, and `usage`, together with common response metadata. It does not require legacy `.output.text` access.
+
+With `stream=True`, the return value is `AppStream` (`AsyncAppStream` on `AsyncClient`). Iterate `text_stream` for text and close the stream when finished, especially on early exit:
+
+```python
+import dashscope
+
+with dashscope.Client() as client:
+    stream = client.apps.completions.create(
+        app_id="YOUR_APP_ID",
+        prompt="Write a short greeting",
+        stream=True,
+        incremental_output=True,
+    )
+    try:
+        for text in stream.text_stream:
+            print(text, end="")
+    finally:
+        stream.close()
+```
+
+## AgentStudio (`client.agentstudio`)
+
+Mount AgentStudio from the main client so configuration and cleanup stay connected:
+
+```python
+import dashscope
 from dashscope.agentstudio.types import user_message
-client = Client(api_key="sk-xxx", workspace="my-ws")
-agent = client.agents.create(name="demo", model="qwen3.8-flash")
-session = client.sessions.create(agent=agent.id)
-client.sessions.events.send(session.id, [user_message("Hello!")])
-with client.sessions.events.stream(session.id) as stream:
-    for text in stream.text_stream:   # auto-stops on idle/terminated
-        print(text, end="")
+
+with dashscope.Client(workspace="my-ws") as client:
+    studio = client.agentstudio
+    agent = studio.agents.create(name="demo", model="qwen3.8-flash")
+    session = studio.sessions.create(agent=agent.id)
+    studio.sessions.events.send(session.id, [user_message("Hello!")])
+    with studio.sessions.events.stream(session.id) as stream:
+        for text in stream.text_stream:
+            print(text, end="")
+# Closing the main client also closes its mounted AgentStudio client.
 ```
 
-## Common Error Codes
-| Error code/exception | HTTP status | Meaning | Handling |
-| --- | --- | --- | --- |
-| `InputRequired` / `ModelRequired` / `InvalidInput` | raised locally | missing required params such as app_id/prompt/model | add params per the exception message; Application failures do not raise — check status_code |
-| `invalid_request_error` / `request_too_large` (InvalidRequestError) | 400/413 | invalid agentstudio request parameters, or payload too large | check parameter names/types, e.g. empty events raises a local ValueError |
-| `authentication_error` (AuthenticationError) | 401 | api_key missing or invalid | check api_key or DASHSCOPE_API_KEY |
-| `permission_denied_error` / `permission_error` (PermissionDeniedError) | 403 | no access to the resource | check workspace/uid and resource ownership |
-| `not_found_error` (NotFoundError) | 404 | agent/session and other resources do not exist | verify the id and region/workspace are correct |
-| `conflict_error` (ConflictError) | 409 | version in agents.update does not match the server | retrieve the latest version first, then update |
-| `rate_limit_error` / `billing_error` (RateLimitError) | 429 | rate limited or out of quota | retry with backoff (client default max_retries=2) |
-| `api_error` / `timeout_error` (InternalServerError), `overloaded_error` (OverloadedError) | 500/502/504 / 503 | server error/overloaded | troubleshoot with `request_id` or retry |
-| `APITimeoutError` / `APIConnectionError` | no response | connection/read/write timeout | increase timeout, check network, then retry |
-| `StreamError` / `StreamClosedError` | mid-stream | SSE protocol error/stream closed | call `events.stream` again to reopen the stream |
+`Client(api_key=..., workspace=..., region=..., ...)` forwards API key, workspace, and region to AgentStudio. A workspace is required unless an AgentStudio base URL is configured. Standalone `dashscope.agentstudio.Client/AsyncClient` remain available, but are unnecessary for normal 2.0 main-client usage.
 
-Match on the exception class, not on `.code`: `.code` echoes the server's raw
-string, so a 403 may arrive as either `permission_denied_error` or
-`permission_error`, and it is normalised to `api_error` when the server omits
-it. The class is always the one listed above.
+Mounted resources are `agents`, `deployments`, `deployment_runs`, `sessions`, `environments`, `files`, `skills`, `vaults`, `memory_stores`, `webhook_endpoints`, and `security`.
+
+### Agents and Sessions
+
+- `agents.create(*, name, model, description=None, system_prompt=None, tools=None, mcp_servers=None, skills=None, multiagent=None, metadata=None)` returns `Agent`. `model` can be a model ID string or `ModelConfig(id=..., temperature=..., max_tokens=..., enable_thinking=..., thinking_budget=...)`.
+- `agents.retrieve(agent_id, version=None)` (alias `get`), `list(...)`, and `list_versions(agent_id)` query agent state. `archive(agent_id)` archives it.
+- `agents.update(agent_id, *, version, name, model=None, ...)` is optimistic-concurrency checked: `version` must match the current version. The service also requires `name`; sending `model` replaces its model configuration, so retain unspecified settings (for example with the existing model's `copy_with(...)`) rather than accidentally dropping them.
+- `sessions.create(*, agent, environment_id=None, title=None, resources=None, vault_ids=None, environment_variables=None, mcp_configs=None, metadata=None)` returns `Session`. Sessions also support `retrieve`/`get`, `update`, `list`, `archive`, and `delete`.
+- `environments.create(*, name, config, description=None, scope="organization", metadata=None)` creates an execution environment. `files.upload(file, *, mime_type=None, progress=None)` accepts a path, binary stream, or `(name, fileobj)`. Skills can be created from `file_id` or `file`, with nested version APIs.
+
+### AgentStudio SSE Execution
+
+1. `studio.sessions.events.send(session_id, events)` sends a non-empty event list; an empty list raises local `ValueError`. Constructors in `dashscope.agentstudio.types` include `user_message(...)`, `user_interrupt()`, `user_tool_confirmation()`, `user_tool_result()`, `user_custom_tool_result()`, and `user_define_outcome()`.
+2. `with studio.sessions.events.stream(session_id, event_deltas=None, timeout=None) as stream:` opens a single-pass SSE stream. Iterating it yields typed server `Message` events with fields such as `type`, `content`, `stop_reason`, and `session_status`.
+3. `stream.text_stream` yields text blocks from message events and stops on terminal stream/session states such as `idle`, `terminated`, or `rescheduling`. Opt into `event_deltas` when incremental `text_deltas` are required; do not assume all delta types arrive by default.
+
+Content blocks can represent text, images, audio, data, files, refusal, or errors. Client event types include message, interrupt, tool confirmation/results, and defined outcomes; server events additionally include reasoning, tool/MCP calls, session status, thread, model-request, and outcome-evaluation events. A typical session state flow is `idle → running → (rescheduling) → idle | terminated`.
+
+### Plugins, Tools, and MCP
+
+- AgentStudio: pass tool schemas through `agents.create(tools=[...])` and MCP configurations through `mcp_servers`. The runtime emits tool/MCP call events; execute client-side tools as required and send results or confirmations back through session events.
+- Apps: bind plugins and workflows in the Bailian console. Callers pass business parameters with `biz_params`; `has_thoughts=True` requests process information in flat `thoughts`.
+
+## Errors (Brief)
+
+New code catches API exception classes from `dashscope.errors`; AgentStudio's stream-specific `StreamError` / `StreamClosedError` remain in `dashscope.agentstudio.exceptions`. Match exception classes rather than inferring the class solely from a raw wire `.code`.
+
+| HTTP / condition | Current class | Handling |
+| --- | --- | --- |
+| 400 | `BadRequestError` (`InvalidRequestError` is an alias) | Check parameter names/types; empty event lists are local `ValueError` |
+| 401 | `AuthenticationError` | Check `DASHSCOPE_API_KEY` or explicit `api_key` |
+| 403 | `PermissionDeniedError` | Check workspace, UID, region, and resource ownership |
+| 413 | `RequestTooLargeError` | Reduce payload size and check service limits |
+| 404 | `NotFoundError` | Verify agent/session/resource IDs |
+| 409 | `APIStatusError` (there is no dedicated conflict catalog class) | Retrieve the latest agent version before retrying update |
+| 429 | `RateLimitError` | Retry with backoff and check quota |
+| 503 / mapped overloaded error | `ServiceUnavailableError` (`OverloadedError` is an alias) | Retry with backoff |
+| 504 | `GatewayTimeoutError` | Retry or troubleshoot with `request_id`; do not label it `InternalServerError` |
+| 500 or a code mapped to internal error | `InternalServerError` | Retry where appropriate and retain `request_id` |
+| Unmapped HTTP status, including an unknown 5xx | `APIStatusError` | Inspect status/code/body; do not blindly guess `InternalServerError`. An unrecognized wire code may still use the known HTTP status mapping. |
+| Connection/read/write timeout | `APIConnectionError` / `APITimeoutError` | Check network and timeout before retrying |
+| AgentStudio stream protocol/closed stream | `StreamError` / `StreamClosedError` | Reopen `events.stream` when the operation is retryable |
+
+See the dedicated errors guide for the complete hierarchy and retry rules.
+
+## 1.x Compatibility — Maintenance Only
+
+These APIs retain their old response envelopes and local exception behavior. Do not mix them with 2.0 flat `AppCompletion` models or `client.agentstudio`.
+
+### Legacy Application
+
+`dashscope.Application.call(app_id, prompt=None, history=None, workspace=None, api_key=None, messages=None, **kwargs)` invokes a published app. At least one of `prompt` or `messages` is required; missing `app_id` raises `InputRequired`. Legacy kwargs include `stream`, `incremental_output`, `session_id`, `biz_params`, `has_thoughts`, document/memory/image/file inputs, `rag_options`, and model controls.
+
+`ApplicationResponse.output` contains `text`, `finish_reason`, `session_id`, `thoughts`, `doc_references`, and `workflow_message`. Legacy failures generally do not raise: check `status_code`, then inspect `code/message/request_id`. This is the opposite of the default 2.0 exception flow.
+
+### Legacy Assistants / Threads / Messages / Runs / Steps
+
+- `Assistants.call/create(*, model, name=None, description=None, instructions=None, tools=None, file_ids=[], metadata=None, ...)`; `retrieve/list/update/delete`.
+- `Threads.create(*, messages=None, metadata=None)`; `Messages.create(thread_id, *, content, role="user", file_ids=[], metadata=None)`.
+- `Runs.create(thread_id, *, assistant_id, instructions=None, tools=None, stream=False, ...)` and `Runs.create_thread_and_run(...)`; also `retrieve`, `submit_tool_outputs`, and `cancel`. Steps belong to this same legacy maintenance surface.
+- Run states: `queued → in_progress → (requires_action) → completed | failed | cancelled | expired`, with `cancelling` also possible. On `requires_action`, read `run.required_action.submit_tool_outputs`, execute the requested tools, submit outputs, and continue polling.
+- Legacy tool schemas and the Run tool-output loop must remain in this compatibility implementation; do not rewrite them as AgentStudio events unless intentionally migrating the application.
 
 ## Java SDK
 

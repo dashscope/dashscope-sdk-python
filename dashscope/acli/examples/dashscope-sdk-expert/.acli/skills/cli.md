@@ -5,11 +5,11 @@ description: Quick reference for all dashscope CLI command groups, subcommands, 
 
 # dashscope CLI
 
-This file is authoritative for answering `dashscope` CLI usage questions (based on the dashscope/cli/ source code); do not invent options. For details, have the user run `dashscope <command group> --help` to verify.
+This file is authoritative for answering `dashscope` CLI usage questions (based on `dashscope/legacy_1x/cli/`); do not invent options. **The CLI is still implemented by the 1.x SDK, including its response envelopes and static resource classes. It is not a command facade over 2.0 `dashscope.Client` / `AsyncClient`.** For details, have the user run `dashscope <command group> --help` to verify.
 
 ## Command overview
 
-| Command group | Subcommands | Purpose | Corresponding SDK class |
+| Command group | Subcommands | Purpose | Corresponding 1.x SDK implementation |
 | --- | --- | --- | --- |
 | auth | whoami/login/logout | Verify the active API key and persist one to ~/.dashscope/api_key | dashscope.common.api_key (get_default_api_key/save_api_key) |
 | generation | create | Text generation (including streaming and multi-turn messages) | dashscope.Generation |
@@ -22,16 +22,18 @@ This file is authoritative for answering `dashscope` CLI usage questions (based 
 | tokenization | create | Tokenization/token counting | dashscope.Tokenization |
 | models | list/get | Query available models | dashscope.Models |
 | application | create | Call a Bailian application | dashscope.Application |
-| image-synthesis | create | Text-to-image (async task) | dashscope.ImageSynthesis |
-| image-generation | create | Image generation (supports reference images) | dashscope.ImageGeneration |
+| image-synthesis | create/fetch/wait/cancel/list | Full text-to-image task lifecycle | dashscope.ImageSynthesis |
+| image-generation | create/fetch/wait/cancel/list | Full image-generation task lifecycle, including reference images | `dashscope.legacy_1x.aigc.image_generation.ImageGeneration` |
 | video-synthesis | create/fetch/wait/cancel/list | Full video synthesis task lifecycle | dashscope.VideoSynthesis |
 | multimodal-conversation | create | Multimodal conversation | dashscope.MultiModalConversation |
 | multimodal-embedding | create | Multimodal embeddings (text/image/audio) | dashscope.MultiModalEmbedding |
-| transcription | create | Audio file transcription (async task) | dashscope.Transcription |
+| transcription | create/fetch/wait/cancel/list | Full audio file transcription task lifecycle | dashscope.Transcription |
 | speech-synthesis | create | Speech synthesis TTS | dashscope.HttpSpeechSynthesizer |
-| rl (hidden alias agentic-rl) | run/get/cancel/logs/list/register_functions/test_functions/upload_data | Agentic RL fine-tuning | dashscope.legacy_1x.finetune.agentic_rl.AgenticRL |
+| rl (hidden alias agentic-rl) | run/get/cancel/logs/list/register_functions/test_functions/upload_data | Agentic RL fine-tuning | 1.x AgenticRL compatibility wrapper, not `client.rl` |
 
-Note: code-generation and understanding still exist in the source but are deprecated/discontinued and are not registered in the CLI.
+Notes:
+- `dashscope.ImageGeneration` is **not** a root public export. The CLI imports the internal 1.x class shown above; do not recommend the nonexistent root import.
+- code-generation and understanding still exist in the source but are deprecated/discontinued and are not registered in the CLI.
 
 ## Common usage
 
@@ -44,7 +46,7 @@ dashscope auth logout                 # remove the saved key file
 dashscope generation create -m qwen3.7-plus -p "Hello" -s --temperature 0.7
 dashscope ft create -m qwen3.8-32b -t file-xxx -v file-yyy -e 2 -b 16 -l 1e-5
 dashscope files upload -f train.jsonl -p fine-tune -d "training set"
-dashscope deployments create -m qwen3.8-32b -s demo -c 1
+dashscope deployments create -m qwen3.8-32b -s demo -c 1 --plan ptu
 dashscope oss upload -m qwen3.7-plus -f ./pic.png
 dashscope rerank create -m gte-rerank -q "query" -d doc1 -d doc2 -n 3
 dashscope embeddings create -m text-embedding-v3 -i "text1" -i "text2"
@@ -54,7 +56,9 @@ dashscope application create -a APP_ID -p "question" --has-thoughts
 dashscope image-synthesis create -m qwen-image-3.0 -p "a cat" -n 2 --size 1024*1024
 dashscope image-generation create -m qwen-image-3.0 -t "a cat" --image ref.png
 dashscope video-synthesis create -m wan2.2-t2v-plus -p "ocean waves"
-dashscope video-synthesis wait TASK_ID   # fetch/cancel/list take task_id the same way
+dashscope video-synthesis wait TASK_ID   # fetch/cancel also take TASK_ID; list is a query
+# image-synthesis, image-generation, and transcription expose the same
+# create/fetch/wait/cancel/list task lifecycle.
 dashscope multimodal-conversation create -m qwen3-vl-plus -t "describe the image" --image a.jpg
 dashscope multimodal-embedding create -m multimodal-embedding-v1 --text "cat" --image c.png
 dashscope transcription create -m paraformer-v2 --file-url https://.../a.wav
@@ -69,7 +73,7 @@ Key option notes:
 - generation create: `-p/--prompt`, `--messages` (JSON string), `-s/--stream`, `--temperature/--top-p/--top-k/--max-tokens/--seed/--stop/--repetition-penalty/--presence-penalty/--enable-search/--n/--result-format`
 - ft create: `-t/--training-file-ids` (repeatable), `-v/--validation-file-ids`, `--mode`, `-e/--n-epochs`, `-b/--batch-size`, `-l/--learning-rate`, `-p/--prompt-loss`; get/stream/cancel/delete all take job_id as a positional argument; list uses `-p/--page`, `-s/--size`
 - files: upload `-f/--file`, `-p/--purpose` (default fine-tune), `-d/--description`; all commands support `-u/--base-url`
-- deployments: create `-m/-s/--suffix/-c/--capacity/--plan/--template-id`; `scale DEPLOYED_MODEL -c 2`; after create it blocks by default (timeout 3600 seconds)
+- deployments: create `-m/-s/--suffix/-c/--capacity/--plan/--template-id`; **`--plan` is required** (for example `--plan ptu`); `scale DEPLOYED_MODEL -c 2`; after create it blocks by default (timeout 3600 seconds)
 - oss upload: `-f/--file`, `-m/--model`, `-k/--api-key` (reads DASHSCOPE_API_KEY), `-u/--base-url`
 - rerank create: `-q/--query`, `-d/--document` (repeatable), `--return-documents/--no-return-documents`, `-n/--top-n`, `-i/--instruct`
 - video-synthesis create: `--img-url/--first-frame-url/--last-frame-url/--duration/--resolution/--ratio/--seed/--prompt-extend/--watermark`; list supports `--start-time/--end-time/--model-name/--status/--region`

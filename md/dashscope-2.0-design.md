@@ -546,14 +546,22 @@ tests/
 | 4.6 | apps 命令 + `dashscope expert` 转发入口 | 同上 |
 | 4.7 | 旧点式命令经 `_COMMAND_MAP`/`_PARAM_MAP` 翻译到新命令、隐藏别名（`ft`/`agentic-rl`）保留，与 2.0 命令并存于同一 `dashscope` 入口；新命令 `--help` 补场景化示例 | 全命令 |
 
-#### M5 — expert 整合（本阶段全部任务按"开发与提交约束"单独 commit，限定 `dashscope/acli/**`）
+#### M5 — expert 整合
+
+> 实施注记（2026-10）：当前采用 **examples 先行** 的保守切片，只更新
+> `agenticCLI-examples/dashscope-sdk-expert`，再由
+> `scripts/sync_examples.sh` 单向同步到 `dashscope/acli/examples/`；不修改
+> `agenticCLI`，也无需把本轮文档改动回流该仓库。2.0 实现已提升到包根，
+> 后续涉及协议层的任务使用 `dashscope/protocols/`，不再引用 `dashscope/v2/`。
+> 本轮仅交付 5.4 的 examples 问答策略与知识更新；5.1、5.2 未实施，5.3 的完整
+> 发布和全斜杠命令回归也不因此视为完成。
 
 | # | 任务 | 交付 |
 | --- | --- | --- |
-| 5.1 | acli 模型调用底座切 SDK Client（`load_config`/`/provider`/`/model` 语义不变）；含 providers 协议翻译切换复用 `v2/protocols/`（2.0 期间对同步副本的唯一改动点，见 §3.2，单独 commit 并回流 agenticCLI） | `acli/agent.py` 等 |
+| 5.1 | acli 模型调用底座切 SDK Client（`load_config`/`/provider`/`/model` 语义不变）；providers 协议翻译切换复用包根 `protocols/`。后续实施时先修改并验证 agenticCLI，再用同步脚本更新 dashscope，单独提交 | `acli/agent.py` 等 |
 | 5.2 | dashscope 能力注册为内置 tools（images/tts/asr/embeddings/files 等） | `acli/tools/dashscope_*` |
 | 5.3 | `dashscope expert` 命令 + 文档；回归 acli 全量斜杠命令 | — |
-| 5.4 | expert 问答 prompt 策略：识别 1.x/2.0 语境（`Generation.call`→1.x、`dashscope.Client`→2.0）；新代码一律推荐 2.0 写法；存量 1.x 代码修 bug 时保持原风格、不强行迁移；新参数/新能力标注仅 2.0。做成可插拔片段，2.0 门面可用后（M1+）才注入，1.x↔2.0 对照表放可检索文档而非 prompt 内 | `acli/prompt.py` 片段 + 知识文档 |
+| 5.4 | expert 问答 prompt 策略：识别 1.x/2.0 语境（`Generation.call`→1.x、`dashscope.Client`→2.0）；新代码推荐 2.0，存量 1.x 修 bug 保持原风格，新参数/新能力标注仅 2.0。当前以 system prompt 的版本选择规则和按需加载的领域 skills 实现，覆盖 2.0.3 包根接口、扁平响应及 `dashscope.errors`；1.x↔2.0 对照留在可检索文档而非常驻 prompt | `agenticCLI-examples/dashscope-sdk-expert/.acli/system-prompt.md` + `.acli/skills/` |
 
 #### M6 — codegen
 
