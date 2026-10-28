@@ -114,24 +114,30 @@ class WsTask(_EventProcessor):
 
     def _enqueue(self, item: _QueueItem) -> None:
         """Called with the connection lock held; the first error ends input."""
-        if not self._closed and self._error is None:
-            if item[0] == _ERROR:
-                self._error = item[1]
-            try:
-                self._queue.put_nowait(item)
-            except queue.Full as exc:
-                if item[0] == _ERROR:
-                    # Preserve terminal visibility without allowing an
-                    # unbounded backlog to retain audio forever.
-                    try:
-                        self._queue.get_nowait()
-                    except queue.Empty:
-                        pass
-                    self._queue.put_nowait(item)
-                else:
-                    raise WsStateError(
+        if self._closed or self._error is not None:
+            return
+        if item[0] == _ERROR:
+            self._error = item[1]
+        try:
+            self._queue.put_nowait(item)
+        except queue.Full:
+            if item[0] != _ERROR:
+                # A slow consumer must not tear down the shared connection:
+                # fail only this task and let its reader surface the error.
+                item = (
+                    _ERROR,
+                    WsStateError(
                         detail="websocket task receive queue is full",
-                    ) from exc
+                    ),
+                )
+                self._error = item[1]
+            # Preserve terminal visibility without allowing an unbounded
+            # backlog to retain audio forever: evict the oldest frame.
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                pass
+            self._queue.put_nowait(item)
 
     def _frame(self, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         return {

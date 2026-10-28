@@ -478,9 +478,7 @@ through `body`.
 > **Breaking (AgentStudio errors):** `ConflictError` is now an alias of
 > `APIStatusError` rather than a 409-specific subclass, so `except ConflictError`
 > catches *every* status error (400/401/404/429/5xx), not just conflicts. Match on
-> `err.status_code == 409` if you need the old behaviour. The Agentic RL
-> `error_code` is now a read-only property — assigning `err.error_code = …`
-> raises `AttributeError`.
+> `err.status_code == 409` if you need the old behaviour.
 
 > **Breaking (`submit_job` / realtime WebSocket):** `submit_job` forwards extra
 > keyword arguments straight to the transport, so the 1.x `request_timeout=` is

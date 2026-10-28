@@ -432,6 +432,17 @@ class AsyncHttpTts:
             decoder = _SSEDecoder()
             header_id = response.headers.get("x-request-id", "")
             try:
+                media_type = response.headers.get("content-type", "")
+                media_type = media_type.split(";", 1)[0].strip().lower()
+                if media_type == "application/json" or media_type.endswith(
+                    "+json",
+                ):
+                    # A 200 JSON envelope is a service failure, not audio
+                    # SSE; mirror _iter_audio_sse so the error surfaces
+                    # instead of yielding zero chunks silently.
+                    await response.aread()
+                    response_body(response)
+                    return
                 async for line in response.aiter_lines():
                     frame = decoder.feed(line)
                     if frame is None:

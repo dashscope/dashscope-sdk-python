@@ -384,6 +384,27 @@ def _merge_tool_calls(
     return merged
 
 
+def _signature_from_blocks(blocks: Any) -> Optional[str]:
+    """Replay signature only when exactly one signed thinking block exists.
+
+    Mirrors the non-streaming Anthropic invariant: concatenating the
+    per-block signatures of an interleaved-thinking turn yields a single
+    invalid signature the API would reject, so emit none in that case.
+    """
+    if not isinstance(blocks, list):
+        return None
+    signed = [
+        block
+        for block in blocks
+        if isinstance(block, dict)
+        and block.get("type") == "thinking"
+        and block.get("signature")
+    ]
+    if len(signed) == 1:
+        return signed[0]["signature"]
+    return None
+
+
 def _cumulative_chunk(
     acc: Dict[int, Dict[str, Any]],
     chunk: ChatCompletionChunk,
@@ -398,6 +419,7 @@ def _cumulative_chunk(
                 "content": "",
                 "reasoning": "",
                 "signature": "",
+                "reasoning_blocks": None,
                 "tool_calls": None,
                 "logprobs": None,
             },
@@ -411,6 +433,10 @@ def _cumulative_chunk(
             slot["reasoning"] += delta.reasoning_content
         if delta.reasoning_signature:
             slot["signature"] += delta.reasoning_signature
+        blocks = (delta.model_extra or {}).get("reasoning_blocks")
+        if blocks is not None:
+            # Anthropic emits a cumulative snapshot; keep the latest.
+            slot["reasoning_blocks"] = blocks
         if delta.tool_calls:
             slot["tool_calls"] = _merge_tool_calls(
                 slot["tool_calls"],
@@ -423,20 +449,27 @@ def _cumulative_chunk(
             slot["logprobs"],
             (choice.model_extra or {}).get("logprobs"),
         )
+        # When verbatim thinking blocks are present, derive the replay
+        # signature from them (single-signed-block rule) instead of the
+        # concatenated per-block fragments, which would be invalid.
+        signature = slot["signature"] or None
+        if slot["reasoning_blocks"] is not None:
+            signature = _signature_from_blocks(slot["reasoning_blocks"])
         # model_copy keeps provider extras the rebuild would otherwise
         # drop (delta-level omni audio); accumulated logprobs override
         # the current frame's fragment.
-        update: Dict[str, Any] = {
-            "delta": choice.delta.model_copy(
-                update={
-                    "role": slot["role"],
-                    "content": slot["content"] or None,
-                    "reasoning_content": slot["reasoning"] or None,
-                    "reasoning_signature": slot["signature"] or None,
-                    "tool_calls": slot["tool_calls"],
-                },
-            ),
-        }
+        new_delta = choice.delta.model_copy(
+            update={
+                "role": slot["role"],
+                "content": slot["content"] or None,
+                "reasoning_content": slot["reasoning"] or None,
+                "reasoning_signature": signature,
+                "tool_calls": slot["tool_calls"],
+            },
+        )
+        if slot["reasoning_blocks"] is not None:
+            new_delta.reasoning_blocks = slot["reasoning_blocks"]
+        update: Dict[str, Any] = {"delta": new_delta}
         if slot["logprobs"] is not None:
             update["logprobs"] = slot["logprobs"]
         choices.append(choice.model_copy(update=update))
@@ -523,6 +556,7 @@ def _aggregate(chunks) -> ChatCompletion:  # pylint: disable=too-many-branches
                     "content": [],
                     "reasoning": [],
                     "signature": [],
+                    "reasoning_blocks": None,
                     "message": {},
                     "logprobs": None,
                 },
@@ -536,6 +570,10 @@ def _aggregate(chunks) -> ChatCompletion:  # pylint: disable=too-many-branches
                 slot["reasoning"].append(delta.reasoning_content)
             if delta.reasoning_signature:
                 slot["signature"].append(delta.reasoning_signature)
+            blocks = (delta.model_extra or {}).get("reasoning_blocks")
+            if blocks is not None:
+                # Anthropic emits a cumulative snapshot; keep the latest.
+                slot["reasoning_blocks"] = blocks
             if delta.tool_calls:
                 slot["message"]["tool_calls"] = _merge_tool_calls(
                     slot["message"].get("tool_calls"),
@@ -552,22 +590,30 @@ def _aggregate(chunks) -> ChatCompletion:  # pylint: disable=too-many-branches
     choices = []
     for index in sorted(acc):
         slot = acc[index]
+        signature = "".join(slot["signature"]) or None
+        message_extras: Dict[str, Any] = {}
+        if slot["reasoning_blocks"] is not None:
+            # Verbatim thinking blocks win: derive the replay signature
+            # from them and carry them so the turn replays faithfully.
+            message_extras["reasoning_blocks"] = slot["reasoning_blocks"]
+            signature = _signature_from_blocks(slot["reasoning_blocks"])
         message = ChatCompletionMessage(
             role=slot["message"].get("role", "assistant"),
             content="".join(slot["content"]) or None,
             reasoning_content="".join(slot["reasoning"]) or None,
-            reasoning_signature="".join(slot["signature"]) or None,
+            reasoning_signature=signature,
             tool_calls=slot["message"].get("tool_calls"),
+            **message_extras,
         )
-        extras: Dict[str, Any] = {}
+        choice_extras: Dict[str, Any] = {}
         if slot["logprobs"] is not None:
-            extras["logprobs"] = slot["logprobs"]
+            choice_extras["logprobs"] = slot["logprobs"]
         choices.append(
             Choice(
                 index=index,
                 finish_reason=slot["message"].get("finish_reason"),
                 message=message,
-                **extras,
+                **choice_extras,
             ),
         )
     return ChatCompletion(

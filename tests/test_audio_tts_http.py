@@ -13,7 +13,7 @@ import json
 import httpx
 import pytest
 
-from dashscope import Client
+from dashscope import AsyncClient, Client
 from dashscope.errors import (
     APIConnectionError,
     APIStatusError,
@@ -32,6 +32,13 @@ def _make_client(handler, **kwargs):
     http_client = httpx.Client(transport=mock, base_url=BASE_URL)
     kwargs.setdefault("base_url", BASE_URL)
     return Client(api_key="sk-test", http_client=http_client, **kwargs)
+
+
+def _make_async_client(handler, **kwargs):
+    mock = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=mock, base_url=BASE_URL)
+    kwargs.setdefault("base_url", BASE_URL)
+    return AsyncClient(api_key="sk-test", http_client=http_client, **kwargs)
 
 
 def _b64(payload: bytes) -> str:
@@ -279,6 +286,29 @@ def test_http_stream_error_frame_raises():
     assert next(stream).output["type"] == "sentence-begin"
     with pytest.raises(BadRequestError, match="bad voice"):
         next(stream)
+
+
+@pytest.mark.asyncio
+async def test_async_http_stream_json_envelope_raises():
+    # A 200 application/json body is a service failure, not audio SSE.
+    # The async stream must surface it (parity with the sync path) rather
+    # than silently yielding zero chunks.
+    def handler(request):
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "application/json"},
+            json={"code": "InvalidParameter", "message": "bad voice"},
+        )
+
+    client = _make_async_client(handler)
+    stream = await client.audio.tts.http.stream(
+        "你好",
+        model="qwen-audio-3.1-tts-flash",
+        voice="nobody",
+    )
+    with pytest.raises(BadRequestError, match="bad voice"):
+        async for _ in stream:
+            pass
 
 
 def test_http_synthesize_error_status_raises():

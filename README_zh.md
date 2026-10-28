@@ -494,8 +494,6 @@ Agentic RL 的 `*WithCode` 错误 `str()` 渲染也变了 —— 1.x 的
 > `APIStatusError` 的别名，而不再是仅对应 409 的子类，因此
 > `except ConflictError` 会捕获**所有**状态错误（400/401/404/429/5xx），
 > 而不仅是冲突。若需要旧行为，请改用 `err.status_code == 409` 判断。
-> Agentic RL 的 `error_code` 现在是只读 property —— 赋值
-> `err.error_code = …` 会抛 `AttributeError`。
 
 > **破坏性变更（`submit_job` / realtime WebSocket）：** `submit_job` 会把
 > 额外关键字参数直接转发给传输层，因此 1.x 的 `request_timeout=` 改名为

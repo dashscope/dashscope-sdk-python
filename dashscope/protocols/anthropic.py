@@ -390,6 +390,7 @@ class _StreamParser:
 
     def __init__(self) -> None:
         self._tools: Dict[int, Dict[str, Any]] = {}
+        self._thinking: Dict[int, Dict[str, Any]] = {}
         self._usage: Dict[str, int] = {}
 
     def parse(self, payload: Dict[str, Any]) -> Optional[ChatCompletionChunk]:
@@ -406,6 +407,7 @@ class _StreamParser:
             # resets per-message tool state.
             if payload.get("type") == "message_stop":
                 self._tools = {}
+                self._thinking = {}
             return None
         parsed = handler(payload)
         if parsed is None:
@@ -426,6 +428,7 @@ class _StreamParser:
     def _message_start(self, payload: Dict[str, Any]):
         message = payload.get("message") or {}
         self._tools = {}
+        self._thinking = {}
         self._usage = {}
         usage: Optional[Dict[str, Any]] = None
         start_usage = message.get("usage") or {}
@@ -441,7 +444,37 @@ class _StreamParser:
 
     def _block_start(self, payload: Dict[str, Any]):
         block = payload.get("content_block") or {}
-        if block.get("type") != "tool_use":
+        block_type = block.get("type")
+        index = payload.get("index", 0)
+        if block_type == "thinking":
+            # Signature and text arrive via deltas; start an empty block
+            # so the cumulative snapshot keeps it in index order.
+            self._thinking[index] = {
+                "type": "thinking",
+                "thinking": "",
+                "signature": "",
+            }
+            return None
+        if block_type == "redacted_thinking":
+            # Arrives complete in content_block_start (no deltas follow);
+            # preserve it verbatim so the turn can be replayed faithfully.
+            self._thinking[index] = dict(block)
+            return (
+                payload.get("id"),
+                payload.get("model"),
+                [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "reasoning_blocks": (
+                                self._cumulative_thinking_blocks()
+                            ),
+                        },
+                    },
+                ],
+                None,
+            )
+        if block_type != "tool_use":
             # Text/audio block starts carry no content yet; skip.
             return None
         choices: List[Dict[str, Any]] = []
@@ -463,13 +496,24 @@ class _StreamParser:
     def _block_delta(self, payload: Dict[str, Any]):
         delta_payload = payload.get("delta") or {}
         delta_type = delta_payload.get("type")
+        index = payload.get("index", 0)
         delta: Dict[str, Any] = {}
         if delta_type == "text_delta":
             delta["content"] = delta_payload.get("text", "")
         elif delta_type == "thinking_delta":
+            block = self._thinking.get(index)
+            if block is not None and block.get("type") == "thinking":
+                block["thinking"] += delta_payload.get("thinking", "")
             delta["reasoning_content"] = delta_payload.get("thinking", "")
+            if self._thinking:
+                delta["reasoning_blocks"] = self._cumulative_thinking_blocks()
         elif delta_type == "signature_delta":
+            block = self._thinking.get(index)
+            if block is not None and block.get("type") == "thinking":
+                block["signature"] = delta_payload.get("signature", "")
             delta["reasoning_signature"] = delta_payload.get("signature", "")
+            if self._thinking:
+                delta["reasoning_blocks"] = self._cumulative_thinking_blocks()
         elif delta_type == "input_json_delta":
             tool = self._tools.get(payload.get("index", 0))
             if tool is not None:
@@ -480,6 +524,23 @@ class _StreamParser:
             return None
         choices = [{"index": 0, "delta": delta}]
         return payload.get("id"), payload.get("model"), choices, None
+
+    def _cumulative_thinking_blocks(self) -> List[Dict[str, Any]]:
+        """Thinking/redacted_thinking blocks accumulated so far, in order."""
+        blocks: List[Dict[str, Any]] = []
+        for index in sorted(self._thinking):
+            block = self._thinking[index]
+            if block.get("type") == "thinking":
+                blocks.append(
+                    {
+                        "type": "thinking",
+                        "thinking": block.get("thinking", ""),
+                        "signature": block.get("signature", ""),
+                    },
+                )
+            else:
+                blocks.append(dict(block))
+        return blocks
 
     def _message_delta(self, payload: Dict[str, Any]):
         choices: List[Dict[str, Any]] = []

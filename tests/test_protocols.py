@@ -1267,6 +1267,135 @@ def test_anthropic_preserves_interleaved_thinking_blocks_for_replay():
     )
 
 
+def test_anthropic_streaming_preserves_interleaved_thinking_blocks():
+    # Streaming parity with parse_completion: an interleaved-thinking
+    # stream must yield verbatim reasoning_blocks and must NOT merge the
+    # per-block signatures into one invalid reasoning_signature.
+    from dashscope.resources.chat.completions import _aggregate
+
+    protocol = AnthropicProtocol()
+    parse = protocol.make_chunk_parser()
+    events = [
+        {"type": "message_start", "message": {"id": "msg-1"}},
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "thinking"},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "thinking_delta", "thinking": "a"},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "signature_delta", "signature": "sig-a"},
+        },
+        {
+            "type": "content_block_start",
+            "index": 1,
+            "content_block": {"type": "text"},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 1,
+            "delta": {"type": "text_delta", "text": "middle"},
+        },
+        {
+            "type": "content_block_start",
+            "index": 2,
+            "content_block": {"type": "thinking"},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 2,
+            "delta": {"type": "thinking_delta", "thinking": "b"},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 2,
+            "delta": {"type": "signature_delta", "signature": "sig-b"},
+        },
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+        },
+    ]
+    chunks = [c for c in (parse(e) for e in events) if c is not None]
+    message = _aggregate(chunks).choices[0].message
+    assert message.content == "middle"
+    assert message.reasoning_content == "ab"
+    # Two signed blocks -> no single replayable signature.
+    assert message.reasoning_signature is None
+    assert [b["signature"] for b in message.reasoning_blocks] == [
+        "sig-a",
+        "sig-b",
+    ]
+    # The streamed turn replays through the same path as the parsed one.
+    request = protocol.build_chat_request(
+        model="qwen3-max",
+        messages=[{"role": "user", "content": "hi"}, message.model_dump()],
+    )
+    assert (
+        request.body["messages"][1]["content"][:2] == message.reasoning_blocks
+    )
+
+
+def test_anthropic_streaming_single_signed_block_keeps_signature():
+    from dashscope.resources.chat.completions import _aggregate
+
+    protocol = AnthropicProtocol()
+    parse = protocol.make_chunk_parser()
+    events = [
+        {"type": "message_start", "message": {"id": "msg-2"}},
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "thinking"},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "thinking_delta", "thinking": "hmm"},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "signature_delta", "signature": "sig"},
+        },
+        {"type": "message_delta", "delta": {"stop_reason": "end_turn"}},
+    ]
+    chunks = [c for c in (parse(e) for e in events) if c is not None]
+    message = _aggregate(chunks).choices[0].message
+    assert message.reasoning_signature == "sig"
+    assert message.reasoning_blocks == [
+        {"type": "thinking", "thinking": "hmm", "signature": "sig"},
+    ]
+
+
+def test_anthropic_streaming_surfaces_redacted_thinking():
+    from dashscope.resources.chat.completions import _accumulate_chunks
+
+    protocol = AnthropicProtocol()
+    parse = protocol.make_chunk_parser()
+    events = [
+        {"type": "message_start", "message": {"id": "msg-3"}},
+        {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "redacted_thinking", "data": "enc"},
+        },
+        {"type": "message_delta", "delta": {"stop_reason": "end_turn"}},
+    ]
+    chunks = [c for c in (parse(e) for e in events) if c is not None]
+    cumulative = list(_accumulate_chunks(iter(chunks)))
+    final = cumulative[-1].choices[0].delta
+    assert (final.model_extra or {}).get("reasoning_blocks") == [
+        {"type": "redacted_thinking", "data": "enc"},
+    ]
+
+
 def test_anthropic_parse_completion_thinking():
     # Parity with the streaming thinking_delta path: thinking blocks
     # surface as reasoning_content instead of being silently dropped,

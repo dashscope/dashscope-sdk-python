@@ -226,6 +226,39 @@ def test_socket_error_broadcasts_to_all_tasks():
     assert conn.closed
 
 
+def test_slow_consumer_queue_full_fails_only_that_task():
+    """One stalled task must not tear down the shared connection.
+
+    Overflowing t1's bounded receive queue fails t1 alone; t2 keeps
+    routing and the socket stays open for the remaining tasks.
+    """
+    conn, _ = _make_connection(timeout=5, task_queue_size=2)
+    t1 = conn.open_task()
+    t2 = conn.open_task()
+    _started(conn, t1)
+    _started(conn, t2)
+
+    # Flood t1 past its queue size without draining it, then a t2 frame.
+    for n in range(5):
+        conn._ws.inbox.put(
+            _event("result-generated", t1.task_id, {"n": n}),
+        )
+    conn._ws.inbox.put(_event("result-generated", t2.task_id, {"n": 99}))
+
+    # t2 is unaffected and the connection survives the overflow.
+    assert t2.recv_event()["payload"] == {"n": 99}
+    assert not conn.closed
+    assert not conn._ws.closed
+
+    # t1 sees a terminal WsStateError, isolated to that task. Drain any
+    # frames queued ahead of the overflow marker, then expect the raise.
+    with pytest.raises(WsStateError, match="queue is full"):
+        while True:
+            t1.recv()
+    assert not conn.closed
+    conn.close()
+
+
 def test_peer_close_normalizes_to_api_connection_error():
     """A library close on the shared reader surfaces as APIConnectionError,
     not a raw websocket exception -- matching WsSession.recv / realtime."""
