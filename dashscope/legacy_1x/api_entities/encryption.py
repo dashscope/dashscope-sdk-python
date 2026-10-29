@@ -21,7 +21,7 @@ from dashscope.legacy_1x.common.constants import (
 from dashscope.legacy_1x.common.logging import logger
 from dashscope.legacy_1x.common.env import resolve_base_url
 from dashscope.legacy_1x.common.api_key import get_default_api_key
-from dashscope.legacy_1x.common.utils import get_sdk_headers
+from dashscope.legacy_1x.common.utils import get_sdk_headers, get_user_agent
 
 
 class Encryption:
@@ -100,8 +100,9 @@ class Encryption:
         api_key = self._api_key or get_default_api_key()
         url = resolve_base_url(base_url) + "/public-keys/latest"
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            "user-agent": get_user_agent(),
             **get_sdk_headers(module="utils"),
+            "Authorization": f"Bearer {api_key}",
         }
 
         response = requests.get(

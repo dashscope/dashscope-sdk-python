@@ -20,7 +20,7 @@ from tenacity import (
     retry_if_exception_type,
 )
 
-from dashscope._shared._sdk_ident import get_sdk_headers
+from dashscope._shared._sdk_ident import get_sdk_headers, get_user_agent
 from .. import logger
 from .errors import (
     InputError,
@@ -175,8 +175,9 @@ async def client_fc(
         url=url,
         headers={
             "Content-Type": content_type,
-            "Authorization": "Bearer " + api_key,
+            "user-agent": get_user_agent(),
             **get_sdk_headers(module="finetune"),
+            "Authorization": "Bearer " + api_key,
         },
         data=request_data,
         timeout=HTTP_REQUEST_TIMEOUT,
@@ -615,8 +616,9 @@ async def to_bailian_data(files: List[FileSpec]) -> List[str]:
         OutputError: If file upload fails
     """
     headers = {
-        "Authorization": f"Bearer {DASHSCOPE_API_KEY}",
+        "user-agent": get_user_agent(),
         **get_sdk_headers(module="finetune"),
+        "Authorization": f"Bearer {DASHSCOPE_API_KEY}",
     }
     form_data = FormData()
     uploaded_files = []
