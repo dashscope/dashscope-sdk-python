@@ -46,7 +46,7 @@ _CONDITION_ONLY = {
     "sdk.agentic_rl.FunctionTestTimeout",
 }
 
-# The ten exception class names the catalog requires.
+# The nine exception class names the catalog requires.
 _REQUIRED_CLASSES = {
     "AuthenticationError",
     "BadRequestError",
@@ -56,7 +56,6 @@ _REQUIRED_CLASSES = {
     "PermissionDeniedError",
     "RateLimitError",
     "RequestTooLargeError",
-    "ResponseError",
     "ServiceUnavailableError",
 }
 
@@ -83,9 +82,9 @@ def _by_key(key):
 
 def test_catalog_size_and_provenance():
     assert registry.__version__ == "1.0.11"
-    assert registry.__commit__ == "cd873b6"
+    assert registry.__commit__ == "84e5f33"
     assert registry.__snapshot__ is False
-    assert len(PUBLIC) == 17
+    assert len(PUBLIC) == 16
     assert len(SDK) == 41
 
 

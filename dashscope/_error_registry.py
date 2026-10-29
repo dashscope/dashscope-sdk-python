@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 __version__ = "1.0.11"
-__commit__ = "cd873b6"
+__commit__ = "84e5f33"
 __snapshot__ = False
 
 
@@ -171,14 +171,6 @@ INTERNAL_ERROR = PublicError(
     error_msg=(
         "The server encountered an internal error. Please try again " "later."
     ),
-    anthropic_error_code="api_error",
-)
-
-RESPONSE_ERROR = PublicError(
-    key="response_error",
-    status_code=500,
-    error_code="ResponseError",
-    error_msg="The server returned a response that could not be parsed.",
     anthropic_error_code="api_error",
 )
 
@@ -732,7 +724,6 @@ PUBLIC_ERRORS = [
     CONCURRENCY_LIMIT_EXCEEDED,
     INSUFFICIENT_QUOTA,
     INTERNAL_ERROR,
-    RESPONSE_ERROR,
     SERVICE_UNAVAILABLE,
     REQUEST_TIMEOUT,
 ]

@@ -252,17 +252,6 @@ class InternalServerError(APIStatusError):
     status_code = _CATALOG_STATUS["InternalServerError"]
 
 
-class ResponseError(APIStatusError):
-    """The server returned a response that could not be parsed.
-
-    SDK-side, never gateway-sent: it shares status 500 with
-    ``internal_error``, so the status maps below must keep resolving a
-    bare 500 to :class:`InternalServerError`.
-    """
-
-    status_code = _CATALOG_STATUS["ResponseError"]
-
-
 class ServiceUnavailableError(APIStatusError):
     status_code = _CATALOG_STATUS["ServiceUnavailableError"]
 
@@ -292,15 +281,13 @@ _CATALOG_CLASSES: Dict[str, Type[APIStatusError]] = {
         RequestTooLargeError,
         RateLimitError,
         InternalServerError,
-        ResponseError,
         ServiceUnavailableError,
         GatewayTimeoutError,
     )
 }
 
-# First entry per status wins: response_error shares 500 with
-# internal_error, and a bare 500 from the gateway means internal_error --
-# ResponseError is raised by the SDK itself, never picked by status.
+# First entry per status wins. Statuses with multiple public entries
+# (400, 401, and 429) intentionally resolve to their shared class.
 _STATUS_MAP: Dict[int, Type[APIStatusError]] = {}
 for _entry_ in _registry.PUBLIC_ERRORS:
     _STATUS_MAP.setdefault(
@@ -313,9 +300,9 @@ _STATUS_COUNTS = Counter(
     entry.status_code for entry in _registry.PUBLIC_ERRORS
 )
 
-# Only the statuses a single entry claims. 400 / 401 / 429 / 500 carry
-# siblings with different ``error_msg`` text, so a status alone cannot
-# pick one without stating a reason the gateway never gave.
+# Only the statuses a single entry claims. 400 / 401 / 429 carry siblings
+# with different ``error_msg`` text, so a status alone cannot pick one
+# without stating a reason the gateway never gave.
 _STATUS_ENTRY: Dict[int, PublicError] = {
     entry.status_code: entry
     for entry in _registry.PUBLIC_ERRORS

@@ -36,7 +36,6 @@ from dashscope.errors import (
     PermissionDeniedError,
     RateLimitError,
     RequestTooLargeError,
-    ResponseError,
     SdkError,
     ServiceUnavailableError,
     WsBinaryOwnerConflictError,
@@ -663,7 +662,7 @@ def test_catalog_classes_are_flat_siblings():
         entry.error_code: getattr(errors, entry.error_code)
         for entry in registry.PUBLIC_ERRORS
     }
-    assert len(classes) == 10
+    assert len(classes) == 9
     for name, cls in classes.items():
         assert cls.__bases__ == (APIStatusError,), name
         for other_name, other in classes.items():
@@ -674,9 +673,8 @@ def test_catalog_classes_are_flat_siblings():
 def test_status_map_is_derived_from_the_catalog():
     catalogued = {e.status_code for e in registry.PUBLIC_ERRORS}
     assert set(_STATUS_MAP) == catalogued
-    # First claimant of a status wins the status-only mapping; later
-    # siblings on the same status (response_error on 500) are reachable
-    # only by class, never selected by the status alone.
+    # First claimant of a status wins the status-only mapping. Entries
+    # sharing a status also share the same exception class.
     seen = set()
     for entry in registry.PUBLIC_ERRORS:
         if entry.status_code in seen:
@@ -686,20 +684,26 @@ def test_status_map_is_derived_from_the_catalog():
         assert _STATUS_MAP[entry.status_code] is expected, entry.key
 
 
-def test_bare_500_still_maps_to_internal_server_error():
-    # response_error shares status 500 with internal_error; the gateway
-    # only ever means internal_error by a bare 500.
+def test_bare_500_maps_to_internal_server_error():
     assert _STATUS_MAP[500] is InternalServerError
     with pytest.raises(InternalServerError) as ei:
         check_response(_resp(500, {"message": "boom"}))
     assert type(ei.value) is InternalServerError
 
 
-def test_response_error_is_sdk_side_only():
-    assert issubclass(ResponseError, APIStatusError)
-    assert ResponseError.status_code == 500
-    assert ResponseError not in _STATUS_MAP.values()
-    assert ResponseError not in set(_CODE_MAP.values())
+def test_unparseable_500_response_maps_to_internal_server_error():
+    response = httpx.Response(500, text="not-json")
+    error = errors.response_error(response)
+    assert type(error) is InternalServerError
+    assert error.status_code == 500
+    assert error.message == "not-json"
+
+
+def test_response_error_is_not_a_public_catalog_entry_or_class():
+    assert "response_error" not in {
+        entry.key for entry in registry.PUBLIC_ERRORS
+    }
+    assert not hasattr(errors, "ResponseError")
 
 
 @pytest.mark.parametrize(
@@ -827,13 +831,21 @@ def test_placeholders_survive_the_catalog_fallback():
 
 
 def test_ambiguous_status_gets_no_catalog_text():
-    # 400 / 401 / 429 / 500 each carry several entries with different
-    # text, so a status alone cannot pick one without inventing a reason.
-    for status in (400, 401, 429, 500):
+    # 400 / 401 / 429 each carry several entries with different text, so
+    # a status alone cannot pick one without inventing a reason.
+    for status in (400, 401, 429):
         with pytest.raises(APIStatusError) as ei:
             check_response(_bare(status))
         assert ei.value.message == "", status
         assert ei.value.status_code == status
+
+
+def test_bodyless_500_gets_internal_error_catalog_text():
+    with pytest.raises(InternalServerError) as ei:
+        check_response(_bare(500))
+    assert ei.value.message == (
+        "The server encountered an internal error. Please try again later."
+    )
 
 
 def test_wire_code_identifies_an_entry_on_an_ambiguous_status():
