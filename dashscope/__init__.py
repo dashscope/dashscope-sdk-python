@@ -179,6 +179,7 @@ _LEGACY_LAZY_MODULES = frozenset(
         "protocol",
         "rerank",
         "threads",
+        "tokenizers",
         "utils",
     },
 )

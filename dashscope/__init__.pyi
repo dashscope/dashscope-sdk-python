@@ -61,6 +61,7 @@ nlp: Any
 protocol: Any
 rerank: Any
 threads: Any
+tokenizers: Any
 utils: Any
 
 # ---------------------------------------------------------------------------

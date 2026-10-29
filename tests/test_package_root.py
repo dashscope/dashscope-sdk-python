@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -65,6 +66,16 @@ def test_legacy_exports_untouched():
     assert hasattr(dashscope, "save_api_key")
 
 
+def test_plain_import_keeps_the_historical_tokenizers_module():
+    # Regression guard: the package root exposed this child immediately in
+    # 1.x. Accessing it must not require an explicit import of the child first.
+    assert dashscope.tokenizers is __import__(
+        "dashscope.tokenizers",
+        fromlist=["tokenizers"],
+    )
+    assert "tokenizers" in dir(dashscope)
+
+
 def test_tokenizers_keep_the_historical_legacy_implementation():
     from dashscope.tokenizers import get_tokenizer, list_tokenizers
 
@@ -83,6 +94,52 @@ def test_root_uses_current_save_api_key():
     assert dashscope.save_api_key is _config.save_api_key
     assert dashscope.save_api_key is not save_1x
     assert dashscope.save_api_key.__module__ == "dashscope._config"
+
+
+def test_quickstart_rebuilds_after_configuration_changes(
+    monkeypatch,
+    tmp_path,
+):
+    first_config = _config.resolve_config(
+        api_key="sk-first",
+        base_url=BASE_URL,
+        config_path=tmp_path / "absent.toml",
+    )
+    second_config = replace(first_config, api_key="sk-second")
+    current = {"config": first_config}
+
+    class FakeClient:
+        def __init__(self, config):
+            self.config = config
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(_quickstart, "_client", None)
+    monkeypatch.setattr(_quickstart, "_active_clients", {})
+    monkeypatch.setattr(_quickstart, "_retired_clients", set())
+    monkeypatch.setattr(
+        _quickstart,
+        "resolve_config",
+        lambda: current["config"],
+    )
+    monkeypatch.setattr(
+        _quickstart,
+        "_new_client",
+        lambda config: FakeClient(config),
+    )
+
+    first = _quickstart._select_client(acquire=True)
+    current["config"] = second_config
+    second = _quickstart._get_client()
+
+    assert second is not first
+    assert second.config.api_key == "sk-second"
+    # The old pool stays alive while an earlier call is still using it.
+    assert not first.closed
+    _quickstart._release_client(first)
+    assert first.closed
 
 
 def test_root_save_api_key_roundtrip(tmp_path):
@@ -123,6 +180,13 @@ def test_chat_quickstart_uses_singleton_client(monkeypatch):
         http_client=http_client,
     )
     monkeypatch.setattr(_quickstart, "_client", client)
+    monkeypatch.setattr(_quickstart, "_active_clients", {})
+    monkeypatch.setattr(_quickstart, "_retired_clients", set())
+    monkeypatch.setattr(
+        _quickstart,
+        "resolve_config",
+        lambda: client.config,
+    )
 
     resp = dashscope.chat("qwen-plus", "Tell me a joke", temperature=0.2)
 
