@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Union
-import warnings
 
 import httpx
 
@@ -145,18 +144,8 @@ class Client:
 
     @property
     def audio(self) -> "Audio":
-        """Audio capabilities (lazily mounted).
-
-        Preview: the 2.0 audio API surface is not final and may change
-        in a future release.
-        """
+        """Audio capabilities (lazily mounted)."""
         if self._audio is None:
-            warnings.warn(
-                "dashscope 2.0 audio API is a preview and may change "
-                "in a future release.",
-                FutureWarning,
-                stacklevel=2,
-            )
             self._audio = Audio(self)
         audio = self._audio
         assert audio is not None
@@ -388,18 +377,8 @@ class AsyncClient:
 
     @property
     def audio(self) -> "AsyncAudio":
-        """Audio capabilities (lazily mounted).
-
-        Preview: the 2.0 audio API surface is not final and may change
-        in a future release.
-        """
+        """Audio capabilities (lazily mounted)."""
         if self._audio is None:
-            warnings.warn(
-                "dashscope 2.0 audio API is a preview and may change "
-                "in a future release.",
-                FutureWarning,
-                stacklevel=2,
-            )
             self._audio = AsyncAudio(self)
         audio = self._audio
         assert audio is not None

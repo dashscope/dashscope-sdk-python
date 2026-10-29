@@ -4,7 +4,7 @@
 
 DashScope Python SDK 是[阿里云百炼（Model Studio）](https://help.aliyun.com/zh/model-studio/)的官方客户端，覆盖文本生成、多模态理解、向量（Embedding）、重排（Rerank）、图像/视频生成、语音合成与识别、模型调优、Agentic RL、应用调用等能力。
 
-**2.0 版本**引入了资源风格的客户端 —— `dashscope.Client()`，其易用性对标 OpenAI SDK：一个客户端持有共享连接池，每项能力都以类型化资源的形式挂载其上（`client.chat`、`client.images`、`client.audio`……），响应是类型化对象而非裸字典，失败默认抛出异常。1.x 的模块级 API（`dashscope.Generation` 等）保持不变且仍被完整支持，因此 2.0 是纯增量的。
+**2.0 版本**引入了资源风格的客户端 —— `dashscope.Client()`，其易用性对标 OpenAI SDK：一个客户端持有共享连接池，每项能力都以类型化资源的形式挂载其上（`client.chat`、`client.images`、`client.audio`……），响应是类型化对象而非裸字典，失败默认抛出异常。1.x 的完整公开接口仍保留在历史导入路径上，由 `dashscope.legacy_1x` 下的 Facade 实现；AgentStudio 与 Agentic RL 与 2.0 共享同一套业务核心，但各自的公开返回类型与错误契约保持独立。
 
 ## 2.0 新特性
 
@@ -16,7 +16,7 @@ DashScope Python SDK 是[阿里云百炼（Model Studio）](https://help.aliyun.
 | 错误 | 手动检查 `resp.code` / `resp.message` | 默认抛出类型化的 `DashScopeError` 异常 *（完善中）* |
 | 流式 | 裸帧生成器 | `ChatStream`，提供 `.text_stream`、`.reasoning_stream`、`.get_final_message()` |
 | 协议 | DashScope 原生 + 单独的 compatible-mode 入口 | 一个客户端通过 `protocol=` 讲 `native`、`openai` 或 `anthropic` |
-| 异步 | 独立的 `Aio*` 类 | `dashscope.AsyncClient()` 完整镜像同步接口 |
+| 异步 | 独立的 `Aio*` 类 | `dashscope.AsyncClient()` 镜像同步接口（双工语音 WebSocket 会话除外） |
 | 连接 | 每次调用新建 session | 每个客户端一个 keep-alive 连接池，跨资源共享 |
 | 配置 | 模块级全局变量（`dashscope.api_key`、`set_region`） | 分层：参数 → `dashscope.settings` → 环境变量 → `~/.dashscope/config.toml` |
 
@@ -134,6 +134,8 @@ low_latency = client.with_options(timeout=10.0, max_retries=0)
 
 每次调用还接受请求级的 `api_key=`、`workspace=`、`timeout=` 覆盖。
 
+需要代理、自定义连接数上限或 event hook？传入自己的 `http_client=httpx.Client(...)`（`AsyncClient` 对应 `httpx.AsyncClient`）。SDK 仍会在其之上完成鉴权、重试和绝对端点 URL 拼接，并且不会关闭不属于它的客户端。
+
 ### 协议
 
 一个客户端可以讲三种线路协议，通过 `protocol=`（或 `DASHSCOPE_PROTOCOL` / `settings.protocol`）选择。无论哪种协议，请求/响应对象都保持同一套规范化的类型形态 —— 变化的只是线路格式：
@@ -185,6 +187,8 @@ for text in stream.text_stream:            # 内容增量
 
 默认每帧是增量的。传入 `incremental_output=False` 可改为接收累积快照（SDK 会替你合并增量）。
 
+思考模型的推理内容走 `.reasoning_stream`，合并后的消息里对应 `message.reasoning_content`。在 `protocol="anthropic"` 下，SDK 还会保留 `message.reasoning_signature` 以及原始的 `thinking` / `redacted_thinking` 块（位于 `message.reasoning_blocks`），因此把 assistant 消息原样回传即可延续 extended thinking。
+
 > **注意：** SDK **不会**自动重试流式请求。生产环境请在你自己的重试/退避逻辑中包裹流消费 —— 参见 [`examples/04_real_world_scenarios/production_ready_rag_harness.py`](examples/04_real_world_scenarios/production_ready_rag_harness.py)。
 
 ### 错误
@@ -206,7 +210,12 @@ except errors.DashScopeError as exc:       # 所有 SDK 错误的基类
     print("请求失败：", exc.code, exc.message)
 ```
 
-异常层级包含 `APIConnectionError` / `APITimeoutError`（网络层），以及在 `APIStatusError` 之下的：`BadRequestError`、`AuthenticationError`、`PermissionDeniedError`、`NotFoundError`、`RequestTooLargeError`、`RateLimitError`、`InternalServerError`、`ServiceUnavailableError`、`GatewayTimeoutError`、`ContentFilterError`。
+所有异常都派生自 `DashScopeError`，分为两个族：
+
+- **服务端错误** —— `APIStatusError` 之下：`BadRequestError`、`AuthenticationError`、`PermissionDeniedError`、`NotFoundError`、`RequestTooLargeError`、`RateLimitError`、`InternalServerError`、`ServiceUnavailableError`、`GatewayTimeoutError`，以及 `ContentFilterError`（`BadRequestError` 的子类）。
+- **客户端侧错误** —— `SdkError` 之下：网络类的 `APIConnectionError` / `APITimeoutError`，以及 WebSocket 族的 `WsEventError`、`WsStateError`、`WsQueueCapacityExceededError`、`WsBinaryOwnerConflictError`。每个都带有稳定的 `sdk.*` 错误码。
+
+HTTP 200 但响应体无法解析成约定信封时，会统一报为 `InternalServerError`，而不是把解析器的异常抛给调用方。
 
 想内联检查错误而不捕获异常？用 `raise_on_error=False` 构建客户端 —— 失败会以正常响应对象返回，带 `is_error=True`、`code`、`message`、`status_code`：
 
@@ -302,7 +311,7 @@ client = dashscope.Client(region="ap-southeast-1", workspace="ws-xxx123")
 
 ## 能力一览
 
-每项能力都是客户端上的一个资源。同步与异步客户端暴露相同的接口（异步方法用 `await` 调用）。
+每项能力都是客户端上的一个资源。同步与异步客户端暴露相同的接口（异步方法用 `await` 调用）—— 只有一个例外：双工 WebSocket 语音会话按设计仅提供同步版本，见下文。
 
 | 能力 | 2.0 资源 | 示例 |
 |------------|--------------|---------|
@@ -315,7 +324,10 @@ client = dashscope.Client(region="ap-southeast-1", workspace="ws-xxx123")
 | Token 计数 | `client.tokenization.count(...)` | [`text_generation/tokenization.py`](examples/01_atomic_capabilities/text_generation/tokenization.py) |
 | 图像生成 | `client.images.generate(...)`（+ `.jobs`） | [`image_video_synthesis/images.py`](examples/01_atomic_capabilities/image_video_synthesis/images.py) |
 | 视频生成 | `client.videos.generate(...)`（+ `.jobs`） | [`image_video_synthesis/videos.py`](examples/01_atomic_capabilities/image_video_synthesis/videos.py) |
-| 语音：ASR / TTS / 实时 *（预览）* | `client.audio.asr` · `client.audio.tts` · `client.audio.realtime` | [`audio/`](examples/01_atomic_capabilities/audio/) |
+| 语音识别（ASR） | 录音文件批量：`client.audio.asr.transcribe(...)` / `.jobs`；实时：`client.audio.asr.recognize(...)` | [`audio/asr_file.py`](examples/01_atomic_capabilities/audio/asr_file.py) · [`audio/asr_websocket.py`](examples/01_atomic_capabilities/audio/asr_websocket.py) |
+| 语音合成（TTS） | HTTP：`client.audio.tts.http.synthesize(...)` / `.stream(...)`；WebSocket：`client.audio.tts.connect(...)` | [`audio/tts_http.py`](examples/01_atomic_capabilities/audio/tts_http.py) · [`audio/tts_websocket.py`](examples/01_atomic_capabilities/audio/tts_websocket.py) |
+| 全模态实时对话 | `client.audio.realtime.connect(...)` | [`audio/realtime_omni.py`](examples/01_atomic_capabilities/audio/realtime_omni.py) |
+| 音色与词表管理 | `client.audio.voices` · `.voice_design` · `.vocabularies` · `.phrases` | [`audio/voice_clone.py`](examples/01_atomic_capabilities/audio/voice_clone.py) |
 | 会议与音频理解（通义听悟 TingWu） | `client.tingwu.call(...)` / `.realtime(...)` | [`audio/tingwu.py`](examples/01_atomic_capabilities/audio/tingwu.py) |
 | 文件 | `client.files.upload/list/get/delete(...)` | [`files/files.py`](examples/01_atomic_capabilities/files/files.py) |
 | 模型 | `client.models.list/get(...)` | [`models/models.py`](examples/01_atomic_capabilities/models/models.py) |
@@ -344,12 +356,27 @@ job = client.images.generate(model="wanx2.1-t2i-turbo", prompt="一间温馨的�
 if job.succeeded:
     print(job.image_urls)
 
+# HTTP 语音合成：一次 POST，音频以临时下载地址返回
+synth = client.audio.tts.http.synthesize(
+    "你好，世界", model="cosyvoice-v3-flash", voice="longanhuan", format="pcm",
+)
+print(synth.audio_url)
+
+# 流式合成按渲染进度返回音频分片
+for chunk in client.audio.tts.http.stream(
+    "你好，世界", model="cosyvoice-v3-flash", voice="longanhuan", format="pcm",
+):
+    if chunk.audio:
+        ...  # chunk.is_final 标记结束分片
+
 # 百炼应用
 resp = client.apps.completions.create(app_id="YOUR_APP_ID", prompt="土豆炖猪脚怎么做？")
 resp.text
 ```
 
-> **语音为预览版。** 2.0 的 `client.audio` 接口尚未定型，可能变化；访问它会发出 `FutureWarning`。
+### 异步语音
+
+`AsyncClient` 覆盖 HTTP 形态的语音资源 —— 批量转写 `await client.audio.asr.transcribe(...)`、合成 `client.audio.tts.http.synthesize/.stream`，以及管理类资源（`voices`、`voice_design`、`vocabularies`、`phrases`）。双工 WebSocket 会话（`asr.recognize`、`tts.connect`、`realtime.connect`）按设计只有同步版本；若需在异步应用中使用，请放到线程里运行。
 
 ### 单条 WebSocket 上的实时能力
 
@@ -361,6 +388,8 @@ session = client.audio.asr.recognize(model="fun-asr-realtime", connection=connec
 # ……驱动该会话；连接由调用方持有……
 connection.close()
 ```
+
+连接上每个任务都通过有界队列读取（`task_queue_size=`，默认 1024）：消费过慢时只会让该任务以 `errors.WsQueueCapacityExceededError` 失败，既不会无限占用内存缓存音频，也不会拖垮共享的 socket。
 
 ## 支持的模型
 
@@ -465,43 +494,26 @@ AgentStudio 与 FineTune/Agentic RL 的唯一业务核心位于
 2.0 业务代码应通过主 Client 资源树调用。
 
 历史 Agentic RL 的 `submit_job` 仍返回 `FineTune`，并保留
-`cancel/list/get/delete/logs`；2.0 的任务生命周期位于 `client.rl.jobs`。
-历史 `dashscope.agentstudio.Client` 继续抛旧 `AgentStudioError` 并保留
-`raw`，而 `client.agentstudio` 使用新 errors，失败响应通过 `body` 暴露。
+`cancel/list/get/delete/logs`；2.0 的任务生命周期位于 `client.rl.jobs`，
+其工作流错误使用新的 SDK 错误目录。历史 `dashscope.agentstudio.Client`
+继续抛旧 `AgentStudioError` 并保留 `raw`，而 `client.agentstudio` 使用新
+errors，失败响应通过 `body` 暴露。
 
-> **破坏性变更（Agentic RL）：** 公开路径 `dashscope.finetune.agentic_rl`
-> 现在解析到 **2.0** 的 `AgenticRL` —— `submit_job` 返回 `SubmitResult`
-> （不再是 1.x 的 `FineTune`），且该类不再带任务管理动词。2.0 的任务生命
-> 周期在客户端上（`client.rl.jobs.create()`、`.wait()`、`.list()`、
-> `.cancel()`、`.delete()`、`.logs()`）。依赖 1.x 类接口
-> （`AgenticRL.cancel(...)`、`.get(...)`、`submit_job` → `FineTune`）的代码
-> 应改为导入 `dashscope.legacy_1x.finetune.agentic_rl`，它保留五个动词
-> （`cancel`/`list`/`get`/`delete`/`logs`）与 `FineTune` 返回值。
-
-AgentStudio 与 Agentic RL 的异常已统一到 2.0 错误体系：`AgentStudioError`
-现在是 `dashscope.errors.DashScopeError` 的别名，Agentic RL 的 `*WithCode`
-错误继承自 `AgenticRLError`。原 AgentStudio 的 `raw` 响应属性改以 `body`
-暴露（`err.raw` → `err.body`）；`RuntimeErrorWithCode` / `ValueErrorWithCode`
-仍可作为其包装的内置 `RuntimeError` / `ValueError` 被捕获。由于两套栈现在
-共享 `dashscope._shared._errors.DashScopeException` 基类，一个
-`except DashScopeException` 即可同时捕获 1.x、2.0 与 AgentStudio 错误。
-Agentic RL 的 `*WithCode` 错误 `str()` 渲染也变了 —— 1.x 的
-`[1800] I/O error: …` 前缀被替换为 2.0 的 `<IOErrorWithCode> … | code=sdk.…`
-形式（数值码仍可通过 `err.error_code` 获取、时间戳通过 `err.timestamp`），
-依赖旧格式的日志解析需要更新。
-
-> **破坏性变更（AgentStudio 错误）：** `ConflictError` 现在是
-> `APIStatusError` 的别名，而不再是仅对应 409 的子类，因此
-> `except ConflictError` 会捕获**所有**状态错误（400/401/404/429/5xx），
-> 而不仅是冲突。若需要旧行为，请改用 `err.status_code == 409` 判断。
+> **破坏性变更（2.0 AgentStudio 错误）：** 在 2.0 接口上 ——
+> `client.agentstudio`，其异常来自 `dashscope.applications.agentstudio` ——
+> `ConflictError` 现在是 `APIStatusError` 的别名，而不再是仅对应 409 的
+> 子类，因此 `except ConflictError` 会捕获**所有**状态错误
+> （400/401/404/429/5xx），而不仅是冲突。若只关心冲突，请改用
+> `err.status_code == 409` 判断。历史路径 `dashscope.agentstudio.ConflictError`
+> 未受影响，仍只对应 409。
 
 > **破坏性变更（`submit_job` / realtime WebSocket）：** `submit_job` 会把
 > 额外关键字参数直接转发给传输层，因此 1.x 的 `request_timeout=` 改名为
 > `timeout=`，且不再接受 `workspace=` / `headers=` / `stream=`（传入任一
-> 都会抛 `TypeError`）。realtime WebSocket 状态错误（`WsStateError`、
-> `WsBinaryOwnerConflictError`）现在继承自 `DashScopeError` 而非
-> `RuntimeError`，因此裸 `except RuntimeError` 不再能捕获它们 —— 请改捕获
-> `errors.DashScopeError`（或具体的错误类）。
+> 都会抛 `TypeError`）。realtime WebSocket 错误（`WsStateError`、
+> `WsQueueCapacityExceededError`、`WsBinaryOwnerConflictError`）现在继承自
+> `DashScopeError` 而非 `RuntimeError`，因此裸 `except RuntimeError` 不再能
+> 捕获它们 —— 请改捕获 `errors.DashScopeError`（或具体的错误类）。
 
 `dashscope.save_api_key` 现在来自 `dashscope._config`，仍接受可选的 key
 文件路径，并会展开 `~`、创建缺失的父目录、按 UTF-8 写入。当前客户端使用

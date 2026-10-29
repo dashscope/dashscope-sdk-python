@@ -93,7 +93,7 @@ examples/
 | `text_generation/chat.py` | 文本生成：一行 `dashscope.chat()`、非流式、流式（text_stream） |
 | `text_generation/tokenization.py` | token 计数 |
 | `multimodal_vision/multimodal_chat.py` | 多模态对话（qwen-vl 图像理解） |
-| `audio/` | 语音示例：ASR/TTS/realtime/音色 CLI（见 `audio/README.md`；`direct_call/` 为不使用 `with` 的副本）；2.0 audio API 为预览，后续可能变更 |
+| `audio/` | 语音示例：ASR/TTS/realtime/音色 CLI（见 `audio/README.md`；`direct_call/` 为不使用 `with` 的副本） |
 | `audio/tingwu.py` | 听悟离线任务与实时会话 |
 | `image_video_synthesis/images.py` | 图像生成：一键生成并等待 + 手动 jobs 流程 |
 | `image_video_synthesis/videos.py` | 视频生成：一键生成并等待 + 手动 jobs 流程 |

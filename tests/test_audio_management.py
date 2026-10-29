@@ -4,7 +4,8 @@
 
 ``client.audio.vocabularies`` / ``phrases`` / ``voices`` /
 ``voice_design`` -- 1.x ``VocabularyService`` / ``AsrPhraseManager`` /
-``VoiceEnrollmentService`` plus the qwen voice-design REST family.
+``VoiceEnrollmentService`` plus prompt-created voice design, which shares
+the voice-enrollment registry with cloning.
 """
 
 # Mock handlers intentionally ignore the request argument.
@@ -227,7 +228,19 @@ def test_voices_clone_create_and_crud():
     assert all(call["model"] == "voice-enrollment" for call in calls)
 
 
-# ── voice design (qwen-voice-design) ─────────────────────────
+# ── voice design (voice-enrollment registry, prompt-created) ──────────
+
+
+# Mirrors the "查询音色详情" response in the voice-design API reference.
+_DESIGNED_VOICE = {
+    "voice_id": "cosyvoice-v3.5-plus-vd-announcer-xxxxxx",
+    "gmt_create": "2025-12-10 14:54:09",
+    "gmt_modified": "2025-12-10 17:47:48",
+    "status": "OK",
+    "target_model": "cosyvoice-v3.5-plus",
+    "voice_prompt": "沉稳的中年男性播音员，音色低沉浑厚",
+    "preview_text": "各位听众朋友们大家好，欢迎收听本期节目",
+}
 
 
 def test_voice_design_crud():
@@ -237,12 +250,14 @@ def test_voice_design_crud():
         body = json.loads(request.content.decode())
         calls.append(body)
         action = body["input"]["action"]
-        if action == "create":
+        if action == "create_voice":
             return httpx.Response(
                 200,
                 json={
+                    "request_id": "req-design",
                     "output": {
-                        "voice": "announcer",
+                        "voice_id": "cosyvoice-v3.5-plus-vd-announcer-xxxxxx",
+                        "target_model": "cosyvoice-v3.5-plus",
                         "preview_audio": {
                             "data": "QUJD",
                             "sample_rate": 24000,
@@ -252,72 +267,77 @@ def test_voice_design_crud():
                     "usage": {"count": 1},
                 },
             )
-        if action == "list":
+        if action == "list_voice":
             return httpx.Response(
                 200,
-                json={
-                    "output": {
-                        "voice_list": [
-                            {"voice": "announcer", "language": "zh"},
-                        ],
-                        "total_count": 1,
-                    },
-                },
+                json={"output": {"voice_list": [_DESIGNED_VOICE]}},
             )
-        if action == "query":
-            return httpx.Response(
-                200,
-                json={
-                    "output": {"voice": "announcer", "language": "zh"},
-                },
-            )
+        if action == "query_voice":
+            return httpx.Response(200, json={"output": _DESIGNED_VOICE})
         return httpx.Response(
             200,
-            json={"output": {"voice": "announcer"}},
+            json={"output": {}, "usage": {"count": 1}},
         )
 
     client = _make_client(handler)
     created = client.audio.voice_design.create(
-        target_model="qwen3-tts-vd-realtime-2026-01-15",
-        voice_prompt="沉稳的中年男性，音色低沉浑厚",
-        preview_text="各位听众朋友，大家好",
-        preferred_name="announcer",
-        language="zh",
+        target_model="cosyvoice-v3.5-plus",
+        prefix="announcer",
+        voice_prompt="沉稳的中年男性播音员，音色低沉浑厚",
+        preview_text="各位听众朋友们大家好，欢迎收听本期节目",
+        language_hints=["zh"],
         parameters={"sample_rate": 24000, "response_format": "wav"},
+        extra_input={"prefix": "evil", "extra": 1},
     )
-    assert created.voice == "announcer"
+    assert created.voice_id == "cosyvoice-v3.5-plus-vd-announcer-xxxxxx"
+    assert created.request_id == "req-design"
     # The mock always returns a dict; pylint only sees Optional[Dict].
     # pylint: disable-next=unsubscriptable-object
     assert created.preview_audio["response_format"] == "wav"
+
+    # Named arguments win over the extra_input escape hatch.
     assert calls[0] == {
-        "model": "qwen-voice-design",
+        "model": "voice-enrollment",
         "input": {
-            "action": "create",
-            "target_model": "qwen3-tts-vd-realtime-2026-01-15",
-            "voice_prompt": "沉稳的中年男性，音色低沉浑厚",
-            "preview_text": "各位听众朋友，大家好",
-            "preferred_name": "announcer",
-            "language": "zh",
+            "action": "create_voice",
+            "extra": 1,
+            "target_model": "cosyvoice-v3.5-plus",
+            "prefix": "announcer",
+            "voice_prompt": "沉稳的中年男性播音员，音色低沉浑厚",
+            "preview_text": "各位听众朋友们大家好，欢迎收听本期节目",
+            "language_hints": ["zh"],
         },
         "parameters": {"sample_rate": 24000, "response_format": "wav"},
     }
 
-    listed = client.audio.voice_design.list()
-    assert listed.voices == [{"voice": "announcer", "language": "zh"}]
-    assert listed.total_count == 1
+    listed = client.audio.voice_design.list(prefix="announcer")
+    assert listed.voices == [_DESIGNED_VOICE]
     assert calls[1]["input"] == {
-        "action": "list",
+        "action": "list_voice",
         "page_index": 0,
         "page_size": 10,
+        "prefix": "announcer",
     }
 
-    fetched = client.audio.voice_design.get("announcer")
-    assert fetched.language == "zh"
-    assert calls[2]["input"] == {"action": "query", "voice": "announcer"}
+    fetched = client.audio.voice_design.get(
+        "cosyvoice-v3.5-plus-vd-announcer-xxxxxx",
+    )
+    assert fetched.status == "OK"
+    assert fetched.voice_prompt == "沉稳的中年男性播音员，音色低沉浑厚"
+    assert fetched.gmt_create == "2025-12-10 14:54:09"
+    assert calls[2]["input"] == {
+        "action": "query_voice",
+        "voice_id": "cosyvoice-v3.5-plus-vd-announcer-xxxxxx",
+    }
 
-    client.audio.voice_design.delete("announcer")
-    assert calls[3]["input"] == {"action": "delete", "voice": "announcer"}
-    assert all(call["model"] == "qwen-voice-design" for call in calls)
+    client.audio.voice_design.delete(
+        "cosyvoice-v3.5-plus-vd-announcer-xxxxxx",
+    )
+    assert calls[3]["input"] == {
+        "action": "delete_voice",
+        "voice_id": "cosyvoice-v3.5-plus-vd-announcer-xxxxxx",
+    }
+    assert all(call["model"] == "voice-enrollment" for call in calls)
 
 
 # ── phrases (1.x AsrPhraseManager, fine-tunes rider) ──────────────────
@@ -514,7 +534,8 @@ def test_management_all_actions_keep_real_response_headers(resource, method):
             "url": "https://cdn.test/audio.wav",
         },
         "voice_design": {
-            "target_model": "qwen-tts-vd",
+            "target_model": "cosyvoice-v3.5-plus",
+            "prefix": "test",
             "voice_prompt": "warm",
             "preview_text": "hello",
         },
@@ -550,7 +571,7 @@ def test_management_all_actions_keep_real_response_headers(resource, method):
         for key in ("vocabularies", "vocabulary_list")
     ]
     + [
-        (resource, key, "voices", {"voice": "voice-1", "enabled": False})
+        (resource, key, "voices", {"voice_id": "voice-1", "status": "OK"})
         for resource in ("voices", "voice_design")
         for key in ("voices", "voice_list")
     ]
@@ -814,7 +835,7 @@ def test_customization_optional_fields_and_caller_dicts(explicit):
 
     client = _make_client(handler)
     voice_extra = {"language_hints": ["en"], "max_prompt_audio_length": 10}
-    design_extra = {"language": "en", "preferred_name": "original"}
+    design_extra = {"language_hints": ["en"], "prefix": "original"}
     original = json.loads(json.dumps([voice_extra, design_extra]))
     parameters = {} if explicit else None
     client.audio.voices.create(
@@ -827,11 +848,11 @@ def test_customization_optional_fields_and_caller_dicts(explicit):
         parameters=parameters,
     )
     client.audio.voice_design.create(
-        target_model="qwen3-tts-vd-realtime-2026-01-15",
+        target_model="cosyvoice-v3.5-plus",
+        prefix="demo",
         voice_prompt="低沉",
         preview_text="你好",
-        language="" if explicit else None,
-        preferred_name="" if explicit else None,
+        language_hints=[] if explicit else None,
         extra_input=design_extra,
         parameters=parameters,
     )
@@ -839,10 +860,8 @@ def test_customization_optional_fields_and_caller_dicts(explicit):
     assert bodies[0]["input"]["max_prompt_audio_length"] == (
         0 if explicit else 10
     )
-    assert bodies[1]["input"]["language"] == ("" if explicit else "en")
-    assert bodies[1]["input"]["preferred_name"] == (
-        "" if explicit else "original"
-    )
+    assert bodies[1]["input"]["language_hints"] == ([] if explicit else ["en"])
+    assert bodies[1]["input"]["prefix"] == "demo"
     assert [voice_extra, design_extra] == original
     for body in bodies:
         if explicit:
@@ -867,16 +886,17 @@ def test_customization_extra_input_cannot_change_create_action(resource):
             url="https://cdn.test/a.wav",
             extra_input={"action": "delete_voice"},
         )
-        expected_action = "create_voice"
     else:
         client.audio.voice_design.create(
-            target_model="qwen3-tts-vd-realtime-2026-01-15",
+            target_model="cosyvoice-v3.5-plus",
+            prefix="demo",
             voice_prompt="低沉",
             preview_text="你好",
-            extra_input={"action": "delete"},
+            extra_input={"action": "delete_voice"},
         )
-        expected_action = "create"
-    assert bodies[0]["input"]["action"] == expected_action
+    # Both families post the same action word, so neither may let the
+    # caller's escape hatch rewrite it into a delete.
+    assert bodies[0]["input"]["action"] == "create_voice"
 
 
 @pytest.mark.parametrize("resource", _MANAGEMENT_RESOURCES)

@@ -4,12 +4,17 @@
 
 V2 form of 1.x ``VocabularyService`` (asr hot-word tables,
 ``audio/asr/vocabulary.py``) and ``VoiceEnrollmentService`` (voice
-cloning, ``audio/tts_v2/enrollment.py``), plus the qwen voice-design
-family (no 1.x SDK class — modeled from the official REST API).
-All three ride the same envelope: ``POST /services/audio/{asr|tts}/
-customization`` with ``{model, input: {action, ...}, parameters?}``;
-only the action words and id fields differ per family. 1.x retried
-transport failures inside these services; v2 leaves that to the
+cloning, ``audio/tts_v2/enrollment.py``), plus voice design (no 1.x SDK
+class). All three ride the same envelope: ``POST /services/audio/{asr|tts}/
+customization`` with ``{model, input: {action, ...}, parameters?}``.
+
+Cloning and design are two doors onto one registry: both post
+``model="voice-enrollment"`` to the tts path with the same action words and
+the same ``voice_id``, and they share a single per-account voice quota.
+They differ only in how a voice is created -- from a sample ``url``, or from
+a ``voice_prompt`` describing the wanted sound.
+
+1.x retried transport failures inside these services; v2 leaves that to the
 transport's retry loop.
 """
 
@@ -77,12 +82,21 @@ class VoiceList(ResponseBase):
 
 
 class DesignedVoice(ResponseBase):
-    """One designed voice; its id field is ``voice`` on the wire."""
+    """One designed voice.
 
-    voice: Optional[str] = None
+    The same registry entry as a cloned :class:`Voice` -- one endpoint, one
+    ``voice_id``, one shared quota -- plus the two texts it was designed
+    from.
+    """
+
+    voice_id: Optional[str] = None
+    status: Optional[str] = None
     preview_audio: Optional[Dict[str, Any]] = None
-    language: Optional[str] = None
     target_model: Optional[str] = None
+    voice_prompt: Optional[str] = None
+    preview_text: Optional[str] = None
+    gmt_create: Optional[str] = None
+    gmt_modified: Optional[str] = None
 
 
 class DesignedVoiceList(ResponseBase):
@@ -453,24 +467,25 @@ class Voices(_CustomizationBase):
 
 
 class VoiceDesign(_CustomizationBase):
-    """``client.audio.voice_design`` -- qwen voice design.
+    """``client.audio.voice_design`` -- voices described in words, not audio.
 
-    No 1.x SDK class; modeled from the official REST API, which shares
-    the voices endpoint with shorter action words and a ``voice`` id
-    field instead of ``voice_id``.
+    Shares the voice-enrollment registry with :class:`Voices`: same path,
+    same ``model``, same action words, same ``voice_id``, one quota. Only
+    ``create`` differs -- a text prompt where cloning has a sample ``url``
+    -- so ``list`` returns cloned voices as well as designed ones.
     """
 
     PATH = "/services/audio/tts/customization"
-    DEFAULT_MODEL = "qwen-voice-design"
+    DEFAULT_MODEL = "voice-enrollment"
 
     def create(
         self,
         *,
         target_model: str,
+        prefix: str,
         voice_prompt: str,
         preview_text: str,
-        preferred_name: Optional[str] = None,
-        language: Optional[str] = None,
+        language_hints: Optional[List[str]] = None,
         extra_input: Optional[Dict[str, Any]] = None,
         model: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
@@ -479,21 +494,28 @@ class VoiceDesign(_CustomizationBase):
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> DesignedVoice:
-        """Design a voice from a text prompt; carries ``voice`` + preview."""
+        """Design a voice from a text prompt; carries ``voice_id`` + preview.
+
+        ``prefix`` becomes part of the generated id,
+        ``{target_model}-vd-{prefix}-{unique}``. Only the first element of
+        ``language_hints`` is honoured, and it must match the language of
+        ``preview_text``. The voice is unusable until its ``status`` leaves
+        ``DEPLOYING``.
+        """
         fields: Dict[str, Any] = dict(extra_input or {})
+        # Named arguments win over the ``extra_input=`` escape hatch.
         fields.update(
             {
                 "target_model": target_model,
+                "prefix": prefix,
                 "voice_prompt": voice_prompt,
                 "preview_text": preview_text,
             },
         )
-        if preferred_name is not None:
-            fields["preferred_name"] = preferred_name
-        if language is not None:
-            fields["language"] = language
+        if language_hints is not None:
+            fields["language_hints"] = language_hints
         response = self._call(
-            "create",
+            "create_voice",
             fields,
             model=model,
             parameters=parameters,
@@ -510,6 +532,7 @@ class VoiceDesign(_CustomizationBase):
     def list(
         self,
         *,
+        prefix: Optional[str] = None,
         page_index: int = 0,
         page_size: int = 10,
         model: Optional[str] = None,
@@ -518,10 +541,16 @@ class VoiceDesign(_CustomizationBase):
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> DesignedVoiceList:
-        """List designed voices."""
+        """List voices, optionally narrowed to one ``prefix``."""
+        fields: Dict[str, Any] = {
+            "page_index": page_index,
+            "page_size": page_size,
+        }
+        if prefix:
+            fields["prefix"] = prefix
         response = self._call(
-            "list",
-            {"page_index": page_index, "page_size": page_size},
+            "list_voice",
+            fields,
             model=model,
             timeout=timeout,
             headers=headers,
@@ -535,7 +564,7 @@ class VoiceDesign(_CustomizationBase):
 
     def get(
         self,
-        voice: str,
+        voice_id: str,
         *,
         model: Optional[str] = None,
         timeout: Optional[float] = None,
@@ -543,11 +572,11 @@ class VoiceDesign(_CustomizationBase):
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> DesignedVoice:
-        """Fetch one designed voice (wire action ``query``)."""
-        _require_id(voice, "voice")
+        """Fetch one voice's details, including its review ``status``."""
+        _require_id(voice_id, "voice_id")
         response = self._call(
-            "query",
-            {"voice": voice},
+            "query_voice",
+            {"voice_id": voice_id},
             model=model,
             timeout=timeout,
             headers=headers,
@@ -561,7 +590,7 @@ class VoiceDesign(_CustomizationBase):
 
     def delete(
         self,
-        voice: str,
+        voice_id: str,
         *,
         model: Optional[str] = None,
         timeout: Optional[float] = None,
@@ -569,11 +598,11 @@ class VoiceDesign(_CustomizationBase):
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> JobStatus:
-        """Delete one designed voice."""
-        _require_id(voice, "voice")
+        """Delete one designed voice, freeing its quota."""
+        _require_id(voice_id, "voice_id")
         response = self._call(
-            "delete",
-            {"voice": voice},
+            "delete_voice",
+            {"voice_id": voice_id},
             model=model,
             timeout=timeout,
             headers=headers,
