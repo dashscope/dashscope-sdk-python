@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict
 
-from dashscope.errors import check_response
+from dashscope.errors import check_response, response_json
 from dashscope.resources._blocking import run_blocking
 from dashscope.resources._oss import upload_embedding_media
 from dashscope.resources.embeddings import (
@@ -178,7 +178,7 @@ class MultimodalEmbeddings:
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            parse_embedding_response(response.json()),
+            parse_embedding_response(response_json(response)),
             response,
         )
 
@@ -240,6 +240,6 @@ class AsyncMultimodalEmbeddings:
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            parse_embedding_response(response.json()),
+            parse_embedding_response(response_json(response)),
             response,
         )

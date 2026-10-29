@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, Union, overload
 
 from typing_extensions import Literal
 
-from dashscope.errors import response_error
+from dashscope.errors import response_error, response_json
 from dashscope.protocols.base import ChatRequest
 from dashscope.resources._blocking import run_blocking
 from dashscope.resources._oss import (
@@ -691,7 +691,7 @@ def _send(
     if error_result is not None:
         return error_result
     return with_headers(
-        client.protocol.parse_completion(response.json()),
+        client.protocol.parse_completion(response_json(response)),
         response,
     )
 
@@ -742,7 +742,7 @@ async def _asend(
     if error_result is not None:
         return error_result
     return with_headers(
-        client.protocol.parse_completion(response.json()),
+        client.protocol.parse_completion(response_json(response)),
         response,
     )
 

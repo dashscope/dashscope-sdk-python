@@ -685,9 +685,13 @@ def test_management_malformed_json_is_not_suppressed(resource, raise_on_error):
         lambda request: httpx.Response(200, content=b'{"output":'),
         raise_on_error=raise_on_error,
     )
-    # Compatibility mode suppresses service errors, not parsing failures.
-    with pytest.raises(ValueError):
+    # Compatibility mode suppresses service errors, not response-contract
+    # failures; malformed JSON uses the catalog internal_error.
+    with pytest.raises(InternalServerError) as caught:
         getattr(client.audio, resource).list()
+    assert caught.value.code == "InternalServerError"
+    assert caught.value.status_code == 500
+    assert isinstance(caught.value.__cause__, ValueError)
 
 
 @pytest.mark.parametrize("resource", _MANAGEMENT_RESOURCES)

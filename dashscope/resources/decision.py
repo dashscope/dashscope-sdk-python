@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from dashscope._config import Config, compatible_mode_base_url
-from dashscope.errors import response_error
+from dashscope.errors import response_error, response_json
 from dashscope.types.common import ResponseBase, Usage, with_headers
 
 _PATH = "/systemone"
@@ -193,7 +193,7 @@ def _checked_response(client, response) -> DecisionResponse:
     """
     error = response_error(response)
     if error is None:
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
     if client.raise_on_error:
         raise error
     return with_headers(

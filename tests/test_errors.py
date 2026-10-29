@@ -40,6 +40,7 @@ from dashscope.errors import (
     ServiceUnavailableError,
     WsBinaryOwnerConflictError,
     WsEventError,
+    WsQueueCapacityExceededError,
     WsStateError,
     check_response,
     error_from_business_code,
@@ -628,8 +629,36 @@ def test_strict_http_envelope_retains_non_object_failures(raw, raise_on_error):
 @pytest.mark.parametrize("raw", [None, [], "not an envelope", 0])
 @pytest.mark.parametrize("raise_on_error", [False, True])
 def test_strict_http_envelope_rejects_non_object_success(raw, raise_on_error):
-    with pytest.raises(ValueError):
-        response_body(_resp(200, raw), raise_on_error=raise_on_error)
+    response = httpx.Response(
+        200,
+        content=json.dumps(raw),
+        headers={
+            "content-type": "application/json",
+            "x-request-id": "header-id",
+        },
+    )
+    with pytest.raises(InternalServerError) as caught:
+        response_body(response, raise_on_error=raise_on_error)
+    assert caught.value.code == "InternalServerError"
+    assert caught.value.status_code == 500
+    assert caught.value.request_id == "header-id"
+    assert caught.value.body == raw
+    assert caught.value.headers["x-request-id"] == "header-id"
+
+
+def test_strict_http_envelope_rejects_invalid_json_as_internal_error():
+    response = httpx.Response(
+        200,
+        text="not-json",
+        headers={"x-request-id": "header-id"},
+    )
+    with pytest.raises(InternalServerError) as caught:
+        response_body(response)
+    assert caught.value.code == "InternalServerError"
+    assert caught.value.status_code == 500
+    assert caught.value.request_id == "header-id"
+    assert caught.value.body == "not-json"
+    assert isinstance(caught.value.__cause__, ValueError)
 
 
 def test_error_code_enum():
@@ -711,6 +740,10 @@ def test_response_error_is_not_a_public_catalog_entry_or_class():
     [
         (WsEventError, "sdk.ws.ProtocolError"),
         (WsStateError, "sdk.ws.IllegalState"),
+        (
+            WsQueueCapacityExceededError,
+            "sdk.ws.QueueCapacityExceeded",
+        ),
         (WsBinaryOwnerConflictError, "sdk.ws.BinaryOwnerConflict"),
     ],
 )

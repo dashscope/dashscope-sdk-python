@@ -17,7 +17,11 @@ from typing import Any, Dict, Iterator, Optional, Union
 
 from pydantic import ConfigDict, Field
 
-from dashscope.errors import check_response, error_from_business_code
+from dashscope.errors import (
+    check_response,
+    error_from_business_code,
+    response_json,
+)
 from dashscope.transport.ws import Connector, WsSession
 from dashscope.transport.ws_connection import WsConnection, WsTask
 from dashscope.types.common import (
@@ -245,7 +249,7 @@ class TingWu:
             sdk_module=MODULE,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        envelope = response.json()
+        envelope = response_json(response)
         data = response_envelope(envelope)
         output = envelope.get("output")
         data["output"] = output if isinstance(output, dict) else {}
@@ -331,7 +335,7 @@ class AsyncTingWu:
             sdk_module=MODULE,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        envelope = response.json()
+        envelope = response_json(response)
         data = response_envelope(envelope)
         output = envelope.get("output")
         data["output"] = output if isinstance(output, dict) else {}

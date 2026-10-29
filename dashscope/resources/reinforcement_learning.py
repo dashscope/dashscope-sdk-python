@@ -41,6 +41,7 @@ from dashscope.errors import (
     DashScopeError,
     check_response,
     error_from_business_code,
+    response_json,
 )
 from dashscope.resources._jobs import (
     CANCELED,
@@ -264,7 +265,7 @@ class RlJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response.json()), response)
+        return with_headers(_parse_job(response_json(response)), response)
 
     def wait(
         self,
@@ -329,7 +330,7 @@ class RlJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response.json()), response)
+        return with_headers(_parse_list(response_json(response)), response)
 
     def cancel(
         self,
@@ -348,7 +349,7 @@ class RlJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response.json()), response)
+        return with_headers(_parse_status(response_json(response)), response)
 
     def delete(
         self,
@@ -367,7 +368,7 @@ class RlJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response.json()), response)
+        return with_headers(_parse_status(response_json(response)), response)
 
     def logs(
         self,
@@ -390,7 +391,10 @@ class RlJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_logs(job_id, response.json()), response)
+        return with_headers(
+            _parse_logs(job_id, response_json(response)),
+            response,
+        )
 
 
 class Rl:
@@ -595,7 +599,7 @@ class AsyncRlJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response.json()), response)
+        return with_headers(_parse_job(response_json(response)), response)
 
     async def wait(
         self,
@@ -664,7 +668,7 @@ class AsyncRlJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response.json()), response)
+        return with_headers(_parse_list(response_json(response)), response)
 
     async def cancel(
         self,
@@ -683,7 +687,7 @@ class AsyncRlJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response.json()), response)
+        return with_headers(_parse_status(response_json(response)), response)
 
     async def delete(
         self,
@@ -702,7 +706,7 @@ class AsyncRlJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response.json()), response)
+        return with_headers(_parse_status(response_json(response)), response)
 
     async def logs(
         self,
@@ -725,7 +729,10 @@ class AsyncRlJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_logs(job_id, response.json()), response)
+        return with_headers(
+            _parse_logs(job_id, response_json(response)),
+            response,
+        )
 
 
 class AsyncRl:

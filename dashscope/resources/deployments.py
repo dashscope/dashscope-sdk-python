@@ -22,7 +22,7 @@ from typing import (
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from dashscope.errors import check_response
+from dashscope.errors import check_response, response_json
 from dashscope.resources._sse import (
     _aiter_sse,
     _iter_sse,
@@ -184,7 +184,7 @@ class Deployments:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
 
     def get(
         self,
@@ -203,7 +203,7 @@ class Deployments:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
 
     def list(
         self,
@@ -224,7 +224,7 @@ class Deployments:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response.json()), response)
+        return with_headers(_parse_list(response_json(response)), response)
 
     def scale(
         self,
@@ -245,7 +245,7 @@ class Deployments:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
 
     def delete(
         self,
@@ -265,7 +265,7 @@ class Deployments:
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            JobStatus(**flatten_envelope(response.json())),
+            JobStatus(**flatten_envelope(response_json(response))),
             response,
         )
 
@@ -339,7 +339,7 @@ class AsyncDeployments:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
 
     async def get(
         self,
@@ -358,7 +358,7 @@ class AsyncDeployments:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
 
     async def list(
         self,
@@ -379,7 +379,7 @@ class AsyncDeployments:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response.json()), response)
+        return with_headers(_parse_list(response_json(response)), response)
 
     async def scale(
         self,
@@ -400,7 +400,7 @@ class AsyncDeployments:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
 
     async def delete(
         self,
@@ -420,7 +420,7 @@ class AsyncDeployments:
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            JobStatus(**flatten_envelope(response.json())),
+            JobStatus(**flatten_envelope(response_json(response))),
             response,
         )
 

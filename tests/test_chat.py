@@ -13,13 +13,50 @@ import httpx
 import pytest
 
 from dashscope import AsyncClient, Client
-from dashscope.errors import ContentFilterError, RateLimitError
+from dashscope.errors import (
+    ContentFilterError,
+    InternalServerError,
+    RateLimitError,
+)
 from dashscope.types.completions import parse_completion
 
 BASE_URL = "https://api.test.local/api/v1"
 CHAT_PATH = "/api/v1/services/aigc/text-generation/generation"
 MULTIMODAL_PATH = "/api/v1/services/aigc/multimodal-generation/generation"
 OPENAI_PATH = "/api/v1/chat/completions"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_chat_maps_invalid_success_json_to_internal_error(asynchronous):
+    response = httpx.Response(
+        200,
+        text="not-json",
+        headers={"x-request-id": "header-id"},
+    )
+    client = (
+        _make_async_client(lambda request: response, max_retries=0)
+        if asynchronous
+        else _make_client(lambda request: response, max_retries=0)
+    )
+    try:
+        with pytest.raises(InternalServerError) as caught:
+            call = client.chat.completions.create(
+                model="qwen-plus",
+                messages="hi",
+            )
+            if asynchronous:
+                await call
+        assert caught.value.code == "InternalServerError"
+        assert caught.value.status_code == 500
+        assert caught.value.request_id == "header-id"
+        assert caught.value.body == "not-json"
+        assert isinstance(caught.value.__cause__, ValueError)
+    finally:
+        if asynchronous:
+            await client.aclose()
+        else:
+            client.close()
 
 
 def _sse(events):

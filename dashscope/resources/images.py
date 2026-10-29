@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
 
-from dashscope.errors import check_response
+from dashscope.errors import check_response, response_json
 from dashscope.resources._blocking import run_blocking
 from dashscope.resources._jobs import (
     DEFAULT_MAX_INTERVAL,
@@ -513,7 +513,7 @@ class Images:
                 raise_on_error=self._client.raise_on_error,
             )
             return with_headers(
-                _parse_sync_job(response.json()),
+                _parse_sync_job(response_json(response)),
                 response,
             )
         job = self.jobs.create(
@@ -783,7 +783,7 @@ class AsyncImages:
                 raise_on_error=self._client.raise_on_error,
             )
             return with_headers(
-                _parse_sync_job(response.json()),
+                _parse_sync_job(response_json(response)),
                 response,
             )
         job = await self.jobs.create(

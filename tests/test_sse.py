@@ -16,6 +16,7 @@ from dashscope import AsyncClient, Client
 from dashscope.errors import (
     ContentFilterError,
     DashScopeError,
+    InternalServerError,
     RateLimitError,
 )
 from dashscope.resources._sse import _aiter_sse, _iter_sse, _stream_error
@@ -600,8 +601,11 @@ def test_audio_sse_sync_malformed_json_response():
         content=b'{"output":',
         headers={"content-type": "application/json"},
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(InternalServerError) as caught:
         list(_iter_audio_sse(response))
+    assert caught.value.code == "InternalServerError"
+    assert caught.value.status_code == 500
+    assert isinstance(caught.value.__cause__, ValueError)
 
 
 @pytest.mark.asyncio

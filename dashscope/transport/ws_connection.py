@@ -44,6 +44,7 @@ from dashscope.errors import (
     APIConnectionError,
     APITimeoutError,
     WsBinaryOwnerConflictError,
+    WsQueueCapacityExceededError,
     WsStateError,
 )
 from dashscope.transport.ws import (
@@ -126,9 +127,7 @@ class WsTask(_EventProcessor):
                 # fail only this task and let its reader surface the error.
                 item = (
                     _ERROR,
-                    WsStateError(
-                        detail="websocket task receive queue is full",
-                    ),
+                    WsQueueCapacityExceededError(),
                 )
                 self._error = item[1]
             # Preserve terminal visibility without allowing an unbounded

@@ -39,6 +39,7 @@ from dashscope.errors import (
     DashScopeError,
     check_response,
     error_from_business_code,
+    response_json,
 )
 from dashscope.resources._jobs import (
     CANCELED,
@@ -271,7 +272,7 @@ class FineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response.json()), response)
+        return with_headers(_parse_job(response_json(response)), response)
 
     def get(
         self,
@@ -290,7 +291,7 @@ class FineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response.json()), response)
+        return with_headers(_parse_job(response_json(response)), response)
 
     def list(
         self,
@@ -311,7 +312,7 @@ class FineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response.json()), response)
+        return with_headers(_parse_list(response_json(response)), response)
 
     def cancel(
         self,
@@ -330,7 +331,7 @@ class FineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response.json()), response)
+        return with_headers(_parse_status(response_json(response)), response)
 
     def delete(
         self,
@@ -349,7 +350,7 @@ class FineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response.json()), response)
+        return with_headers(_parse_status(response_json(response)), response)
 
     def logs(
         self,
@@ -372,7 +373,10 @@ class FineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_logs(job_id, response.json()), response)
+        return with_headers(
+            _parse_logs(job_id, response_json(response)),
+            response,
+        )
 
     def stream_events(
         self,
@@ -496,7 +500,7 @@ class AsyncFineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response.json()), response)
+        return with_headers(_parse_job(response_json(response)), response)
 
     async def get(
         self,
@@ -515,7 +519,7 @@ class AsyncFineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response.json()), response)
+        return with_headers(_parse_job(response_json(response)), response)
 
     async def list(
         self,
@@ -536,7 +540,7 @@ class AsyncFineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response.json()), response)
+        return with_headers(_parse_list(response_json(response)), response)
 
     async def cancel(
         self,
@@ -555,7 +559,7 @@ class AsyncFineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response.json()), response)
+        return with_headers(_parse_status(response_json(response)), response)
 
     async def delete(
         self,
@@ -574,7 +578,7 @@ class AsyncFineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response.json()), response)
+        return with_headers(_parse_status(response_json(response)), response)
 
     async def logs(
         self,
@@ -597,7 +601,10 @@ class AsyncFineTunes:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_logs(job_id, response.json()), response)
+        return with_headers(
+            _parse_logs(job_id, response_json(response)),
+            response,
+        )
 
     async def stream_events(
         self,

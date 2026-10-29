@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict
 from dashscope.errors import (
     check_response,
     error_from_business_code,
+    response_json,
 )
 from dashscope.types.common import (
     ResponseBase,
@@ -445,7 +446,7 @@ class AppCompletions:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
 
     def _events(self, response) -> Iterator[AppCompletion]:
         try:
@@ -543,7 +544,7 @@ class AsyncAppCompletions:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
 
     async def _events(self, response) -> AsyncIterator[AppCompletion]:
         try:

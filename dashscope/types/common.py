@@ -9,7 +9,11 @@ from typing import Any, Dict, Optional, Protocol, TypeVar
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from dashscope.errors import error_from_business_code, error_from_status
+from dashscope.errors import (
+    error_from_business_code,
+    error_from_status,
+    response_json,
+)
 
 __all__ = [
     "JobStatus",
@@ -144,12 +148,13 @@ def response_body(
 ) -> Dict[str, Any]:
     """Opt in to strict HTTP envelopes, retaining non-JSON service failures."""
     success = 200 <= response.status_code < 300
-    try:
-        raw = response.json()
-    except ValueError:
-        if success:
-            raise
-        raw = None
+    if success:
+        raw = response_json(response)
+    else:
+        try:
+            raw = response.json()
+        except ValueError:
+            raw = None
     if isinstance(raw, dict):
         body = raw
     else:

@@ -12,6 +12,7 @@ from dashscope.errors import (
     ErrorCode,
     check_response,
     error_from_business_code,
+    response_json,
 )
 from dashscope.types.common import (
     ResponseBase,
@@ -118,7 +119,7 @@ class Models:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        result = _parse_list(response.json())
+        result = _parse_list(response_json(response))
         if provider:
             result.models = [
                 m for m in result.models if _match_provider(m, provider)
@@ -144,7 +145,7 @@ class Models:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        body = response.json()
+        body = response_json(response)
         models = _parse_get_models(body)
         if not models:
             if self._client.raise_on_error:
@@ -185,7 +186,7 @@ class AsyncModels:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        result = _parse_list(response.json())
+        result = _parse_list(response_json(response))
         if provider:
             result.models = [
                 m for m in result.models if _match_provider(m, provider)
@@ -211,7 +212,7 @@ class AsyncModels:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        body = response.json()
+        body = response_json(response)
         models = _parse_get_models(body)
         if not models:
             if self._client.raise_on_error:

@@ -496,8 +496,11 @@ def test_http_malformed_json_is_not_suppressed(raise_on_error):
         lambda request: httpx.Response(200, content=b'{"output":'),
         raise_on_error=raise_on_error,
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(InternalServerError) as caught:
         client.audio.tts.http.synthesize("你好", **_TTS_ARGS)
+    assert caught.value.code == "InternalServerError"
+    assert caught.value.status_code == 500
+    assert isinstance(caught.value.__cause__, ValueError)
 
 
 @pytest.mark.parametrize("method", ["synthesize", "stream"])
@@ -658,8 +661,10 @@ def test_http_stream_malformed_json_response_raises_and_closes(
         headers={"content-type": "application/json"},
         raise_on_error=raise_on_error,
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(InternalServerError) as caught:
         list(client.audio.tts.http.stream("你好", **_TTS_ARGS))
+    assert caught.value.code == "InternalServerError"
+    assert caught.value.status_code == 500
     assert wire.closed and response.is_closed
 
 

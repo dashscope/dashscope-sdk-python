@@ -22,6 +22,7 @@ own side. Those come from the catalog's ``SDK_ERRORS`` table as
 :class:`APITimeoutError`) are SdkError subclasses backed by the generic
 ``sdk.ConnectionError`` / ``sdk.Timeout`` entries, the websocket
 transport errors (:class:`WsEventError` / :class:`WsStateError` /
+:class:`WsQueueCapacityExceededError` /
 :class:`WsBinaryOwnerConflictError`) are backed by the ``sdk.ws.*``
 entries. AgentStudio and AgenticRL also raise catalog-backed v2 errors
 natively; :func:`error_from_sdk_exception` remains available for mounts
@@ -192,6 +193,15 @@ class WsStateError(_CatalogSdkError):
     """
 
     _SDK_ERROR_NAME = "sdk.ws.IllegalState"
+
+
+class WsQueueCapacityExceededError(_CatalogSdkError):
+    """A bounded websocket task receive queue overflowed.
+
+    Backed by the catalog's ``sdk.ws.QueueCapacityExceeded`` entry.
+    """
+
+    _SDK_ERROR_NAME = "sdk.ws.QueueCapacityExceeded"
 
 
 class WsBinaryOwnerConflictError(_CatalogSdkError):
@@ -521,6 +531,46 @@ def _sse_error_body(text: str) -> Any:
                 return body
     body = flush()
     return body if body is not None else fallback
+
+
+def internal_response_error(
+    response: httpx.Response,
+    body: Any,
+) -> InternalServerError:
+    """Build the catalog ``internal_error`` for an unusable response body."""
+    entry = _entry("internal_error")
+    data = body if isinstance(body, dict) else {}
+    return InternalServerError(
+        entry.error_msg,
+        code=entry.error_code,
+        status_code=entry.status_code,
+        request_id=(
+            data.get("request_id") or response.headers.get("x-request-id")
+        ),
+        body=body,
+        headers=response.headers,
+    )
+
+
+def response_json(
+    response: httpx.Response,
+    *,
+    require_object: bool = True,
+) -> Any:
+    """Parse a successful JSON response through the v2 error contract.
+
+    A response that cannot be decoded, or whose top-level shape is not the
+    object every DashScope resource envelope requires, is a server response
+    contract failure. Report it as the catalog ``internal_error`` rather than
+    leaking ``JSONDecodeError`` / ``AttributeError`` from the parser.
+    """
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise internal_response_error(response, response.text) from exc
+    if require_object and not isinstance(body, dict):
+        raise internal_response_error(response, body)
+    return body
 
 
 def _parse_body(response: httpx.Response) -> Any:

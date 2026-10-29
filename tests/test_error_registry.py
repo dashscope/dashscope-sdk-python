@@ -310,12 +310,12 @@ def test_unfamily_entries_are_the_generic_sdk_ones():
 
 
 def test_ws_family_entries():
-    """The five websocket entries; three wired, two carried for parity.
+    """The five websocket entries; four wired, one carried for parity.
 
-    ProtocolError / IllegalState / BinaryOwnerConflict back the v2
-    websocket transport's exception classes. UpstreamQueueFull (sync
-    send, no send buffer) and QueueCapacityExceeded (unbounded per-task
-    queues) describe mechanisms the Python transport does not have.
+    ProtocolError / IllegalState / QueueCapacityExceeded /
+    BinaryOwnerConflict back the v2 websocket transport's exception classes.
+    UpstreamQueueFull remains parity-only because sends are synchronous and
+    the Python transport has no upstream queue.
     """
     entries = _by_name(SDK)
     expected = {
@@ -332,9 +332,17 @@ def test_ws_family_entries():
     wired = {
         "sdk.ws.ProtocolError": "WsEventError",
         "sdk.ws.IllegalState": "WsStateError",
+        "sdk.ws.QueueCapacityExceeded": ("WsQueueCapacityExceededError"),
         "sdk.ws.BinaryOwnerConflict": "WsBinaryOwnerConflictError",
     }
     for name, cls_name in wired.items():
         cls = getattr(v2_errors, cls_name)
         assert cls._SDK_ERROR_NAME == name
-        assert entries[name].vars == ["detail"]
+        expected_vars = (
+            []
+            if name.endswith("QueueCapacityExceeded")
+            else [
+                "detail",
+            ]
+        )
+        assert entries[name].vars == expected_vars

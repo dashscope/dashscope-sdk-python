@@ -14,7 +14,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from dashscope.errors import check_response
+from dashscope.errors import check_response, response_json
 from dashscope.resources._jobs import (
     DEFAULT_MAX_INTERVAL,
     DEFAULT_POLL_INTERVAL,
@@ -380,7 +380,7 @@ class Embeddings:
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            parse_embedding_response(response.json()),
+            parse_embedding_response(response_json(response)),
             response,
         )
 
@@ -424,6 +424,6 @@ class AsyncEmbeddings:
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            parse_embedding_response(response.json()),
+            parse_embedding_response(response_json(response)),
             response,
         )

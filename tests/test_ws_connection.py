@@ -15,6 +15,7 @@ from dashscope.errors import (
     APIConnectionError,
     DashScopeError,
     WsBinaryOwnerConflictError,
+    WsQueueCapacityExceededError,
     WsStateError,
 )
 from dashscope.transport.ws import WsEventError, WsSession
@@ -250,9 +251,10 @@ def test_slow_consumer_queue_full_fails_only_that_task():
     assert not conn.closed
     assert not conn._ws.closed
 
-    # t1 sees a terminal WsStateError, isolated to that task. Drain any
+    # t1 sees the catalog queue-capacity error, isolated to that task.
+    # Drain any
     # frames queued ahead of the overflow marker, then expect the raise.
-    with pytest.raises(WsStateError, match="queue is full"):
+    with pytest.raises(WsQueueCapacityExceededError, match="capacity"):
         while True:
             t1.recv()
     assert not conn.closed

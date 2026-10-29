@@ -25,12 +25,12 @@ from urllib.parse import unquote_plus, urlparse
 
 import httpx
 
-from dashscope import _error_registry as _registry
 from dashscope._logging import get_logger
 from dashscope.errors import (
-    InternalServerError,
     check_response,
     error_from_status,
+    internal_response_error,
+    response_json,
 )
 from dashscope.transport.http import default_user_agent
 
@@ -68,25 +68,6 @@ def _resolve_file_uri_path(file_uri: str) -> str:
     return os.path.expanduser(file_path)
 
 
-def _invalid_policy_response(
-    response: httpx.Response,
-    body: Any,
-) -> InternalServerError:
-    """Classify an unusable getPolicy response through ``internal_error``."""
-    entry = _registry.INTERNAL_ERROR
-    data = body if isinstance(body, dict) else {}
-    return InternalServerError(
-        entry.error_msg,
-        code=entry.error_code,
-        status_code=entry.status_code,
-        request_id=(
-            data.get("request_id") or response.headers.get("x-request-id")
-        ),
-        body=body,
-        headers=response.headers,
-    )
-
-
 def _policy_from_response(response: httpx.Response) -> Dict[str, Any]:
     """Pull the policy out of the getPolicy envelope.
 
@@ -95,15 +76,10 @@ def _policy_from_response(response: httpx.Response) -> Dict[str, Any]:
     embeddings response, say) through as a "policy", deferring the failure
     to a ``KeyError`` on some policy field far from here.
     """
-    try:
-        body = response.json()
-    except ValueError as exc:
-        raise _invalid_policy_response(response, response.text) from exc
-    if not isinstance(body, dict):
-        raise _invalid_policy_response(response, body)
+    body = response_json(response)
     policy = body.get("data")
     if not isinstance(policy, dict):
-        raise _invalid_policy_response(response, body)
+        raise internal_response_error(response, body)
     return policy
 
 

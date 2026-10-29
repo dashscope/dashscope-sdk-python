@@ -21,6 +21,7 @@ from dashscope.errors import (
     DashScopeError,
     check_response,
     error_from_business_code,
+    response_json,
 )
 from dashscope.types.common import (
     ResponseBase,
@@ -360,7 +361,10 @@ class Jobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(JobList.from_payload(response.json()), response)
+        return with_headers(
+            JobList.from_payload(response_json(response)),
+            response,
+        )
 
     def wait(
         self,
@@ -413,7 +417,7 @@ class Jobs:
         return self._check_canceled(current)
 
     def _parse(self, response: Any) -> Job:
-        payload = response.json()
+        payload = response_json(response)
         job = with_headers(Job.from_payload(payload), response)
         if job.status == FAILED and self._client.raise_on_error:
             raise error_from_business_code(
@@ -557,7 +561,10 @@ class AsyncJobs:
             workspace=workspace,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(JobList.from_payload(response.json()), response)
+        return with_headers(
+            JobList.from_payload(response_json(response)),
+            response,
+        )
 
     async def wait(
         self,
@@ -605,7 +612,7 @@ class AsyncJobs:
         return self._check_canceled(current)
 
     def _parse(self, response: Any) -> Job:
-        payload = response.json()
+        payload = response_json(response)
         job = with_headers(Job.from_payload(payload), response)
         if job.status == FAILED and self._client.raise_on_error:
             raise error_from_business_code(

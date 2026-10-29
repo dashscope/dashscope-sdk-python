@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from dashscope.errors import check_response
+from dashscope.errors import check_response, response_json
 from dashscope.types.common import (
     ResponseBase,
     Usage,
@@ -125,7 +125,7 @@ class Rerank:
             sdk_module=MODULE,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
 
 
 class AsyncRerank:
@@ -165,4 +165,4 @@ class AsyncRerank:
             sdk_module=MODULE,
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response.json()), response)
+        return with_headers(_parse(response_json(response)), response)
