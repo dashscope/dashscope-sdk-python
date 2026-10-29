@@ -22,6 +22,7 @@ from dashscope.v2 import AsyncClient, Client
 from dashscope.v2 import _error_registry as registry
 from dashscope.v2 import errors
 from dashscope.v2.errors import (
+    APIResponseValidationError,
     APIStatusError,
     AuthenticationError,
     BadRequestError,
@@ -869,3 +870,99 @@ def test_sdk_error_translation_needs_a_family_fallback():
             family="sdk.agentstudio",
         )
     assert "sdk.agentstudio.Error" in str(ei.value)
+
+
+# -- response validation errors (SDK-side parse failure) --------------
+
+
+def test_response_validation_error_keeps_response_provenance():
+    resp = _resp(
+        200,
+        {"request_id": "req-body-1", "output": "unexpected"},
+        headers={"x-request-id": "req-header-1"},
+    )
+    cause = ValueError("field 'choices' expected a list")
+    err = APIResponseValidationError(
+        "ChatCompletion validation failed",
+        response=resp,
+        body={"request_id": "req-body-1", "output": "unexpected"},
+        cause=cause,
+    )
+    assert isinstance(err, DashScopeError)
+    assert not isinstance(err, APIStatusError)
+    assert not isinstance(err, SdkError)
+    assert err.response is resp
+    assert err.cause is cause
+    assert err.status_code == 200
+    # Body wins over the header: it is the payload the SDK failed on.
+    assert err.request_id == "req-body-1"
+    assert err.headers["x-request-id"] == "req-header-1"
+
+
+def test_response_validation_error_str_carries_request_id_and_body():
+    resp = _resp(200, None, headers={"x-request-id": "req-header-1"})
+    err = APIResponseValidationError(
+        "ChatCompletion validation failed",
+        response=resp,
+        body={"choices": "unexpected"},
+    )
+    text = str(err)
+    assert "APIResponseValidationError" in text
+    assert "req-header-1" in text
+    assert "unexpected" in text
+
+
+def test_response_validation_error_str_truncates_large_bodies():
+    err = APIResponseValidationError(
+        "boom",
+        body={"payload": "x" * 5000},
+    )
+    assert len(str(err)) < 400
+    assert str(err).endswith("...")
+
+
+def test_response_validation_error_without_response():
+    # Streaming parses may fail after the response is consumed; the
+    # class must stay constructible with SDK-side knowledge only.
+    err = APIResponseValidationError(
+        "chunk validation failed",
+        body={"frame": "not an envelope"},
+    )
+    assert err.response is None
+    assert err.status_code is None
+    assert err.request_id is None
+    assert isinstance(err, DashScopeError)
+    assert "not an envelope" in str(err)
+
+
+def test_response_validation_error_chains_the_cause():
+    resp = _resp(200, {"output": {}})
+    try:
+        try:
+            raise ValueError("inner parse failure")
+        except ValueError as exc:
+            raise APIResponseValidationError(
+                "TingWuResult validation failed",
+                response=resp,
+                body={"output": {}},
+                cause=exc,
+            ) from exc
+    except APIResponseValidationError as err:
+        assert isinstance(err.__cause__, ValueError)
+        assert err.cause is err.__cause__
+
+
+def test_response_validation_error_is_not_in_the_catalog():
+    # The class is hand-written on purpose: _error_registry.py is
+    # generated (DO NOT EDIT), and the SdkError contract ("no HTTP
+    # response behind it") does not fit a failure that has one. If the
+    # catalog ever grows a matching entry, this pin forces the
+    # registration decision to be made explicitly.
+    assert not any(
+        "response_validation" in entry.name
+        for entry in registry.SDK_ERRORS
+    )
+    assert not any(
+        entry.error_code == "APIResponseValidationError"
+        for entry in registry.PUBLIC_ERRORS
+    )

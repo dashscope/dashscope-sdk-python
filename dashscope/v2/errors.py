@@ -20,6 +20,12 @@ A third source has no response at all: failures the SDK reports on its
 own side. Those come from the catalog's ``SDK_ERRORS`` table as
 :class:`SdkError`, and the v2 mount layers over 1.x subsystems
 translate with :func:`error_from_sdk_exception`.
+
+:class:`APIResponseValidationError` sits between the two: the gateway
+answered, but the body failed SDK-side validation. It is deliberately
+not a catalog :class:`SdkError` -- that class means "no HTTP response
+behind it" -- and it is not an :class:`APIStatusError` either, so a
+broken response never masquerades as a gateway-declared failure.
 """
 
 from __future__ import annotations
@@ -191,6 +197,67 @@ class SdkError(DashScopeError):
         )
         self.solution = solution
         self.allow_retry = allow_retry
+
+
+# Body preview cap for __str__: enough to recognise the payload, short
+# enough that a large response does not flood logs.
+_BODY_PREVIEW_CHARS = 200
+
+
+class APIResponseValidationError(DashScopeError):
+    """Response body failed SDK-side validation.
+
+    Distinct from both catalog families on purpose: the gateway did
+    answer, so the raw ``response`` is attached for inspection, yet the
+    failure is the SDK's inability to parse the body rather than an
+    error the gateway declared. ``cause`` carries the original
+    validation exception (e.g. ``pydantic.ValidationError``) when the
+    caller has one; raise sites should also use ``raise ... from exc``
+    so the traceback keeps the chain.
+
+    ``status_code`` mirrors the HTTP status of ``response`` when there
+    is one. That is provenance, not a gateway verdict, which is why
+    this class stays outside ``APIStatusError``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        response: Optional[httpx.Response] = None,
+        body: Any = None,
+        cause: Optional[BaseException] = None,
+    ) -> None:
+        headers: Optional[Mapping[str, str]] = None
+        status_code: Optional[int] = None
+        request_id: Optional[str] = None
+        if response is not None:
+            headers = response.headers
+            status_code = response.status_code
+        # Same precedence as _request_id(): body first, header second.
+        if isinstance(body, dict):
+            request_id = body.get("request_id")
+        if request_id is None and response is not None:
+            request_id = response.headers.get("x-request-id")
+        super().__init__(
+            message,
+            status_code=status_code,
+            request_id=request_id,
+            body=body,
+            headers=headers,
+        )
+        self.response = response
+        self.cause = cause
+
+    def __str__(self) -> str:
+        text = super().__str__()
+        try:
+            preview = json.dumps(self.body, ensure_ascii=False, default=repr)
+        except (TypeError, ValueError):
+            preview = repr(self.body)
+        if len(preview) > _BODY_PREVIEW_CHARS:
+            preview = preview[:_BODY_PREVIEW_CHARS] + "..."
+        return f"{text} | body={preview}"
 
 
 _CATALOG_CLASSES: Dict[str, Type[APIStatusError]] = {
