@@ -10,9 +10,7 @@ and the management plane ``client.audio.vocabularies`` / ``phrases`` /
 ``voices`` / ``voice_design``.
 """
 
-import asyncio
-
-from dashscope.resources._blocking import bridge_client
+from dashscope.resources._blocking import run_blocking
 from dashscope.resources.audio.asr import (
     Asr,
     AsyncAsr,
@@ -74,6 +72,11 @@ __all__ = [
 ]
 
 
+def _call_resource(client, resource_cls, name, args, kwargs):
+    resource = resource_cls(client)
+    return getattr(resource, name)(*args, **kwargs)
+
+
 class _AsyncResourceProxy:
     """Run sync response parsing in a worker while reusing AsyncTransport."""
 
@@ -83,11 +86,13 @@ class _AsyncResourceProxy:
 
     def __getattr__(self, name):
         async def call(*args, **kwargs):
-            resource = self._resource_cls(bridge_client(self._client))
-            return await asyncio.to_thread(
-                getattr(resource, name),
-                *args,
-                **kwargs,
+            return await run_blocking(
+                self._client,
+                _call_resource,
+                self._resource_cls,
+                name,
+                args,
+                kwargs,
             )
 
         return call

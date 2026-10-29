@@ -19,9 +19,21 @@ and the event loop stays free to run the coroutine it was handed.
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import functools
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
 
 __all__ = ["bridge_client", "run_blocking"]
+
+
+# Keep bridge workers separate from the event loop default executor. Async
+# transports may need that default executor themselves (for example DNS
+# resolution); occupying it with workers that synchronously wait for those
+# transports can otherwise deadlock under concurrent uploads.
+_BLOCKING_EXECUTOR = ThreadPoolExecutor(
+    thread_name_prefix="dashscope-blocking",
+)
 
 
 class _BridgeTransport:
@@ -62,9 +74,14 @@ async def run_blocking(
     *args,
     **kwargs,
 ) -> Any:
-    """``asyncio.to_thread(fn, <bridged client>, *args, **kwargs)``.
+    """Run ``fn`` with a bridged client on the isolated worker pool.
 
     ``fn`` takes the client as its first argument, as every blocking helper
-    on the upload path does.
+    on the upload path does. Context variables are propagated like
+    :func:`asyncio.to_thread`, without consuming the loop default executor.
     """
-    return await asyncio.to_thread(fn, bridge_client(client), *args, **kwargs)
+    loop = asyncio.get_running_loop()
+    bound = functools.partial(fn, bridge_client(client), *args, **kwargs)
+    context = contextvars.copy_context()
+    call = functools.partial(context.run, bound)
+    return await loop.run_in_executor(_BLOCKING_EXECUTOR, call)

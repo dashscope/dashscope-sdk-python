@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import httpx
@@ -15,8 +16,8 @@ import pytest
 from dashscope import AsyncClient, Client
 from dashscope.errors import (
     AuthenticationError,
+    InternalServerError,
     PermissionDeniedError,
-    SdkError,
 )
 from dashscope.resources import _oss_upload
 from dashscope.resources._blocking import run_blocking
@@ -132,20 +133,81 @@ def test_certificate_fetch_failure_raises():
 
 
 @pytest.mark.parametrize(
-    "body",
+    "body,request_id",
     [
-        {"request_id": "r-1"},
+        ({"request_id": "r-1"}, "r-1"),
         # "output" is not this endpoint's envelope; accepting it would let
         # an unrelated body through as a policy and fail later on a missing
         # policy field instead of here.
-        {"request_id": "r-1", "output": _CERT},
+        ({"request_id": "r-1", "output": _CERT}, "r-1"),
+        ([], "header-id"),
+        ("not-an-object", "header-id"),
     ],
 )
-def test_certificate_fetch_rejects_a_body_without_a_policy(body):
-    client = _make_client(lambda request: httpx.Response(200, json=body))
+def test_certificate_fetch_rejects_an_invalid_policy_body(body, request_id):
+    client = _make_client(
+        lambda request: httpx.Response(
+            200,
+            json=body,
+            headers={"x-request-id": "header-id"},
+        ),
+    )
 
-    with pytest.raises(SdkError, match="no data object"):
+    with pytest.raises(InternalServerError) as caught:
         _oss_upload.get_upload_certificate(client, "m")
+    assert caught.value.code == "InternalServerError"
+    assert caught.value.status_code == 500
+    assert caught.value.request_id == request_id
+    assert caught.value.body == body
+    assert caught.value.headers["x-request-id"] == "header-id"
+
+
+def test_certificate_fetch_rejects_invalid_json_as_internal_error():
+    client = _make_client(
+        lambda request: httpx.Response(
+            200,
+            text="not-json",
+            headers={"x-request-id": "header-id"},
+        ),
+    )
+
+    with pytest.raises(InternalServerError) as caught:
+        _oss_upload.get_upload_certificate(client, "m")
+    assert caught.value.code == "InternalServerError"
+    assert caught.value.status_code == 500
+    assert caught.value.request_id == "header-id"
+    assert caught.value.body == "not-json"
+    assert isinstance(caught.value.__cause__, ValueError)
+
+
+@pytest.mark.asyncio
+async def test_run_blocking_leaves_the_default_executor_for_async_transport(
+    monkeypatch,
+):
+    real_to_thread = asyncio.to_thread
+    default_executor_calls = []
+
+    async def tracked_to_thread(fn, *args, **kwargs):
+        default_executor_calls.append(fn)
+        return await real_to_thread(fn, *args, **kwargs)
+
+    class ExecutorUsingTransport:
+        async def request(self):
+            return await asyncio.to_thread(lambda: "ok")
+
+    monkeypatch.setattr(asyncio, "to_thread", tracked_to_thread)
+    client = type("Client", (), {"transport": ExecutorUsingTransport()})()
+
+    result = await run_blocking(
+        client,
+        lambda bridged: bridged.transport.request(),
+    )
+
+    assert result == "ok"
+    # Only the async transport used the loop default executor. The outer
+    # blocking call ran on the isolated pool, so the two cannot starve each
+    # other when concurrent uploads fill the bridge pool.
+    assert len(default_executor_calls) == 1
 
 
 @pytest.mark.asyncio
