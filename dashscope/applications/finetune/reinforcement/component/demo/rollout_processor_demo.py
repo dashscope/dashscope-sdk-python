@@ -8,7 +8,7 @@ Demonstrates simple rollout execution flow (simulating Agent invocation).
 
 import time
 
-from dashscope.applications.finetune.reinforcement.common.log import logger
+from ...common.log import logger
 from ..data.base_data_model import (
     AgentOutput,
     TaskStatus,

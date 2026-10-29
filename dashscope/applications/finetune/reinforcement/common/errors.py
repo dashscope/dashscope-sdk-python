@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from dashscope.errors import _CatalogSdkError, sdk_error
 
-from dashscope.applications.finetune.reinforcement.common._legacy_errors import (
+from ._legacy_errors import (
     AgenticRLError as _LegacyAgenticRLError,
     BaseConnectionError as _LegacyBaseConnectionError,
     BasePermissionError as _LegacyBasePermissionError,

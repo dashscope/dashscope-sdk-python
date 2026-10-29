@@ -48,15 +48,15 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from dashscope.applications.finetune.reinforcement.common.log import logger
-from dashscope.applications.finetune.reinforcement.common.utils import (
+from ...common.log import logger
+from ...common.utils import (
     get_fc_request_id,
     get_business_summary,
 )
-from dashscope.applications.finetune.reinforcement.common.model_types import (
+from ...common.model_types import (
     FunctionType as FuncType,
 )
-from dashscope.applications.finetune.reinforcement.component import (
+from .. import (
     BaseDataModel,
 )
 from ..func_manager import (

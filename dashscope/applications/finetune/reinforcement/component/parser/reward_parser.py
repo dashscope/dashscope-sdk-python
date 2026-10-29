@@ -7,11 +7,11 @@ Request parameter parser for Reward business type.
 
 from typing import Any, Dict
 
-from dashscope.applications.finetune.reinforcement.common.log import logger
-from dashscope.applications.finetune.reinforcement.component.data.reward_input import (
+from ...common.log import logger
+from ..data.reward_input import (
     RewardInput,
 )
-from dashscope.applications.finetune.reinforcement.component.parser.base_parser import (
+from .base_parser import (
     BaseRequestParser,
 )
 

@@ -1,13 +1,7 @@
 # -*- coding: utf-8 -*-
-from dashscope.applications.finetune.reinforcement.component.demo.group_reward_processor_demo import (  # noqa: E501  # pylint: disable=line-too-long
-    DemoGroupRewardProcessor,
-)
-from dashscope.applications.finetune.reinforcement.component.demo.reward_processor_demo import (  # noqa: E501  # pylint: disable=line-too-long
-    DemoRewardProcessor,
-)
-from dashscope.applications.finetune.reinforcement.component.demo.rollout_processor_demo import (  # noqa: E501  # pylint: disable=line-too-long
-    DemoRolloutProcessor,
-)
+from .group_reward_processor_demo import DemoGroupRewardProcessor
+from .reward_processor_demo import DemoRewardProcessor
+from .rollout_processor_demo import DemoRolloutProcessor
 
 __all__ = [
     "DemoRewardProcessor",

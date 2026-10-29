@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-from dashscope.applications.finetune.reinforcement.common.model_types import (
+from ...common.model_types import (
     FunctionType as FuncType,
 )
 

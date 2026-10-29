@@ -9,7 +9,7 @@ Corresponds to the GroupRewardInput structure in protocol.py.
 from typing import Any, List, Optional
 from pydantic import ConfigDict, Field
 
-from dashscope.applications.finetune.reinforcement.common.model_types import (
+from ...common.model_types import (
     FunctionType as FuncType,
 )
 from .base_data_model import (

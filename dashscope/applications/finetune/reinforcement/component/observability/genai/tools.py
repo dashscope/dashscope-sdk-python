@@ -50,7 +50,7 @@ except ImportError:  # pragma: no cover
 
 from opentelemetry.trace.status import Status, StatusCode
 
-from dashscope.applications.finetune.reinforcement.component.observability import (
+from .. import (
     genai,
     tracing,
 )

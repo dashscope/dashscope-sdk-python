@@ -6,7 +6,7 @@ Demo implementation of Reward Processor.
 Demonstrates rule-based scoring for Agent outputs.
 """
 
-from dashscope.applications.finetune.reinforcement.common.log import logger
+from ...common.log import logger
 from ..data.base_data_model import (
     TaskStatus,
 )

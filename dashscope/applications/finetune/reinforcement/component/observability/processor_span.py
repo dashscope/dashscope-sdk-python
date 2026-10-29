@@ -34,7 +34,7 @@ import inspect
 from functools import wraps
 from typing import Any, Callable, Dict, Optional, TypeVar, cast
 
-from dashscope.applications.finetune.reinforcement.common.log import logger
+from ...common.log import logger
 from ..data.base_data_model import (
     BaseDataModel,
 )

@@ -6,7 +6,7 @@ Demo implementation of GroupReward Processor.
 Demonstrates rule-based scoring for multiple Agent outputs in a group.
 """
 
-from dashscope.applications.finetune.reinforcement.common.log import logger
+from ...common.log import logger
 from ..data.base_data_model import (
     TaskStatus,
 )

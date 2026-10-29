@@ -14,18 +14,18 @@ from abc import abstractmethod
 from concurrent.futures import ThreadPoolExecutor, Executor
 from typing import Optional, Dict
 
-from dashscope.applications.finetune.reinforcement.component.data.reward_input import (
+from ..data.reward_input import (
     RewardInput,
 )
-from dashscope.applications.finetune.reinforcement.component.data.reward_output import (
+from ..data.reward_output import (
     RewardOutput,
 )
-from dashscope.applications.finetune.reinforcement.component.func_decorator import (
+from ..func_decorator import (
     RewardProcessorMeta,
     SubRewardFunction,
     AggregateFunction,
 )
-from dashscope.applications.finetune.reinforcement.component.processor import (
+from . import (
     AbstractProcessor,
 )
 

@@ -9,13 +9,13 @@ reward calculation logic.
 
 from abc import abstractmethod
 
-from dashscope.applications.finetune.reinforcement.component.data import (
+from ..data import (
     GroupRewardInput,
 )
-from dashscope.applications.finetune.reinforcement.component.data import (
+from ..data import (
     GroupRewardOutput,
 )
-from dashscope.applications.finetune.reinforcement.component.processor.abstract_processor import (  # noqa: E501  # pylint: disable=line-too-long
+from .abstract_processor import (  # noqa: E501  # pylint: disable=line-too-long
     AbstractProcessor,
 )
 

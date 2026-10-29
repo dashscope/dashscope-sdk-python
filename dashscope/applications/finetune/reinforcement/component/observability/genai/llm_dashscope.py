@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 from opentelemetry.trace.status import Status, StatusCode
 
-from dashscope.applications.finetune.reinforcement.common.log import logger
+from ....common.log import logger
 from ..genai._core import (  # noqa: E501
     GENAI_AVAILABLE,
     get_handler,

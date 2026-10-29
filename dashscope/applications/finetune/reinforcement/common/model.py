@@ -23,7 +23,7 @@ from pydantic import (
 import yaml
 
 # Local Application
-from dashscope.applications.finetune.reinforcement.common.constants import (
+from .constants import (
     FC_API_KEY,
     FC_DELETE_API,
     FC_LOAD_API,
@@ -40,7 +40,7 @@ from dashscope.applications.finetune.reinforcement.common.constants import (
     FC_LAYER_QUERY_API,
     LOG_LEVEL,
 )
-from dashscope.applications.finetune.reinforcement.common.model_types import (
+from .model_types import (
     FileSpec,
     FunctionType,
     DatasetsType,
@@ -51,7 +51,7 @@ from dashscope.applications.finetune.reinforcement.common.model_types import (
     StatusType,
     TrainingType,
 )
-from dashscope.applications.finetune.reinforcement.component.data import (
+from ..component.data import (
     RewardInput,
     RewardOutput,
     RolloutInput,
@@ -59,7 +59,7 @@ from dashscope.applications.finetune.reinforcement.component.data import (
     GroupRewardInput,
     GroupRewardOutput,
 )
-from dashscope.applications.finetune.reinforcement.common.utils import (
+from .utils import (
     check_file,
     client_fc,
     create_deployment_files,
@@ -73,8 +73,8 @@ from dashscope.applications.finetune.reinforcement.common.utils import (
     get_weights_from_file,
     deep_remove_none,
 )
-from dashscope.applications.finetune.reinforcement.common.log import logger
-from dashscope.applications.finetune.reinforcement.common.errors import (
+from .log import logger
+from .errors import (
     InputError,
     OutputError,
     OSSConnectionError,

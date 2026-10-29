@@ -27,11 +27,11 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
-from dashscope.applications.finetune.reinforcement.common.log import logger
-from dashscope.applications.finetune.reinforcement.common.utils import (
+from ....common.log import logger
+from ....common.utils import (
     deep_mask,
 )
-from dashscope.applications.finetune.reinforcement.component.observability import (
+from .. import (
     genai,
 )
 

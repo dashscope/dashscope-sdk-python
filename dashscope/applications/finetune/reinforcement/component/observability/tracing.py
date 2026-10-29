@@ -36,8 +36,8 @@ from contextlib import contextmanager
 from enum import Enum
 from typing import Any, Dict, Iterator, Optional, Tuple
 
-from dashscope.applications.finetune.reinforcement.common.log import logger
-from dashscope.applications.finetune.reinforcement.common.model_types import (
+from ...common.log import logger
+from ...common.model_types import (
     FunctionType as FuncType,
 )
 from ..data.base_data_model import (

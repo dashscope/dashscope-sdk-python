@@ -2,7 +2,7 @@
 import logging
 import sys
 
-from dashscope.applications.finetune.reinforcement.common.constants import (
+from .constants import (
     LOGGER_NAME,
     LOG_LEVEL,
 )

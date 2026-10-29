@@ -21,8 +21,8 @@ from tenacity import (
 )
 
 from dashscope._shared._sdk_ident import get_sdk_headers
-from dashscope.applications.finetune.reinforcement import logger
-from dashscope.applications.finetune.reinforcement.common.errors import (
+from .. import logger
+from .errors import (
     InputError,
     OutputError,
     ConfigurationError,
@@ -30,7 +30,7 @@ from dashscope.applications.finetune.reinforcement.common.errors import (
     RuntimeErrorWithCode,
     OSSUploadError,
 )
-from dashscope.applications.finetune.reinforcement import (
+from .. import (
     LOG_LEVEL,
     DASHSCOPE_API_KEY,
     BAILIAN_FILE_API,
@@ -47,7 +47,7 @@ from dashscope.applications.finetune.reinforcement import (
     LOGGER_FILTER_FIELDS,
     FC_WORKERS_COUNT,
 )
-from dashscope.applications.finetune.reinforcement.common.model_types import (
+from .model_types import (
     FileSpec,
     FunctionType,
 )

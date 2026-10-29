@@ -4,8 +4,8 @@ import copy
 from functools import wraps
 from typing import Callable, Dict, Optional, Type
 
-from dashscope.applications.finetune.reinforcement.common.log import logger
-from dashscope.applications.finetune.reinforcement.component.data import (
+from ..common.log import logger
+from .data import (
     RewardInput,
     RewardOutput,
     Reward,
