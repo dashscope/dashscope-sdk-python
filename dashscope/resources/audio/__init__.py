@@ -11,8 +11,8 @@ and the management plane ``client.audio.vocabularies`` / ``phrases`` /
 """
 
 import asyncio
-from types import SimpleNamespace
 
+from dashscope.resources._blocking import bridge_client
 from dashscope.resources.audio.asr import (
     Asr,
     AsyncAsr,
@@ -74,19 +74,6 @@ __all__ = [
 ]
 
 
-class _ThreadBridgeTransport:
-    def __init__(self, transport, loop) -> None:
-        self._transport = transport
-        self._loop = loop
-
-    def request(self, *args, **kwargs):
-        future = asyncio.run_coroutine_threadsafe(
-            self._transport.request(*args, **kwargs),
-            self._loop,
-        )
-        return future.result()
-
-
 class _AsyncResourceProxy:
     """Run sync response parsing in a worker while reusing AsyncTransport."""
 
@@ -96,12 +83,7 @@ class _AsyncResourceProxy:
 
     def __getattr__(self, name):
         async def call(*args, **kwargs):
-            loop = asyncio.get_running_loop()
-            bridge_client = SimpleNamespace(
-                transport=_ThreadBridgeTransport(self._client.transport, loop),
-                raise_on_error=self._client.raise_on_error,
-            )
-            resource = self._resource_cls(bridge_client)
+            resource = self._resource_cls(bridge_client(self._client))
             return await asyncio.to_thread(
                 getattr(resource, name),
                 *args,

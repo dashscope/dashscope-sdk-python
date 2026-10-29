@@ -26,7 +26,7 @@ from urllib.parse import unquote_plus, urlparse
 import httpx
 
 from dashscope._logging import get_logger
-from dashscope.errors import check_response, error_from_status
+from dashscope.errors import SdkError, check_response, error_from_status
 from dashscope.transport.http import default_user_agent
 
 __all__ = [
@@ -63,6 +63,20 @@ def _resolve_file_uri_path(file_uri: str) -> str:
     return os.path.expanduser(file_path)
 
 
+def _policy_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Pull the policy out of the getPolicy envelope.
+
+    ``data`` is the key the gateway answers with -- and the one 1.x read
+    first. Accepting ``output`` too would let an unrelated body (an
+    embeddings response, say) through as a "policy", deferring the failure
+    to a ``KeyError`` on some policy field far from here.
+    """
+    policy = body.get("data")
+    if not isinstance(policy, dict):
+        raise SdkError("upload policy response carries no data object")
+    return policy
+
+
 def get_upload_certificate(
     client,
     model: str,
@@ -73,6 +87,11 @@ def get_upload_certificate(
 
     Raises even when the client was built with ``raise_on_error=False``:
     without a policy there is no URL to upload to and nothing to hand back.
+
+    Blocking, like the rest of this module: an ``AsyncClient`` reaches it
+    through the bridge in :mod:`dashscope.resources._blocking`, which is
+    what lets ``client.transport.request`` return a response here instead
+    of a coroutine.
     """
     response = client.transport.request(
         "GET",
@@ -82,7 +101,7 @@ def get_upload_certificate(
         workspace=workspace,
     )
     check_response(response)
-    return response.json()["output"]
+    return _policy_from_body(response.json())
 
 
 def _post_to_oss(

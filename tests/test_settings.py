@@ -156,6 +156,8 @@ def test_setter_validation(clean):
         settings.timeout = 0
     with pytest.raises(ValueError, match="max_retries"):
         settings.max_retries = -1
+    with pytest.raises(TypeError, match="base_url must be a string"):
+        settings.base_url = 123
 
 
 def test_log_level_setter_applies_immediately(clean):

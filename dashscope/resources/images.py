@@ -22,10 +22,10 @@ same for both output shapes.
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
 
 from dashscope.errors import check_response
+from dashscope.resources._blocking import run_blocking
 from dashscope.resources._jobs import (
     DEFAULT_MAX_INTERVAL,
     DEFAULT_POLL_INTERVAL,
@@ -572,11 +572,12 @@ class AsyncImageJobs:
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> Job:
-        # The upload path is blocking (requests + getPolicy); run it off the
-        # event loop so it never stalls other tasks.
-        image_urls, extra_input, has_upload = await asyncio.to_thread(
-            _upload_inputs,
+        # The upload path is blocking (file post + getPolicy), so it runs in
+        # a worker thread -- over a transport bridged back to this loop,
+        # which is what lets it serve the policy fetch.
+        image_urls, extra_input, has_upload = await run_blocking(
             self._client,
+            _upload_inputs,
             model,
             image_urls,
             extra_input,
@@ -741,11 +742,12 @@ class AsyncImages:
     ) -> Job:
         """See :meth:`Images.generate`."""
         if _uses_multimodal_protocol(model):
-            # The upload path is blocking (requests + getPolicy); run it off
-            # the event loop so it never stalls other tasks.
-            image_urls, extra_input, has_upload = await asyncio.to_thread(
-                _upload_inputs,
+            # The upload path is blocking (file post + getPolicy), so it runs
+            # in a worker thread -- over a transport bridged back to this
+            # loop, which is what lets it serve the policy fetch.
+            image_urls, extra_input, has_upload = await run_blocking(
                 self._client,
+                _upload_inputs,
                 model,
                 image_urls,
                 extra_input,

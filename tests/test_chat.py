@@ -1571,3 +1571,49 @@ def test_media_upload_uses_the_per_call_api_key(monkeypatch):
     assert captured["body"]["input"]["messages"][0]["content"] == [
         {"image": "oss://bucket/cat.png"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_async_media_upload_reaches_the_gateway(tmp_path, monkeypatch):
+    # The async call offloads the blocking upload to a worker thread, which
+    # cannot await the AsyncTransport unless the client is bridged; without
+    # the bridge the policy fetch returns a coroutine and the upload dies.
+    monkeypatch.setattr(
+        "dashscope.resources._oss_upload._post_to_oss",
+        lambda *args, **kwargs: httpx.Response(200, text=""),
+    )
+    policy = {
+        "oss_access_key_id": "STS.access-key-id",
+        "signature": "sig==",
+        "policy": "pol==",
+        "upload_dir": "upload/2026/abc",
+        "x_oss_object_acl": "private",
+        "x_oss_forbid_overwrite": "true",
+        "upload_host": "https://dashscope-oss.oss-cn-beijing.aliyuncs.com",
+    }
+    captured = {}
+
+    def handler(request):
+        if request.url.path.endswith("/uploads"):
+            return httpx.Response(
+                200,
+                json={"request_id": "r", "data": policy},
+            )
+        captured["oss"] = request.headers.get("X-DashScope-OssResourceResolve")
+        captured["body"] = json.loads(request.content)
+        return _native_response()
+
+    image = tmp_path / "cat.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\n")
+    client = _make_async_client(handler)
+    resp = await client.chat.completions.create(
+        model="qwen-vl-max",
+        messages=[{"role": "user", "content": [{"image": str(image)}]}],
+    )
+
+    assert captured["oss"] == "enable"
+    assert captured["body"]["input"]["messages"][0]["content"] == [
+        {"image": f"oss://{policy['upload_dir']}/cat.png"},
+    ]
+    assert resp.output_text == "ok"
+    await client.aclose()

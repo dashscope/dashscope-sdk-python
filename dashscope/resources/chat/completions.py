@@ -8,7 +8,6 @@ carrying media parts route to the multimodal endpoint on their own.
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import replace
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union, overload
 
@@ -16,6 +15,7 @@ from typing_extensions import Literal
 
 from dashscope.errors import response_error
 from dashscope.protocols.base import ChatRequest
+from dashscope.resources._blocking import run_blocking
 from dashscope.resources._oss import (
     OSS_RESOLVE_HEADERS,
     upload_message_media,
@@ -997,11 +997,12 @@ class AsyncCompletions:
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> Union[ChatCompletion, AsyncChatStream]:
-        # The upload path is blocking (requests + getPolicy); run the whole
-        # request build off the event loop so it never stalls other tasks.
-        built = await asyncio.to_thread(
-            _build_request,
+        # The upload path is blocking (file post + getPolicy), so the whole
+        # request build runs in a worker thread -- over a transport bridged
+        # back to this loop, which is what lets it serve the policy fetch.
+        built = await run_blocking(
             self._client,
+            _build_request,
             multimodal=False,
             model=model,
             messages=messages,

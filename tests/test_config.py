@@ -508,6 +508,17 @@ def test_invalid_timeout_and_retries(clean_env):
         resolve_config(max_retries=-1, config_path="/nonexistent/config.toml")
 
 
+def test_non_string_base_url(clean_env):
+    # Left unvalidated, a non-string base_url only dies in the transport on
+    # ``base_url.rstrip("/")`` -- an AttributeError far from the bad argument.
+    with pytest.raises(TypeError, match="base_url must be a string"):
+        resolve_config(base_url=123, config_path="/nonexistent/config.toml")
+    with pytest.raises(TypeError, match="base_url must be a string"):
+        Client(base_url=123)
+    with pytest.raises(TypeError, match="base_url must be a string"):
+        AsyncClient(base_url=123)
+
+
 def test_invalid_toml(clean_env, tmp_path):
     path = _write_config(tmp_path, "not valid [toml")
     with pytest.raises(ValueError, match="invalid TOML"):

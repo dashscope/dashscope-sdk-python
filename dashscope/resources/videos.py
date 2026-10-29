@@ -19,9 +19,9 @@ the same async-task envelope, so ``generate`` returns the unified
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
 
+from dashscope.resources._blocking import run_blocking
 from dashscope.resources._jobs import (
     DEFAULT_MAX_INTERVAL,
     DEFAULT_POLL_INTERVAL,
@@ -411,11 +411,12 @@ class AsyncVideoJobs:
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> Job:
-        # The upload path is blocking (requests + getPolicy); run it off the
-        # event loop so it never stalls other tasks.
-        image_url, media, extra_input, has_upload = await asyncio.to_thread(
-            _upload_inputs,
+        # The upload path is blocking (file post + getPolicy), so it runs in
+        # a worker thread -- over a transport bridged back to this loop,
+        # which is what lets it serve the policy fetch.
+        image_url, media, extra_input, has_upload = await run_blocking(
             self._client,
+            _upload_inputs,
             model,
             image_url,
             media,

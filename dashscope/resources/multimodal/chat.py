@@ -15,11 +15,11 @@ parts on their own chat path — so there this resource and
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Dict, List, Optional, Union, overload
 
 from typing_extensions import Literal
 
+from dashscope.resources._blocking import run_blocking
 from dashscope.resources.chat.completions import (
     AsyncChatStream,
     ChatStream,
@@ -286,11 +286,12 @@ class AsyncMultimodalChat:
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> Union[ChatCompletion, AsyncChatStream]:
-        # The upload path is blocking (requests + getPolicy); run the whole
-        # request build off the event loop so it never stalls other tasks.
-        built = await asyncio.to_thread(
-            _build_request,
+        # The upload path is blocking (file post + getPolicy), so the whole
+        # request build runs in a worker thread -- over a transport bridged
+        # back to this loop, which is what lets it serve the policy fetch.
+        built = await run_blocking(
             self._client,
+            _build_request,
             multimodal=True,
             model=model,
             messages=messages,

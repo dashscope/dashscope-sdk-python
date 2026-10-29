@@ -203,6 +203,20 @@ def _validate_region(region: str) -> str:
     return region
 
 
+def _validate_base_url(value: Optional[str]) -> Optional[str]:
+    """Reject a non-string base_url where it is configured.
+
+    Left alone it reaches ``base_url.rstrip("/")`` in the transport and
+    surfaces as an ``AttributeError`` naming a method the caller never
+    wrote, far from the bad argument.
+    """
+    if value is not None and not isinstance(value, str):
+        raise TypeError(
+            f"base_url must be a string, got {type(value).__name__}",
+        )
+    return value
+
+
 def _protocol_default_base_url(
     protocol: str,
     workspace: Optional[str],
@@ -349,6 +363,7 @@ class Settings:
 
     @base_url.setter
     def base_url(self, value: Optional[str]) -> None:
+        value = _validate_base_url(value)
         with self._lock:
             self._explicit["base_url"] = value
 
@@ -707,12 +722,15 @@ def resolve_config(
         ),
     )
 
-    configured_base_url = _pick(
-        base_url,
-        settings.get_explicit("base_url"),
-        os.environ.get(_BASE_URL_ENV) or os.environ.get(_LEGACY_BASE_URL_ENV),
-        file_cfg.get("base_url"),
-        None,
+    configured_base_url = _validate_base_url(
+        _pick(
+            base_url,
+            settings.get_explicit("base_url"),
+            os.environ.get(_BASE_URL_ENV)
+            or os.environ.get(_LEGACY_BASE_URL_ENV),
+            file_cfg.get("base_url"),
+            None,
+        ),
     )
     # An explicit base_url is the escape hatch for custom/private gateways.
     # Otherwise defaults come from the workspace-scoped MaaS gateway,

@@ -12,9 +12,14 @@ import os
 import httpx
 import pytest
 
-from dashscope import Client
-from dashscope.errors import AuthenticationError, PermissionDeniedError
+from dashscope import AsyncClient, Client
+from dashscope.errors import (
+    AuthenticationError,
+    PermissionDeniedError,
+    SdkError,
+)
 from dashscope.resources import _oss_upload
+from dashscope.resources._blocking import run_blocking
 
 BASE_URL = "https://api.test.local/api/v1"
 OSS_HOST = "https://dashscope-oss.oss-cn-beijing.aliyuncs.com"
@@ -37,20 +42,30 @@ def _make_client(handler, **kwargs):
     return Client(api_key="sk-test", http_client=http_client, **kwargs)
 
 
-def _policy_client(status=200):
-    """Client whose transport answers ``GET /uploads`` with a policy."""
-    calls = []
+def _make_async_client(handler, **kwargs):
+    mock = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=mock, base_url=BASE_URL)
+    kwargs.setdefault("base_url", BASE_URL)
+    return AsyncClient(api_key="sk-test", http_client=http_client, **kwargs)
 
+
+def _policy_handler(calls, status=200):
     def handler(request):
         calls.append(request)
         if status != 200:
             return httpx.Response(status, json={"message": "denied"})
         return httpx.Response(
             200,
-            json={"request_id": "r-1", "output": _CERT},
+            json={"request_id": "r-1", "data": _CERT},
         )
 
-    return _make_client(handler), calls
+    return handler
+
+
+def _policy_client(status=200):
+    """Client whose transport answers ``GET /uploads`` with a policy."""
+    calls = []
+    return _make_client(_policy_handler(calls, status=status)), calls
 
 
 def _capture_oss(monkeypatch, status=200):
@@ -114,6 +129,49 @@ def test_certificate_fetch_failure_raises():
     client, _ = _policy_client(status=401)
     with pytest.raises(AuthenticationError):
         _oss_upload.get_upload_certificate(client, "qwen-vl-max")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"request_id": "r-1"},
+        # "output" is not this endpoint's envelope; accepting it would let
+        # an unrelated body through as a policy and fail later on a missing
+        # policy field instead of here.
+        {"request_id": "r-1", "output": _CERT},
+    ],
+)
+def test_certificate_fetch_rejects_a_body_without_a_policy(body):
+    client = _make_client(lambda request: httpx.Response(200, json=body))
+
+    with pytest.raises(SdkError, match="no data object"):
+        _oss_upload.get_upload_certificate(client, "m")
+
+
+@pytest.mark.asyncio
+async def test_async_client_uploads_over_the_bridged_transport(
+    tmp_path,
+    monkeypatch,
+):
+    seen = _capture_oss(monkeypatch)
+    calls = []
+    client = _make_async_client(_policy_handler(calls))
+
+    url, cert = await run_blocking(
+        client,
+        _oss_upload.upload_local_file,
+        "qwen-vl-max",
+        _png(tmp_path),
+    )
+
+    # The policy fetch must come back a response, not the un-awaited
+    # coroutine an AsyncTransport hands a caller that forgets to await.
+    assert url == f"oss://{_CERT['upload_dir']}/cat.png"
+    assert cert == _CERT
+    assert seen["url"] == OSS_HOST
+    assert len(calls) == 1
+    assert calls[0].headers.get("Authorization") == "Bearer sk-test"
+    await client.aclose()
 
 
 def test_upload_local_file_builds_the_oss_form(tmp_path, monkeypatch):

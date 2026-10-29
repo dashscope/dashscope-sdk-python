@@ -7,12 +7,12 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict
 
 from dashscope.errors import check_response
+from dashscope.resources._blocking import run_blocking
 from dashscope.resources._oss import upload_embedding_media
 from dashscope.resources.embeddings import (
     EmbeddingResponse,
@@ -205,11 +205,12 @@ class AsyncMultimodalEmbeddings:
         workspace: Optional[str] = None,
     ) -> EmbeddingResponse:
         contents = _contents(input)
-        # The upload path is blocking (requests + getPolicy); run it off the
-        # event loop so it never stalls other tasks.
-        await asyncio.to_thread(
-            upload_embedding_media,
+        # The upload path is blocking (file post + getPolicy), so it runs in
+        # a worker thread -- over a transport bridged back to this loop,
+        # which is what lets it serve the policy fetch.
+        await run_blocking(
             self._client,
+            upload_embedding_media,
             contents,
             model,
             api_key,
