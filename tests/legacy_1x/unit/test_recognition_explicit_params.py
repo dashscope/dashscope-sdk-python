@@ -1,0 +1,192 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) Alibaba, Inc. and its affiliates.
+"""Test explicit parameters for Recognition class."""
+
+# pylint: disable=protected-access
+import threading
+from contextlib import contextmanager
+from unittest import mock
+
+from dashscope.legacy_1x.audio.asr.recognition import (
+    Recognition,
+    RecognitionCallback,
+)
+
+
+class MockRecognitionCallback(RecognitionCallback):
+    """Mock callback for testing."""
+
+    def on_event(self, result):
+        pass
+
+    def on_complete(self):
+        pass
+
+    def on_error(self, result):
+        pass
+
+    def on_close(self):
+        pass
+
+
+@contextmanager
+def _stubbed_worker():
+    """Stub out the receive worker so start() makes no network call.
+
+    The fake worker must block until released: start() checks is_alive()
+    right after starting the thread, and an instantly exiting thread is
+    reported as InvalidTask("Invalid task, task create failed.").
+    """
+    release = threading.Event()
+
+    def _fake_worker(self):
+        release.wait(timeout=10)
+
+    with mock.patch.object(
+        Recognition,
+        "_Recognition__receive_worker",
+        _fake_worker,
+    ):
+        yield release
+
+
+def _stop_recognition(recognition, release):
+    recognition._running = False
+    release.set()
+    if recognition._worker is not None and recognition._worker.is_alive():
+        recognition._worker.join(timeout=1)
+    if (
+        recognition._silence_timer is not None
+        and recognition._silence_timer.is_alive()
+    ):
+        recognition._silence_timer.cancel()
+
+
+class TestRecognitionExplicitParams:
+    """Test explicit parameters in Recognition class."""
+
+    def test_init_with_all_explicit_params(self):
+        """Test __init__ with all explicit parameters."""
+        recognition = Recognition(
+            model="test-model",
+            callback=MockRecognitionCallback(),
+            format="pcm",
+            sample_rate=16000,
+            disfluency_removal_enabled=True,
+            diarization_enabled=True,
+            speaker_count=2,
+            timestamp_alignment_enabled=True,
+            special_word_filter="test_filter",
+            audio_event_detection_enabled=True,
+        )
+
+        # Verify parameters are stored in _kwargs
+        assert recognition._kwargs["disfluency_removal_enabled"] is True
+        assert recognition._kwargs["diarization_enabled"] is True
+        assert recognition._kwargs["speaker_count"] == 2
+        assert recognition._kwargs["timestamp_alignment_enabled"] is True
+        assert recognition._kwargs["special_word_filter"] == "test_filter"
+        assert recognition._kwargs["audio_event_detection_enabled"] is True
+
+    def test_init_with_none_params(self):
+        """Test __init__ with None parameters should not add to _kwargs."""
+        recognition = Recognition(
+            model="test-model",
+            callback=MockRecognitionCallback(),
+            format="pcm",
+            sample_rate=16000,
+            disfluency_removal_enabled=None,
+            diarization_enabled=None,
+            speaker_count=None,
+        )
+
+        # Verify None parameters are not in _kwargs
+        assert "disfluency_removal_enabled" not in recognition._kwargs
+        assert "diarization_enabled" not in recognition._kwargs
+        assert "speaker_count" not in recognition._kwargs
+
+    def test_init_with_partial_params(self):
+        """Test __init__ with some explicit parameters."""
+        recognition = Recognition(
+            model="test-model",
+            callback=MockRecognitionCallback(),
+            format="pcm",
+            sample_rate=16000,
+            disfluency_removal_enabled=True,
+            speaker_count=3,
+        )
+
+        # Verify only specified parameters are in _kwargs
+        assert recognition._kwargs["disfluency_removal_enabled"] is True
+        assert recognition._kwargs["speaker_count"] == 3
+        assert "diarization_enabled" not in recognition._kwargs
+        assert "timestamp_alignment_enabled" not in recognition._kwargs
+
+    def test_init_with_extra_kwargs(self):
+        """Test __init__ with extra kwargs should still work."""
+        recognition = Recognition(
+            model="test-model",
+            callback=MockRecognitionCallback(),
+            format="pcm",
+            sample_rate=16000,
+            disfluency_removal_enabled=True,
+            custom_param="custom_value",
+        )
+
+        # Verify both explicit and extra kwargs are stored
+        assert recognition._kwargs["disfluency_removal_enabled"] is True
+        assert recognition._kwargs["custom_param"] == "custom_value"
+
+    def test_start_with_explicit_params(self):
+        """Test start() method with explicit parameters."""
+        recognition = Recognition(
+            model="test-model",
+            callback=MockRecognitionCallback(),
+            format="pcm",
+            sample_rate=16000,
+        )
+
+        with _stubbed_worker() as release:
+            try:
+                recognition.start(
+                    phrase_id="test_phrase",
+                    disfluency_removal_enabled=True,
+                    diarization_enabled=True,
+                    speaker_count=2,
+                )
+            finally:
+                _stop_recognition(recognition, release)
+
+        # Verify parameters are updated in _kwargs
+        assert recognition._kwargs.get("disfluency_removal_enabled") is True
+        assert recognition._kwargs.get("diarization_enabled") is True
+        assert recognition._kwargs.get("speaker_count") == 2
+
+    def test_param_override_in_start(self):
+        """Test that start() can override __init__ parameters."""
+        recognition = Recognition(
+            model="test-model",
+            callback=MockRecognitionCallback(),
+            format="pcm",
+            sample_rate=16000,
+            disfluency_removal_enabled=False,
+            speaker_count=1,
+        )
+
+        # Verify initial values
+        assert recognition._kwargs["disfluency_removal_enabled"] is False
+        assert recognition._kwargs["speaker_count"] == 1
+
+        # Override parameters in start
+        with _stubbed_worker() as release:
+            try:
+                recognition.start(
+                    disfluency_removal_enabled=True,
+                    speaker_count=3,
+                )
+            finally:
+                _stop_recognition(recognition, release)
+
+        # Verify parameters are overridden
+        assert recognition._kwargs.get("disfluency_removal_enabled") is True
+        assert recognition._kwargs.get("speaker_count") == 3

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Qwen-Audio 单轮实时语音对话：发送 WAV 或麦克风音频，保存并播放回答。"""
+"""Single-turn realtime voice chat with Qwen-Audio: send WAV or microphone audio, save and play the reply."""
 
 import argparse
 import base64
@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from dashscope import Client
-from dashscope.v2.errors import DashScopeError
+from dashscope.errors import DashScopeError
 from ._common import (
     input_device,
     load_sounddevice,

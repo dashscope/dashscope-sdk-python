@@ -2,7 +2,7 @@
 
 > **English** | [中文](README_zh.md)
 
-This is not an "API call reference". In the age of AI-assisted development, anyone can generate a one-line `call(model="xxx")` in seconds — the value of this directory is that it **writes those few hundred lines of "grubby code" needed to push a Model Studio application to production, correctly, in advance**: every advanced file is a miniature production-grade harness blueprint with rigid engineering defenses, targeting a specific development or business scenario. Everything is built on the 2.0 resource-style client `dashscope.Client()` (consistent with `dashscope.v2` inside the package); legacy 1.x examples are preserved intact under `legacy_1x/`.
+This is not an "API call reference". In the age of AI-assisted development, anyone can generate a one-line `call(model="xxx")` in seconds — the value of this directory is that it **writes those few hundred lines of "grubby code" needed to push a Model Studio application to production, correctly, in advance**: every advanced file is a miniature production-grade harness blueprint with rigid engineering defenses, targeting a specific development or business scenario. Everything is built on the 2.0 resource-style client `dashscope.Client()` (consistent with `dashscope` inside the package); legacy 1.x examples are preserved intact under `legacy_1x/`.
 
 A qualified best-practice case must demonstrate three dimensions at once:
 
@@ -93,7 +93,7 @@ Uniform style: `client = dashscope.Client()` (reads the key from the `DASHSCOPE_
 | `text_generation/chat.py` | Text generation: one-line `dashscope.chat()`, non-streaming, streaming (text_stream) |
 | `text_generation/tokenization.py` | Token counting |
 | `multimodal_vision/multimodal_chat.py` | Multimodal chat (qwen-vl image understanding) |
-| `audio/` | Speech samples: ASR/TTS/realtime/voice CLIs (see `audio/README.md`; `direct_call/` holds the no-`with` variants); 2.0 audio API is a preview and may change |
+| `audio/` | Speech samples: ASR/TTS/realtime/voice CLIs (see `audio/README.md`; `direct_call/` holds the no-`with` variants) |
 | `audio/tingwu.py` | TingWu offline tasks and realtime sessions |
 | `image_video_synthesis/images.py` | Image generation: one-call generate-and-wait + the manual jobs flow |
 | `image_video_synthesis/videos.py` | Video generation: one-call generate-and-wait + the manual jobs flow |

@@ -1,4 +1,4 @@
-﻿.. currentmodule:: dashscope.aigc.conversation
+﻿.. currentmodule:: dashscope.legacy_1x.aigc.conversation
 
 
 Conversation

@@ -1,0 +1,245 @@
+# -*- coding: utf-8 -*-
+"""``generation`` sub-command group."""
+import json
+import sys
+from http import HTTPStatus
+from typing import Any, Dict, Optional
+
+import typer
+
+from dashscope.legacy_1x.aigc import Generation
+from dashscope.legacy_1x.cli.common import (
+    error,
+    extract_text,
+    handle_sdk_error,
+    print_failed_message,
+)
+
+app = typer.Typer(
+    name="generation",
+    help="Text generation commands",
+    add_completion=False,
+    invoke_without_command=True,
+)
+
+
+def _build_generation_kwargs(
+    messages: Optional[str],
+    temperature: Optional[float],
+    top_p: Optional[float],
+    top_k: Optional[int],
+    max_tokens: Optional[int],
+    seed: Optional[int],
+    stop: Optional[str],
+    repetition_penalty: Optional[float],
+    presence_penalty: Optional[float],
+    enable_search: Optional[bool],
+    n: Optional[int],
+    result_format: Optional[str],
+) -> Dict[str, Any]:
+    """Build kwargs dictionary for Generation.call from CLI options."""
+    kwargs: Dict[str, Any] = {}
+
+    if messages is not None:
+        try:
+            kwargs["messages"] = json.loads(messages)
+        except json.JSONDecodeError as exc:
+            error("--messages must be a valid JSON string")
+            raise typer.Exit(1) from exc
+
+    # Group simple parameters to reduce branches
+    simple_params = {
+        "temperature": temperature,
+        "top_p": top_p,
+        "top_k": top_k,
+        "max_tokens": max_tokens,
+        "seed": seed,
+        "repetition_penalty": repetition_penalty,
+        "presence_penalty": presence_penalty,
+        "enable_search": enable_search,
+        "n": n,
+        "result_format": result_format,
+    }
+
+    for key, value in simple_params.items():
+        if value is not None:
+            kwargs[key] = value
+
+    if stop is not None:
+        stop_list = [s.strip() for s in stop.split(",") if s.strip()]
+        if stop_list:
+            kwargs["stop"] = stop_list if len(stop_list) > 1 else stop_list[0]
+
+    return kwargs
+
+
+def _output_stream(response):
+    """Handle streaming response output.
+
+    TTY: plain text; non-TTY: JSON lines.
+    """
+    is_tty = sys.stdout.isatty()
+    last_usage = None
+    for rsp in response:
+        if rsp.status_code != HTTPStatus.OK:
+            print_failed_message(rsp)
+            raise typer.Exit(1)
+        last_usage = getattr(rsp, "usage", None)
+        if is_tty:
+            typer.echo(extract_text(rsp.output), nl=False)
+        else:
+            row = {"output": dict(rsp.output)}
+            if last_usage:
+                row["usage"] = dict(last_usage)
+            typer.echo(json.dumps(row, ensure_ascii=False))
+    if is_tty:
+        typer.echo("")
+        if last_usage:
+            typer.echo(json.dumps(dict(last_usage), ensure_ascii=False))
+
+
+def _output_single(response):
+    """Handle non-streaming response output.
+
+    TTY: plain text; non-TTY: JSON.
+    """
+    if response.status_code != HTTPStatus.OK:
+        print_failed_message(response)
+        raise typer.Exit(1)
+    if sys.stdout.isatty():
+        typer.echo(extract_text(response.output))
+    else:
+        row = {"output": dict(response.output)}
+        usage = getattr(response, "usage", None)
+        if usage:
+            row["usage"] = dict(usage)
+        typer.echo(json.dumps(row, ensure_ascii=False))
+
+
+@app.callback()
+def callback(ctx: typer.Context):
+    """Show help if no subcommand is provided."""
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+
+
+@app.command("create")
+@handle_sdk_error("Generation request failed")
+def create(
+    prompt: str = typer.Option(..., "-p", "--prompt", help="Input prompt"),
+    model: str = typer.Option(..., "-m", "--model", help="The model to call"),
+    stream: bool = typer.Option(
+        False,
+        "-s",
+        "--stream",
+        help="Use stream mode",
+    ),
+    messages: Optional[str] = typer.Option(
+        None,
+        "--messages",
+        help="JSON string of message list for multi-turn conversation",
+    ),
+    temperature: Optional[float] = typer.Option(
+        None,
+        "--temperature",
+        help="Controls randomness, range [0, 2)",
+    ),
+    top_p: Optional[float] = typer.Option(
+        None,
+        "--top-p",
+        help="Nucleus sampling parameter, range (0, 1.0]",
+    ),
+    top_k: Optional[int] = typer.Option(
+        None,
+        "--top-k",
+        help="Size of candidate token set for sampling",
+    ),
+    max_tokens: Optional[int] = typer.Option(
+        None,
+        "--max-tokens",
+        help="Maximum number of output tokens",
+    ),
+    seed: Optional[int] = typer.Option(
+        None,
+        "--seed",
+        help="Random seed for reproducibility",
+    ),
+    stop: Optional[str] = typer.Option(
+        None,
+        "--stop",
+        help="Stop sequence(s), comma-separated for multiple",
+    ),
+    repetition_penalty: Optional[float] = typer.Option(
+        None,
+        "--repetition-penalty",
+        help="Penalizes repeated sequences, 1.0 means no penalty",
+    ),
+    presence_penalty: Optional[float] = typer.Option(
+        None,
+        "--presence-penalty",
+        help="Controls content repetition, range [-2.0, 2.0]",
+    ),
+    enable_search: Optional[bool] = typer.Option(
+        None,
+        "--enable-search",
+        help="Enable web search",
+    ),
+    n: Optional[int] = typer.Option(
+        None,
+        "--n",
+        help="Number of responses to generate (1-4)",
+    ),
+    result_format: Optional[str] = typer.Option(
+        None,
+        "--result-format",
+        help="Output format: 'message' or 'text'",
+    ),
+):
+    """Call text generation API."""
+    kwargs = _build_generation_kwargs(
+        messages=messages,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k,
+        max_tokens=max_tokens,
+        seed=seed,
+        stop=stop,
+        repetition_penalty=repetition_penalty,
+        presence_penalty=presence_penalty,
+        enable_search=enable_search,
+        n=n,
+        result_format=result_format,
+    )
+
+    response = Generation.call(model, prompt, stream=stream, **kwargs)
+
+    if stream:
+        _output_stream(response)
+    else:
+        _output_single(response)
+
+
+# Backward compatibility alias
+@app.command("call", hidden=True)
+def call(
+    prompt: str = typer.Option(..., "-p", "--prompt", help="Input prompt"),
+    model: str = typer.Option(..., "-m", "--model", help="The model to call"),
+    stream: bool = typer.Option(
+        False,
+        "-s",
+        "--stream",
+        help="Use stream mode",
+    ),
+    history: Optional[str] = typer.Option(  # pylint: disable=unused-argument
+        None,
+        "--history",
+        help="The history of the request",
+    ),
+):
+    """(Deprecated: use 'create' instead) Call text generation API."""
+    create(
+        prompt=prompt,
+        model=model,
+        stream=stream,
+        history=history,
+    )

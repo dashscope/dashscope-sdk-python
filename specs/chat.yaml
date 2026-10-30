@@ -235,7 +235,7 @@ components:
           $ref: "#/components/schemas/Usage"
       x-python:
         class: ChatCompletion
-        module: dashscope.v2.types.completions
+        module: dashscope.types.completions
         convenience:
           output_text: output.choices[0].message.content
 
@@ -283,7 +283,7 @@ components:
           $ref: "#/components/schemas/Usage"
       x-python:
         class: ChatCompletionChunk
-        module: dashscope.v2.types.completions
+        module: dashscope.types.completions
 
     ErrorResponse:
       type: object
@@ -311,4 +311,4 @@ components:
         request_id:
           type: string
       x-python:
-        maps_to: dashscope.v2.errors.ErrorCode
+        maps_to: dashscope.errors.ErrorCode

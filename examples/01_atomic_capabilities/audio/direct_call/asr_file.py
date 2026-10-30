@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from dashscope import Client
-from dashscope.v2.errors import DashScopeError
+from dashscope.errors import DashScopeError
 from ._common import positive_seconds
 
 

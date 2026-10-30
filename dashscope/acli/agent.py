@@ -514,18 +514,17 @@ class Agent:
         if not self.session_path:
             return
         try:
+            from dashscope.acli.utils.paths import atomic_write_text
+
             self.session_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.session_path.with_suffix(
-                self.session_path.suffix + ".tmp",
-            )
-            tmp.write_text(
+            atomic_write_text(
+                self.session_path,
                 json.dumps(
                     sanitize(self.messages),
                     ensure_ascii=False,
                     indent=2,
                 ),
             )
-            tmp.replace(self.session_path)
         except OSError:
             pass
         # Update session meta message count
@@ -934,6 +933,7 @@ class Agent:
         tools_schema = self._filter_tools_schema(
             registry.to_schema_list(user_input_text),
         )
+        registry_version = registry.version
 
         # Compress with the full request overhead in view: the system prompt
         # and tools schema ride on every API call, so they count against the
@@ -952,6 +952,30 @@ class Agent:
 
         last_content = ""
         for _loop_i in range(self.max_turns):
+            # Connecting MCP services or enabling capabilities can mutate the
+            # global registry during a tool call. A schema frozen at turn start
+            # makes the newly registered tools unusable until the user sends a
+            # second message, so refresh both the schema and the prompt's
+            # ephemeral capability/MCP sections before the next model call.
+            if registry.version != registry_version:
+                system_prompt = self._system_prompt_for_turn(user_input_text)
+                if memory_context:
+                    system_prompt += memory_context
+                tools_schema = self._filter_tools_schema(
+                    registry.to_schema_list(user_input_text),
+                )
+                overhead_tokens = estimate_tokens(
+                    system_prompt,
+                ) + estimate_tokens(
+                    json.dumps(tools_schema, ensure_ascii=False),
+                )
+                await self._ensure_fits_context(overhead_tokens)
+                messages_with_system = [
+                    {"role": "system", "content": system_prompt},
+                    *self.messages,
+                ]
+                registry_version = registry.version
+
             # Cheap in-place shrink of stale tool results (no LLM call):
             # keeps long tool loops from re-sending huge old outputs.
             if _loop_i > 0:
@@ -1465,38 +1489,37 @@ class Agent:
             ),
         )
 
-        # Record the completed turn as events (session-as-event-log
-        # direction) BEFORE persisting history.json: the event stream is
-        # the source of truth, so it must never be older than the
-        # fallback store if we crash between the two writes. Best-effort:
-        # subagents/SDK callers may run without a session manager, and
-        # event recording must never break the loop.
-        try:
-            from dashscope.acli.session import get_session_manager
+        # Record the completed turn as events only for a persistent session.
+        # A session_path-less agent is intentionally ephemeral (SDK calls,
+        # disabled session persistence, isolated subagents); defaulting such a
+        # run to SessionManager.current_topic silently polluted the interactive
+        # "default" session. The event stream remains the source of truth for
+        # sessions that explicitly opted in.
+        if self.session_path is not None:
+            try:
+                from dashscope.acli.session import get_session_manager
 
-            turn_topic = (
-                self.session_path.parent.name if self.session_path else None
-            )
-            get_session_manager().record_turn_event(
-                user_text=text_of(user_input),
-                assistant_text=last_content,
-                tools_used=self._current_turn_tools,
-                outcome=(
-                    _classify_outcome(
-                        self._turn_tool_successes,
-                        self._turn_tool_failures,
-                    )
-                    if self._current_turn_tools
-                    else ""
-                ),
-                topic=turn_topic,
-            )
-            get_session_manager().record_messages_snapshot(
-                self.messages,
-                topic=turn_topic,
-            )
-        except Exception:
-            pass
+                turn_topic = self.session_path.parent.name
+                get_session_manager().record_turn_event(
+                    user_text=text_of(user_input),
+                    assistant_text=last_content,
+                    tools_used=self._current_turn_tools,
+                    outcome=(
+                        _classify_outcome(
+                            self._turn_tool_successes,
+                            self._turn_tool_failures,
+                        )
+                        if self._current_turn_tools
+                        else ""
+                    ),
+                    topic=turn_topic,
+                )
+                get_session_manager().record_messages_snapshot(
+                    self.messages,
+                    topic=turn_topic,
+                )
+            except Exception:
+                pass
 
         # Persist session before memory write so a memory exception can't
         # cost us the conversation.

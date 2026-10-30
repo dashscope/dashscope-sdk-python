@@ -109,26 +109,13 @@ async def _run_oneshot_embedded(
     prompt: str,
     system_prompt: str | None,
 ):
-    """One-shot mode using acli's full agent stack."""
-    import dashscope.acli.tools.filesystem  # noqa: F401
-    import dashscope.acli.tools.shell  # noqa: F401
-    from dashscope.acli.agent import Agent
-    from dashscope.acli.cli import _compose_system_prompt, _load_system_prompt
-    from dashscope.acli.executor import Executor
-    from dashscope.acli.providers import get_provider_chain
+    """One-shot mode using the same fully wired stack as the SDK."""
+    from dashscope.acli.sdk import create_agent
 
-    resolved_prompt = _compose_system_prompt(
-        system_prompt or _load_system_prompt(),
-    )
-    provider = get_provider_chain(config)
-    executor = Executor()
-    agent = Agent(
-        provider=provider,
-        executor=executor,
-        max_turns=config.max_turns,
-        provider_name=config.provider,
-        model_name=config.model,
-        system_prompt=resolved_prompt,
+    agent = create_agent(
+        config=config,
+        system_prompt=system_prompt,
+        oneshot=True,
     )
 
     async for chunk in agent.run_stream(prompt):

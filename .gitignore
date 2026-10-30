@@ -144,5 +144,5 @@ cython_debug/
 # Local design/analysis docs — kept out of the public repo
 /md/
 
-# Local PyPI investigation tooling; the CI guard lives in tests/unit/.
+# Local PyPI investigation tooling; the CI guard lives in tests/legacy_1x/unit/.
 /scripts/

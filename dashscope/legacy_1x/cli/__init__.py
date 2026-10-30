@@ -1,0 +1,591 @@
+# -*- coding: utf-8 -*-
+# pylint: disable=wrong-import-position
+"""DashScope command-line entry point.
+
+This package is intentionally thin — all command-specific logic lives in
+sub-modules (generation, fine_tunes, files, etc.).
+"""
+import sys
+import warnings
+from pathlib import Path
+from typing import Optional
+
+# Suppress urllib3 NotOpenSSLWarning on systems with LibreSSL
+warnings.filterwarnings(
+    "ignore",
+    message=".*urllib3.*only supports OpenSSL.*",
+    category=Warning,
+)
+
+import typer  # noqa: E402
+from rich.markup import escape  # noqa: E402
+
+import dashscope  # noqa: E402
+from dashscope.legacy_1x.cli.common import console, err_console  # noqa: E402
+from dashscope.legacy_1x.common.error import AuthenticationError  # noqa: E402
+from dashscope.legacy_1x.common.utils import set_sdk_client  # noqa: E402
+from dashscope.legacy_1x.cli import (  # noqa: E402
+    application,
+    auth,
+    deployments,
+    embeddings,
+    files,
+    fine_tunes,
+    generation,
+    image_generation,
+    image_synthesis,
+    models,
+    multimodal_conversation,
+    multimodal_embedding,
+    oss,
+    rerank,
+    speech_synthesis,
+    tokenization,
+    transcription,
+    video_synthesis,
+)
+
+set_sdk_client("python-cli")
+
+
+# ---------------------------------------------------------------------------
+# Legacy command compatibility layer
+# ---------------------------------------------------------------------------
+
+# Command name mapping: old -> new
+_COMMAND_MAP = {
+    "fine_tunes.call": "fine-tunes create",
+    "fine_tunes.get": "fine-tunes get",
+    "fine_tunes.list": "fine-tunes list",
+    "fine_tunes.stream": "fine-tunes stream",
+    "fine_tunes.cancel": "fine-tunes cancel",
+    "fine_tunes.delete": "fine-tunes delete",
+    "generation.call": "generation create",
+    "files.upload": "files upload",
+    "files.get": "files get",
+    "files.list": "files list",
+    "files.delete": "files delete",
+    "deployments.call": "deployments create",
+    "deployments.get": "deployments get",
+    "deployments.list": "deployments list",
+    "deployments.scale": "deployments scale",
+    "deployments.delete": "deployments delete",
+    "oss.upload": "oss upload",
+}
+
+# Parameter name mapping: old -> new (underscore to dash)
+_PARAM_MAP = {
+    "--training_file_ids": "--training-file-ids",
+    "--validation_file_ids": "--validation-file-ids",
+    "--n_epochs": "--n-epochs",
+    "--batch_size": "--batch-size",
+    "--learning_rate": "--learning-rate",
+    "--prompt_loss": "--prompt-loss",
+    "--hyper_parameters": "--hyper-parameters",
+    "--file_id": "--file-id",
+    "--deployed_model": "--deployed-model",
+    "--base_url": "--base-url",
+    "--api_key": "--api-key",
+    "--start_page": "--start-page",
+    "--page_size": "--page-size",
+}
+
+_TOP_LEVEL_COMMANDS = {
+    "auth",
+    "generation",
+    "ft",
+    "fine-tunes",
+    "files",
+    "deployments",
+    "oss",
+    "rerank",
+    "embeddings",
+    "tokenization",
+    "models",
+    "application",
+    "image-synthesis",
+    "video-synthesis",
+    "image-generation",
+    "multimodal-conversation",
+    "multimodal-embedding",
+    "transcription",
+    "speech-synthesis",
+    "rl",
+    "agentic-rl",
+}
+
+
+_COMMANDS_WITH_LOCAL_API_KEY = {"oss", "rl", "agentic-rl"}
+
+# Routing keyword for the bundled agent, handled in main() before typer sees
+# argv. Deliberately NOT a member of _TOP_LEVEL_COMMANDS: that set mirrors the
+# typer-registered command groups, and `expert` is not one of them.
+_EXPERT_COMMAND = "expert"
+
+_EXPERT_USAGE = """[bold]DashScope SDK Expert[/bold] — the built-in AI assistant.
+
+[bold]Usage:[/bold]
+  dashscope                     interactive assistant (TUI by default)
+  dashscope expert              the same, spelled explicitly
+  dashscope expert --cli        interactive, plain REPL instead of the TUI
+  dashscope expert --tui        interactive, force the TUI
+  dashscope expert "question"   ask once and exit
+
+With no argument, piped stdin is read as a one-shot prompt.
+SDK subcommands (generation, ft, files, models, ...) dispatch as usual; an
+unrecognized command is reported as an error rather than treated as a
+question, so ask one with [bold]dashscope expert "question"[/bold].
+
+Requires [bold]pip install dashscope[acli][/bold]."""
+
+_LEGACY_COMMANDS_WITH_SIZE_OPTION = {
+    "files.list",
+    "fine_tunes.list",
+    "deployments.list",
+}
+
+
+def _translate_param_name(arg):
+    """Translate legacy underscore option names to Typer hyphen names."""
+    if arg in _PARAM_MAP:
+        return _PARAM_MAP[arg]
+    if arg.startswith("--") and "=" in arg:
+        option_name, option_value = arg.split("=", 1)
+        if option_name in _PARAM_MAP:
+            return f"{_PARAM_MAP[option_name]}={option_value}"
+    return arg
+
+
+def _translate_legacy_args(argv):
+    """Translate legacy argparse command format to Typer format.
+
+    Legacy format:  dashscope fine_tunes.call --training_file_ids ...
+    New format:     dashscope fine-tunes create --training-file-ids ...
+
+    Returns modified argv list.
+    """
+    if len(argv) < 2:
+        return argv
+
+    is_legacy_command = argv[1] in _COMMAND_MAP
+    if not is_legacy_command:
+        return [argv[0]] + [_translate_param_name(arg) for arg in argv[1:]]
+
+    command_args = _COMMAND_MAP[argv[1]].split()
+    top_level_args = []
+    translated_args = []
+    i = 2
+    while i < len(argv):
+        arg = argv[i]
+        translated_arg = _translate_param_name(arg)
+        if argv[1] in _LEGACY_COMMANDS_WITH_SIZE_OPTION:
+            if translated_arg == "--page-size":
+                translated_arg = "--size"
+            elif translated_arg.startswith("--page-size="):
+                translated_arg = translated_arg.replace(
+                    "--page-size=",
+                    "--size=",
+                    1,
+                )
+
+        if translated_arg == "--api-key":
+            top_level_args.append("--api-key")
+            if i + 1 < len(argv):
+                top_level_args.append(argv[i + 1])
+                i += 2
+            else:
+                i += 1
+            continue
+
+        if translated_arg.startswith("--api-key="):
+            top_level_args.append(translated_arg)
+            i += 1
+            continue
+
+        translated_args.append(translated_arg)
+        i += 1
+
+    return [argv[0]] + top_level_args + command_args + translated_args
+
+
+def _exit_missing_api_key_value(option_name):
+    err_console.print(
+        f"[red]Error:[/red] Option '{option_name}' requires an argument.",
+    )
+    sys.exit(2)
+
+
+def _extract_global_api_key(argv):
+    """Extract global -k/--api-key from argv and set dashscope.api_key.
+
+    For backward compatibility, global api-key can appear before or after most
+    command names. Commands that define their own local api-key option are left
+    untouched once their command name has been reached.
+    """
+    new_argv = []
+    i = 0
+    current_command = None
+    while i < len(argv):
+        arg = argv[i]
+
+        if i > 0 and current_command is None and arg in _TOP_LEVEL_COMMANDS:
+            current_command = arg
+
+        should_parse_global_api_key = (
+            current_command not in _COMMANDS_WITH_LOCAL_API_KEY
+        )
+
+        if arg in ("-k", "--api-key"):
+            if i + 1 >= len(argv):
+                _exit_missing_api_key_value(arg)
+            next_arg = argv[i + 1]
+            if not next_arg or next_arg.startswith("-"):
+                _exit_missing_api_key_value(arg)
+            if should_parse_global_api_key:
+                if next_arg in _TOP_LEVEL_COMMANDS:
+                    _exit_missing_api_key_value(arg)
+                dashscope.api_key = next_arg
+                i += 2
+                continue
+
+        if arg.startswith("--api-key="):
+            api_key = arg.split("=", 1)[1]
+            if not api_key:
+                _exit_missing_api_key_value("--api-key")
+            if should_parse_global_api_key:
+                dashscope.api_key = api_key
+                i += 1
+                continue
+
+        new_argv.append(arg)
+        i += 1
+
+    return new_argv
+
+
+def _translate_help_shortcut(argv):
+    """Translate -h to --help for convenience."""
+    return [arg if arg != "-h" else "--help" for arg in argv]
+
+
+_MD_MARKER = "<!-- managed-by: dashscope-expert -->"
+_PY_MARKER = "# managed-by: dashscope-expert"
+_EXPERT_EXAMPLE = "dashscope-sdk-expert"
+
+
+def _cleanup_legacy_expert_sync():
+    """Remove files the deleted expert bundling synced into ~/.acli.
+
+    Only files carrying the managed marker are deleted — without it the file
+    is user-owned and left untouched. Needed so stale global copies don't
+    shadow the workspace ./.acli/ configs installed via example download.
+    """
+    try:
+        from dashscope.acli.config import CONFIG_DIR
+    except ImportError:
+        return
+    md_targets = []
+    for subdir in ("skills", "references"):
+        target_dir = CONFIG_DIR / subdir
+        if target_dir.is_dir():
+            md_targets.extend(target_dir.glob("*.md"))
+    for path in md_targets:
+        try:
+            if _MD_MARKER in path.read_text(encoding="utf-8"):
+                path.unlink()
+        except OSError:
+            pass
+    build = CONFIG_DIR / "build_sdk_index.py"
+    try:
+        if build.is_file() and _PY_MARKER in build.read_text(encoding="utf-8"):
+            build.unlink()
+    except OSError:
+        pass
+
+
+def _maybe_offer_example_download():
+    """First interactive run without ./.acli: offer the SDK-expert example.
+
+    Accepting merges the example into ./.acli/ via the same code path as
+    `example download` (copied from the packaged install dir when present);
+    declining writes a marker into ./.acli/ so we never ask again here.
+    """
+    if not sys.stdin.isatty() or (Path.cwd() / ".acli").is_dir():
+        return
+    try:
+        from dashscope.acli.cli.examples import _handle_example_command
+        from dashscope.acli.cli.handlers_key import _GUIDE_DOC, _doc_locale
+    except ImportError:
+        return
+    err_console.print(
+        "[cyan]First run:[/cyan] download the dashscope-sdk-expert "
+        "example config into ./.acli/\n"
+        "(SDK Q&A expert persona + skill templates + SDK knowledge "
+        "index; pure config, editable anytime).",
+    )
+    err_console.print(
+        f"[dim]Guide: {_GUIDE_DOC.format(_doc_locale())}[/dim]",
+    )
+    try:
+        answer = input("Download the example config? [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        err_console.print()
+        return
+    if answer in ("n", "no"):
+        try:
+            marker = Path.cwd() / ".acli" / ".dashscope-example-declined"
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("declined\n", encoding="utf-8")
+        except OSError:
+            pass
+        err_console.print(
+            "[dim]Skipped. To customize later, run: "
+            "python -m dashscope.acli example download "
+            "dashscope-sdk-expert[/dim]",
+        )
+        return
+    _handle_example_command(["download", _EXPERT_EXAMPLE])
+
+
+def _route_to_expert(command, tui=None):
+    """Run the vendored acli agent (bare ``dashscope`` or ``dashscope expert``).
+
+    ``command`` is a one-shot prompt, or None for the interactive REPL.
+    """
+    try:
+        from dashscope.acli.cli.handlers_key import _GUIDE_DOC, _doc_locale
+        from dashscope.acli.ui.embedded import run
+    except ImportError as exception:
+        err_console.print(
+            "[yellow]Tip:[/yellow] Install dashscope[acli] to enable "
+            "the agent "
+            f"({exception}).",
+        )
+        return
+
+    if command is None and not sys.stdin.isatty():
+        # The interactive REPL needs a real terminal; prompt_toolkit crashes
+        # on non-tty stdin (e.g. kqueue rejects /dev/null with EINVAL).
+        # Treat piped text as a one-shot prompt instead.
+        try:
+            piped = sys.stdin.read().strip()
+        except OSError:
+            piped = ""
+        if not piped:
+            err_console.print(
+                "[red]Error:[/red] Interactive mode requires a terminal. "
+                'Pass a prompt instead, e.g. dashscope expert "your question".',
+            )
+            sys.exit(2)
+        command = piped
+
+    _cleanup_legacy_expert_sync()
+    if command is None:
+        _maybe_offer_example_download()
+
+    try:
+        run(
+            app_name="DashScope SDK Expert",
+            prompt_symbol="dashscope> ",
+            api_key=dashscope.api_key or None,
+            command=command,
+            tui=tui,
+            module="expert",
+            guide_url=_GUIDE_DOC.format(_doc_locale()),
+        )
+    except SystemExit:
+        pass
+    except Exception as exception:  # pylint: disable=broad-except
+        err_console.print(
+            f"[yellow]Tip:[/yellow] Agent failed to start ({exception}).",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Typer app
+# ---------------------------------------------------------------------------
+
+app = typer.Typer(
+    name="dashscope",
+    help="DashScope command line tools.",
+    add_completion=True,
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+
+
+@app.callback()
+def callback(
+    api_key: Optional[str] = typer.Option(
+        None,
+        "-k",
+        "--api-key",
+        help="DashScope API Key.",
+    ),
+):
+    """Configure global CLI options."""
+    if api_key:
+        dashscope.api_key = api_key
+
+
+# Register sub-command groups
+app.add_typer(auth.app)
+app.add_typer(generation.app)
+app.add_typer(fine_tunes.app, name="ft")
+app.add_typer(fine_tunes.app, name="fine-tunes", hidden=True)
+app.add_typer(files.app)
+app.add_typer(deployments.app)
+app.add_typer(oss.app)
+app.add_typer(rerank.app)
+app.add_typer(embeddings.app)
+app.add_typer(tokenization.app)
+app.add_typer(models.app)
+app.add_typer(application.app)
+app.add_typer(image_synthesis.app)
+app.add_typer(video_synthesis.app)
+app.add_typer(image_generation.app)
+app.add_typer(multimodal_conversation.app)
+app.add_typer(multimodal_embedding.app)
+app.add_typer(transcription.app)
+app.add_typer(speech_synthesis.app)
+
+
+# Records why the Agentic-RL Typer app could not be registered, so the reason
+# can be reported when `rl` is actually invoked instead of on every command.
+_RL_IMPORT_ERROR: Optional[Exception] = None
+
+_RL_COMMAND_NAMES = ("rl", "agentic-rl")
+
+
+def _register_rl_app():
+    """Lazily import and register the Agentic-RL Typer app.
+
+    Wrapped in a function so that a missing optional dependency
+    won't crash the entire CLI at import time.
+
+    The failure is recorded rather than reported: `rl` is an optional
+    extra, so a user running any other command has no reason to be told
+    about it. ``main()`` surfaces it when the rl command is invoked.
+    """
+    global _RL_IMPORT_ERROR  # pylint: disable=global-statement
+
+    try:
+        from dashscope.legacy_1x.cli.agentic_rl import app as rl_app
+
+        app.add_typer(
+            rl_app,
+            name="rl",
+            help="🚀 Agentic RL fine-tuning commands",
+        )
+        app.add_typer(
+            rl_app,
+            name="agentic-rl",
+            help="🚀 Agentic RL fine-tuning commands",
+            hidden=True,
+        )
+    except Exception as exception:  # pylint: disable=broad-except
+        _RL_IMPORT_ERROR = exception
+
+
+def _rl_unavailable_detail(exception: Exception) -> str:
+    """Render a deferred rl import failure as an actionable message."""
+    # Unescaped, rich reads a bracketed run in the exception text as a style
+    # tag and drops it from the printed output.
+    detail = escape(str(exception))
+    if "pip install" not in detail:
+        detail += (
+            ". Reinstall to pull in the missing dependencies: "
+            "[bold]pip install -U dashscope[/bold]"
+        )
+    return detail
+
+
+_register_rl_app()
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def _first_non_option(argv):
+    """Return the first non-option argument in *argv* (skip index 0),
+    or None if all arguments are options."""
+    for arg in argv[1:]:
+        if not arg.startswith("-"):
+            return arg
+    return None
+
+
+def main():
+    """Entry point for the ``dashscope`` console script."""
+    # Translate legacy command format first so legacy --api_key can be treated
+    # as the global --api-key option.
+    argv = _translate_legacy_args(sys.argv)
+
+    # Extract global api-key parameter after legacy argument normalization.
+    argv = _extract_global_api_key(argv)
+
+    # Extract agent mode flags (--cli / --tui); they belong to the vendored
+    # acli and must not leak into typer or the one-shot prompt text.
+    # Bare `dashscope` defaults to the TUI; --cli opts into the plain CLI REPL.
+    forced_tui = True
+    if "--cli" in argv:
+        forced_tui = False
+        argv = [a for a in argv if a != "--cli"]
+    if "--tui" in argv:
+        forced_tui = True
+        argv = [a for a in argv if a != "--tui"]
+
+    first_cmd = _first_non_option(argv)
+
+    # `rl` is an optional extra: report a missing dependency only when the
+    # user asks for that command, never on unrelated invocations. Without
+    # this gate the dispatch below reaches typer, which only knows that `rl`
+    # is in _TOP_LEVEL_COMMANDS but was never registered — "No such command"
+    # does not tell the user how to get it.
+    if _RL_IMPORT_ERROR is not None and first_cmd in _RL_COMMAND_NAMES:
+        err_console.print(
+            f"[red]Error:[/red] {_rl_unavailable_detail(_RL_IMPORT_ERROR)}",
+        )
+        sys.exit(1)
+
+    # No arguments at all → the agent, interactively. -k/--api-key and
+    # --cli/--tui were stripped above, so `dashscope -k sk-x` lands here too.
+    if len(argv) == 1:
+        _route_to_expert(None, tui=forced_tui)
+        return
+
+    # `dashscope expert ...` → the agent, explicitly. Handled before the
+    # --help gate so `dashscope expert --help` describes the agent instead of
+    # reaching typer, which has no such command.
+    if first_cmd == _EXPERT_COMMAND:
+        idx = argv.index(_EXPERT_COMMAND)
+        expert_args = argv[idx + 1 :]
+        if "--help" in expert_args or "-h" in expert_args:
+            console.print(_EXPERT_USAGE)
+            return
+        prompt = " ".join(expert_args).strip()
+        _route_to_expert(prompt or None, tui=forced_tui)
+        return
+
+    # Top-level --help / -h → show help and exit normally
+    if "--help" in argv or "-h" in argv:
+        argv = _translate_help_shortcut(argv)
+        sys.argv = argv
+        app()
+        return
+
+    # Anything that is not bare `dashscope` and not `dashscope expert ...`
+    # belongs to typer, so a typo or a stray option gets a real error instead
+    # of silently opening a chat. Forwarding an unrecognized token as a
+    # question used to swallow whole command lines -- `dashscope auth whoami`
+    # opened a session whose first message was the command itself.
+    argv = _translate_help_shortcut(argv)
+    sys.argv = argv
+
+    try:
+        app()
+    except AuthenticationError as exception:
+        err_console.print(f"[red]Error:[/red] {exception}")
+        sys.exit(1)

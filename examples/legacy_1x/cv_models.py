@@ -7,8 +7,8 @@ API doc: https://help.aliyun.com/zh/model-studio/portrait-style-redraw-api-refer
 
 import os
 
-from dashscope.client.base_api import BaseAsyncApi
-from dashscope.utils.oss_utils import check_and_upload_local
+from dashscope.legacy_1x.client.base_api import BaseAsyncApi
+from dashscope.legacy_1x.utils.oss_utils import check_and_upload_local
 
 # Authentication: set your Model Studio API key via the
 # DASHSCOPE_API_KEY environment variable (recommended)

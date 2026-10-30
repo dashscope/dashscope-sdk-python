@@ -1,9 +1,9 @@
-dashscope.aigc
-==============
+dashscope.legacy_1x.aigc
+========================
 
-.. automodule:: dashscope.aigc
+.. automodule:: dashscope.legacy_1x.aigc
 
-.. currentmodule:: dashscope.aigc
+.. currentmodule:: dashscope.legacy_1x.aigc
 
 .. autosummary::
     :toctree: generated

@@ -103,6 +103,15 @@ def register_platform_tools(
     config: Config,
     connect_mcp_fn: Callable | None = None,
 ):
+    if config.privacy_mode:
+        # Registration is process-global. A previous non-private Agent may have
+        # left cloud/MCP tools in the registry, so merely skipping new
+        # registration is insufficient for SDKs that create multiple Agents.
+        unregister_cloud_capability_tools()
+        for name in [t.name for t in registry.list_tools()]:
+            if name.startswith(("mcp_", "bailian_")):
+                registry.unregister(name)
+
     caps = config.enabled_capabilities
     all_enabled = caps is None
     for cap_key in all_capability_keys():

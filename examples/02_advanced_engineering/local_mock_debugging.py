@@ -16,7 +16,7 @@ calling code runs against the real gateway.
 import httpx
 
 import dashscope
-from dashscope.v2 import errors
+from dashscope import errors
 
 # A fake gateway URL. MockTransport intercepts every request, so no
 # traffic ever leaves this process and the host is never resolved.

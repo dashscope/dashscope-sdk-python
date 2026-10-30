@@ -28,6 +28,9 @@ __all__ = [
 # Env var hints for the /key command and profile validation. NOT used for
 # dispatch — protocol routing is driven by profile.protocol (filled from
 # the user's custom-extensions.toml, see the basic-chat example).
+_WARNED_UNSUPPORTED_RUNTIME_OPTIONS: set[tuple[str, str, str]] = set()
+
+
 PROVIDER_API_KEY_ENVS = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
@@ -118,6 +121,24 @@ def get_provider(
 
 def get_provider_chain(config) -> ProviderChain:
     """Build a ProviderChain from acli Config (primary + fallbacks)."""
+    legacy = (
+        getattr(config, "thinking_provider", ""),
+        getattr(config, "thinking_model", ""),
+        getattr(config, "loop_mode", "auto"),
+    )
+    if (legacy[0] or legacy[1] or legacy[2] not in ("", "auto")) and (
+        legacy not in _WARNED_UNSUPPORTED_RUNTIME_OPTIONS
+    ):
+        _WARNED_UNSUPPORTED_RUNTIME_OPTIONS.add(legacy)
+        from rich.console import Console
+
+        Console().print(
+            "[yellow]⚠ thinking_provider/thinking_model/structured "
+            "loop_mode are legacy compatibility settings and are not active "
+            "in this build; execution uses the primary provider/model and "
+            "the standard Agent loop.[/yellow]",
+        )
+
     profiles = build_profiles_from_config(config)
     if not profiles:
         raise RuntimeError("No usable provider configuration")

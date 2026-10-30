@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from dashscope import Client
-from dashscope.v2.errors import DashScopeError
+from dashscope.errors import DashScopeError
 from ._common import (
     play_wav,
     player_command,

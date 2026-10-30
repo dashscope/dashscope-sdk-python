@@ -198,7 +198,10 @@ def _handle_slash_command(
             f"  JSON mode:    "
             f"{'[green]on' if agent.json_mode else '[dim]off'}[/]",
         )
-        console.print(f"  Loop mode:    [cyan]{config.loop_mode}[/cyan]")
+        loop_label = config.loop_mode
+        if loop_label not in ("", "auto"):
+            loop_label += " [yellow](legacy; inactive)[/yellow]"
+        console.print(f"  Loop mode:    [cyan]{loop_label}[/cyan]")
         console.print(f"  Max turns:    [cyan]{config.max_turns}[/cyan]")
         # config.timeout is the LLM request timeout; run_command enforces its
         # own, so showing one "Timeout" line reported a limit nothing used.

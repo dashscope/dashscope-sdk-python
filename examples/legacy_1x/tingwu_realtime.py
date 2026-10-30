@@ -16,7 +16,7 @@ import logging
 import os
 import time
 
-from dashscope.multimodal.tingwu.tingwu_realtime import (
+from dashscope.legacy_1x.multimodal.tingwu.tingwu_realtime import (
     TingWuRealtime,
     TingWuRealtimeCallback,
 )

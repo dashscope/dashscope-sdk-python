@@ -36,7 +36,7 @@ real gateway with ``DASHSCOPE_API_KEY``.
 import os
 
 import dashscope
-from dashscope.v2 import errors
+from dashscope import errors
 
 # ---- configuration (override via env) ---- #
 DECISION_MODEL = os.environ.get("DASHSCOPE_MODEL", "decision-model-preview")
@@ -60,7 +60,7 @@ TRIAGED, ESCALATED, HUMAN_REVIEW, DEGRADED = (
 # One decision round asks every question at once; ``answers`` come back
 # keyed by these same question ids. Raw dicts show the wire shape; the
 # typed ChoiceQuestion / NoulQuestion / ScoreQuestion models in
-# dashscope.v2.resources.decision add local validation if wanted.
+# dashscope.resources.decision add local validation if wanted.
 QUESTIONS = {
     "department": {
         "type": "choice",

@@ -81,7 +81,7 @@ python3 examples/04_real_world_scenarios/customer_service_assistant.py
 
 ### 不读源码一定会踩的坑
 
-> **流式请求不走 SDK 的自动重试。** `dashscope/v2/transport/http.py` 里的 `open_stream` 只检查一次初始状态就返回（源码注释："only the initial status is checked here, no retries"），而普通 `request` 会跑 `max_retries` 退避循环。所以一个不自己处理 429/503 的流式 RAG，会把异常直接甩到用户脸上。harness 的 `retry_with_backoff` 正是为这个缺口而存在。
+> **流式请求不走 SDK 的自动重试。** `dashscope/transport/http.py` 里的 `open_stream` 只检查一次初始状态就返回（源码注释："only the initial status is checked here, no retries"），而普通 `request` 会跑 `max_retries` 退避循环。所以一个不自己处理 429/503 的流式 RAG，会把异常直接甩到用户脸上。harness 的 `retry_with_backoff` 正是为这个缺口而存在。
 
 同样，流是**一次性迭代器**：先消费 `text_stream` 再调 `get_final_message()` 只能拿到空尾巴，而 usage 计数在**最后一个 chunk** 而不是第一个。因此 `_consume_stream` 恰好迭代一次，边打印增量边把 usage 折叠进来。
 
@@ -113,7 +113,7 @@ RAG_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/production_ready_rag
 
 ## 案例：高并发实时会议转写底座
 
-`realtime_audio_meeting_harness.py` 把 legacy 听悟 realtime 脚本（`legacy_1x/tingwu_realtime.py`，回调 + `time.sleep` 轮询的测试风格）重建成**会议平台级并发监管器**：同时实时转写 N 个会议室，每个房间有自己的状态机和转写稿，任何一个房间的断线或审核拦截都不能拖垮其他房间。它同样默认离线运行——通过听悟 realtime 的 `connector=` 注入一条脚本化双工 socket（与 `tests/v2/test_tingwu.py` 用的是同一个接缝），没有麦克风、没有密钥也能看到并发、重连和降级真实发生。
+`realtime_audio_meeting_harness.py` 把 legacy 听悟 realtime 脚本（`legacy_1x/tingwu_realtime.py`，回调 + `time.sleep` 轮询的测试风格）重建成**会议平台级并发监管器**：同时实时转写 N 个会议室，每个房间有自己的状态机和转写稿，任何一个房间的断线或审核拦截都不能拖垮其他房间。它同样默认离线运行——通过听悟 realtime 的 `connector=` 注入一条脚本化双工 socket（与 `tests/test_tingwu.py` 用的是同一个接缝），没有麦克风、没有密钥也能看到并发、重连和降级真实发生。
 
 ### 四个生产维度
 
@@ -126,7 +126,7 @@ RAG_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/production_ready_rag
 
 ### 不读源码一定会踩的坑
 
-> **realtime 家族无法复用连接。** `dashscope/v2/transport/ws_connection.py` 的头注释写明了：realtime 协议没有 task id——一条 socket 就是一个会话，会话结束即关闭——所以它总是为每个会话开一条独立连接。（可复用的 `WsConnection` 只服务 JSON 帧的 asr/tts/translation 任务，且二进制上行是单属主的。）因此"高并发实时音频"的正确形态是**每场会议一条独立连接 + 一个监管线程池**，而不是把多路音频塞进一条 socket——协议做不到。harness 的 `MeetingSupervisor` 用有界线程池把"并发"绑定到"活跃 socket / 爆炸半径"上，作为准入控制。
+> **realtime 家族无法复用连接。** `dashscope/transport/ws_connection.py` 的头注释写明了：realtime 协议没有 task id——一条 socket 就是一个会话，会话结束即关闭——所以它总是为每个会话开一条独立连接。（可复用的 `WsConnection` 只服务 JSON 帧的 asr/tts/translation 任务，且二进制上行是单属主的。）因此"高并发实时音频"的正确形态是**每场会议一条独立连接 + 一个监管线程池**，而不是把多路音频塞进一条 socket——协议做不到。harness 的 `MeetingSupervisor` 用有界线程池把"并发"绑定到"活跃 socket / 爆炸半径"上，作为准入控制。
 
 同样，当 socket 在中途断开时，`WsSession.recv` 抛 `APIConnectionError`（"closed before task-finished"），而 `task-failed` 事件会经错误目录映射成 `status_code=200` 的业务异常（如 `ContentFilterError`）。`_is_reconnectable` 正是据此区分：前者重连，后者降级——离线演示里的 `room-gamma`（断线重连后，半句 `今天我们讨论` 被补全为 `今天我们讨论第三季度的路线图。`）和 `room-delta`（内容审核 `task-failed` 立即降级）分别演示了这两条路径。
 
@@ -166,11 +166,11 @@ MEETING_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/realtime_audio_m
 
 ### 不读源码一定会踩的坑
 
-> **DashScope 可能用 HTTP 200 报告失败。** `dashscope/v2/types/common.py` 的 `ResponseBase` 在每个响应上都带 `code` / `message` / `is_error`，而 `raise_on_error=False` 时 SDK 会填充这个信封而不是抛异常。一个只包 `try/except` 的分诊循环会把失败的调用当成答案为空的成功调用——然后基于"什么都没有"自动路由工单。因此 harness 即使在默认 raising 模式下也检查 `response.is_error`：这是双保险，因为当某天有人把 `raise_on_error=False` 打开时，这道防线必须已经就位。
+> **DashScope 可能用 HTTP 200 报告失败。** `dashscope/types/common.py` 的 `ResponseBase` 在每个响应上都带 `code` / `message` / `is_error`，而 `raise_on_error=False` 时 SDK 会填充这个信封而不是抛异常。一个只包 `try/except` 的分诊循环会把失败的调用当成答案为空的成功调用——然后基于"什么都没有"自动路由工单。因此 harness 即使在默认 raising 模式下也检查 `response.is_error`：这是双保险，因为当某天有人把 `raise_on_error=False` 打开时，这道防线必须已经就位。
 
 同样，**`score` 答案是概率加权等级索引，不是整数类别**——`2.3` 表示"介于等级 2 和 3 之间，偏向 2"，`legend` 把索引映射回你给的等级文本。像 `P1_SCORE = 2.5` 这样的分数线因此是连续轴上的阈值，这正是严重度分档想要的东西。
 
-还有一条路由说明：System One 端点在**每个网关的 compatible-mode 路径下**（由 `dashscope/v2/_config.py` 的 `compatible_mode_base_url` 推导），所以改变客户端的聊天 `protocol` 不会移动它。
+还有一条路由说明：System One 端点在**每个网关的 compatible-mode 路径下**（由 `dashscope/_config.py` 的 `compatible_mode_base_url` 推导），所以改变客户端的聊天 `protocol` 不会移动它。
 
 ### 运行
 

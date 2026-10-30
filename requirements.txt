@@ -5,6 +5,7 @@ cryptography
 certifi>=2024.7.4
 typer>=0.9.0
 rich>=13.0.0
+tomli>=1.1.0; python_version < "3.11"
 httpx>=0.27.0
 httpx-sse>=0.4.0
 typing_extensions>=4.16.0

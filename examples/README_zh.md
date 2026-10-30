@@ -2,7 +2,7 @@
 
 > [English](README.md) | **中文**
 
-这不是一份"API 调用参考"。在 AI 辅助开发的时代，任何人都能几秒钟生成一行 `call(model="xxx")`——本目录的价值在于**提前、正确地把一个百炼应用推向生产所需的那几百行"脏活代码"写好**：每个进阶文件都是一个微型的生产级 harness 蓝图，带有严格的工程防御，面向一个具体的开发或业务场景。全部示例基于 2.0 资源风格客户端 `dashscope.Client()`（与包内 `dashscope.v2` 一致）；旧版 1.x 示例完整归档在 `legacy_1x/` 下。
+这不是一份"API 调用参考"。在 AI 辅助开发的时代，任何人都能几秒钟生成一行 `call(model="xxx")`——本目录的价值在于**提前、正确地把一个百炼应用推向生产所需的那几百行"脏活代码"写好**：每个进阶文件都是一个微型的生产级 harness 蓝图，带有严格的工程防御，面向一个具体的开发或业务场景。全部示例基于 2.0 资源风格客户端 `dashscope.Client()`（与包内 `dashscope` 一致）；旧版 1.x 示例完整归档在 `legacy_1x/` 下。
 
 一个合格的最佳实践案例必须同时展现三个维度：
 
@@ -93,7 +93,7 @@ examples/
 | `text_generation/chat.py` | 文本生成：一行 `dashscope.chat()`、非流式、流式（text_stream） |
 | `text_generation/tokenization.py` | token 计数 |
 | `multimodal_vision/multimodal_chat.py` | 多模态对话（qwen-vl 图像理解） |
-| `audio/` | 语音示例：ASR/TTS/realtime/音色 CLI（见 `audio/README.md`；`direct_call/` 为不使用 `with` 的副本）；2.0 audio API 为预览，后续可能变更 |
+| `audio/` | 语音示例：ASR/TTS/realtime/音色 CLI（见 `audio/README.md`；`direct_call/` 为不使用 `with` 的副本） |
 | `audio/tingwu.py` | 听悟离线任务与实时会话 |
 | `image_video_synthesis/images.py` | 图像生成：一键生成并等待 + 手动 jobs 流程 |
 | `image_video_synthesis/videos.py` | 视频生成：一键生成并等待 + 手动 jobs 流程 |

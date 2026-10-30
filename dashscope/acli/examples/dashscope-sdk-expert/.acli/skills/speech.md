@@ -4,92 +4,183 @@ description: Quick reference for Speech (SpeechSynthesizer synthesis / Transcrip
 ---
 # Speech
 
-Before answering, locate the right path: synthesis goes through `SpeechSynthesizer` (legacy `dashscope.audio.tts` / new `dashscope.audio.tts_v2`); recorded-file transcription goes through `dashscope.audio.asr.Transcription` (async task). Parameter names must be verified against the source in `dashscope/audio/tts/`, `dashscope/audio/tts_v2/`, and `dashscope/audio/asr/transcription.py`; never answer from memory.
+For Python SDK 2.0.3, start with `dashscope.Client` or `dashscope.AsyncClient`; the 2.0 API is at the package root (`dashscope.v2` does not exist). Verify parameters against `dashscope/resources/audio/`, `dashscope/resources/tingwu.py`, and `dashscope/types/` rather than answering from memory. Use a context manager or call `close()`/`aclose()` so HTTP and WebSocket resources are released.
 
-## Applicable Models and Scenarios
+## Choose the Current API
 
-- Speech synthesis (TTS):
-  - `dashscope.audio.tts.SpeechSynthesizer`: Sambert series (e.g. `sambert-zhichu-v1`), WebSocket streaming, class method `call` for one-shot synthesis.
-  - `dashscope.audio.tts_v2.SpeechSynthesizer`: CosyVoice series (e.g. `cosyvoice-v1`, `cosyvoice-v2`), requires a `voice` (e.g. `longxiaochun`, `longxiaochun_v2`), supports streaming text input and voice-clone timbres.
-- Recorded-file transcription (ASR): `dashscope.audio.asr.Transcription`, models listed in `Transcription.Models`: `paraformer-v1`, `paraformer-8k-v1` (8kHz telephony), `paraformer-mtl-v1` (multilingual); input is a list of publicly accessible audio URLs, async task.
+| Scenario | Current entry point | Contract |
+| --- | --- | --- |
+| WebSocket TTS, complete audio | `client.audio.tts.synthesize(...)` | Returns audio `bytes` |
+| WebSocket TTS, output streaming | `client.audio.tts.stream(...)` | Iterates audio `bytes`; close the iterator if exiting early |
+| WebSocket TTS, incremental text | `client.audio.tts.connect(...)` | Synchronous duplex `SynthesisSession` |
+| HTTP/SSE TTS | `client.audio.tts.http.synthesize/stream(...)` | URL result or SSE audio chunks, not a WebSocket task |
+| Recorded-file transcription | `client.audio.asr.transcribe(...)` or `client.audio.asr.jobs` | Asynchronous server task represented by a flat `Job` |
+| Streaming speech recognition | `client.audio.asr.recognize(...)` | Synchronous duplex WebSocket `Recognition` session |
+| Omni/Qwen-Audio/Livetranslate | `client.audio.realtime.connect(...)` | Synchronous realtime WebSocket JSON events |
+| TingWu offline meeting processing | `client.tingwu.call(...)` | `TingWuResult`; an async variant also exists |
+| TingWu streaming recognition | `client.tingwu.realtime(...)` | Synchronous WebSocket session |
 
-## SDK APIs
+**AsyncAudio limitation:** `AsyncClient.audio` currently exposes only `audio.asr` for file transcription (`transcribe` and `jobs`). It does not expose TTS, real-time recognition, or `audio.realtime`; use synchronous `Client` for those WebSocket APIs. TingWu real-time sessions are also synchronous. Do not wrap a synchronous session method in `await`.
 
-`tts.SpeechSynthesizer.call(model, text, callback=None, workspace=None, **kwargs) -> SpeechSynthesisResult`, key kwargs:
+## WebSocket TTS (`client.audio.tts`)
 
-| Parameter | Description |
-|---|---|
-| format | `SpeechSynthesizer.AudioFormat`: `format_wav` (default) / `format_pcm` / `format_mp3` |
-| sample_rate | sample rate; defaults to the model's sample rate |
-| volume | volume 0~100, default 50 |
-| rate / pitch | speech rate / pitch, 0.5~2.0, default 1.0 |
-| word_timestamp_enabled / phoneme_timestamp_enabled | word-level / phoneme-level timestamps, default False |
-| callback | subclass of `ResultCallback`: `on_open/on_event/on_error/on_complete/on_close` |
-
-`tts_v2.SpeechSynthesizer(model, voice, format=AudioFormat.DEFAULT, volume=50, speech_rate=1.0, pitch_rate=1.0, seed=0, instruction=None, language_hints=None, callback=None, workspace=None, ...)` is constructor-based:
-- `call(text, timeout_millis=None)`: without callback, blocks and returns the full audio `bytes`; with callback, audio is delivered in real time via `on_data(data: bytes)`.
-- Streaming input: `streaming_call(text)` (may be called multiple times) -> `streaming_complete()` to wait for completion; `streaming_cancel()` to cancel. Empty `model` raises `ModelRequired`; empty apikey raises `InputRequired`.
-- `AudioFormat` enum values look like `MP3_22050HZ_MONO_256KBPS`, `WAV_16000HZ_MONO_16BIT`, `PCM_*`, `OGG_OPUS_*`; `DEFAULT` is treated as mp3/22050Hz.
-- Helpers: `get_last_request_id()`, `get_first_package_delay()`, `get_response()`.
-
-`Transcription` (async task):
-
-| Method | Description |
-|---|---|
-| `call(model, file_urls, phrase_id=None, api_key=None, workspace=None, **kwargs)` | synchronous wrapper that waits for the result |
-| `async_call(...)` (same signature) | submits the task only; returns a response containing `output.task_id` |
-| `fetch(task, ...)` | single query; `task` accepts a task_id string or the response object from async_call |
-| `wait(task, wait_timeout=-1, ...)` | polls until a terminal state; `wait_timeout=-1` means no time limit |
-
-Transcription kwargs: `channel_id: List[int]`, `disfluency_removal_enabled` (remove filler words), `diarization_enabled` (speaker diarization), `speaker_count`, `timestamp_alignment_enabled`, `special_word_filter`, `audio_event_detection_enabled`; `phrase_id` (hotwords) is converted to `resources=[{"resource_id": phrase_id, "resource_type": "asr_phrase"}]`. Task flow: `async_call` -> `output.task_id` (`task_status=PENDING`) -> `wait`/`fetch` -> `SUCCEEDED` to get results.
-
-## Input/Output
-
-- Synthesis input: `text` (utf-8 text). Output `SpeechSynthesisResult`: `get_audio_data()` for the full audio `bytes`, `get_audio_frame()` for streaming frames, `get_timestamp()/get_timestamps()` for sentence timestamps (`sentence` contains `begin_time`/`end_time`), `get_response()` for the `SpeechSynthesisResponse` (`status_code/code/message`, `usage.characters` billed character count).
-- Transcription input: `file_urls: List[str]` (audio file URLs).
-- Transcription output `TranscriptionResponse`: `status_code`, `request_id`, `code`, `message`, `output.task_id`, `output.task_status` (`PENDING/RUNNING/SUCCEEDED/FAILED/CANCELED/UNKNOWN`), `usage`. On success, each item in `output.results[]` contains `transcription_url` — the download URL of the recognition-result JSON, which you must GET and parse yourself (contains per-sentence text and timestamps).
-
-## Minimal Examples
-
-Synthesis (Sambert):
+`synthesize`, `stream`, and `connect` default to `model="cosyvoice-v1"`, `voice="longxiaochun"`, `format="mp3"`, and `sample_rate=22050`. Named options include `volume`, `rate`, `pitch`, `language_hints`, `enable_ssml`, `parameters`, `timeout`, `api_key`, and `workspace`.
 
 ```python
-from dashscope.audio.tts import SpeechSynthesizer
+from pathlib import Path
+import dashscope
 
-result = SpeechSynthesizer.call(model="sambert-zhichu-v1", text="Hello, Bailian.")
-with open("out.wav", "wb") as f:
-    f.write(result.get_audio_data())
+with dashscope.Client() as client:  # reads DASHSCOPE_API_KEY by default
+    audio = client.audio.tts.synthesize(
+        "Hello, Bailian.",
+        model="cosyvoice-v1",
+        voice="longxiaochun",
+        format="mp3",
+        sample_rate=22050,
+    )
+    Path("out.mp3").write_bytes(audio)
 ```
 
-Transcription (async task):
+- `stream(text, ...)` yields encoded audio chunks. Consume it fully, or call its `close()` when abandoning iteration; do not mistake it for an HTTP response.
+- `connect(...)` is a context manager. Use `send_text()` for fragments, `flush()` to request buffered synthesis without ending input, and `stop()` to end input. `stop()` does not wait for output: keep one receiver draining `audio_chunks()` or `events()` through completion. Use a sender thread and a single receiver thread for concurrent duplex traffic; `cancel()` requests cancellation.
+- A caller-owned `client.ws_connection()` can carry compatible ASR/TTS/TingWu tasks. Close that connection separately; realtime Omni sessions cannot use it.
+
+### HTTP/SSE TTS (`client.audio.tts.http`)
+
+Use this sibling when the desired model/protocol returns an audio URL instead of WebSocket bytes:
 
 ```python
-from http import HTTPStatus
-from dashscope.audio.asr import Transcription
+import dashscope
 
-task = Transcription.async_call(
-    model=Transcription.Models.paraformer_v1,
-    file_urls=["https://example.com/audio.wav"],
-)
-if task.status_code == HTTPStatus.OK:
-    rsp = Transcription.wait(task)   # or Transcription.wait(task.output.task_id)
-    if rsp.output.task_status == "SUCCEEDED":
-        print(rsp.output.results)
+with dashscope.Client() as client:
+    result = client.audio.tts.http.synthesize(
+        "Hello, Bailian.",
+        model="cosyvoice-v1",
+        voice="longxiaochun",
+    )
+    print(result.audio_url, result.audio_id, result.expires_at)
 ```
 
-## Common Error Codes
+`http.stream(...)` yields chunks with flat `audio` bytes, `sentence`, `finish_reason`, and `is_final`; the final chunk can carry whole-audio URL fields. Close an SSE stream if not consuming it fully. These fields are not WebSocket `bytes` frames.
 
-| Error code | HTTP status | Meaning | Handling |
-|---|---|---|---|
-| InvalidApiKey | 401 | API Key missing/invalid | Check `dashscope.api_key` or the `DASHSCOPE_API_KEY` environment variable |
-| InvalidParameter | 400 | Invalid parameters (file_urls unreachable, unsupported format/sample_rate, etc.) | Check each item against the parameter tables in this file |
-| InvalidModel | 400 | Wrong model name | Use `Transcription.Models` constants or official model names |
-| Throttling | 429 | Rate limited | Retry with exponential backoff, reduce concurrency (`fetch` already retries timeout/connection errors 3 times internally) |
-| InternalError | 500 | Server-side error | Retry with `request_id` or file a ticket |
-| Task FAILED | 200 | Transcription subtask failed | Read `output.task_status` and failure details in `output`; check audio URL reachability, format, and duration |
-| task-failed (WebSocket) | - | Synthesis task failed; tts_v2 without callback raises `Exception("TaskFailed: ...")` | Read the code/message in the event message to locate the cause |
+## File Transcription (`client.audio.asr`)
 
-Local validation exceptions (no request sent, see `dashscope/common/error.py`): `ModelRequired` (missing model), `InputRequired` (missing apikey/format/callback), `InvalidTask` (started twice or submitted before starting).
+`transcribe(file_urls, ...)` submits and waits. Its current default model is `qwen-audio-3.1-asr-flash-filetrans`; pass `model=` explicitly when selecting another model. `parameters` carries service-specific options and `phrase_id` selects a hotword resource. Waiting defaults to 86400 seconds and uses bounded exponential polling.
+
+For separate submission and polling, use `jobs.create(*, model, file_urls, parameters=None, phrase_id=None, ...)`, `jobs.fetch(task_id)`, and `jobs.wait(job_or_task_id)`. A `Job` exposes `task_id`, `status`, `results`, `finished`, `succeeded`, and common flat metadata. On success, each result's `transcription_url` is a URL to result JSON that the application must download and parse. Terminal states include `SUCCEEDED`, `FAILED`, `CANCELED`, and `UNKNOWN`.
+
+```python
+import dashscope
+
+with dashscope.Client() as client:
+    submitted = client.audio.asr.jobs.create(
+        model="qwen-audio-3.1-asr-flash-filetrans",
+        file_urls=["https://example.com/audio.wav"],
+    )
+    job = client.audio.asr.jobs.wait(submitted)
+    print(job.task_id, job.status)
+    for result in job.results or []:
+        print(result.transcription_url)
+```
+
+The same file-transaction surface is asynchronous on `AsyncClient`:
+
+```python
+import asyncio
+import dashscope
+
+async def main():
+    async with dashscope.AsyncClient() as client:
+        job = await client.audio.asr.transcribe(
+            file_urls=["https://example.com/audio.wav"],
+        )
+        print(job.status)
+
+asyncio.run(main())
+```
+
+`Job.output`, when present, is the retained raw service payload, not the normal 2.0 access pattern; use the flat fields above.
+
+## Real-Time Recognition (`client.audio.asr.recognize`)
+
+`recognize(*, model, format="pcm", sample_rate=16000, vocabulary_id=None, disfluency_removal_enabled=None, diarization_enabled=None, parameters=None, ...)` creates a synchronous session. It supports `start()`, `send_audio_frame(bytes)`, `update_context()`, `stop()`, `events()`, `results()`, and `close()`, and can be used as a context manager.
+
+```python
+import dashscope
+
+pcm_frames = [b"..."]  # replace with actual PCM frames
+
+with dashscope.Client() as client:
+    with client.audio.asr.recognize(
+        model="paraformer-realtime-v2", format="pcm", sample_rate=16000,
+    ) as session:
+        for frame in pcm_frames:
+            session.send_audio_frame(frame)
+        session.stop()  # ends input only
+        for event in session.events():  # drain through task-finished
+            print(event)
+```
+
+For incremental sending while results arrive, run the sender and one receiver concurrently. `recognize_file(path, *, model, ...)` drives a local file through the same session and yields event dictionaries. Neither real-time method exists on `AsyncAudio`.
+
+## Realtime Omni / Qwen-Audio / Livetranslate
+
+`client.audio.realtime.connect(model=...)` is a synchronous context manager. Important methods include `update_session`, `append_audio`, `append_video`, `commit`, `clear_appended_audio`, `create_item`, `retrieve_item`, `delete_item`, `create_response`, `cancel_response`, `send_event`, `recv_event`, `events`, `end_session`, and `close`.
+
+```python
+import dashscope
+
+with dashscope.Client() as client:
+    with client.audio.realtime.connect(
+        model="qwen-audio-3.0-realtime-plus",
+    ) as session:
+        session.update_session(["text"], enable_turn_detection=False)
+        session.create_item({
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": "Say hello"}],
+        })
+        session.create_response()
+        for event in session.events():
+            print(event.get("type"))
+            if event.get("type") == "response.done":
+                break  # Qwen-Audio: close after the response; no end_session()
+```
+
+Events are JSON dictionaries; output audio is Base64 inside events, not an iterator of `bytes`. `events()` normally ends at `session.finished` or normal close, not automatically at every `response.done`, so a single-turn caller may break as above. Protocol capabilities differ by model: Qwen-Audio does not support `end_session()`, while Omni/Livetranslate lifecycle and session options must follow their own protocol. Realtime uses one socket per session and does not support `WsConnection` task reuse.
+
+## TingWu
+
+Offline processing uses `client.tingwu.call(*, model, input: dict, parameters=None, ...)`; with `AsyncClient`, await the same method. The input dictionary contains service fields such as `fileUrl` and `appid`.
+
+```python
+import dashscope
+
+with dashscope.Client() as client:
+    result = client.tingwu.call(
+        model="tingwu-turbo",
+        input={
+            "fileUrl": "https://example.com/meeting.mp3",
+            "appid": "YOUR_APP_ID",
+        },
+    )
+    print(result.request_id, result.status_code)
+```
+
+`TingWuResult` intentionally retains service `output` and `usage` fields; this is a resource-specific result model, not a reason to use legacy `.output` envelopes on other 2.0 resources.
+
+Real-time TingWu uses synchronous `client.tingwu.realtime(*, model, app_id, format="pcm", sample_rate=16000, terminology=None, max_end_silence=None, parameters=None, ...)`. In its context manager, send PCM with `send_audio_frame()`, call `stop()`, and drain `events()`; iteration ends at `speech-end`.
+
+## 1.x Compatibility — Maintenance Only
+
+Keep the following contracts only when repairing existing 1.x code. Do not combine them with `Client` resource calls or flat 2.0 models.
+
+- `dashscope.audio.tts.SpeechSynthesizer`: Sambert synthesis; class method `call(model, text, callback=None, workspace=None, **kwargs)`. Important kwargs include `format`, `sample_rate`, `volume`, `rate`, `pitch`, timestamps, and `ResultCallback`. `SpeechSynthesisResult` uses `get_audio_data()`, `get_audio_frame()`, timestamp getters, and `get_response()`.
+- `dashscope.audio.tts_v2.SpeechSynthesizer`: constructor-based CosyVoice synthesis. `call(text)` returns full `bytes` without a callback; callbacks receive `on_data(data)`. Incremental input uses `streaming_call()` / `streaming_complete()` / `streaming_cancel()`. Diagnostics include `get_last_request_id()`, `get_first_package_delay()`, and `get_response()`.
+- `dashscope.audio.asr.Transcription`: recorded-file tasks. `call()` waits, `async_call()` submits, and `fetch()` / `wait()` query the task. Its legacy response uses `output.task_id`, `output.task_status`, and `output.results[].transcription_url`; `phrase_id` becomes an `asr_phrase` resource. Preserve this envelope only in old code.
+- Legacy local exceptions include `ModelRequired`, `InputRequired`, and `InvalidTask`; legacy WebSocket callbacks can receive `task-failed`. Diagnose task failure from the legacy response/event's code and message.
+
+For new 2.0 code, errors come from `dashscope.errors`; normally `raise_on_error=True` raises them. With `raise_on_error=False`, inspect flat `is_error`, `status_code`, `code`, `message`, and `request_id`. See the dedicated errors guide for the hierarchy and retry policy.
 
 ## Java SDK
 

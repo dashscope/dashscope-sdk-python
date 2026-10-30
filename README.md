@@ -4,7 +4,7 @@
 
 The DashScope Python SDK is the official client for [Alibaba Cloud Model Studio (Bailian)](https://www.alibabacloud.com/help/en/model-studio/), covering text generation, multi-modal understanding, embeddings, reranking, image/video generation, speech synthesis & recognition, fine-tuning, agentic RL, applications and more.
 
-**Version 2.0** introduces a resource-style client — `dashscope.Client()` — modeled on the ergonomics of the OpenAI SDK: one client holds a shared connection pool, every capability hangs off it as a typed resource (`client.chat`, `client.images`, `client.audio`, …), responses are typed objects instead of raw dicts, and failures raise exceptions by default. The 1.x module-level API (`dashscope.Generation`, …) is unchanged and still fully supported, so 2.0 is purely additive.
+**Version 2.0** introduces a resource-style client — `dashscope.Client()` — modeled on the ergonomics of the OpenAI SDK: one client holds a shared connection pool, every capability hangs off it as a typed resource (`client.chat`, `client.images`, `client.audio`, …), responses are typed objects instead of raw dicts, and failures raise exceptions by default. The complete 1.x public surface remains available at its historical import paths and is implemented by facades under `dashscope.legacy_1x`; AgentStudio and Agentic RL share their large business cores with 2.0 without sharing public return or error contracts.
 
 ## What's new in 2.0
 
@@ -16,7 +16,7 @@ The DashScope Python SDK is the official client for [Alibaba Cloud Model Studio 
 | Errors | Inspect `resp.code` / `resp.message` by hand | Typed `DashScopeError` exceptions raised by default *(evolving)* |
 | Streaming | Generator of raw frames | `ChatStream` with `.text_stream`, `.reasoning_stream`, `.get_final_message()` |
 | Protocols | DashScope native + a separate compatible-mode entry | One client speaks `native`, `openai`, or `anthropic` via `protocol=` |
-| Async | Separate `Aio*` classes | `dashscope.AsyncClient()` mirrors the whole sync surface |
+| Async | Separate `Aio*` classes | `dashscope.AsyncClient()` mirrors the sync surface (except the duplex audio WebSocket sessions) |
 | Connections | A fresh session per call | One keep-alive pool per client, shared across resources |
 | Config | Module globals (`dashscope.api_key`, `set_region`) | Layered: args → `dashscope.settings` → env → `~/.dashscope/config.toml` |
 
@@ -26,11 +26,16 @@ The DashScope Python SDK is the official client for [Alibaba Cloud Model Studio 
 pip install -U dashscope
 ```
 
-The base install covers SDK API calls, the `dashscope` CLI command, Agentic RL fine-tuning and the local tokenizer. Python 3.9+ is required. One optional feature group remains:
+The base install covers SDK API calls, the `dashscope` CLI command, Agentic RL fine-tuning and the local tokenizer. Python 3.9+ is required. Optional feature groups all belong to the bundled AI assistant:
 
 | Extra | Provides | Install |
 |-------|----------|---------|
 | `acli` | Interactive AI assistant (DashScope SDK Expert) | `pip install "dashscope[acli]"` |
+| `acli-openai` | Run the assistant on an OpenAI-compatible model provider | `pip install "dashscope[acli-openai]"` |
+| `acli-anthropic` | Run the assistant on an Anthropic model provider | `pip install "dashscope[acli-anthropic]"` |
+| `acli-voice` | Voice input and spoken replies in the assistant | `pip install "dashscope[acli-voice]"` |
+| `acli-camera` | Camera capture for image input in the assistant | `pip install "dashscope[acli-camera]"` |
+| `acli-all` | All of the above (includes `acli`) | `pip install "dashscope[acli-all]"` |
 
 To install from a source checkout:
 
@@ -120,8 +125,15 @@ client = dashscope.Client(
     protocol="native",      # native | openai | anthropic
     timeout=300.0,
     max_retries=2,
+    base_url=None,          # override the endpoint entirely; default: DASHSCOPE_BASE_URL
+    config_path=None,       # alternate config.toml; default: DASHSCOPE_CONFIG
+    protocol_options=None,  # extra kwargs forwarded to the selected protocol adapter
+    raise_on_error=True,    # False: return error responses instead of raising
+    http_client=None,       # your own httpx.Client (AsyncClient for AsyncClient)
 )
 ```
+
+All options are keyword-only.
 
 Use it as a context manager to close the pool automatically, or derive a variant with `with_options()` (unmentioned options are inherited; the connection pool is shared when connection-level options are unchanged):
 
@@ -133,6 +145,8 @@ low_latency = client.with_options(timeout=10.0, max_retries=0)
 ```
 
 Any call also accepts per-request `api_key=`, `workspace=`, and `timeout=` overrides.
+
+Need proxies, custom connection limits or event hooks? Pass your own `http_client=httpx.Client(...)` (`httpx.AsyncClient` for `AsyncClient`). The SDK still applies authentication, retries and absolute endpoint URLs on top of it, and never closes a client it does not own.
 
 ### Protocols
 
@@ -185,7 +199,9 @@ for text in stream.text_stream:            # content deltas
 
 By default each frame is incremental. Pass `incremental_output=False` to receive cumulative snapshots instead (the SDK merges deltas for you).
 
-> **Note:** the SDK does **not** auto-retry streaming requests. Wrap stream consumption in your own retry/backoff for production — see [`examples/04_real_world_scenarios/production_ready_rag_harness.py`](examples/04_real_world_scenarios/production_ready_rag_harness.py).
+Thinking models surface reasoning on `.reasoning_stream` and, in the merged message, as `message.reasoning_content`. Under `protocol="anthropic"` the SDK also keeps `message.reasoning_signature` plus the raw `thinking` / `redacted_thinking` blocks in `message.reasoning_blocks`, so echoing the assistant message back on the next turn preserves extended thinking.
+
+> **Note:** streaming retries stop at the handshake. The SDK retries connection failures and retryable HTTP statuses only *before* the first event reaches you; once a stream is open it is never replayed, so a mid-stream drop surfaces as an exception. Wrap stream consumption in your own retry/backoff for production — see [`examples/04_real_world_scenarios/production_ready_rag_harness.py`](examples/04_real_world_scenarios/production_ready_rag_harness.py).
 
 ### Errors
 
@@ -194,7 +210,7 @@ By default each frame is incremental. Pass `incremental_output=False` to receive
 Failures raise a typed `DashScopeError` by default (both non-2xx HTTP statuses and HTTP-200-with-a-business-error land here):
 
 ```python
-from dashscope.v2 import errors
+from dashscope import errors
 
 try:
     client.chat.completions.create(model="qwen-plus", messages=["hi"])
@@ -206,7 +222,12 @@ except errors.DashScopeError as exc:       # base class for all SDK errors
     print("request failed:", exc.code, exc.message)
 ```
 
-The hierarchy includes `APIConnectionError` / `APITimeoutError` (network) and, under `APIStatusError`: `BadRequestError`, `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, `RequestTooLargeError`, `RateLimitError`, `InternalServerError`, `ServiceUnavailableError`, `GatewayTimeoutError`, and `ContentFilterError`.
+Everything derives from `DashScopeError`, in two families:
+
+- **Server errors** — under `APIStatusError`: `BadRequestError`, `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, `RequestTooLargeError`, `RateLimitError`, `InternalServerError`, `ServiceUnavailableError`, `GatewayTimeoutError`, and `ContentFilterError` (a `BadRequestError` subclass).
+- **Client-side errors** — under `SdkError`: `APIConnectionError` / `APITimeoutError` for network failures, plus the WebSocket family `WsEventError`, `WsStateError`, `WsQueueCapacityExceededError` and `WsBinaryOwnerConflictError`. Each carries a stable `sdk.*` code.
+
+A 200 response whose body does not parse into the expected envelope is reported as `InternalServerError` rather than leaking a decoder exception.
 
 Prefer to inspect errors inline instead of catching? Build the client with `raise_on_error=False` — failures come back as a normal response object with `is_error=True`, `code`, `message`, and `status_code`:
 
@@ -257,11 +278,19 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_WORKSPACE` | Workspace ID (endpoint subdomain) | — |
 | `DASHSCOPE_REGION` | Region | `cn-beijing` |
 | `DASHSCOPE_PROTOCOL` | `native` / `openai` / `anthropic` | `native` |
-| `DASHSCOPE_BASE_URL` | Override the endpoint entirely (escape hatch) | — |
+| `DASHSCOPE_BASE_URL` | Override the HTTP endpoint entirely (escape hatch) | — |
+| `DASHSCOPE_HTTP_BASE_URL` | 1.x name for the same override, honored as a fallback | — |
+| `DASHSCOPE_WEBSOCKET_BASE_URL` | Override the WebSocket endpoint | derived from region/workspace |
 | `DASHSCOPE_TIMEOUT` | Request timeout (seconds) | `300` |
 | `DASHSCOPE_MAX_RETRIES` | Automatic retries | `2` |
+| `DASHSCOPE_HTTP_MAX_CONNECTIONS` | Connection-pool size | `100` |
+| `DASHSCOPE_HTTP_MAX_KEEPALIVE_CONNECTIONS` | Keep-alive connections held in the pool | `20` |
+| `DASHSCOPE_HTTP_KEEPALIVE_EXPIRY` | Keep-alive expiry (seconds) | `5.0` |
 | `DASHSCOPE_LOG` | Log level | `WARNING` |
 | `DASHSCOPE_CONFIG` | Path to `config.toml` | `~/.dashscope/config.toml` |
+| `DASHSCOPE_API_KEY_FILE_PATH` | Path to the 1.x key file (lowest-priority auth tier) | `~/.dashscope/api_key` |
+
+The three `DASHSCOPE_HTTP_*` pool variables are also settable as `http_max_connections`, `http_max_keepalive_connections` and `http_keepalive_expiry` in `settings` and `config.toml`. Passing your own `http_client=` takes precedence over all of them.
 
 **Config file** (`~/.dashscope/config.toml`):
 
@@ -302,7 +331,7 @@ Notes:
 
 ## Capabilities
 
-Every capability is a resource on the client. Sync and async clients expose the same surface (async methods are `await`ed).
+Every capability is a resource on the client. Sync and async clients expose the same surface (async methods are `await`ed) — with one exception: the duplex WebSocket audio sessions are sync-only by design, as noted below.
 
 | Capability | 2.0 resource | Example |
 |------------|--------------|---------|
@@ -315,7 +344,10 @@ Every capability is a resource on the client. Sync and async clients expose the 
 | Token counting | `client.tokenization.count(...)` | [`text_generation/tokenization.py`](examples/01_atomic_capabilities/text_generation/tokenization.py) |
 | Image generation | `client.images.generate(...)` (+ `.jobs`) | [`image_video_synthesis/images.py`](examples/01_atomic_capabilities/image_video_synthesis/images.py) |
 | Video generation | `client.videos.generate(...)` (+ `.jobs`) | [`image_video_synthesis/videos.py`](examples/01_atomic_capabilities/image_video_synthesis/videos.py) |
-| Speech: ASR / TTS / realtime *(preview)* | `client.audio.asr` · `client.audio.tts` · `client.audio.realtime` | [`audio/`](examples/01_atomic_capabilities/audio/) |
+| Speech recognition (ASR) | Batch `client.audio.asr.transcribe(...)` / `.jobs`; realtime `client.audio.asr.recognize(...)` | [`audio/asr_file.py`](examples/01_atomic_capabilities/audio/asr_file.py) · [`audio/asr_websocket.py`](examples/01_atomic_capabilities/audio/asr_websocket.py) |
+| Speech synthesis (TTS) | HTTP `client.audio.tts.http.synthesize(...)` / `.stream(...)`; WebSocket `client.audio.tts.connect(...)` | [`audio/tts_http.py`](examples/01_atomic_capabilities/audio/tts_http.py) · [`audio/tts_websocket.py`](examples/01_atomic_capabilities/audio/tts_websocket.py) |
+| Realtime omni dialog | `client.audio.realtime.connect(...)` | [`audio/realtime_omni.py`](examples/01_atomic_capabilities/audio/realtime_omni.py) |
+| Voice & vocabulary management | `client.audio.voices` · `.voice_design` · `.vocabularies` · `.phrases` | [`audio/voice_clone.py`](examples/01_atomic_capabilities/audio/voice_clone.py) |
 | Meeting & audio understanding (TingWu) | `client.tingwu.call(...)` / `.realtime(...)` | [`audio/tingwu.py`](examples/01_atomic_capabilities/audio/tingwu.py) |
 | Files | `client.files.upload/list/get/delete(...)` | [`files/files.py`](examples/01_atomic_capabilities/files/files.py) |
 | Models | `client.models.list/get(...)` | [`models/models.py`](examples/01_atomic_capabilities/models/models.py) |
@@ -344,12 +376,27 @@ job = client.images.generate(model="wanx2.1-t2i-turbo", prompt="a cozy flower sh
 if job.succeeded:
     print(job.image_urls)
 
+# HTTP speech synthesis: one POST, audio comes back as a temporary URL
+synth = client.audio.tts.http.synthesize(
+    "Hello there", model="cosyvoice-v3-flash", voice="longanhuan", format="pcm",
+)
+print(synth.audio_url)
+
+# Streaming synthesis yields audio chunks as they are rendered
+for chunk in client.audio.tts.http.stream(
+    "Hello there", model="cosyvoice-v3-flash", voice="longanhuan", format="pcm",
+):
+    if chunk.audio:
+        ...  # chunk.is_final marks the closing part
+
 # A Model Studio application
 resp = client.apps.completions.create(app_id="YOUR_APP_ID", prompt="How do I make stew?")
 resp.text
 ```
 
-> **Audio is a preview.** The 2.0 `client.audio` surface is not final and may change; accessing it emits a `FutureWarning`.
+### Async audio
+
+`AsyncClient` covers the HTTP-shaped audio resources — `await client.audio.asr.transcribe(...)` for batch transcription, `client.audio.tts.http.synthesize/.stream` for synthesis, and the management resources (`voices`, `voice_design`, `vocabularies`, `phrases`). The duplex WebSocket sessions (`asr.recognize`, `tts.connect`, `realtime.connect`) are sync-only by design; run them in a thread if you need them inside an async app.
 
 ### Realtime over one WebSocket
 
@@ -362,20 +409,22 @@ session = client.audio.asr.recognize(model="fun-asr-realtime", connection=connec
 connection.close()
 ```
 
+Each task on the connection reads through a bounded queue (`task_queue_size=`, default 1024), so a slow consumer fails its own task with `errors.WsQueueCapacityExceededError` instead of holding audio in memory indefinitely or tearing down the shared socket.
+
 ## Supported models
 
 | Category | Example models | 2.0 resource |
 |----------|----------------|--------------|
-| Text generation | qwen-max, qwen-plus, qwen-flash | `client.chat` |
+| Text generation | qwen-max, qwen-plus, qwen-turbo | `client.chat` |
 | Multi-modal understanding | qwen3-vl-plus, qwen-omni | `client.multimodal.chat` |
 | Text embedding | text-embedding-v4, text-embedding-v3 | `client.embeddings` |
 | Multi-modal embedding | tongyi-embedding-vision-plus | `client.multimodal.embeddings` |
 | Rerank | gte-rerank-v2, qwen3-rerank | `client.rerank` |
-| Image generation | wanx2.1-t2i-turbo, wan-image | `client.images` |
-| Video generation | wanx2.1-t2v, wan-i2v | `client.videos` |
-| Speech synthesis (TTS) | cosyvoice-v1, qwen-tts | `client.audio.tts` |
+| Image generation | wanx2.1-t2i-turbo, wan2.6-image | `client.images` |
+| Video generation | wanx2.1-t2v, wan2.7-i2v | `client.videos` |
+| Speech synthesis (TTS) | cosyvoice-v3-flash, cosyvoice-v1, qwen-tts | `client.audio.tts` |
 | Speech recognition (ASR) | fun-asr-realtime, paraformer-v1 | `client.audio.asr` |
-| Omni (realtime) | qwen-omni-realtime | `client.audio.realtime` |
+| Omni (realtime) | qwen-omni-turbo-realtime | `client.audio.realtime` |
 
 For the latest model list, visit the [Model Studio model plaza](https://bailian.console.aliyun.com/).
 
@@ -385,7 +434,7 @@ The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built 
 
 - Run `dashscope` with no arguments to start the assistant. On first run it offers to install the knowledge pack (per-domain quick-reference skills: text, multimodal, speech, retrieval, fine-tuning, agent, cli), so guidance comes from the SDK's public interfaces — parameters, outputs, error codes — without reading the source.
 - Ask it instead of reading docs — e.g. `dashscope expert "how do I stream chat output"` (asks once and exits). Type `/help` inside the assistant for available commands; `dashscope expert --help` shows all forms.
-- Install with the `acli` extra: `pip install "dashscope[acli]"`.
+- Install with the `acli` extra: `pip install "dashscope[acli]"`. Add `acli-voice` / `acli-camera` for voice and camera input, or `acli-all` for everything — see the [extras table](#installation).
 - Full walkthrough: [DashScope SDK Expert guide](https://help.aliyun.com/en/model-studio/dashscope-sdk-expert).
 
 ## Shell completion
@@ -446,6 +495,33 @@ The 1.x module-level API is unchanged and still supported — you can adopt 2.0 
 | `dashscope.api_key = "sk-xxx"` | `dashscope.Client(api_key=...)` or `dashscope.settings.api_key = ...` |
 | `dashscope.set_region(region, workspace_id)` | `dashscope.Client(region=..., workspace=...)` |
 | OpenAI-compatible via `dashscope.aigc.chat_completion.Completions` | `dashscope.Client(protocol="openai")` |
+
+### Package layout and compatibility
+
+The 2.0 implementation sits directly under `dashscope`; the former `dashscope.v2` namespace is gone. AgentStudio and FineTune/Agentic RL each have a single business core under `dashscope.applications`, with two thin public facades on top:
+
+- the historical `dashscope.agentstudio` and `dashscope.finetune.agentic_rl` imports keep the 1.x clients, methods, return models and exception classes;
+- `client.agentstudio` and `client.rl` expose the 2.0 resource APIs, the httpx transport and the `dashscope.errors` family.
+
+Historical deep modules such as `dashscope.aigc`, `dashscope.client.base_api`, `dashscope.files` and `dashscope.tokenizers` remain importable through lazy aliases to `dashscope.legacy_1x`. The local `get_tokenizer` utility therefore keeps its 1.x exception contract, while 2.0 remote token counting is the independent `client.tokenization` resource. The application cores are internal implementation paths — 2.0 callers should use the client resource tree.
+
+Concretely: the historical Agentic RL class still returns `FineTune` from `submit_job` and retains `cancel/list/get/delete/logs`, whereas the 2.0 job lifecycle is `client.rl.jobs` with errors from the SDK catalog. Likewise, standalone `dashscope.agentstudio.Client` keeps the old `AgentStudioError` hierarchy and its `raw` response attribute, while `client.agentstudio` raises `dashscope.errors` and exposes failed response data through `body`.
+
+> **Breaking (2.0 AgentStudio errors):** on the 2.0 surface — `client.agentstudio`, whose exceptions come from `dashscope.applications.agentstudio` — `ConflictError` is an alias of `APIStatusError` rather than a 409-specific subclass, so `except ConflictError` catches *every* status error (400/401/404/429/5xx), not just conflicts. Match on `err.status_code == 409` if you need conflict-only handling. The historical `dashscope.agentstudio.ConflictError` is untouched and still 409-specific.
+
+> **Breaking (`submit_job` / realtime WebSocket):** `submit_job` forwards extra keyword arguments straight to the transport, so the 1.x `request_timeout=` is renamed `timeout=`, and `workspace=` / `headers=` / `stream=` are no longer accepted (passing any of them raises `TypeError`). The realtime WebSocket errors (`WsStateError`, `WsQueueCapacityExceededError`, `WsBinaryOwnerConflictError`) now derive from `DashScopeError` instead of `RuntimeError`, so a bare `except RuntimeError` no longer catches them — catch `errors.DashScopeError` (or the specific class) instead.
+
+`dashscope.save_api_key` now comes from `dashscope._config`. It accepts an optional key-file path, expands `~`, creates missing parent directories, and writes UTF-8. Logs from the current client use the independent `dashscope._logging` logger hierarchy and do not reconfigure the shared `dashscope` root logger.
+
+### Development tests
+
+```bash
+python -m pytest tests --ignore=tests/legacy_1x -q  # current
+python -m pytest tests/legacy_1x -q                 # archived compatibility
+python -m pytest tests -q                           # everything
+```
+
+For current coverage, run `coverage run -m pytest tests --ignore=tests/legacy_1x`, then `coverage report -m`.
 
 ## License
 

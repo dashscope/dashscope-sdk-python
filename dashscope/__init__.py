@@ -15,26 +15,37 @@ warnings.filterwarnings(
     category=Warning,
 )
 
+from dashscope.legacy_1x._shim import install as _install_legacy_aliases
+
+_install_legacy_aliases()
+
 from dashscope.version import __version__
-from dashscope.aigc.code_generation import CodeGeneration
-from dashscope.aigc.conversation import Conversation, History, HistoryItem
-from dashscope.aigc.generation import AioGeneration, Generation
-from dashscope.aigc.image_synthesis import ImageSynthesis
-from dashscope.aigc.multimodal_conversation import (
+from dashscope.legacy_1x.aigc.code_generation import CodeGeneration
+from dashscope.legacy_1x.aigc.conversation import (
+    Conversation,
+    History,
+    HistoryItem,
+)
+from dashscope.legacy_1x.aigc.generation import AioGeneration, Generation
+from dashscope.legacy_1x.aigc.image_synthesis import ImageSynthesis
+from dashscope.legacy_1x.aigc.multimodal_conversation import (
     MultiModalConversation,
     AioMultiModalConversation,
 )
-from dashscope.aigc.video_synthesis import VideoSynthesis
-from dashscope.app.application import Application
-from dashscope.audio.asr.transcription import Transcription
-from dashscope.audio.http_tts.http_speech_synthesizer import (
+from dashscope.legacy_1x.aigc.video_synthesis import VideoSynthesis
+from dashscope.legacy_1x.app.application import Application
+from dashscope.legacy_1x.audio.asr.transcription import Transcription
+from dashscope.legacy_1x.audio.http_tts.http_speech_synthesizer import (
     HttpSpeechSynthesizer,
 )
-from dashscope.audio.tts.speech_synthesizer import SpeechSynthesizer
-from dashscope.api_entities.aio_session import close_shared_aio_session
-from dashscope.api_entities.http_request import close_shared_sync_session
-from dashscope.common.api_key import save_api_key
-from dashscope.common.env import (
+from dashscope.legacy_1x.audio.tts.speech_synthesizer import SpeechSynthesizer
+from dashscope.legacy_1x.api_entities.aio_session import (
+    close_shared_aio_session,
+)
+from dashscope.legacy_1x.api_entities.http_request import (
+    close_shared_sync_session,
+)
+from dashscope.legacy_1x.common.env import (
     MAAS_REGIONS,
     api_key,
     api_key_file_path,
@@ -43,33 +54,40 @@ from dashscope.common.env import (
     base_websocket_api_url,
     validate_workspace_id,
 )
-from dashscope.finetune.deployments import Deployments
-from dashscope.finetune.finetunes import FineTunes
-from dashscope.embeddings.batch_text_embedding import BatchTextEmbedding
-from dashscope.embeddings.batch_text_embedding_response import (
+from dashscope.legacy_1x.finetune.deployments import Deployments
+from dashscope.legacy_1x.finetune.finetunes import FineTunes
+from dashscope.legacy_1x.embeddings.batch_text_embedding import (
+    BatchTextEmbedding,
+)
+from dashscope.legacy_1x.embeddings.batch_text_embedding_response import (
     BatchTextEmbeddingResponse,
 )
-from dashscope.embeddings.multimodal_embedding import (
+from dashscope.legacy_1x.embeddings.multimodal_embedding import (
     MultiModalEmbedding,
     MultiModalEmbeddingItemAudio,
     MultiModalEmbeddingItemImage,
     MultiModalEmbeddingItemText,
     AioMultiModalEmbedding,
 )
-from dashscope.embeddings.text_embedding import TextEmbedding
-from dashscope.files import Files
-from dashscope.models import Models
-from dashscope.nlp.understanding import Understanding
-from dashscope.rerank import AioTextReRank, TextReRank
-from dashscope.tokenizers import (
+from dashscope.legacy_1x.embeddings.text_embedding import TextEmbedding
+from dashscope.legacy_1x.files import Files
+from dashscope.legacy_1x.models import Models
+from dashscope.legacy_1x.nlp.understanding import Understanding
+from dashscope.legacy_1x.rerank import AioTextReRank, TextReRank
+from dashscope.legacy_1x.tokenizers import (
     Tokenization,
     Tokenizer,
     get_tokenizer,
     list_tokenizers,
 )
 
-# dashscope 2.0 public surface (implementation lives in dashscope/v2/).
-from dashscope.v2 import AsyncClient, Client, WsConnection, chat, settings
+# dashscope 2.0 public surface.
+from dashscope import errors
+from dashscope._config import Config, Settings, save_api_key, settings
+from dashscope._quickstart import chat
+from dashscope.client import AsyncClient, Client
+from dashscope.errors import DashScopeError, ErrorCode
+from dashscope.transport.ws_connection import WsConnection, WsTask
 
 # cn-beijing defaults to the legacy dashscope.aliyuncs.com endpoints;
 # its MaaS URLs are only reachable via an explicit set_region() call.
@@ -114,44 +132,77 @@ def set_region(region: str, workspace_id: str = None):
     base_websocket_api_url = f"wss://{host}/api-ws/v1/inference"
 
 
-# The Assistants API (dashscope.assistants / dashscope.threads) is deprecated.
+# The Assistants API (dashscope.legacy_1x.assistants /
+# dashscope.legacy_1x.threads) is deprecated.
 # Resolve its names lazily (PEP 562) so a plain `import dashscope` does not emit
 # the DeprecationWarning for code that never touches them; accessing any of these
-# names imports dashscope.assistants, which warns once.
+# names imports dashscope.legacy_1x.assistants, which warns once.
 _DEPRECATED_LAZY_IMPORTS = {
-    "Assistant": "dashscope.assistants",
-    "AssistantList": "dashscope.assistants",
-    "Assistants": "dashscope.assistants",
-    "AssistantFile": "dashscope.assistants",
-    "DeleteResponse": "dashscope.assistants",
-    "MessageFile": "dashscope.threads",
-    "Messages": "dashscope.threads",
-    "Run": "dashscope.threads",
-    "RunList": "dashscope.threads",
-    "Runs": "dashscope.threads",
-    "RunStep": "dashscope.threads",
-    "RunStepList": "dashscope.threads",
-    "Steps": "dashscope.threads",
-    "Thread": "dashscope.threads",
-    "ThreadMessage": "dashscope.threads",
-    "ThreadMessageList": "dashscope.threads",
-    "Threads": "dashscope.threads",
+    "Assistant": "dashscope.legacy_1x.assistants",
+    "AssistantList": "dashscope.legacy_1x.assistants",
+    "Assistants": "dashscope.legacy_1x.assistants",
+    "AssistantFile": "dashscope.legacy_1x.assistants",
+    "DeleteResponse": "dashscope.legacy_1x.assistants",
+    "MessageFile": "dashscope.legacy_1x.threads",
+    "Messages": "dashscope.legacy_1x.threads",
+    "Run": "dashscope.legacy_1x.threads",
+    "RunList": "dashscope.legacy_1x.threads",
+    "Runs": "dashscope.legacy_1x.threads",
+    "RunStep": "dashscope.legacy_1x.threads",
+    "RunStepList": "dashscope.legacy_1x.threads",
+    "Steps": "dashscope.legacy_1x.threads",
+    "Thread": "dashscope.legacy_1x.threads",
+    "ThreadMessage": "dashscope.legacy_1x.threads",
+    "ThreadMessageList": "dashscope.legacy_1x.threads",
+    "Threads": "dashscope.legacy_1x.threads",
 }
+
+_LEGACY_LAZY_MODULES = frozenset(
+    {
+        "aigc",
+        "agentstudio",
+        "api_entities",
+        "app",
+        "applications",
+        "assistants",
+        "audio",
+        "cli",
+        "common",
+        "embeddings",
+        "files",
+        "finetune",
+        "io",
+        "model",
+        "models",
+        "multimodal",
+        "nlp",
+        "protocol",
+        "rerank",
+        "threads",
+        "tokenizers",
+        "utils",
+    },
+)
 
 
 def __getattr__(name):
     module_name = _DEPRECATED_LAZY_IMPORTS.get(name)
-    if module_name is None:
+    if module_name is not None:
+        value = getattr(importlib.import_module(module_name), name)
+    elif name in _LEGACY_LAZY_MODULES:
+        value = importlib.import_module(f"dashscope.{name}")
+    else:
         raise AttributeError(
             f"module {__name__!r} has no attribute {name!r}",
         )
-    value = getattr(importlib.import_module(module_name), name)
     globals()[name] = value
     return value
 
 
 def __dir__():
-    return sorted(set(globals()) | set(_DEPRECATED_LAZY_IMPORTS))
+    return sorted(
+        set(globals()) | set(_DEPRECATED_LAZY_IMPORTS) | _LEGACY_LAZY_MODULES,
+    )
 
 
 __all__ = [
@@ -218,8 +269,14 @@ __all__ = [
     # dashscope 2.0
     "AsyncClient",
     "Client",
+    "Config",
+    "DashScopeError",
+    "ErrorCode",
+    "Settings",
     "WsConnection",
+    "WsTask",
     "chat",
+    "errors",
     "set_region",
 ]
 

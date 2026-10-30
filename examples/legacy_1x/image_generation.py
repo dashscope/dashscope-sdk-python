@@ -10,8 +10,8 @@ multi-image generation.
 
 import os
 
-from dashscope.aigc.image_generation import ImageGeneration
-from dashscope.api_entities.dashscope_response import Message, Role
+from dashscope.legacy_1x.aigc.image_generation import ImageGeneration
+from dashscope.legacy_1x.api_entities.dashscope_response import Message, Role
 
 # Authentication: set your Model Studio API key via the
 # DASHSCOPE_API_KEY environment variable (recommended), or pass
