@@ -18,7 +18,7 @@ from dashscope.errors import (
     DashScopeError,
     check_response,
 )
-from dashscope.transport._ident import sdk_headers
+from dashscope.transport import _ident
 from dashscope.transport._retry import backoff_delay, should_retry
 
 logger = get_logger("transport")
@@ -27,16 +27,26 @@ DEFAULT_CONNECT_TIMEOUT = 5.0
 _WORKSPACE_HEADER = "X-DashScope-WorkSpace"
 
 
-def _map_transport_error(exc: httpx.TransportError) -> DashScopeError:
+def _map_transport_error(
+    exc: httpx.TransportError,
+    request_id: Optional[str] = None,
+) -> DashScopeError:
     """Map raw httpx transport failures into the SDK error hierarchy.
 
     The message text comes from the catalog entry behind each class
     (``sdk.Timeout`` / ``sdk.ConnectionError``), with the httpx error as
     the ``{detail}``.
+
+    ``request_id`` is the best id the caller has for the failed request:
+    the server's ``x-request-id`` when a response arrived before the
+    failure, otherwise the client-generated id that went out with the
+    request. A transport failure that never got a response can therefore
+    only ever carry the client id -- which is still something to search
+    access logs for, unlike the ``None`` it would otherwise be.
     """
     if isinstance(exc, httpx.TimeoutException):
-        return APITimeoutError(detail=str(exc))
-    return APIConnectionError(detail=str(exc))
+        return APITimeoutError(detail=str(exc), request_id=request_id)
+    return APIConnectionError(detail=str(exc), request_id=request_id)
 
 
 def _resolve_timeout(
@@ -203,6 +213,7 @@ class SyncTransport:
         sdk_module: Optional[str] = None,
     ) -> httpx.Response:
         url = _abs_url(base_url or self._base_url, path)
+        client_request_id = _ident.client_request_id()
         for attempt in range(self._max_retries + 1):
             try:
                 response = self._client.request(
@@ -215,7 +226,7 @@ class SyncTransport:
                     params=params,
                     headers=_request_headers(
                         self._default_headers,
-                        sdk_headers(sdk_module),
+                        _ident.sdk_headers(sdk_module, client_request_id),
                         headers,
                         api_key,
                         workspace,
@@ -227,13 +238,15 @@ class SyncTransport:
             except httpx.TransportError as exc:
                 if attempt >= self._max_retries:
                     logger.warning(
-                        "request %s %s failed after %d attempt(s): %s",
+                        "request %s %s failed after %d attempt(s)"
+                        " (client_request_id=%s): %s",
                         method,
                         path,
                         attempt + 1,
+                        client_request_id,
                         exc,
                     )
-                    raise _map_transport_error(exc) from exc
+                    raise _map_transport_error(exc, client_request_id) from exc
                 delay = backoff_delay(attempt, None)
                 logger.info(
                     "retrying %s %s in %.2fs (attempt %d/%d): %s: %s",
@@ -249,10 +262,11 @@ class SyncTransport:
                 continue
             request_id = response.headers.get("x-request-id")
             logger.debug(
-                "request %s %s -> %d (request_id=%s)",
+                "request %s %s -> %d (client_request_id=%s, request_id=%s)",
                 method,
                 path,
                 response.status_code,
+                client_request_id,
                 request_id,
             )
             if not should_retry(response.status_code, response.headers):
@@ -296,6 +310,7 @@ class SyncTransport:
         never retries or replays stream contents.
         """
         url = _abs_url(base_url or self._base_url, path)
+        client_request_id = _ident.client_request_id()
         for attempt in range(self._max_retries + 1):
             try:
                 response = self._client.send(
@@ -306,7 +321,7 @@ class SyncTransport:
                         params=params,
                         headers=_request_headers(
                             self._default_headers,
-                            sdk_headers(sdk_module),
+                            _ident.sdk_headers(sdk_module, client_request_id),
                             headers,
                             api_key,
                             workspace,
@@ -321,7 +336,10 @@ class SyncTransport:
                 )
             except httpx.TransportError as exc:
                 if attempt >= self._max_retries:
-                    raise _map_transport_error(exc) from exc
+                    raise _map_transport_error(
+                        exc,
+                        client_request_id,
+                    ) from exc
                 delay = backoff_delay(attempt, None)
                 logger.info(
                     "retrying stream %s %s in %.2fs (attempt %d/%d): %s: %s",
@@ -368,14 +386,20 @@ class SyncTransport:
                     response.read()
                     check_response(response)
                 except httpx.TransportError as exc:
-                    raise _map_transport_error(exc) from exc
+                    # A response arrived, so its server id wins.
+                    raise _map_transport_error(
+                        exc,
+                        response.headers.get("x-request-id")
+                        or client_request_id,
+                    ) from exc
                 finally:
                     response.close()
             logger.debug(
-                "stream %s %s -> %d (request_id=%s)",
+                "stream %s %s -> %d (client_request_id=%s, request_id=%s)",
                 method,
                 path,
                 response.status_code,
+                client_request_id,
                 response.headers.get("x-request-id"),
             )
             return response
@@ -440,6 +464,7 @@ class AsyncTransport:
         sdk_module: Optional[str] = None,
     ) -> httpx.Response:
         url = _abs_url(base_url or self._base_url, path)
+        client_request_id = _ident.client_request_id()
         for attempt in range(self._max_retries + 1):
             try:
                 response = await self._client.request(
@@ -452,7 +477,7 @@ class AsyncTransport:
                     params=params,
                     headers=_request_headers(
                         self._default_headers,
-                        sdk_headers(sdk_module),
+                        _ident.sdk_headers(sdk_module, client_request_id),
                         headers,
                         api_key,
                         workspace,
@@ -464,13 +489,15 @@ class AsyncTransport:
             except httpx.TransportError as exc:
                 if attempt >= self._max_retries:
                     logger.warning(
-                        "request %s %s failed after %d attempt(s): %s",
+                        "request %s %s failed after %d attempt(s)"
+                        " (client_request_id=%s): %s",
                         method,
                         path,
                         attempt + 1,
+                        client_request_id,
                         exc,
                     )
-                    raise _map_transport_error(exc) from exc
+                    raise _map_transport_error(exc, client_request_id) from exc
                 delay = backoff_delay(attempt, None)
                 logger.info(
                     "retrying %s %s in %.2fs (attempt %d/%d): %s: %s",
@@ -486,10 +513,11 @@ class AsyncTransport:
                 continue
             request_id = response.headers.get("x-request-id")
             logger.debug(
-                "request %s %s -> %d (request_id=%s)",
+                "request %s %s -> %d (client_request_id=%s, request_id=%s)",
                 method,
                 path,
                 response.status_code,
+                client_request_id,
                 request_id,
             )
             if not should_retry(response.status_code, response.headers):
@@ -527,6 +555,7 @@ class AsyncTransport:
     ) -> httpx.Response:
         """Async twin of :meth:`SyncTransport.open_stream`."""
         url = _abs_url(base_url or self._base_url, path)
+        client_request_id = _ident.client_request_id()
         for attempt in range(self._max_retries + 1):
             request = self._client.build_request(
                 method,
@@ -535,7 +564,7 @@ class AsyncTransport:
                 params=params,
                 headers=_request_headers(
                     self._default_headers,
-                    sdk_headers(sdk_module),
+                    _ident.sdk_headers(sdk_module, client_request_id),
                     headers,
                     api_key,
                     workspace,
@@ -548,7 +577,10 @@ class AsyncTransport:
                 response = await self._client.send(request, stream=True)
             except httpx.TransportError as exc:
                 if attempt >= self._max_retries:
-                    raise _map_transport_error(exc) from exc
+                    raise _map_transport_error(
+                        exc,
+                        client_request_id,
+                    ) from exc
                 delay = backoff_delay(attempt, None)
                 logger.info(
                     "retrying stream %s %s in %.2fs (attempt %d/%d): %s: %s",
@@ -593,14 +625,20 @@ class AsyncTransport:
                     await response.aread()
                     check_response(response)
                 except httpx.TransportError as exc:
-                    raise _map_transport_error(exc) from exc
+                    # A response arrived, so its server id wins.
+                    raise _map_transport_error(
+                        exc,
+                        response.headers.get("x-request-id")
+                        or client_request_id,
+                    ) from exc
                 finally:
                     await response.aclose()
             logger.debug(
-                "stream %s %s -> %d (request_id=%s)",
+                "stream %s %s -> %d (client_request_id=%s, request_id=%s)",
                 method,
                 path,
                 response.status_code,
+                client_request_id,
                 response.headers.get("x-request-id"),
             )
             return response

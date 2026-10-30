@@ -17,12 +17,14 @@ import json
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from dashscope import AsyncClient, Client
 from dashscope import _error_registry as registry
 from dashscope import errors
 from dashscope.errors import (
     APIConnectionError,
+    APIResponseValidationError,
     APIStatusError,
     APITimeoutError,
     AuthenticationError,
@@ -55,6 +57,7 @@ from dashscope.errors import (
     _WIRE_TO_PUBLIC,
 )
 from dashscope.types.common import JobStatus, ResponseBase, response_body
+from dashscope.types.completions import ChatCompletion
 
 
 def _resp(status, body=None, headers=None):
@@ -1008,3 +1011,114 @@ def test_sdk_error_translation_needs_a_family_fallback():
             family="sdk.agentstudio",
         )
     assert "sdk.agentstudio.Error" in str(ei.value)
+
+
+def _validation_cause(body):
+    """A real pydantic failure over a body the typed models cannot hold."""
+    with pytest.raises(ValidationError) as caught:
+        ChatCompletion(**body)
+    return caught.value
+
+
+def test_response_validation_error_is_its_own_category():
+    assert issubclass(APIResponseValidationError, DashScopeError)
+    assert not issubclass(APIResponseValidationError, APIStatusError)
+    assert not issubclass(APIResponseValidationError, SdkError)
+    err = APIResponseValidationError()
+    assert isinstance(err, DashScopeError)
+    assert err.message == "Response body failed SDK-side validation."
+    # No status is invented: the gateway's own status said success.
+    assert err.status_code is None
+    assert err.code is None
+
+
+def test_response_validation_error_is_not_a_catalog_entry():
+    # ``_error_registry.py`` is a vendored generated artifact, so this
+    # class has no ``sdk.*`` entry behind it; pinning that keeps the
+    # DashScopeError base (rather than SdkError) a recorded decision.
+    names = {entry.name for entry in registry.SDK_ERRORS}
+    assert not any("response_validation" in name for name in names)
+    assert APIResponseValidationError().code is None
+
+
+def test_response_validation_error_makes_a_parse_failure_catchable():
+    body = {"request_id": "req-1", "usage": "unlimited"}
+    with pytest.raises(DashScopeError) as caught:
+        try:
+            ChatCompletion(**body)
+        except ValidationError as exc:
+            raise APIResponseValidationError(
+                response=_resp(200, body),
+                body=body,
+                cause=exc,
+            ) from exc
+    assert caught.value.__cause__ is not None
+
+
+def test_response_validation_error_str_carries_request_id_and_body():
+    body = {
+        "request_id": "req-1",
+        "output": {"text": "hi"},
+        "usage": "unlimited",
+    }
+    err = APIResponseValidationError(
+        response=_resp(200, body),
+        body=body,
+        cause=_validation_cause(body),
+    )
+    assert err.request_id == "req-1"
+    text = str(err)
+    assert "request_id=req-1" in text
+    assert "usage" in text and "unlimited" in text
+    assert "cause=" in text and "ChatCompletion" in text
+    # Pydantic's own text is multiline; ``__str__`` stays on one line.
+    assert "\n" not in text
+
+
+def test_response_validation_error_carries_response_body_and_cause():
+    body = {"usage": "unlimited"}
+    cause = _validation_cause(body)
+    response = _resp(200, body, {"x-request-id": "header-id"})
+    err = APIResponseValidationError(
+        response=response,
+        body=body,
+        cause=cause,
+    )
+    assert err.response is response
+    assert err.body is body
+    assert err.cause is cause
+    assert err.headers["x-request-id"] == "header-id"
+    # With no request_id in the body, the header supplies it.
+    assert err.request_id == "header-id"
+    assert err.status_code is None
+    assert err.response.status_code == 200
+
+
+def test_response_validation_error_without_a_response():
+    # Websocket payloads have no httpx.Response behind them.
+    err = APIResponseValidationError(
+        body={"output": {"text": "hi"}},
+        request_id="ws-1",
+    )
+    assert err.response is None
+    assert err.headers == {}
+    assert err.request_id == "ws-1"
+    assert "request_id=ws-1" in str(err)
+    assert "cause=" not in str(err)
+
+
+def test_response_validation_error_keeps_an_explicit_message():
+    err = APIResponseValidationError("usage arrived as a string")
+    assert err.message == "usage arrived as a string"
+    assert str(err) == "<APIResponseValidationError> usage arrived as a string"
+
+
+def test_response_validation_error_digests_stay_one_bounded_line():
+    err = APIResponseValidationError(
+        body={"text": "x" * 5000, "split": "a\nb\tc"},
+        cause=ValueError("boom\nover two lines"),
+    )
+    text = str(err)
+    assert "\n" not in text and "\t" not in text
+    assert text.endswith("...")
+    assert len(text) < 600

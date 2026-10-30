@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import httpx
 import pytest
 
@@ -19,7 +21,10 @@ from dashscope.errors import (
 )
 from dashscope.transport import AsyncTransport, SyncTransport
 from dashscope.transport import http as transport_http
-from dashscope.transport._ident import SDK_CLIENT_VALUE
+from dashscope.transport._ident import (
+    CLIENT_REQUEST_ID_HEADER,
+    SDK_CLIENT_VALUE,
+)
 from dashscope.transport._retry import backoff_delay, retry_after_seconds
 
 BASE_URL = "https://api.test.local"
@@ -481,6 +486,158 @@ async def test_async_sdk_identification_headers(no_sleep):
     assert (
         second["x-dashscope-sdk-session-id"]
         == first["x-dashscope-sdk-session-id"]
+    )
+    await t.aclose()
+
+
+def test_client_request_id_header_name():
+    # Pin the wire contract: renaming the constant must not silently
+    # rename the header the gateway is asked to log.
+    assert CLIENT_REQUEST_ID_HEADER == "x-dashscope-client-request-id"
+
+
+def test_client_request_id_is_a_fresh_uuid_per_request(no_sleep):
+    # The session id groups every request a process makes; this one
+    # narrows a log search to a single call, so two requests through one
+    # transport must not share it.
+    rec = _Recorder()
+    t = _make_sync(rec, [])
+    t.request("GET", "/x")
+    t.request("GET", "/y")
+    first = rec.requests[0].headers[CLIENT_REQUEST_ID_HEADER]
+    second = rec.requests[1].headers[CLIENT_REQUEST_ID_HEADER]
+    assert uuid.UUID(first).hex == first  # 32 lowercase hex chars
+    assert uuid.UUID(second).hex == second
+    assert first != second
+    # Both still belong to one SDK session.
+    assert (
+        rec.requests[0].headers["x-dashscope-sdk-session-id"]
+        == rec.requests[1].headers["x-dashscope-sdk-session-id"]
+    )
+
+
+def test_client_request_id_is_shared_by_a_request_and_its_retries(no_sleep):
+    # Retries are attempts at one logical request: the client id stays
+    # fixed while the gateway hands out an x-request-id per attempt, so
+    # the server-side ids all correlate back to one client id.
+    rec = _Recorder()
+    t = _make_sync(rec, [(429, {}), (200, {})], max_retries=2)
+    t.request("GET", "/x")
+    assert rec.calls == 2
+    sent = [r.headers[CLIENT_REQUEST_ID_HEADER] for r in rec.requests]
+    assert len(set(sent)) == 1
+
+
+def test_client_request_id_on_streams(no_sleep):
+    rec = _Recorder()
+    t = _make_sync(rec, [])
+    t.open_stream("GET", "/x").close()
+    sent = rec.requests[0].headers[CLIENT_REQUEST_ID_HEADER]
+    assert uuid.UUID(sent).hex == sent
+
+
+def test_client_request_id_overridden_by_caller(no_sleep):
+    rec = _Recorder()
+    t = _make_sync(rec, [])
+    t.request(
+        "GET",
+        "/x",
+        headers={"X-DashScope-Client-Request-Id": "caller-id"},
+    )
+    sent = rec.requests[0].headers
+    assert sent[CLIENT_REQUEST_ID_HEADER] == "caller-id"
+    assert len(sent.get_list(CLIENT_REQUEST_ID_HEADER)) == 1
+
+
+def test_client_request_id_disabled_with_the_other_sdk_headers(monkeypatch):
+    monkeypatch.setenv("DASHSCOPE_DISABLE_SDK_HEADERS", "1")
+    rec = _Recorder()
+    t = _make_sync(rec, [])
+    t.request("GET", "/x")
+    assert CLIENT_REQUEST_ID_HEADER not in rec.requests[0].headers
+
+
+def test_connection_error_carries_the_client_request_id(no_sleep):
+    # The request never reached the gateway, so there is no server
+    # x-request-id to report; the id the SDK sent is the only handle left.
+    rec = _Recorder()
+    t = _make_sync(rec, [httpx.ConnectError("boom")], max_retries=0)
+    with pytest.raises(APIConnectionError) as exc_info:
+        t.request("GET", "/x")
+    sent = rec.requests[0].headers[CLIENT_REQUEST_ID_HEADER]
+    assert sent
+    assert exc_info.value.request_id == sent
+    assert sent in str(exc_info.value)
+
+
+def test_timeout_error_carries_the_client_request_id(no_sleep):
+    rec = _Recorder()
+    t = _make_sync(rec, [httpx.ConnectTimeout("slow")], max_retries=0)
+    with pytest.raises(APITimeoutError) as exc_info:
+        t.request("GET", "/x")
+    assert (
+        exc_info.value.request_id
+        == rec.requests[0].headers[CLIENT_REQUEST_ID_HEADER]
+    )
+
+
+def test_stream_connection_error_carries_the_client_request_id(no_sleep):
+    rec = _Recorder()
+    t = _make_sync(rec, [httpx.ConnectError("boom")], max_retries=0)
+    with pytest.raises(APIConnectionError) as exc_info:
+        t.open_stream("POST", "/x")
+    assert (
+        exc_info.value.request_id
+        == rec.requests[0].headers[CLIENT_REQUEST_ID_HEADER]
+    )
+
+
+def test_no_client_request_id_on_errors_when_headers_disabled(
+    monkeypatch,
+    no_sleep,
+):
+    # An id that never went on the wire cannot be looked up, so reporting
+    # it would point at nothing.
+    monkeypatch.setenv("DASHSCOPE_DISABLE_SDK_HEADERS", "1")
+    rec = _Recorder()
+    t = _make_sync(rec, [httpx.ConnectError("boom")], max_retries=0)
+    with pytest.raises(APIConnectionError) as exc_info:
+        t.request("GET", "/x")
+    assert CLIENT_REQUEST_ID_HEADER not in rec.requests[0].headers
+    assert exc_info.value.request_id is None
+
+
+@pytest.mark.asyncio
+async def test_async_client_request_id(no_sleep):
+    rec = _Recorder()
+    mock = httpx.MockTransport(rec.handler([]))
+    http_client = httpx.AsyncClient(transport=mock, base_url=BASE_URL)
+    t = AsyncTransport(base_url=BASE_URL, http_client=http_client)
+    await t.request("GET", "/x")
+    response = await t.open_stream("GET", "/x")
+    await response.aclose()
+    first = rec.requests[0].headers[CLIENT_REQUEST_ID_HEADER]
+    second = rec.requests[1].headers[CLIENT_REQUEST_ID_HEADER]
+    assert uuid.UUID(first).hex == first
+    assert first != second
+    await t.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_connection_error_carries_the_client_request_id(no_sleep):
+    rec = _Recorder()
+    mock = httpx.MockTransport(rec.handler([httpx.ConnectError("boom")]))
+    http_client = httpx.AsyncClient(transport=mock, base_url=BASE_URL)
+    t = AsyncTransport(
+        base_url=BASE_URL,
+        http_client=http_client,
+        max_retries=0,
+    )
+    with pytest.raises(APIConnectionError) as exc_info:
+        await t.request("GET", "/x")
+    assert (
+        exc_info.value.request_id
+        == rec.requests[0].headers[CLIENT_REQUEST_ID_HEADER]
     )
     await t.aclose()
 
