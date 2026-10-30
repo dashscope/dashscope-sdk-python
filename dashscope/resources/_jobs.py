@@ -13,7 +13,16 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Union,
+)
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -23,6 +32,7 @@ from dashscope.errors import (
     error_from_business_code,
     response_json,
 )
+from dashscope.transport._options import request_options
 from dashscope.types.common import (
     ResponseBase,
     Usage,
@@ -263,6 +273,9 @@ class Jobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         """Submit a task; returns immediately with a PENDING/RUNNING Job."""
         body: Dict[str, Any] = {"model": model, "input": input}
@@ -282,6 +295,11 @@ class Jobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return self._parse(response)
@@ -293,6 +311,9 @@ class Jobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         """Fetch one task snapshot; raises on FAILED status."""
         response = self._client.transport.request(
@@ -302,6 +323,11 @@ class Jobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return self._parse(response)
@@ -313,6 +339,9 @@ class Jobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         """Cancel a PENDING task (1.x: ``POST /tasks/{task_id}/cancel``)."""
         response = self._client.transport.request(
@@ -322,6 +351,11 @@ class Jobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return self._parse(response)
@@ -340,6 +374,9 @@ class Jobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> JobList:
         """List async tasks (1.x: ``GET /tasks`` with page_no/page_size)."""
         response = self._client.transport.request(
@@ -359,6 +396,11 @@ class Jobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
@@ -375,6 +417,9 @@ class Jobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
         _sleep: Optional[Callable[[float], Any]] = None,
     ) -> Job:
         """Poll with exponential backoff until the task finishes.
@@ -397,7 +442,14 @@ class Jobs:
         current = (
             job
             if isinstance(job, Job)
-            else self.fetch(task_id, api_key=api_key, workspace=workspace)
+            else self.fetch(
+                task_id,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+            )
         )
         interval = poll_interval
         while not current.finished:
@@ -413,7 +465,14 @@ class Jobs:
                 )
             sleep_fn(min(interval, remaining))
             interval = min(interval * 2, max_interval)
-            current = self.fetch(task_id, api_key=api_key, workspace=workspace)
+            current = self.fetch(
+                task_id,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+            )
         return self._check_canceled(current)
 
     def _parse(self, response: Any) -> Job:
@@ -465,6 +524,9 @@ class AsyncJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         body: Dict[str, Any] = {"model": model, "input": input}
         if parameters is not None:
@@ -483,6 +545,11 @@ class AsyncJobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return self._parse(response)
@@ -494,6 +561,9 @@ class AsyncJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         response = await self._client.transport.request(
             "GET",
@@ -502,6 +572,11 @@ class AsyncJobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return self._parse(response)
@@ -513,6 +588,9 @@ class AsyncJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         """Cancel a PENDING task (1.x: ``POST /tasks/{task_id}/cancel``)."""
         response = await self._client.transport.request(
@@ -522,6 +600,11 @@ class AsyncJobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return self._parse(response)
@@ -540,6 +623,9 @@ class AsyncJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> JobList:
         """List async tasks (1.x: ``GET /tasks`` with page_no/page_size)."""
         response = await self._client.transport.request(
@@ -559,6 +645,11 @@ class AsyncJobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
@@ -575,6 +666,9 @@ class AsyncJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
     ) -> Job:
         """Async twin of :meth:`Jobs.wait`, same compat-mode contract."""
@@ -588,6 +682,9 @@ class AsyncJobs:
                 task_id,
                 api_key=api_key,
                 workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
             )
         )
         interval = poll_interval
@@ -608,6 +705,9 @@ class AsyncJobs:
                 task_id,
                 api_key=api_key,
                 workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
             )
         return self._check_canceled(current)
 

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from pydantic import AliasChoices, Field
 
@@ -14,6 +14,7 @@ from dashscope.errors import (
     error_from_business_code,
     response_json,
 )
+from dashscope.transport._options import request_options
 from dashscope.types.common import (
     ResponseBase,
     response_envelope,
@@ -102,6 +103,9 @@ class Models:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> ModelList:
         """List models; ``provider`` filters client-side per page.
 
@@ -117,6 +121,11 @@ class Models:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         result = _parse_list(response_json(response))
@@ -133,6 +142,9 @@ class Models:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Model:
         # Server filters by model name via query params.
         response = self._client.transport.request(
@@ -143,6 +155,11 @@ class Models:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         body = response_json(response)
@@ -175,6 +192,9 @@ class AsyncModels:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> ModelList:
         response = await self._client.transport.request(
             "GET",
@@ -184,6 +204,11 @@ class AsyncModels:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         result = _parse_list(response_json(response))
@@ -200,6 +225,9 @@ class AsyncModels:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Model:
         # Server filters by model name via query params.
         response = await self._client.transport.request(
@@ -210,6 +238,11 @@ class AsyncModels:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         body = response_json(response)

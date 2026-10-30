@@ -7,14 +7,20 @@
 ``python-sdk/<version>/dashscope2`` -- the trailing ``2`` marks the v2
 surface, see ``V2_MODULE_MARKER``), and ``x-dashscope-sdk-session-id``
 carries one id per interpreter process so server-side access logs can
-group all requests a single SDK session makes. Caller-supplied headers
-always win over these defaults. Set ``DASHSCOPE_DISABLE_SDK_HEADERS`` to
-omit both (the same kill switch the 1.x SDK honors).
+group all requests a single SDK session makes.
+``x-dashscope-client-request-id`` narrows that to one logical request:
+the session id cannot tell two calls apart, and the server's own
+``x-request-id`` only exists once a response comes back, so a request
+that dies in the network layer would otherwise leave nothing to
+correlate. Caller-supplied headers always win over these defaults. Set
+``DASHSCOPE_DISABLE_SDK_HEADERS`` to omit all three (the same kill
+switch the 1.x SDK honors).
 """
 
 from __future__ import annotations
 
 import os
+import uuid
 from typing import Optional
 
 # One process-wide session id shared with the 1.x API classes, so a
@@ -25,6 +31,7 @@ from dashscope._shared._sdk_session import sdk_session_id
 
 SDK_CLIENT_HEADER = "x-dashscope-sdk-client"
 SDK_SESSION_ID_HEADER = "x-dashscope-sdk-session-id"
+CLIENT_REQUEST_ID_HEADER = "x-dashscope-client-request-id"
 
 # ``client/version/module``, mirroring 1.x ``common.utils.get_sdk_headers``.
 # The client segment keeps server-side language stats on one spelling
@@ -78,16 +85,44 @@ def sdk_client_value(module: Optional[str] = None) -> str:
 SDK_CLIENT_VALUE = sdk_client_value()
 
 
-def sdk_headers(module: Optional[str] = None) -> dict:
+def client_request_id() -> Optional[str]:
+    """A fresh client-side id for one logical request.
+
+    Complements the server's ``x-request-id`` rather than replacing it:
+    this one exists before the request is sent, so it is still available
+    when the request never reaches the gateway. Callers mint one per
+    request, outside the retry loop, and reuse it across attempts -- the
+    id counts logical requests, not attempts, so the server's per-attempt
+    ``x-request-id`` still correlates back to a single client id.
+
+    ``None`` under ``DASHSCOPE_DISABLE_SDK_HEADERS`` is deliberate -- an id
+    that never went on the wire is not something anyone can look up, so
+    carrying it into logs and errors would point at nothing.
+    """
+    if os.environ.get("DASHSCOPE_DISABLE_SDK_HEADERS"):
+        return None
+    return uuid.uuid4().hex
+
+
+def sdk_headers(
+    module: Optional[str] = None,
+    per_request_id: Optional[str] = None,
+) -> dict:
     """Default identification headers for outgoing requests.
 
     ``module`` names the functional area issuing the request and becomes
-    the third segment of ``x-dashscope-sdk-client``. Returns an empty dict
-    when ``DASHSCOPE_DISABLE_SDK_HEADERS`` is set, matching the 1.x opt-out.
+    the third segment of ``x-dashscope-sdk-client``. ``per_request_id`` is
+    the caller's :func:`client_request_id` value; passing it in rather
+    than minting one here is what keeps every retry attempt of a request
+    under a single id. Returns an empty dict when
+    ``DASHSCOPE_DISABLE_SDK_HEADERS`` is set, matching the 1.x opt-out.
     """
     if os.environ.get("DASHSCOPE_DISABLE_SDK_HEADERS"):
         return {}
-    return {
+    headers = {
         SDK_CLIENT_HEADER: sdk_client_value(module),
         SDK_SESSION_ID_HEADER: sdk_session_id(),
     }
+    if per_request_id:
+        headers[CLIENT_REQUEST_ID_HEADER] = per_request_id
+    return headers

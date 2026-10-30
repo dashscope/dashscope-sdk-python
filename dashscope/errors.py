@@ -27,6 +27,13 @@ transport errors (:class:`WsEventError` / :class:`WsStateError` /
 entries. AgentStudio and AgenticRL also raise catalog-backed v2 errors
 natively; :func:`error_from_sdk_exception` remains available for mounts
 over external SDK families.
+
+A fourth source has a response the gateway considered successful:
+:class:`APIResponseValidationError`, for a body that does not fit the
+model the SDK parses it into. It belongs to neither layer above -- the
+gateway declared no failure -- and is not an :class:`SdkError` either,
+because the catalog is a vendored generated artifact this SDK does not
+hand-edit.
 """
 
 from __future__ import annotations
@@ -211,6 +218,78 @@ class WsBinaryOwnerConflictError(_CatalogSdkError):
     """
 
     _SDK_ERROR_NAME = "sdk.ws.BinaryOwnerConflict"
+
+
+_STR_FIELD_LIMIT = 200
+
+
+def _one_line(text: str, limit: int = _STR_FIELD_LIMIT) -> str:
+    """Collapse whitespace and bound a field destined for ``__str__``.
+
+    Bodies and validation errors are both unbounded and both multiline,
+    and ``__str__`` joins its fields with `` | `` on one line for logs.
+    """
+    text = " ".join(text.split())
+    return text if len(text) <= limit else f"{text[:limit]}..."
+
+
+class APIResponseValidationError(DashScopeError):
+    """The gateway answered, but its body did not fit the SDK's models.
+
+    Distinct from :class:`APIStatusError` so that ``except
+    APIStatusError`` keeps meaning "the service refused or broke": here
+    nothing failed on the wire and the gateway declared no error, the
+    payload simply could not be parsed into the model the resource
+    returns.
+
+    Carries ``response`` (``None`` for websocket payloads, which have no
+    response), ``body`` as received, and ``cause``, the original
+    validation error. ``status_code`` stays ``None`` even with a
+    response present: that status is the gateway's and it reported
+    success, so repeating it here would read as the reason for the
+    failure. ``response.status_code`` still has it.
+
+    Deliberately no catalog entry -- ``_error_registry.py`` is vendored
+    from a generator this repo does not carry -- so it roots at
+    :class:`DashScopeError`, not :class:`SdkError`, whose ``code`` and
+    ``solution`` would have to name an entry that does not exist.
+    """
+
+    def __init__(
+        self,
+        message: Optional[str] = None,
+        *,
+        response: Optional[httpx.Response] = None,
+        body: Any = None,
+        cause: Optional[BaseException] = None,
+        request_id: Optional[str] = None,
+        headers: Optional[Mapping[str, str]] = None,
+    ) -> None:
+        if headers is None and response is not None:
+            headers = response.headers
+        data = _extract(body)
+        super().__init__(
+            message or "Response body failed SDK-side validation.",
+            request_id=request_id or _request_id(data, headers or {}),
+            body=body,
+            headers=headers,
+        )
+        self.response = response
+        self.cause = cause
+
+    def __str__(self) -> str:
+        parts = [super().__str__()]
+        if self.cause is not None:
+            parts.append(f"cause={_one_line(str(self.cause))}")
+        if self.body is not None:
+            body = self.body
+            if not isinstance(body, str):
+                try:
+                    body = json.dumps(body, ensure_ascii=False, default=str)
+                except (TypeError, ValueError):
+                    body = repr(body)
+            parts.append(f"body={_one_line(body)}")
+        return " | ".join(parts)
 
 
 class APIStatusError(DashScopeError):

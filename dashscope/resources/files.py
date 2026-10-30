@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from pydantic import AliasChoices, Field
 
@@ -19,6 +19,7 @@ from dashscope.errors import (
     sdk_error,
     response_json,
 )
+from dashscope.transport._options import request_options
 from dashscope.types.common import (
     ResponseBase,
     response_envelope,
@@ -219,6 +220,9 @@ class Files:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> File:
         _validate_upload(file_path, purpose)
         data, files = _upload_form(file_path, description)
@@ -231,6 +235,11 @@ class Files:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(_parse_upload(response_json(response)), response)
@@ -243,6 +252,9 @@ class Files:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> FileList:
         response = self._client.transport.request(
             "GET",
@@ -252,6 +264,11 @@ class Files:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(_parse_list(response_json(response)), response)
@@ -263,6 +280,9 @@ class Files:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> File:
         _require_file_id(file_id)
         response = self._client.transport.request(
@@ -272,6 +292,11 @@ class Files:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         _check_by_id_response(
             response,
@@ -286,6 +311,9 @@ class Files:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> DeletionStatus:
         _require_file_id(file_id)
         response = self._client.transport.request(
@@ -295,6 +323,11 @@ class Files:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         _check_by_id_response(
             response,
@@ -316,6 +349,9 @@ class AsyncFiles:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> File:
         _validate_upload(file_path, purpose)
         data, files = _upload_form(file_path, description)
@@ -328,6 +364,11 @@ class AsyncFiles:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(_parse_upload(response_json(response)), response)
@@ -340,6 +381,9 @@ class AsyncFiles:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> FileList:
         response = await self._client.transport.request(
             "GET",
@@ -349,6 +393,11 @@ class AsyncFiles:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(_parse_list(response_json(response)), response)
@@ -360,6 +409,9 @@ class AsyncFiles:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> File:
         _require_file_id(file_id)
         response = await self._client.transport.request(
@@ -369,6 +421,11 @@ class AsyncFiles:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         _check_by_id_response(
             response,
@@ -383,6 +440,9 @@ class AsyncFiles:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> DeletionStatus:
         _require_file_id(file_id)
         response = await self._client.transport.request(
@@ -392,6 +452,11 @@ class AsyncFiles:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         _check_by_id_response(
             response,
