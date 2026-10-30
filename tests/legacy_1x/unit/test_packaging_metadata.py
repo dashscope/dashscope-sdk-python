@@ -13,6 +13,7 @@ part of the ordinary unit-test job, with no separate CI entry to keep in sync.
 import ast
 import json
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -299,3 +300,41 @@ def test_repo_classifiers_cover_every_python_carrying_real_traffic():
 def test_python_39_config_reader_is_a_core_dependency():
     requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     assert 'tomli>=1.1.0; python_version < "3.11"' in requirements
+
+
+def test_build_py_removes_stale_deleted_packages(tmp_path):
+    """Incremental wheel builds must not resurrect pre-migration modules.
+
+    A dirty ``build/lib`` can otherwise contain both ``dashscope/client.py``
+    and the deleted ``dashscope/client/__init__.py`` package. Python chooses
+    the stale package and ``from dashscope.client import Client`` then fails.
+    """
+    build_lib = tmp_path / "build-lib"
+    stale_files = (
+        build_lib / "dashscope" / "client" / "__init__.py",
+        build_lib / "dashscope" / "aigc" / "__init__.py",
+        build_lib / "dashscope" / "resources" / "qwen.tiktoken",
+    )
+    for stale in stale_files:
+        stale.parent.mkdir(parents=True, exist_ok=True)
+        stale.write_text("# stale pre-2.0 build artifact\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "setup.py",
+            "build_py",
+            "--build-lib",
+            str(build_lib),
+            "--force",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (build_lib / "dashscope" / "client.py").is_file()
+    for stale in stale_files:
+        assert not stale.exists(), stale

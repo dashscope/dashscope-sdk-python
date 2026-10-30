@@ -40,7 +40,14 @@ def readme():
 
 
 class build_py(_build_py):
-    """Ship the top-level ``examples/`` tree inside the wheel.
+    """Build one clean package tree and bundle the top-level examples.
+
+    Setuptools incrementally copies files into ``build/lib`` but does not
+    delete modules removed from the source tree. That is unsafe for the 2.0
+    package migration: a stale ``dashscope/client/__init__.py`` shadows the
+    new ``dashscope/client.py`` and makes ``from dashscope.client import
+    Client`` fail in the built wheel. Remove the package build directory
+    before every build, then copy the current sources and examples only.
 
     ``examples/`` lives at the repository root (a sibling of
     ``dashscope/``) for visibility, but a wheel can only bundle files
@@ -50,6 +57,14 @@ class build_py(_build_py):
     """
 
     def run(self):
+        source_package = os.path.abspath(os.path.join(package_root, name))
+        built_package = os.path.abspath(os.path.join(self.build_lib, name))
+        if built_package == source_package:
+            raise RuntimeError(
+                "build_lib must not point at the source package directory",
+            )
+        if os.path.isdir(built_package):
+            shutil.rmtree(built_package)
         super().run()
         src = os.path.join(package_root, "examples")
         dst = os.path.join(self.build_lib, "dashscope", "examples")
