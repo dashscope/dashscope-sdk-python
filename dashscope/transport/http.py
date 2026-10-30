@@ -19,6 +19,13 @@ from dashscope.errors import (
     check_response,
 )
 from dashscope.transport import _ident
+from dashscope.transport._options import (
+    RequestOptions,
+    deep_merge,
+    merge_query,
+    resolve_max_retries,
+    resolve_timeout,
+)
 from dashscope.transport._retry import backoff_delay, should_retry
 
 logger = get_logger("transport")
@@ -83,24 +90,26 @@ def _timeout_kwarg(
     return {} if timeout is None else {"timeout": timeout}
 
 
-def _with_sdk_headers(
-    sdk: Mapping[str, str],
-    headers: Optional[Mapping[str, str]],
+def _merge_headers(
+    base: Mapping[str, str],
+    overrides: Optional[Mapping[str, str]],
 ) -> dict:
-    # SDK identification rides on every request, even through a
-    # caller-provided http_client; caller headers win over the defaults.
-    # The override is matched case-insensitively so a caller passing
-    # ``X-DashScope-SDK-Session-Id`` replaces the lowercase default rather
-    # than emitting a duplicate header.
-    if headers is None:
-        return dict(sdk)
-    caller_keys = {key.lower() for key in headers}
+    """``overrides`` on top of ``base``, matched case-insensitively.
+
+    Used for every header layer (SDK identity, Client defaults, caller
+    headers, ``extra_headers``), so an override spelled
+    ``X-DashScope-Client-Request-Id`` replaces the lowercase default
+    instead of emitting a duplicate header.
+    """
+    if overrides is None:
+        return dict(base)
+    override_keys = {key.lower() for key in overrides}
     merged = {
         key: value
-        for key, value in sdk.items()
-        if key.lower() not in caller_keys
+        for key, value in base.items()
+        if key.lower() not in override_keys
     }
-    merged.update(headers)
+    merged.update(overrides)
     return merged
 
 
@@ -117,7 +126,7 @@ def _merge_auth_headers(
     """
     if api_key is None and workspace is None:
         return headers
-    return _with_sdk_headers(
+    return _merge_headers(
         headers or {},
         _build_headers(api_key, workspace, None),
     )
@@ -129,16 +138,64 @@ def _request_headers(
     headers: Optional[Mapping[str, str]],
     api_key: Optional[str],
     workspace: Optional[str],
+    options: Optional[RequestOptions] = None,
 ) -> dict:
     """Merge Client defaults, SDK identity and per-call overrides.
 
     This is deliberately request-scoped so an injected ``http_client`` still
-    receives the Client's credentials and user agent. Caller headers and
-    per-call credentials win case-insensitively.
+    receives the Client's credentials and user agent.
+
+    Precedence, lowest to highest: SDK identity headers, Client defaults,
+    caller ``headers``, the per-call ``api_key`` / ``workspace``, then
+    ``options.extra_headers``. The auth-over-headers step is what makes
+    ``api_key=`` mean "use this key" even when a client-level
+    ``Authorization`` is still in ``headers``; ``extra_headers`` sits above
+    everything because it is the narrowest, most explicit statement of
+    intent a caller can make about one request. All of it is matched
+    case-insensitively.
     """
     per_call = _merge_auth_headers(headers, api_key, workspace)
-    configured = _with_sdk_headers(defaults, per_call)
-    return _with_sdk_headers(sdk, configured)
+    configured = _merge_headers(defaults, per_call)
+    merged = _merge_headers(sdk, configured)
+    if options is not None and options.extra_headers:
+        merged = _merge_headers(merged, options.extra_headers)
+    return merged
+
+
+def _with_extra_body(
+    body: Any,
+    options: Optional[RequestOptions],
+    method: str,
+    path: str,
+    *,
+    has_other_body: bool = False,
+) -> Any:
+    """Deep-merge ``options.extra_body`` into a JSON object body.
+
+    A request whose body is something other than a JSON object -- raw
+    ``content`` bytes, a multipart ``files`` upload -- has nothing to
+    merge into, so it is left alone and the drop is reported: silently
+    discarding what a caller asked to send is worse than the warning.
+    ``has_other_body`` covers the case where ``json`` is absent only
+    because another body channel is carrying the payload; httpx would
+    drop the JSON silently, so the warning has to come from here.
+
+    A missing body with no other channel is different: ``extra_body``
+    alone becomes the JSON object, which is what a caller adding fields
+    to a body-less request means.
+    """
+    if options is None or not options.extra_body:
+        return body
+    foreign_body = body is not None and not isinstance(body, dict)
+    if has_other_body or foreign_body:
+        logger.warning(
+            "ignoring extra_body for %s %s: body is %s, not a JSON object",
+            method,
+            path,
+            "another body channel" if has_other_body else type(body).__name__,
+        )
+        return body
+    return deep_merge(body or {}, options.extra_body)
 
 
 def _abs_url(base_url: Optional[str], path: str) -> str:
@@ -211,10 +268,21 @@ class SyncTransport:
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
         sdk_module: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
     ) -> httpx.Response:
         url = _abs_url(base_url or self._base_url, path)
         client_request_id = _ident.client_request_id()
-        for attempt in range(self._max_retries + 1):
+        max_retries = resolve_max_retries(self._max_retries, options)
+        params = merge_query(params, options)
+        json = _with_extra_body(
+            json,
+            options,
+            method,
+            path,
+            has_other_body=any(x is not None for x in (content, data, files)),
+        )
+        timeout = resolve_timeout(timeout, options)
+        for attempt in range(max_retries + 1):
             try:
                 response = self._client.request(
                     method,
@@ -230,13 +298,14 @@ class SyncTransport:
                         headers,
                         api_key,
                         workspace,
+                        options,
                     ),
                     **_timeout_kwarg(
                         self._request_timeout if timeout is None else timeout,
                     ),
                 )
             except httpx.TransportError as exc:
-                if attempt >= self._max_retries:
+                if attempt >= max_retries:
                     logger.warning(
                         "request %s %s failed after %d attempt(s)"
                         " (client_request_id=%s): %s",
@@ -254,7 +323,7 @@ class SyncTransport:
                     path,
                     delay,
                     attempt + 1,
-                    self._max_retries,
+                    max_retries,
                     type(exc).__name__,
                     exc,
                 )
@@ -271,7 +340,7 @@ class SyncTransport:
             )
             if not should_retry(response.status_code, response.headers):
                 return response
-            if attempt >= self._max_retries:
+            if attempt >= max_retries:
                 return response
             delay = backoff_delay(attempt, response.headers)
             logger.info(
@@ -281,7 +350,7 @@ class SyncTransport:
                 path,
                 delay,
                 attempt + 1,
-                self._max_retries,
+                max_retries,
                 response.status_code,
                 request_id,
             )
@@ -301,6 +370,7 @@ class SyncTransport:
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
         sdk_module: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
     ) -> httpx.Response:
         """Open a stream, retrying only before a successful stream exists.
 
@@ -311,7 +381,11 @@ class SyncTransport:
         """
         url = _abs_url(base_url or self._base_url, path)
         client_request_id = _ident.client_request_id()
-        for attempt in range(self._max_retries + 1):
+        max_retries = resolve_max_retries(self._max_retries, options)
+        params = merge_query(params, options)
+        json = _with_extra_body(json, options, method, path)
+        timeout = resolve_timeout(timeout, options)
+        for attempt in range(max_retries + 1):
             try:
                 response = self._client.send(
                     self._client.build_request(
@@ -325,6 +399,7 @@ class SyncTransport:
                             headers,
                             api_key,
                             workspace,
+                            options,
                         ),
                         **_timeout_kwarg(
                             self._request_timeout
@@ -335,7 +410,7 @@ class SyncTransport:
                     stream=True,
                 )
             except httpx.TransportError as exc:
-                if attempt >= self._max_retries:
+                if attempt >= max_retries:
                     raise _map_transport_error(
                         exc,
                         client_request_id,
@@ -347,7 +422,7 @@ class SyncTransport:
                     path,
                     delay,
                     attempt + 1,
-                    self._max_retries,
+                    max_retries,
                     type(exc).__name__,
                     exc,
                 )
@@ -355,7 +430,7 @@ class SyncTransport:
                 continue
 
             if should_retry(response.status_code, response.headers) and (
-                attempt < self._max_retries
+                attempt < max_retries
             ):
                 delay = backoff_delay(attempt, response.headers)
                 request_id = response.headers.get("x-request-id")
@@ -374,7 +449,7 @@ class SyncTransport:
                     path,
                     delay,
                     attempt + 1,
-                    self._max_retries,
+                    max_retries,
                     response.status_code,
                     request_id,
                 )
@@ -462,10 +537,21 @@ class AsyncTransport:
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
         sdk_module: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
     ) -> httpx.Response:
         url = _abs_url(base_url or self._base_url, path)
         client_request_id = _ident.client_request_id()
-        for attempt in range(self._max_retries + 1):
+        max_retries = resolve_max_retries(self._max_retries, options)
+        params = merge_query(params, options)
+        json = _with_extra_body(
+            json,
+            options,
+            method,
+            path,
+            has_other_body=any(x is not None for x in (content, data, files)),
+        )
+        timeout = resolve_timeout(timeout, options)
+        for attempt in range(max_retries + 1):
             try:
                 response = await self._client.request(
                     method,
@@ -481,13 +567,14 @@ class AsyncTransport:
                         headers,
                         api_key,
                         workspace,
+                        options,
                     ),
                     **_timeout_kwarg(
                         self._request_timeout if timeout is None else timeout,
                     ),
                 )
             except httpx.TransportError as exc:
-                if attempt >= self._max_retries:
+                if attempt >= max_retries:
                     logger.warning(
                         "request %s %s failed after %d attempt(s)"
                         " (client_request_id=%s): %s",
@@ -505,7 +592,7 @@ class AsyncTransport:
                     path,
                     delay,
                     attempt + 1,
-                    self._max_retries,
+                    max_retries,
                     type(exc).__name__,
                     exc,
                 )
@@ -522,7 +609,7 @@ class AsyncTransport:
             )
             if not should_retry(response.status_code, response.headers):
                 return response
-            if attempt >= self._max_retries:
+            if attempt >= max_retries:
                 return response
             delay = backoff_delay(attempt, response.headers)
             logger.info(
@@ -532,7 +619,7 @@ class AsyncTransport:
                 path,
                 delay,
                 attempt + 1,
-                self._max_retries,
+                max_retries,
                 response.status_code,
                 request_id,
             )
@@ -552,11 +639,16 @@ class AsyncTransport:
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
         sdk_module: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
     ) -> httpx.Response:
         """Async twin of :meth:`SyncTransport.open_stream`."""
         url = _abs_url(base_url or self._base_url, path)
         client_request_id = _ident.client_request_id()
-        for attempt in range(self._max_retries + 1):
+        max_retries = resolve_max_retries(self._max_retries, options)
+        params = merge_query(params, options)
+        json = _with_extra_body(json, options, method, path)
+        timeout = resolve_timeout(timeout, options)
+        for attempt in range(max_retries + 1):
             request = self._client.build_request(
                 method,
                 url,
@@ -568,6 +660,7 @@ class AsyncTransport:
                     headers,
                     api_key,
                     workspace,
+                    options,
                 ),
                 **_timeout_kwarg(
                     self._request_timeout if timeout is None else timeout,
@@ -576,7 +669,7 @@ class AsyncTransport:
             try:
                 response = await self._client.send(request, stream=True)
             except httpx.TransportError as exc:
-                if attempt >= self._max_retries:
+                if attempt >= max_retries:
                     raise _map_transport_error(
                         exc,
                         client_request_id,
@@ -588,7 +681,7 @@ class AsyncTransport:
                     path,
                     delay,
                     attempt + 1,
-                    self._max_retries,
+                    max_retries,
                     type(exc).__name__,
                     exc,
                 )
@@ -596,7 +689,7 @@ class AsyncTransport:
                 continue
 
             if should_retry(response.status_code, response.headers) and (
-                attempt < self._max_retries
+                attempt < max_retries
             ):
                 delay = backoff_delay(attempt, response.headers)
                 request_id = response.headers.get("x-request-id")
@@ -613,7 +706,7 @@ class AsyncTransport:
                     path,
                     delay,
                     attempt + 1,
-                    self._max_retries,
+                    max_retries,
                     response.status_code,
                     request_id,
                 )

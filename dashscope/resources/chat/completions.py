@@ -9,7 +9,17 @@ carrying media parts route to the multimodal endpoint on their own.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union, overload
+from typing import (
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+    overload,
+)
 
 from typing_extensions import Literal
 
@@ -32,6 +42,7 @@ from dashscope.types.completions import (
     SearchInfo,
     StreamChoice,
 )
+from dashscope.transport._options import RequestOptions, request_options
 from dashscope.transport.sse import AsyncStream, Stream
 from dashscope.types.messages import (
     Message,
@@ -656,6 +667,7 @@ def _send(
     api_key: Optional[str],
     workspace: Optional[str],
     timeout: Optional[float],
+    options: Optional[RequestOptions] = None,
 ) -> Union[ChatCompletion, ChatStream]:
     transport = client.transport
     base_url = client.config.protocol_base_url
@@ -670,6 +682,7 @@ def _send(
             workspace=workspace,
             sdk_module=module,
             timeout=timeout,
+            options=options,
         )
         return ChatStream(
             Stream(response, client.protocol.make_chunk_parser()),
@@ -686,6 +699,7 @@ def _send(
         workspace=workspace,
         sdk_module=module,
         timeout=timeout,
+        options=options,
     )
     error_result = _checked_completion(client, response)
     if error_result is not None:
@@ -707,6 +721,7 @@ async def _asend(
     api_key: Optional[str],
     workspace: Optional[str],
     timeout: Optional[float],
+    options: Optional[RequestOptions] = None,
 ) -> Union[ChatCompletion, AsyncChatStream]:
     transport = client.transport
     base_url = client.config.protocol_base_url
@@ -721,6 +736,7 @@ async def _asend(
             workspace=workspace,
             sdk_module=module,
             timeout=timeout,
+            options=options,
         )
         return AsyncChatStream(
             AsyncStream(response, client.protocol.make_chunk_parser()),
@@ -737,6 +753,7 @@ async def _asend(
         workspace=workspace,
         sdk_module=module,
         timeout=timeout,
+        options=options,
     )
     error_result = _checked_completion(client, response)
     if error_result is not None:
@@ -782,6 +799,9 @@ class Completions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> ChatStream:
         ...
 
@@ -816,6 +836,9 @@ class Completions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> ChatCompletion:
         ...
 
@@ -849,6 +872,9 @@ class Completions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Union[ChatCompletion, ChatStream]:
         built = _build_request(
             self._client,
@@ -891,6 +917,11 @@ class Completions:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
 
 
@@ -929,6 +960,9 @@ class AsyncCompletions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> AsyncChatStream:
         ...
 
@@ -963,6 +997,9 @@ class AsyncCompletions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> ChatCompletion:
         ...
 
@@ -996,6 +1033,9 @@ class AsyncCompletions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Union[ChatCompletion, AsyncChatStream]:
         # The upload path is blocking (file post + getPolicy), so the whole
         # request build runs in a worker thread -- over a transport bridged
@@ -1042,4 +1082,9 @@ class AsyncCompletions:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )

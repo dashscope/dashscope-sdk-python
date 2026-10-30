@@ -10,7 +10,16 @@ Multimodal embedding lives at ``client.multimodal.embeddings``.
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Union,
+)
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -24,6 +33,7 @@ from dashscope.resources._jobs import (
     JobList,
     Jobs,
 )
+from dashscope.transport._options import request_options
 from dashscope.types.common import (
     ResponseBase,
     Usage,
@@ -126,6 +136,9 @@ class EmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         """Submit a batch task over one file whose lines are the texts.
 
@@ -144,6 +157,9 @@ class EmbeddingJobs:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
         )
 
     def fetch(
@@ -153,12 +169,18 @@ class EmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         return self._jobs.fetch(
             task_id,
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
         )
 
     def cancel(
@@ -168,6 +190,9 @@ class EmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         """Cancel a PENDING task (``POST /tasks/{task_id}/cancel``)."""
         return self._jobs.cancel(
@@ -175,6 +200,9 @@ class EmbeddingJobs:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
         )
 
     def list(  # pylint: disable=redefined-builtin
@@ -191,6 +219,9 @@ class EmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> JobList:
         """List async tasks (``GET /tasks``)."""
         return self._jobs.list(
@@ -205,6 +236,9 @@ class EmbeddingJobs:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
         )
 
     def wait(
@@ -216,6 +250,9 @@ class EmbeddingJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
         _sleep: Optional[Callable[[float], Any]] = None,
     ) -> Job:
         return self._jobs.wait(
@@ -225,6 +262,9 @@ class EmbeddingJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
             _sleep=_sleep,
         )
 
@@ -243,6 +283,9 @@ class AsyncEmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         if not file_url:
             raise ValueError("file_url must not be empty")
@@ -256,6 +299,9 @@ class AsyncEmbeddingJobs:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
         )
 
     async def fetch(
@@ -265,12 +311,18 @@ class AsyncEmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         return await self._jobs.fetch(
             task_id,
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
         )
 
     async def cancel(
@@ -280,6 +332,9 @@ class AsyncEmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> Job:
         """Cancel a PENDING task (``POST /tasks/{task_id}/cancel``)."""
         return await self._jobs.cancel(
@@ -287,6 +342,9 @@ class AsyncEmbeddingJobs:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
         )
 
     async def list(  # pylint: disable=redefined-builtin
@@ -303,6 +361,9 @@ class AsyncEmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> JobList:
         """List async tasks (``GET /tasks``)."""
         return await self._jobs.list(
@@ -317,6 +378,9 @@ class AsyncEmbeddingJobs:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
         )
 
     async def wait(
@@ -328,6 +392,9 @@ class AsyncEmbeddingJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
     ) -> Job:
         return await self._jobs.wait(
@@ -337,6 +404,9 @@ class AsyncEmbeddingJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
             _sleep=_sleep,
         )
 
@@ -359,6 +429,9 @@ class Embeddings:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> EmbeddingResponse:
         body = _build_body(
             model=model,
@@ -377,6 +450,11 @@ class Embeddings:
             api_key=api_key,
             workspace=workspace,
             sdk_module=MODULE,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
@@ -403,6 +481,9 @@ class AsyncEmbeddings:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
     ) -> EmbeddingResponse:
         body = _build_body(
             model=model,
@@ -421,6 +502,11 @@ class AsyncEmbeddings:
             api_key=api_key,
             workspace=workspace,
             sdk_module=MODULE,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
