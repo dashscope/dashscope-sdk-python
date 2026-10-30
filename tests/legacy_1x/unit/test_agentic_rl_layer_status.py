@@ -69,6 +69,19 @@ def _component(with_runtime=True):
     return component
 
 
+async def test_create_layer_rejection_is_not_retryable(monkeypatch):
+    _stub_responses(
+        monkeypatch,
+        [{"status": {"code": 400}, "message": "invalid requirements"}],
+    )
+
+    with pytest.raises(FunctionLayerError) as excinfo:
+        await FunctionComponentModel().create_layer(requirements_file="")
+
+    assert excinfo.value.allow_retry is False
+    assert "Fix invalid requirements" in excinfo.value.solution
+
+
 async def test_get_layer_returns_ready_status(monkeypatch):
     calls = _stub_responses(monkeypatch, [{"output": {"status": "SUCCESS"}}])
 
@@ -108,6 +121,8 @@ async def test_get_layer_raises_on_failed_build(monkeypatch):
     assert "Function layer failed: build reported FAILED" in message
     assert excinfo.value.layer_code == LAYER_CODE
     assert excinfo.value.layer_name is None
+    assert excinfo.value.allow_retry is False
+    assert "requirements.txt" in excinfo.value.solution
 
 
 async def test_get_layer_raises_on_region_rejection(monkeypatch):
@@ -117,6 +132,8 @@ async def test_get_layer_raises_on_region_rejection(monkeypatch):
         await FunctionComponentModel().get_layer(LAYER_CODE)
 
     assert "cn-wulanchabu" in str(excinfo.value)
+    assert excinfo.value.allow_retry is True
+    assert "Retry the status query" in excinfo.value.solution
     assert calls["count"] == 1
 
 
@@ -132,6 +149,8 @@ async def test_get_layer_raises_when_build_stalls(monkeypatch):
     assert "timed out" in message
     assert "RUNNING" in message
     assert "FC_LAYER_STATUS_TIMEOUT" in message
+    assert excinfo.value.allow_retry is True
+    assert "FC_LAYER_STATUS_TIMEOUT" in excinfo.value.solution
     assert calls["count"] > 3
 
 
@@ -142,6 +161,8 @@ async def test_get_layer_raises_on_transport_error(monkeypatch):
         await FunctionComponentModel().get_layer(LAYER_CODE)
 
     assert "connection reset" in str(excinfo.value)
+    assert excinfo.value.allow_retry is True
+    assert "connectivity recovers" in excinfo.value.solution
 
 
 async def test_load_reports_layer_failure_as_such(monkeypatch):
