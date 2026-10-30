@@ -26,11 +26,16 @@ DashScope Python SDK 是[阿里云百炼（Model Studio）](https://help.aliyun.
 pip install -U dashscope
 ```
 
-基础安装包含 SDK API 调用、`dashscope` CLI 命令、Agentic RL 微调和本地 tokenizer，要求 Python 3.9+。仅剩一个可选功能组：
+基础安装包含 SDK API 调用、`dashscope` CLI 命令、Agentic RL 微调和本地 tokenizer，要求 Python 3.9+。可选功能组都属于内置的 AI 助手：
 
 | Extra | 提供的能力 | 安装命令 |
 |-------|----------|---------|
 | `acli` | 交互式 AI 助手（DashScope SDK Expert） | `pip install "dashscope[acli]"` |
+| `acli-openai` | 让助手使用 OpenAI 兼容的模型服务方 | `pip install "dashscope[acli-openai]"` |
+| `acli-anthropic` | 让助手使用 Anthropic 模型服务方 | `pip install "dashscope[acli-anthropic]"` |
+| `acli-voice` | 助手的语音输入与语音播报 | `pip install "dashscope[acli-voice]"` |
+| `acli-camera` | 助手的摄像头采集图片输入 | `pip install "dashscope[acli-camera]"` |
+| `acli-all` | 以上全部（含 `acli`） | `pip install "dashscope[acli-all]"` |
 
 从源码安装：
 
@@ -120,8 +125,15 @@ client = dashscope.Client(
     protocol="native",      # native | openai | anthropic
     timeout=300.0,
     max_retries=2,
+    base_url=None,          # 整体覆盖端点；默认取 DASHSCOPE_BASE_URL
+    config_path=None,       # 指定其他 config.toml；默认取 DASHSCOPE_CONFIG
+    protocol_options=None,  # 透传给所选协议适配器的额外关键字参数
+    raise_on_error=True,    # False 时返回错误响应对象而不抛异常
+    http_client=None,       # 自备 httpx.Client（AsyncClient 用 httpx.AsyncClient）
 )
 ```
+
+所有选项均为关键字参数（keyword-only）。
 
 用上下文管理器可自动关闭连接池；也可用 `with_options()` 派生一个变体（未指定的选项会被继承；当连接级选项不变时共享同一连接池）：
 
@@ -189,7 +201,7 @@ for text in stream.text_stream:            # 内容增量
 
 思考模型的推理内容走 `.reasoning_stream`，合并后的消息里对应 `message.reasoning_content`。在 `protocol="anthropic"` 下，SDK 还会保留 `message.reasoning_signature` 以及原始的 `thinking` / `redacted_thinking` 块（位于 `message.reasoning_blocks`），因此把 assistant 消息原样回传即可延续 extended thinking。
 
-> **注意：** SDK **不会**自动重试流式请求。生产环境请在你自己的重试/退避逻辑中包裹流消费 —— 参见 [`examples/04_real_world_scenarios/production_ready_rag_harness.py`](examples/04_real_world_scenarios/production_ready_rag_harness.py)。
+> **注意：** 流式的重试只到握手为止。SDK 仅在第一个事件到达你之前重试连接失败和可重试的 HTTP 状态码；流一旦打开就绝不会重放，因此中途断流会以异常形式抛出。生产环境请在你自己的重试/退避逻辑中包裹流消费 —— 参见 [`examples/04_real_world_scenarios/production_ready_rag_harness.py`](examples/04_real_world_scenarios/production_ready_rag_harness.py)。
 
 ### 错误
 
@@ -266,11 +278,19 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_WORKSPACE` | 业务空间 ID（端点子域名） | —— |
 | `DASHSCOPE_REGION` | 地域 | `cn-beijing` |
 | `DASHSCOPE_PROTOCOL` | `native` / `openai` / `anthropic` | `native` |
-| `DASHSCOPE_BASE_URL` | 完全覆盖端点（逃生舱） | —— |
+| `DASHSCOPE_BASE_URL` | 完全覆盖 HTTP 端点（逃生舱） | —— |
+| `DASHSCOPE_HTTP_BASE_URL` | 1.x 的同义覆盖项，作为兜底仍然生效 | —— |
+| `DASHSCOPE_WEBSOCKET_BASE_URL` | 覆盖 WebSocket 端点 | 由地域/业务空间推导 |
 | `DASHSCOPE_TIMEOUT` | 请求超时（秒） | `300` |
 | `DASHSCOPE_MAX_RETRIES` | 自动重试次数 | `2` |
+| `DASHSCOPE_HTTP_MAX_CONNECTIONS` | 连接池大小 | `100` |
+| `DASHSCOPE_HTTP_MAX_KEEPALIVE_CONNECTIONS` | 连接池保持的 keep-alive 连接数 | `20` |
+| `DASHSCOPE_HTTP_KEEPALIVE_EXPIRY` | keep-alive 过期时间（秒） | `5.0` |
 | `DASHSCOPE_LOG` | 日志级别 | `WARNING` |
 | `DASHSCOPE_CONFIG` | `config.toml` 路径 | `~/.dashscope/config.toml` |
+| `DASHSCOPE_API_KEY_FILE_PATH` | 1.x key 文件路径（优先级最低的鉴权层） | `~/.dashscope/api_key` |
+
+三个 `DASHSCOPE_HTTP_*` 连接池变量同样可以在 `settings` 和 `config.toml` 中以 `http_max_connections`、`http_max_keepalive_connections`、`http_keepalive_expiry` 设置。传入自备的 `http_client=` 时，以它为准，上述配置全部被忽略。
 
 **配置文件**（`~/.dashscope/config.toml`）：
 
@@ -395,16 +415,16 @@ connection.close()
 
 | 类别 | 示例模型 | 2.0 资源 |
 |----------|----------------|--------------|
-| 文本生成 | qwen-max、qwen-plus、qwen-flash | `client.chat` |
+| 文本生成 | qwen-max、qwen-plus、qwen-turbo | `client.chat` |
 | 多模态理解 | qwen3-vl-plus、qwen-omni | `client.multimodal.chat` |
 | 文本向量 | text-embedding-v4、text-embedding-v3 | `client.embeddings` |
 | 多模态向量 | tongyi-embedding-vision-plus | `client.multimodal.embeddings` |
 | 重排 | gte-rerank-v2、qwen3-rerank | `client.rerank` |
-| 图像生成 | wanx2.1-t2i-turbo、wan-image | `client.images` |
-| 视频生成 | wanx2.1-t2v、wan-i2v | `client.videos` |
-| 语音合成（TTS） | cosyvoice-v1、qwen-tts | `client.audio.tts` |
+| 图像生成 | wanx2.1-t2i-turbo、wan2.6-image | `client.images` |
+| 视频生成 | wanx2.1-t2v、wan2.7-i2v | `client.videos` |
+| 语音合成（TTS） | cosyvoice-v3-flash、cosyvoice-v1、qwen-tts | `client.audio.tts` |
 | 语音识别（ASR） | fun-asr-realtime、paraformer-v1 | `client.audio.asr` |
-| 全模态（实时） | qwen-omni-realtime | `client.audio.realtime` |
+| 全模态（实时） | qwen-omni-turbo-realtime | `client.audio.realtime` |
 
 最新模型列表请访问[百炼模型广场](https://bailian.console.aliyun.com/)。
 
@@ -414,7 +434,7 @@ SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供�
 
 - 直接运行 `dashscope`（不带参数）即可启动助手。首次运行时会提示安装知识包（按领域划分的速查技能：文本、多模态、语音、检索、微调、Agent、CLI），使助手的指导来自 SDK 的公开接口 —— 参数、输出、错误码 —— 而无需阅读源码。
 - 直接提问代替翻文档 —— 如 `dashscope expert "如何流式输出对话结果"`（一次性提问后退出）。在助手内输入 `/help` 查看可用命令；`dashscope expert --help` 查看全部形式。
-- 通过 `acli` extra 安装：`pip install "dashscope[acli]"`。
+- 通过 `acli` extra 安装：`pip install "dashscope[acli]"`。需要语音/摄像头输入可加装 `acli-voice` / `acli-camera`，或直接用 `acli-all` 装齐 —— 详见[安装](#安装)一节的 extra 表格。
 - 完整使用指南：[DashScope SDK Expert 文档](https://help.aliyun.com/zh/model-studio/dashscope-sdk-expert)。
 
 ## Shell 命令补全
@@ -528,8 +548,7 @@ python -m pytest tests/legacy_1x -q                 # 归档兼容套件
 python -m pytest tests -q                           # 全量
 ```
 
-当前实现的 coverage 使用 `coverage run -m pytest tests
---ignore=tests/legacy_1x`，随后执行 `coverage report -m`。
+当前实现的 coverage 使用 `coverage run -m pytest tests --ignore=tests/legacy_1x`，随后执行 `coverage report -m`。
 
 ## 许可证
 

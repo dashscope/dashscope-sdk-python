@@ -26,11 +26,16 @@ The DashScope Python SDK is the official client for [Alibaba Cloud Model Studio 
 pip install -U dashscope
 ```
 
-The base install covers SDK API calls, the `dashscope` CLI command, Agentic RL fine-tuning and the local tokenizer. Python 3.9+ is required. One optional feature group remains:
+The base install covers SDK API calls, the `dashscope` CLI command, Agentic RL fine-tuning and the local tokenizer. Python 3.9+ is required. Optional feature groups all belong to the bundled AI assistant:
 
 | Extra | Provides | Install |
 |-------|----------|---------|
 | `acli` | Interactive AI assistant (DashScope SDK Expert) | `pip install "dashscope[acli]"` |
+| `acli-openai` | Run the assistant on an OpenAI-compatible model provider | `pip install "dashscope[acli-openai]"` |
+| `acli-anthropic` | Run the assistant on an Anthropic model provider | `pip install "dashscope[acli-anthropic]"` |
+| `acli-voice` | Voice input and spoken replies in the assistant | `pip install "dashscope[acli-voice]"` |
+| `acli-camera` | Camera capture for image input in the assistant | `pip install "dashscope[acli-camera]"` |
+| `acli-all` | All of the above (includes `acli`) | `pip install "dashscope[acli-all]"` |
 
 To install from a source checkout:
 
@@ -120,8 +125,15 @@ client = dashscope.Client(
     protocol="native",      # native | openai | anthropic
     timeout=300.0,
     max_retries=2,
+    base_url=None,          # override the endpoint entirely; default: DASHSCOPE_BASE_URL
+    config_path=None,       # alternate config.toml; default: DASHSCOPE_CONFIG
+    protocol_options=None,  # extra kwargs forwarded to the selected protocol adapter
+    raise_on_error=True,    # False: return error responses instead of raising
+    http_client=None,       # your own httpx.Client (AsyncClient for AsyncClient)
 )
 ```
+
+All options are keyword-only.
 
 Use it as a context manager to close the pool automatically, or derive a variant with `with_options()` (unmentioned options are inherited; the connection pool is shared when connection-level options are unchanged):
 
@@ -189,7 +201,7 @@ By default each frame is incremental. Pass `incremental_output=False` to receive
 
 Thinking models surface reasoning on `.reasoning_stream` and, in the merged message, as `message.reasoning_content`. Under `protocol="anthropic"` the SDK also keeps `message.reasoning_signature` plus the raw `thinking` / `redacted_thinking` blocks in `message.reasoning_blocks`, so echoing the assistant message back on the next turn preserves extended thinking.
 
-> **Note:** the SDK does **not** auto-retry streaming requests. Wrap stream consumption in your own retry/backoff for production — see [`examples/04_real_world_scenarios/production_ready_rag_harness.py`](examples/04_real_world_scenarios/production_ready_rag_harness.py).
+> **Note:** streaming retries stop at the handshake. The SDK retries connection failures and retryable HTTP statuses only *before* the first event reaches you; once a stream is open it is never replayed, so a mid-stream drop surfaces as an exception. Wrap stream consumption in your own retry/backoff for production — see [`examples/04_real_world_scenarios/production_ready_rag_harness.py`](examples/04_real_world_scenarios/production_ready_rag_harness.py).
 
 ### Errors
 
@@ -266,11 +278,19 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_WORKSPACE` | Workspace ID (endpoint subdomain) | — |
 | `DASHSCOPE_REGION` | Region | `cn-beijing` |
 | `DASHSCOPE_PROTOCOL` | `native` / `openai` / `anthropic` | `native` |
-| `DASHSCOPE_BASE_URL` | Override the endpoint entirely (escape hatch) | — |
+| `DASHSCOPE_BASE_URL` | Override the HTTP endpoint entirely (escape hatch) | — |
+| `DASHSCOPE_HTTP_BASE_URL` | 1.x name for the same override, honored as a fallback | — |
+| `DASHSCOPE_WEBSOCKET_BASE_URL` | Override the WebSocket endpoint | derived from region/workspace |
 | `DASHSCOPE_TIMEOUT` | Request timeout (seconds) | `300` |
 | `DASHSCOPE_MAX_RETRIES` | Automatic retries | `2` |
+| `DASHSCOPE_HTTP_MAX_CONNECTIONS` | Connection-pool size | `100` |
+| `DASHSCOPE_HTTP_MAX_KEEPALIVE_CONNECTIONS` | Keep-alive connections held in the pool | `20` |
+| `DASHSCOPE_HTTP_KEEPALIVE_EXPIRY` | Keep-alive expiry (seconds) | `5.0` |
 | `DASHSCOPE_LOG` | Log level | `WARNING` |
 | `DASHSCOPE_CONFIG` | Path to `config.toml` | `~/.dashscope/config.toml` |
+| `DASHSCOPE_API_KEY_FILE_PATH` | Path to the 1.x key file (lowest-priority auth tier) | `~/.dashscope/api_key` |
+
+The three `DASHSCOPE_HTTP_*` pool variables are also settable as `http_max_connections`, `http_max_keepalive_connections` and `http_keepalive_expiry` in `settings` and `config.toml`. Passing your own `http_client=` takes precedence over all of them.
 
 **Config file** (`~/.dashscope/config.toml`):
 
@@ -395,16 +415,16 @@ Each task on the connection reads through a bounded queue (`task_queue_size=`, d
 
 | Category | Example models | 2.0 resource |
 |----------|----------------|--------------|
-| Text generation | qwen-max, qwen-plus, qwen-flash | `client.chat` |
+| Text generation | qwen-max, qwen-plus, qwen-turbo | `client.chat` |
 | Multi-modal understanding | qwen3-vl-plus, qwen-omni | `client.multimodal.chat` |
 | Text embedding | text-embedding-v4, text-embedding-v3 | `client.embeddings` |
 | Multi-modal embedding | tongyi-embedding-vision-plus | `client.multimodal.embeddings` |
 | Rerank | gte-rerank-v2, qwen3-rerank | `client.rerank` |
-| Image generation | wanx2.1-t2i-turbo, wan-image | `client.images` |
-| Video generation | wanx2.1-t2v, wan-i2v | `client.videos` |
-| Speech synthesis (TTS) | cosyvoice-v1, qwen-tts | `client.audio.tts` |
+| Image generation | wanx2.1-t2i-turbo, wan2.6-image | `client.images` |
+| Video generation | wanx2.1-t2v, wan2.7-i2v | `client.videos` |
+| Speech synthesis (TTS) | cosyvoice-v3-flash, cosyvoice-v1, qwen-tts | `client.audio.tts` |
 | Speech recognition (ASR) | fun-asr-realtime, paraformer-v1 | `client.audio.asr` |
-| Omni (realtime) | qwen-omni-realtime | `client.audio.realtime` |
+| Omni (realtime) | qwen-omni-turbo-realtime | `client.audio.realtime` |
 
 For the latest model list, visit the [Model Studio model plaza](https://bailian.console.aliyun.com/).
 
@@ -414,7 +434,7 @@ The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built 
 
 - Run `dashscope` with no arguments to start the assistant. On first run it offers to install the knowledge pack (per-domain quick-reference skills: text, multimodal, speech, retrieval, fine-tuning, agent, cli), so guidance comes from the SDK's public interfaces — parameters, outputs, error codes — without reading the source.
 - Ask it instead of reading docs — e.g. `dashscope expert "how do I stream chat output"` (asks once and exits). Type `/help` inside the assistant for available commands; `dashscope expert --help` shows all forms.
-- Install with the `acli` extra: `pip install "dashscope[acli]"`.
+- Install with the `acli` extra: `pip install "dashscope[acli]"`. Add `acli-voice` / `acli-camera` for voice and camera input, or `acli-all` for everything — see the [extras table](#installation).
 - Full walkthrough: [DashScope SDK Expert guide](https://help.aliyun.com/en/model-studio/dashscope-sdk-expert).
 
 ## Shell completion
@@ -501,8 +521,7 @@ python -m pytest tests/legacy_1x -q                 # archived compatibility
 python -m pytest tests -q                           # everything
 ```
 
-For current coverage, run `coverage run -m pytest tests
---ignore=tests/legacy_1x`, then `coverage report -m`.
+For current coverage, run `coverage run -m pytest tests --ignore=tests/legacy_1x`, then `coverage report -m`.
 
 ## License
 
