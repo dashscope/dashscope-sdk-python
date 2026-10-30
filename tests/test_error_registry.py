@@ -158,6 +158,19 @@ def test_internal_entries_well_formed():
         assert all(isinstance(v, str) for v in entry.vars)
 
 
+def test_function_layer_error_matches_generated_registry_source():
+    entry = _by_name(SDK)["sdk.agentic_rl.FunctionLayerError"]
+    assert entry.message == "Creating a layer of function failed."
+    assert entry.solution == (
+        "Failed to create the function dependency layer. Check that the "
+        "requirements.txt or setup.py is valid and all dependencies are "
+        "installable. Review the layer build logs for details."
+    )
+    # Python-only runtime controls belong at the raise site, not in the
+    # cross-language generated catalog.
+    assert "FC_LAYER_STATUS_TIMEOUT" not in entry.solution
+
+
 def test_internal_vars_match_message_placeholders():
     """Every declared var is used, and every placeholder is declared."""
     for entry in SDK:

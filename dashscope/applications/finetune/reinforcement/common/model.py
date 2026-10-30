@@ -91,6 +91,34 @@ from .errors import (
     ValueErrorWithCode,
 )
 
+_LAYER_CREATE_REJECTED_SOLUTION = (
+    "Review the server response and layer request. Fix invalid requirements "
+    "or request parameters before retrying."
+)
+_LAYER_CREATE_LOCAL_SOLUTION = (
+    "Check that the requirements file exists, is readable, and contains "
+    "valid dependency declarations before retrying."
+)
+_LAYER_CREATE_TRANSIENT_SOLUTION = (
+    "Retry after connectivity recovers. If the error persists, check the "
+    "Function Compute layer service and request logs."
+)
+_LAYER_STATUS_QUERY_SOLUTION = (
+    "Retry the layer status query after connectivity recovers."
+)
+_LAYER_BUILD_FAILED_SOLUTION = (
+    "Check that requirements.txt or setup.py is valid and every dependency "
+    "is installable, then review the layer build logs before retrying."
+)
+_LAYER_STATUS_MISSING_SOLUTION = (
+    "Retry the status query. If the response still has no status, report the "
+    "response and layer code to the service owner."
+)
+_LAYER_BUILD_TIMEOUT_SOLUTION = (
+    "Increase FC_LAYER_STATUS_TIMEOUT if the layer is still building, then "
+    "query the same layer code again instead of creating a duplicate layer."
+)
+
 
 class MountStorage(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -322,11 +350,12 @@ class FunctionComponentModel(BaseModel):
 
     def generate_id(self, func_type: FunctionType) -> str:
         """Generate unique OSS resource identifier."""
-        self.oss_id = generate_random_id(func_type.value)
+        oss_id = generate_random_id(func_type.value)
+        self.oss_id = oss_id
         logger.debug(
-            f"Generated OSS ID | Type: {func_type.name}, ID: {self.oss_id}",
+            f"Generated OSS ID | Type: {func_type.name}, ID: {oss_id}",
         )
-        return self.oss_id
+        return oss_id
 
     async def get_oss(self, oss_id: Optional[str] = None) -> str:
         """Retrieve OSS signed URL for deployment package."""
@@ -393,6 +422,8 @@ class FunctionComponentModel(BaseModel):
             if result.get("status", {}).get("code", 500) != 200:
                 raise FunctionLayerError(
                     f"create rejected by server | {result}",
+                    allow_retry=False,
+                    solution=_LAYER_CREATE_REJECTED_SOLUTION,
                 )
 
             layer_code = result.get("output", {}).get("layer_code", "")
@@ -403,11 +434,21 @@ class FunctionComponentModel(BaseModel):
 
         except FunctionLayerError:
             raise
+        except (InputError, OSError) as e:
+            raise FunctionLayerError(
+                f"create input error | {e}",
+                error_code=2013,
+                layer_name=layer_name,
+                allow_retry=False,
+                solution=_LAYER_CREATE_LOCAL_SOLUTION,
+            ) from e
         except Exception as e:
             raise FunctionLayerError(
                 f"create error | {e}",
                 error_code=2013,
                 layer_name=layer_name,
+                allow_retry=True,
+                solution=_LAYER_CREATE_TRANSIENT_SOLUTION,
             ) from e
 
         return layer_code
@@ -487,6 +528,8 @@ class FunctionComponentModel(BaseModel):
                     f"status query error | layer_code: {layer_code} | {e}",
                     error_code=2014,
                     layer_code=layer_code,
+                    allow_retry=True,
+                    solution=_LAYER_STATUS_QUERY_SOLUTION,
                 ) from e
 
             status = result.get("output", {}).get("status", "")
@@ -504,6 +547,8 @@ class FunctionComponentModel(BaseModel):
                     f"{layer_code} | {result}",
                     error_code=2015,
                     layer_code=layer_code,
+                    allow_retry=False,
+                    solution=_LAYER_BUILD_FAILED_SOLUTION,
                 )
 
             if not status:
@@ -512,6 +557,8 @@ class FunctionComponentModel(BaseModel):
                     f"{layer_code} | {result}",
                     error_code=2016,
                     layer_code=layer_code,
+                    allow_retry=True,
+                    solution=_LAYER_STATUS_MISSING_SOLUTION,
                 )
 
             if attempt == 1:
@@ -536,6 +583,8 @@ class FunctionComponentModel(BaseModel):
             f"FC_LAYER_STATUS_TIMEOUT if the build needs longer",
             error_code=2017,
             layer_code=layer_code,
+            allow_retry=True,
+            solution=_LAYER_BUILD_TIMEOUT_SOLUTION,
         )
 
     def clean_temp_files(self, tmp_path: str) -> None:
