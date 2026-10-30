@@ -486,12 +486,14 @@ SDK_AGENTIC_RL_INSTANCE_QUERY_ERROR = SdkErrorDef(
 
 SDK_AGENTIC_RL_FUNCTION_LAYER_ERROR = SdkErrorDef(
     name="sdk.agentic_rl.FunctionLayerError",
-    message="Creating a layer of function failed.",
+    message="The function dependency layer is not usable.",
     solution=(
-        "Failed to create the function dependency layer. Check that "
-        "the requirements.txt or setup.py is valid and all "
-        "dependencies are installable. Review the layer build logs "
-        "for details."
+        "The dependency layer could not be created, or its build failed, "
+        "timed out, or its status could not be queried. For a build "
+        "failure, check that requirements.txt or setup.py is valid and "
+        "every dependency is installable, then review the layer build "
+        "logs. For a timeout, raise FC_LAYER_STATUS_TIMEOUT to allow more "
+        "time. For a status query error, retry once connectivity recovers."
     ),
     allow_retry=True,
     vars=[],

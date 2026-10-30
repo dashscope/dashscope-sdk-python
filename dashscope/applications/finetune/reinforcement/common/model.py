@@ -38,6 +38,8 @@ from .constants import (
     FC_LAYER_USED,
     FC_LAYER_CREATE_API,
     FC_LAYER_QUERY_API,
+    FC_LAYER_STATUS_TIMEOUT,
+    FC_LAYER_STATUS_INTERVAL,
     LOG_LEVEL,
 )
 from .model_types import (
@@ -366,6 +368,7 @@ class FunctionComponentModel(BaseModel):
     ) -> str:
         """Retrieve OSS signed URL for deployment package."""
         layer_code = None
+        layer_name = None
         try:
             # Validate requirements file if provided
             layer_name = name + "-" + generate_random_id()[:8]
@@ -389,7 +392,7 @@ class FunctionComponentModel(BaseModel):
             )
             if result.get("status", {}).get("code", 500) != 200:
                 raise FunctionLayerError(
-                    f"Function layer create failed: {result}",
+                    f"create rejected by server | {result}",
                 )
 
             layer_code = result.get("output", {}).get("layer_code", "")
@@ -398,10 +401,13 @@ class FunctionComponentModel(BaseModel):
                 f"layer_code: {layer_code}",
             )
 
+        except FunctionLayerError:
+            raise
         except Exception as e:
             raise FunctionLayerError(
-                "Function layer create failed",
+                f"create error | {e}",
                 error_code=2013,
+                layer_name=layer_name,
             ) from e
 
         return layer_code
@@ -454,10 +460,20 @@ class FunctionComponentModel(BaseModel):
         return
 
     async def get_layer(self, layer_code: str) -> str:
-        """Get FC layer status."""
-        try:
-            i = 0
-            while i < 3:
+        """Wait for an FC layer build to finish and return its final status.
+
+        Raises FunctionLayerError when the layer fails to build, when the
+        status endpoint returns an unusable response, or when the build does
+        not finish within ``FC_LAYER_STATUS_TIMEOUT`` seconds.
+        """
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + FC_LAYER_STATUS_TIMEOUT
+        attempt = 0
+        status = ""
+
+        while loop.time() < deadline:
+            attempt += 1
+            try:
                 result = await client_fc(
                     FC_API_KEY,
                     FC_LAYER_QUERY_API,
@@ -466,36 +482,61 @@ class FunctionComponentModel(BaseModel):
                     },
                     "GET",
                 )
-                status = result.get("output", {}).get("status", "")
-                if status != "SUCCESS":
-                    i += 1
-                    logger.debug(
-                        f"Load function layer({i}) | layer_code:"
-                        f" {layer_code} | Status: {status}",
-                    )
-                    await asyncio.sleep(10)
-                else:
-                    break
-
-            logger.debug(
-                f"Load function layer | layer_code: {layer_code} | Status:"
-                f" {status}",
-            )
-            if status != "SUCCESS":
+            except Exception as e:
                 raise FunctionLayerError(
-                    f"Function layer create failed: {status}",
+                    f"status query error | layer_code: {layer_code} | {e}",
                     error_code=2014,
+                    layer_code=layer_code,
+                ) from e
+
+            status = result.get("output", {}).get("status", "")
+
+            if status == "SUCCESS":
+                logger.debug(
+                    f"Load function layer | layer_code: {layer_code} | "
+                    f"Status: {status}",
+                )
+                return status
+
+            if status == "FAILED":
+                raise FunctionLayerError(
+                    f"build reported FAILED | layer_code: "
+                    f"{layer_code} | {result}",
+                    error_code=2015,
+                    layer_code=layer_code,
                 )
 
-            return status
+            if not status:
+                raise FunctionLayerError(
+                    f"status query returned no status | layer_code: "
+                    f"{layer_code} | {result}",
+                    error_code=2016,
+                    layer_code=layer_code,
+                )
 
-        except Exception as e:
-            logger.warning(
-                f"Load function layer failed | layer_code: {layer_code}, "
-                f"Error: {str(e)}",
+            if attempt == 1:
+                logger.info(
+                    f"Waiting for function layer build | layer_code: "
+                    f"{layer_code} | Status: {status} | Timeout: "
+                    f"{FC_LAYER_STATUS_TIMEOUT}s",
+                )
+            else:
+                logger.debug(
+                    f"Load function layer({attempt}) | layer_code:"
+                    f" {layer_code} | Status: {status}",
+                )
+
+            await asyncio.sleep(
+                min(FC_LAYER_STATUS_INTERVAL, deadline - loop.time()),
             )
 
-        return "SUCCESS"
+        raise FunctionLayerError(
+            f"build timed out after {FC_LAYER_STATUS_TIMEOUT}s | "
+            f"layer_code: {layer_code} | Last status: {status} | Raise "
+            f"FC_LAYER_STATUS_TIMEOUT if the build needs longer",
+            error_code=2017,
+            layer_code=layer_code,
+        )
 
     def clean_temp_files(self, tmp_path: str) -> None:
         """Cleanup temporary deployment files."""
@@ -770,9 +811,11 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         warmup: bool = False,
     ) -> ResponseFC:
         """Load and initialize a registered function instance."""
+        runtime_obj = runtime or self.runtime
+        target_entity_id = entity_id or self.entity_id
+        layer_code = runtime_obj.layer_code if runtime_obj else None
+
         try:
-            # Resolve target registration ID
-            target_entity_id = entity_id or self.entity_id
             if not target_entity_id:
                 raise ValueErrorWithCode(
                     "No valid registration ID provided",
@@ -780,17 +823,18 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 )
 
             if FC_LAYER_USED:
-                if self.runtime.layer_code is None:
+                if layer_code is None:
                     raise ValueErrorWithCode(
-                        "layer_code is required when FC_LAYER_USED is enabled",
+                        "layer_code is required when FC_LAYER_USED is "
+                        "enabled: pass a runtime carrying layer_code, or "
+                        "set FC_LAYER_USED=false",
                         error_code=2022,
                     )
                 await self.fcmodel.get_layer(
-                    layer_code=self.runtime.layer_code,
+                    layer_code=layer_code,
                 )
 
             # Load function instance
-            runtime_obj = runtime or self.runtime
             runtime_dict = (
                 deep_remove_none({**runtime_obj.model_dump()})
                 if runtime_obj
@@ -826,10 +870,30 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 f"{result if LOG_LEVEL == 'DEBUG' else deep_mask(result)}",
             )
 
+        except FunctionLayerError as e:
+            logger.warning(
+                f"Instance initialization blocked by function layer | "
+                f"EntityID: {target_entity_id}, LayerCode: {layer_code}, "
+                f"Error: {str(e)}",
+            )
+            return ResponseFC(
+                status=Status(
+                    task=StatusType.FAILED,
+                    name="FunctionLayerError",
+                    code=526,
+                    message=(
+                        f"Function layer not ready | EntityID: "
+                        f"{target_entity_id}, LayerCode: {layer_code}, "
+                        f"Error: {str(e)}"
+                    ),
+                ),
+                output={},
+            )
+
         except Exception as e:
-            logger.debug(
+            logger.warning(
                 f"Instance initialization failed | EntityID:"
-                f" {target_entity_id}, "
+                f" {target_entity_id}, LayerCode: {layer_code}, "
                 f"Error: {str(e)}",
             )
             return ResponseFC(
@@ -837,7 +901,11 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     task=StatusType.FAILED,
                     name="FunctionLoadError",
                     code=522,
-                    message=f"Instance initialization failed: {str(e)}",
+                    message=(
+                        f"Instance initialization failed | EntityID: "
+                        f"{target_entity_id}, LayerCode: {layer_code}, "
+                        f"Error: {str(e)}"
+                    ),
                 ),
                 output={},
             )

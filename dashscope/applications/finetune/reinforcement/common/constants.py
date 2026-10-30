@@ -127,6 +127,10 @@ FC_SERVER_CLASSPATH = os.environ.get(
 FC_WORKERS_COUNT = get_int_env("FC_WORKERS_COUNT", 2)
 FC_LAYER_USED = get_bool_env("FC_LAYER_USED", True)
 FC_LAYER_NAME = "fc_layer"
+# Building a layer installs requirements.txt inside Function Compute, so a
+# cold build routinely outlasts a single HTTP timeout.
+FC_LAYER_STATUS_TIMEOUT = get_int_env("FC_LAYER_STATUS_TIMEOUT", 600)
+FC_LAYER_STATUS_INTERVAL = get_int_env("FC_LAYER_STATUS_INTERVAL", 10)
 FC_REQUIREMENTS_FILE = "./requirements.txt"
 FC_ZIP_EXCLUDE_PATTERNS = os.environ.get(
     "FC_ZIP_EXCLUDE_PATTERNS",

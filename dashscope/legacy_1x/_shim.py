@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib
 import importlib.abc
 import importlib.util
+import os
 import sys
 
 
@@ -85,6 +86,23 @@ _EXACT_MODULES = {
 
 _FINDER_MARKER = "_dashscope_legacy_1x_alias_finder"
 
+_CLIENT_NAME = "dashscope.client"
+
+
+def _client_module_spec():
+    """Bind ``dashscope.client`` to ``client.py`` when a leftover 1.x ``client/``
+    directory shadows it, since CPython resolves directories first.
+
+    Returns None on a clean install, where normal resolution already works.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    module_file = os.path.join(root, "client.py")
+    if not os.path.isfile(module_file):
+        return None
+    if not os.path.isdir(os.path.join(root, "client")):
+        return None
+    return importlib.util.spec_from_file_location(_CLIENT_NAME, module_file)
+
 
 def _canonical_name(name):
     if name in _EXACT_MODULES:
@@ -130,6 +148,8 @@ class _AliasFinder(importlib.abc.MetaPathFinder):
     _dashscope_legacy_1x_alias_finder = True
 
     def find_spec(self, fullname, path=None, target=None):
+        if fullname == _CLIENT_NAME:
+            return _client_module_spec()
         canonical_name = _canonical_name(fullname)
         if canonical_name is None:
             return None

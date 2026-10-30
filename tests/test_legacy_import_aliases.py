@@ -114,6 +114,51 @@ def test_client_and_legacy_base_api_coexist():
     assert Client.__module__ == "dashscope.client"
 
 
+def test_leftover_1x_client_dir_does_not_shadow_client_module(tmp_path):
+    """pip leaves 1.x files behind on an in-place upgrade, and a directory
+    outranks a same-named module, so the empty 1.x ``client/`` would win."""
+    site = tmp_path / "site-packages"
+    installed = site / "dashscope"
+    installed.mkdir(parents=True)
+    for entry in (_REPO / "dashscope").iterdir():
+        if entry.name == "__pycache__":
+            continue
+        (installed / entry.name).symlink_to(entry)
+
+    stale = installed / "client"
+    stale.mkdir()
+    (stale / "__init__.py").write_text("", encoding="utf-8")
+    (stale / "base_api.py").write_text("", encoding="utf-8")
+
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTHONPATH"] = str(site)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import dashscope
+import dashscope.client as client
+from dashscope.client import AsyncClient, Client
+from dashscope.client.base_api import BaseApi
+
+assert client.__file__.endswith('client.py'), client.__file__
+assert Client is dashscope.Client
+assert AsyncClient is dashscope.AsyncClient
+assert Client.__module__ == 'dashscope.client'
+assert BaseApi.__module__ == 'dashscope.legacy_1x.client.base_api'
+""",
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.mark.parametrize(
     ("old_name", "canonical_name"),
     [

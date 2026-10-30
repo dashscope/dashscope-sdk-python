@@ -315,15 +315,20 @@ class FunctionLayerError(DeploymentError, _LegacyFunctionLayerError):
         error_code: Optional[int] = None,
         layer_name: Optional[str] = None,
         error_log: Optional[str] = None,
+        layer_code: Optional[str] = None,
         **kwargs: Any,
     ) -> None:
+        # Raised for create, status-query and build-timeout failures alike, so
+        # the prefix names the subsystem rather than the create stage. The
+        # archived 1.x base keeps its original wording.
         super().__init__(
-            f"Function layer create failed: {message}",
+            f"Function layer failed: {message}",
             error_code,
-            layer_name,
+            layer_code,
             **kwargs,
         )
         self.layer_name = layer_name
+        self.layer_code = layer_code
         self.error_log = error_log
 
 
