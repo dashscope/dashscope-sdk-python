@@ -21,6 +21,7 @@ from dashscope.types.common import (
     response_envelope,
     with_headers,
 )
+from dashscope.types.pagination import BasePage
 
 if TYPE_CHECKING:
     import httpx
@@ -51,11 +52,20 @@ class Model(ResponseBase):
     )
 
 
-class ModelList(ResponseBase):
-    page_no: int = 1
-    page_size: int = 10
-    total_count: int = 0
+class ModelList(BasePage[Model]):
+    """One page of the model catalog, from ``models.list``.
+
+    ``page_no`` / ``page_size`` / ``total_count`` come from
+    :class:`~dashscope.types.pagination.BasePage`; iterate the page directly
+    (``for m in page``) or cross pages with ``iter_pages()`` /
+    ``next_page()``.
+    """
+
     models: List[Model] = []
+
+    @property
+    def items(self) -> List[Model]:
+        return self.models
 
 
 def _parse_list(
@@ -125,7 +135,9 @@ class Models:
 
         The server has no provider filter, so ``total_count`` is always
         the pre-filter total of the whole catalog, not of the filtered
-        ``models`` slice.
+        ``models`` slice. Pagination therefore walks the unfiltered catalog:
+        ``has_next_page()`` / ``iter_pages()`` follow ``total_count``, and the
+        ``provider`` filter is applied to each fetched page independently.
         """
         response = self._client.transport.request(
             "GET",
@@ -151,6 +163,19 @@ class Models:
             result.models = [
                 m for m in result.models if _match_provider(m, provider)
             ]
+        result.bind_pagination(
+            lambda next_no, next_size: self.list(
+                page_no=next_no,
+                page_size=next_size,
+                provider=provider,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+            ),
+        )
         return with_headers(result, response)
 
     def get(
@@ -254,6 +279,19 @@ class AsyncModels:
             result.models = [
                 m for m in result.models if _match_provider(m, provider)
             ]
+        result.bind_pagination(
+            lambda next_no, next_size: self.list(
+                page_no=next_no,
+                page_size=next_size,
+                provider=provider,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+            ),
+        )
         return with_headers(result, response)
 
     async def get(

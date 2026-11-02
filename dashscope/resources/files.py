@@ -26,6 +26,7 @@ from dashscope.types.common import (
     response_envelope,
     with_headers,
 )
+from dashscope.types.pagination import BasePage
 
 if TYPE_CHECKING:
     import httpx
@@ -74,11 +75,19 @@ class File(ResponseBase):
     )
 
 
-class FileList(ResponseBase):
-    page_no: int = 1
-    page_size: int = 10
-    total_count: int = 0
+class FileList(BasePage[File]):
+    """One page of files, from ``files.list``.
+
+    Pagination fields come from
+    :class:`~dashscope.types.pagination.BasePage`; iterate the page directly
+    or cross pages with ``iter_pages()`` / ``next_page()``.
+    """
+
     files: List[File] = []
+
+    @property
+    def items(self) -> List[File]:
+        return self.files
 
 
 class DeletionStatus(ResponseBase):
@@ -334,14 +343,24 @@ class Files:
             ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            _parse_list(
-                response_json(response),
-                strict=self._client.config.strict_validation,
-                response=response,
-            ),
-            response,
+        result = _parse_list(
+            response_json(response),
+            strict=self._client.config.strict_validation,
+            response=response,
         )
+        result.bind_pagination(
+            lambda next_no, next_size: self.list(
+                page_no=next_no,
+                page_size=next_size,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+            ),
+        )
+        return with_headers(result, response)
 
     def get(
         self,
@@ -491,14 +510,24 @@ class AsyncFiles:
             ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            _parse_list(
-                response_json(response),
-                strict=self._client.config.strict_validation,
-                response=response,
-            ),
-            response,
+        result = _parse_list(
+            response_json(response),
+            strict=self._client.config.strict_validation,
+            response=response,
         )
+        result.bind_pagination(
+            lambda next_no, next_size: self.list(
+                page_no=next_no,
+                page_size=next_size,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+            ),
+        )
+        return with_headers(result, response)
 
     async def get(
         self,

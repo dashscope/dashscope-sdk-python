@@ -42,6 +42,7 @@ from dashscope.types.common import (
     response_envelope,
     with_headers,
 )
+from dashscope.types.pagination import BasePage
 
 if TYPE_CHECKING:
     import httpx
@@ -216,17 +217,35 @@ class Job(ResponseBase):
         )
 
 
-class JobList(ResponseBase):
+class JobList(BasePage[Job]):
     """One page of async tasks, from ``jobs.list`` (1.x ``GET /tasks``).
 
     Each entry in ``tasks`` parses with the same aliases as a fetched
     :class:`Job`; a FAILED task inside the list is data, not an error.
+
+    ``page_no`` / ``page_size`` / ``total_count`` come from
+    :class:`~dashscope.types.pagination.BasePage`; iterate the page directly
+    or cross pages with ``iter_pages()`` / ``next_page()``. The wire reports
+    the total as ``total``, which is aliased onto ``total_count`` and also
+    readable through the :attr:`total` property.
     """
 
-    page_no: int = 1
-    page_size: int = 10
-    total: int = 0
+    # The wire field is ``total``; the canonical pagination name is
+    # ``total_count``. Accept both on input so the base traversal works.
+    total_count: int = Field(
+        0,
+        validation_alias=AliasChoices("total_count", "total"),
+    )
     tasks: List[Job] = []
+
+    @property
+    def items(self) -> List[Job]:
+        return self.tasks
+
+    @property
+    def total(self) -> int:
+        """Alias of ``total_count``, keeping the historical field name readable."""
+        return self.total_count
 
     @classmethod
     def from_payload(
@@ -250,7 +269,7 @@ class JobList(ResponseBase):
             {
                 "page_no": data.get("page_no", 1),
                 "page_size": data.get("page_size", 10),
-                "total": data.get("total", len(items)),
+                "total_count": data.get("total", len(items)),
                 "tasks": items,
                 **response_envelope(data),
             },
@@ -444,14 +463,30 @@ class Jobs:
             ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            JobList.from_payload(
-                response_json(response),
-                strict=self._client.config.strict_validation,
-                response=response,
-            ),
-            response,
+        result = JobList.from_payload(
+            response_json(response),
+            strict=self._client.config.strict_validation,
+            response=response,
         )
+        result.bind_pagination(
+            lambda next_no, next_size: self.list(
+                start_time=start_time,
+                end_time=end_time,
+                model_name=model_name,
+                api_key_id=api_key_id,
+                region=region,
+                status=status,
+                page_no=next_no,
+                page_size=next_size,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+            ),
+        )
+        return with_headers(result, response)
 
     def wait(
         self,
@@ -704,14 +739,30 @@ class AsyncJobs:
             ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            JobList.from_payload(
-                response_json(response),
-                strict=self._client.config.strict_validation,
-                response=response,
-            ),
-            response,
+        result = JobList.from_payload(
+            response_json(response),
+            strict=self._client.config.strict_validation,
+            response=response,
         )
+        result.bind_pagination(
+            lambda next_no, next_size: self.list(
+                start_time=start_time,
+                end_time=end_time,
+                model_name=model_name,
+                api_key_id=api_key_id,
+                region=region,
+                status=status,
+                page_no=next_no,
+                page_size=next_size,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+            ),
+        )
+        return with_headers(result, response)
 
     async def wait(
         self,
