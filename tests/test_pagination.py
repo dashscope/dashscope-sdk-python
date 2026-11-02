@@ -196,6 +196,13 @@ def test_list_models_share_base_page():
     assert BasePage().items == []
 
 
+def test_base_page_accepts_the_wire_total_alias():
+    # The alias lives on BasePage so every list model inherits it, and a page
+    # parsed straight from a body traverses instead of reading a zero total.
+    for cls in (ModelList, FileList, JobList):
+        assert cls.model_validate({"total": 7}).total_count == 7
+
+
 # --- models.list (async) --------------------------------------------------
 
 

@@ -230,12 +230,6 @@ class JobList(BasePage[Job]):
     readable through the :attr:`total` property.
     """
 
-    # The wire field is ``total``; the canonical pagination name is
-    # ``total_count``. Accept both on input so the base traversal works.
-    total_count: int = Field(
-        0,
-        validation_alias=AliasChoices("total_count", "total"),
-    )
     tasks: List[Job] = []
 
     @property

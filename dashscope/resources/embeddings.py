@@ -11,19 +11,21 @@ Multimodal embedding lives at ``client.multimodal.embeddings``.
 from __future__ import annotations
 
 from typing import (
+    TYPE_CHECKING,
     Any,
     Awaitable,
     Callable,
     Dict,
     List,
+    Literal,
     Mapping,
     Optional,
     Union,
+    overload,
 )
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from dashscope.errors import check_response, response_json
 from dashscope.resources._jobs import (
     DEFAULT_MAX_INTERVAL,
     DEFAULT_POLL_INTERVAL,
@@ -40,6 +42,9 @@ from dashscope.types.common import (
     response_envelope,
     with_headers,
 )
+
+if TYPE_CHECKING:
+    from dashscope.transport._response import APIResponse
 
 _PATH = "/services/embeddings/text-embedding/text-embedding"
 _BATCH_SERVICE = "embeddings/text-embedding/text-embedding"
@@ -416,6 +421,7 @@ class Embeddings:
         self._client = client
         self.jobs = EmbeddingJobs(client)
 
+    @overload
     def create(
         self,
         *,
@@ -432,7 +438,49 @@ class Embeddings:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        raw: Literal[False] = False,
     ) -> EmbeddingResponse:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        input: Union[str, List[str]],
+        text_type: Optional[str] = None,
+        dimension: Optional[int] = None,
+        output_type: Optional[str] = None,
+        instruct: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    def create(
+        self,
+        *,
+        model: str,
+        input: Union[str, List[str]],
+        text_type: Optional[str] = None,
+        dimension: Optional[int] = None,
+        output_type: Optional[str] = None,
+        instruct: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        raw: bool = False,
+    ) -> Union[EmbeddingResponse, "APIResponse"]:
         body = _build_body(
             model=model,
             input=input,
@@ -442,7 +490,7 @@ class Embeddings:
             instruct=instruct,
             parameters=parameters,
         )
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "POST",
             _PATH,
             json=body,
@@ -455,11 +503,14 @@ class Embeddings:
                 extra_query,
                 extra_body,
             ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
+        if raw:
+            return resp
+        resp.raise_for_status()
         return with_headers(
-            parse_embedding_response(response_json(response)),
-            response,
+            parse_embedding_response(resp.json()),
+            resp.http_response,
         )
 
 
@@ -467,6 +518,48 @@ class AsyncEmbeddings:
     def __init__(self, client) -> None:
         self._client = client
         self.jobs = AsyncEmbeddingJobs(client)
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        input: Union[str, List[str]],
+        text_type: Optional[str] = None,
+        dimension: Optional[int] = None,
+        output_type: Optional[str] = None,
+        instruct: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        raw: Literal[False] = False,
+    ) -> EmbeddingResponse:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        input: Union[str, List[str]],
+        text_type: Optional[str] = None,
+        dimension: Optional[int] = None,
+        output_type: Optional[str] = None,
+        instruct: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def create(
         self,
@@ -484,7 +577,8 @@ class AsyncEmbeddings:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
-    ) -> EmbeddingResponse:
+        raw: bool = False,
+    ) -> Union[EmbeddingResponse, "APIResponse"]:
         body = _build_body(
             model=model,
             input=input,
@@ -494,7 +588,7 @@ class AsyncEmbeddings:
             instruct=instruct,
             parameters=parameters,
         )
-        response = await self._client.transport.request(
+        resp = await self._client.transport.request_api(
             "POST",
             _PATH,
             json=body,
@@ -507,9 +601,12 @@ class AsyncEmbeddings:
                 extra_query,
                 extra_body,
             ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
+        if raw:
+            return resp
+        resp.raise_for_status()
         return with_headers(
-            parse_embedding_response(response_json(response)),
-            response,
+            parse_embedding_response(resp.json()),
+            resp.http_response,
         )

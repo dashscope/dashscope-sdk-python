@@ -119,6 +119,10 @@ def with_headers(model: _M, response: Any) -> _M:
     have no HTTP envelope to copy and keep the empty default; SSE
     streams expose theirs via ``Stream.headers`` and
     ``ChatStream.get_final_message()``.
+
+    Resources on the ``APIResponse`` path (``transport.request_api``) get
+    this applied for free by ``APIResponse.parse``; websocket-sourced
+    models, which have no ``APIResponse``, still call it directly.
     """
     model.headers = dict(response.headers)
     return model

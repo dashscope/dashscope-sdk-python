@@ -26,6 +26,7 @@ from dashscope.transport._options import (
     resolve_max_retries,
     resolve_timeout,
 )
+from dashscope.transport._response import APIResponse
 from dashscope.transport._retry import backoff_delay, should_retry
 
 logger = get_logger("transport")
@@ -357,6 +358,50 @@ class SyncTransport:
             _sleep(delay)
         return response
 
+    def request_api(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        content: Optional[bytes] = None,
+        data: Optional[Mapping[str, Any]] = None,
+        files: Any = None,
+        params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        base_url: Optional[str] = None,
+        timeout: Union[float, httpx.Timeout, None] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        sdk_module: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+        client: Any = None,
+    ) -> APIResponse:
+        """``request()`` wrapped in an :class:`APIResponse`.
+
+        A thin convenience layer: it reuses :meth:`request` (and therefore
+        the same retry/backoff behavior) and only adds the response
+        wrapper. ``client`` seeds the wrapper's ``strict`` /
+        ``raise_on_error`` behavior and is optional.
+        """
+        response = self.request(
+            method,
+            path,
+            json=json,
+            content=content,
+            data=data,
+            files=files,
+            params=params,
+            headers=headers,
+            base_url=base_url,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            sdk_module=sdk_module,
+            options=options,
+        )
+        return APIResponse(response, client=client)
+
     def open_stream(
         self,
         method: str,
@@ -625,6 +670,44 @@ class AsyncTransport:
             )
             await _asleep(delay)
         return response
+
+    async def request_api(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        content: Optional[bytes] = None,
+        data: Optional[Mapping[str, Any]] = None,
+        files: Any = None,
+        params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        base_url: Optional[str] = None,
+        timeout: Union[float, httpx.Timeout, None] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        sdk_module: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+        client: Any = None,
+    ) -> APIResponse:
+        """Async :meth:`SyncTransport.request_api`."""
+        response = await self.request(
+            method,
+            path,
+            json=json,
+            content=content,
+            data=data,
+            files=files,
+            params=params,
+            headers=headers,
+            base_url=base_url,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            sdk_module=sdk_module,
+            options=options,
+        )
+        return APIResponse(response, client=client)
 
     async def open_stream(
         self,

@@ -34,7 +34,7 @@ from typing import (
     TypeVar,
 )
 
-from pydantic import PrivateAttr
+from pydantic import AliasChoices, Field, PrivateAttr
 
 from dashscope.types.common import ResponseBase
 
@@ -60,7 +60,13 @@ class BasePage(ResponseBase, Generic[T]):
 
     page_no: int = 1
     page_size: int = 10
-    total_count: int = 0
+    # The wire reports the total as ``total``; ``total_count`` is the
+    # canonical name here. Accept both so a page parsed straight from a body
+    # traverses correctly instead of silently reading a zero total.
+    total_count: int = Field(
+        0,
+        validation_alias=AliasChoices("total_count", "total"),
+    )
 
     @property
     def items(self) -> List[T]:
