@@ -88,6 +88,11 @@ DEFAULT_HTTP_MAX_CONNECTIONS = 100
 DEFAULT_HTTP_MAX_KEEPALIVE_CONNECTIONS = 20
 DEFAULT_HTTP_KEEPALIVE_EXPIRY = 5.0
 
+# Response bodies that do not fit the typed models degrade by default,
+# so a gateway adding or retyping a field cannot take a caller's process
+# down; strict mode opts back into raising for contract testing.
+DEFAULT_STRICT_VALIDATION = False
+
 # Each wire protocol lives at its own URL path under the gateway host.
 PROTOCOL_DEFAULT_PATHS = {
     "native": "/api/v1",
@@ -133,6 +138,7 @@ _HTTP_MAX_KEEPALIVE_CONNECTIONS_ENV = (
     "DASHSCOPE_HTTP_MAX_KEEPALIVE_CONNECTIONS"
 )
 _HTTP_KEEPALIVE_EXPIRY_ENV = "DASHSCOPE_HTTP_KEEPALIVE_EXPIRY"
+_STRICT_VALIDATION_ENV = "DASHSCOPE_STRICT_VALIDATION"
 _LOG_ENV = "DASHSCOPE_LOG"
 _CONFIG_PATH_ENV = "DASHSCOPE_CONFIG"
 _DEFAULT_CONFIG_PATH = "~/.dashscope/config.toml"
@@ -153,6 +159,7 @@ _FILE_KEYS = frozenset(
         "http_max_connections",
         "http_max_keepalive_connections",
         "http_keepalive_expiry",
+        "strict_validation",
     },
 )
 
@@ -179,6 +186,38 @@ def _env_int(name: str) -> Optional[int]:
         raise ValueError(
             f"invalid {name}={raw!r}: expected an integer",
         ) from None
+
+
+# Recognised spellings for a boolean setting. Anything else is rejected
+# rather than coerced: ``"0"`` silently reading as true (the bare
+# truthiness trap) would flip a caller into the wrong mode.
+_TRUTHY = frozenset({"1", "true", "yes", "on", "t", "y"})
+_FALSY = frozenset({"0", "false", "no", "off", "f", "n"})
+
+
+def _coerce_bool(name: str, raw: Any) -> bool:
+    """Interpret one boolean-ish value, shared by env and ``settings``."""
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, int) and raw in (0, 1):
+        return bool(raw)
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in _TRUTHY:
+            return True
+        if normalized in _FALSY:
+            return False
+    raise ValueError(
+        f"invalid {name}={raw!r}: expected a boolean "
+        "(true/false, 1/0, yes/no, on/off)",
+    )
+
+
+def _env_bool(name: str) -> Optional[bool]:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return None
+    return _coerce_bool(name, raw)
 
 
 def _legacy_fallback(host: str) -> str:
@@ -304,6 +343,10 @@ class Config:
         DEFAULT_HTTP_MAX_KEEPALIVE_CONNECTIONS
     )
     http_keepalive_expiry: float = DEFAULT_HTTP_KEEPALIVE_EXPIRY
+    # Raise instead of degrading when a response body does not fit its
+    # typed model. Off by default so a gateway retyping a field cannot
+    # break callers; turn it on in CI to catch contract drift.
+    strict_validation: bool = DEFAULT_STRICT_VALIDATION
 
 
 class Settings:
@@ -505,6 +548,23 @@ class Settings:
             self._explicit["http_keepalive_expiry"] = value
 
     @property
+    def strict_validation(self) -> bool:
+        # ``is None``, not truthiness: an explicit ``False`` must win over
+        # the environment instead of falling through to it.
+        value = self._explicit.get("strict_validation")
+        if value is None:
+            value = _env_bool(_STRICT_VALIDATION_ENV)
+        if value is None:
+            return DEFAULT_STRICT_VALIDATION
+        return value
+
+    @strict_validation.setter
+    def strict_validation(self, value: Union[bool, int, str]) -> None:
+        coerced = _coerce_bool("strict_validation", value)
+        with self._lock:
+            self._explicit["strict_validation"] = coerced
+
+    @property
     def log_level(self) -> Optional[str]:
         return self._explicit.get("log_level") or os.environ.get(_LOG_ENV)
 
@@ -607,6 +667,7 @@ def resolve_config(
     protocol: Optional[str] = None,
     timeout: Optional[float] = None,
     max_retries: Optional[int] = None,
+    strict_validation: Optional[bool] = None,
     config_path: Union[str, Path, None] = None,
 ) -> Config:
     path = (
@@ -702,6 +763,19 @@ def resolve_config(
             f"got {resolved_http_keepalive_expiry}",
         )
 
+    # _coerce_bool rather than bool(): a config.toml written as
+    # strict_validation = "false" would otherwise read as True.
+    resolved_strict_validation = _coerce_bool(
+        "strict_validation",
+        _pick(
+            strict_validation,
+            settings.get_explicit("strict_validation"),
+            _env_bool(_STRICT_VALIDATION_ENV),
+            file_cfg.get("strict_validation"),
+            DEFAULT_STRICT_VALIDATION,
+        ),
+    )
+
     resolved_workspace = _pick(
         workspace,
         settings.get_explicit("workspace"),
@@ -770,4 +844,5 @@ def resolve_config(
         http_max_connections=resolved_http_max_connections,
         http_max_keepalive_connections=resolved_http_max_keepalive,
         http_keepalive_expiry=resolved_http_keepalive_expiry,
+        strict_validation=resolved_strict_validation,
     )

@@ -22,7 +22,17 @@ same for both output shapes.
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from dashscope.errors import check_response, response_json
 from dashscope.resources._blocking import run_blocking
@@ -41,6 +51,9 @@ from dashscope.resources._oss import (
     upload_media_value,
 )
 from dashscope.types.common import with_headers
+
+if TYPE_CHECKING:
+    import httpx
 
 __all__ = [
     "AsyncImages",
@@ -255,7 +268,12 @@ def _build_multimodal_body(
     return body
 
 
-def _parse_sync_job(payload: Dict[str, Any]) -> Job:
+def _parse_sync_job(
+    payload: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional[httpx.Response] = None,
+) -> Job:
     """Wrap a one-shot multimodal answer in the unified Job contract.
 
     A sync response carries no task fields; mark it finished so
@@ -265,7 +283,7 @@ def _parse_sync_job(payload: Dict[str, Any]) -> Job:
     output = payload.get("output")
     if isinstance(output, dict) and not payload.get("code"):
         output.setdefault("task_status", SUCCEEDED)
-    return Job.from_payload(payload)
+    return Job.from_payload(payload, strict=strict, response=response)
 
 
 class ImageJobs:
@@ -513,7 +531,11 @@ class Images:
                 raise_on_error=self._client.raise_on_error,
             )
             return with_headers(
-                _parse_sync_job(response_json(response)),
+                _parse_sync_job(
+                    response_json(response),
+                    strict=self._client.config.strict_validation,
+                    response=response,
+                ),
                 response,
             )
         job = self.jobs.create(
@@ -783,7 +805,11 @@ class AsyncImages:
                 raise_on_error=self._client.raise_on_error,
             )
             return with_headers(
-                _parse_sync_job(response_json(response)),
+                _parse_sync_job(
+                    response_json(response),
+                    strict=self._client.config.strict_validation,
+                    response=response,
+                ),
                 response,
             )
         job = await self.jobs.create(

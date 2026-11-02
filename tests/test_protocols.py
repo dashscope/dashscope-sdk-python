@@ -8,7 +8,11 @@ import httpx
 import pytest
 
 from dashscope import Client
-from dashscope.errors import BadRequestError, DashScopeError
+from dashscope.errors import (
+    APIResponseValidationError,
+    BadRequestError,
+    DashScopeError,
+)
 from dashscope.protocols import (
     AnthropicProtocol,
     NativeProtocol,
@@ -16,6 +20,7 @@ from dashscope.protocols import (
     get_protocol,
 )
 from dashscope.protocols.base import ChatRequest
+from dashscope.types.completions import parse_chunk, parse_completion
 
 BASE_URL = "https://api.test.local/api/v1"
 CHAT_PATH = "/api/v1/services/aigc/text-generation/generation"
@@ -1880,3 +1885,133 @@ def test_openai_stream_usage_details_reach_the_caller():
     assert usage.total_tokens == 120
     assert usage.prompt_tokens_details == {"cached_tokens": 64}
     assert usage.completion_tokens_details == {"reasoning_tokens": 12}
+
+
+# --------------------------------------------------------------------------
+# Response drift: every adapter degrades rather than leaking a bare
+# pydantic ValidationError, and honours strict_validation when asked.
+# --------------------------------------------------------------------------
+
+_NATIVE_DRIFT = {
+    "request_id": "r1",
+    "output": {"text": "hi"},
+    "usage": "unlimited",
+}
+_OPENAI_DRIFT = {
+    "id": "chatcmpl-1",
+    "model": "qwen-plus",
+    "choices": [
+        {"index": 0, "message": {"role": "assistant", "content": "hi"}},
+    ],
+    "usage": "unlimited",
+}
+_ANTHROPIC_DRIFT = {
+    "id": "msg-1",
+    "model": "claude-x",
+    "content": [{"type": "text", "text": "hi"}],
+    "usage": "unlimited",
+}
+_ANTHROPIC_EVENT = {
+    "type": "message_start",
+    "message": {"id": "msg-1", "usage": {"input_tokens": "many"}},
+}
+
+
+def test_native_free_functions_degrade_a_drifted_usage():
+    completion = parse_completion(_NATIVE_DRIFT)
+    assert completion.output_text == "hi"
+    assert completion.request_id == "r1"
+    assert completion.usage is None
+    chunk = parse_chunk(_NATIVE_DRIFT)
+    assert chunk.delta.content == "hi"
+    assert chunk.usage is None
+
+
+def test_every_adapter_degrades_a_drifted_usage():
+    cases = [
+        (NativeProtocol(), _NATIVE_DRIFT, "hi"),
+        (OpenAIProtocol(), _OPENAI_DRIFT, "hi"),
+        (AnthropicProtocol(), _ANTHROPIC_DRIFT, "hi"),
+    ]
+    for protocol, body, expected in cases:
+        completion = protocol.parse_completion(body)
+        assert completion.output_text == expected, protocol.name
+        assert completion.usage is None, protocol.name
+
+
+def test_strict_validation_raises_a_catchable_error_per_adapter():
+    cases = [
+        (NativeProtocol(), _NATIVE_DRIFT),
+        (OpenAIProtocol(), _OPENAI_DRIFT),
+        (AnthropicProtocol(), _ANTHROPIC_DRIFT),
+    ]
+    for protocol, body in cases:
+        with pytest.raises(APIResponseValidationError) as excinfo:
+            protocol.parse_completion(body, strict_validation=True)
+        error = excinfo.value
+        # The point of the flag: a caller's ``except DashScopeError``
+        # catches a parse failure instead of a bare ValidationError.
+        assert isinstance(error, DashScopeError), protocol.name
+        assert error.body["usage"] == "unlimited", protocol.name
+        assert error.cause is not None, protocol.name
+
+
+def test_the_default_parser_degrades_and_the_flag_overrides_it():
+    protocol = AnthropicProtocol()
+    lenient = protocol.make_chunk_parser()
+    chunk = lenient(_ANTHROPIC_EVENT)
+    assert chunk is not None
+    assert chunk.usage is not None
+    assert chunk.usage.input_tokens == 0
+
+    strict = protocol.make_chunk_parser(strict_validation=True)
+    with pytest.raises(APIResponseValidationError):
+        strict(_ANTHROPIC_EVENT)
+
+    # parse_chunk keeps one shared stateful parser, so the mode is a
+    # per-call override rather than a rebuilt parser.
+    with pytest.raises(APIResponseValidationError):
+        protocol.parse_chunk(_ANTHROPIC_EVENT, strict_validation=True)
+    assert protocol.parse_chunk(_ANTHROPIC_EVENT) is not None
+
+
+def test_native_chunk_parser_honours_strict_validation():
+    parse = NativeProtocol().make_chunk_parser(strict_validation=True)
+    with pytest.raises(APIResponseValidationError):
+        parse(_NATIVE_DRIFT)
+    lenient = NativeProtocol().make_chunk_parser()
+    assert lenient(_NATIVE_DRIFT).usage is None
+
+
+def test_openai_drifted_usage_counters_do_not_raise_type_error():
+    # Summing a string counter used to blow up inside the adapter,
+    # before the model layer that repairs it ever ran.
+    completion = OpenAIProtocol().parse_completion(
+        {
+            "id": "chatcmpl-1",
+            "choices": [],
+            "usage": {"prompt_tokens": "many", "completion_tokens": 3},
+        },
+    )
+    usage = completion.usage
+    assert usage is not None
+    assert usage.input_tokens == 0
+    assert usage.output_tokens == 3
+    # The derived total falls back to Usage's own default rather than
+    # being summed from a value that is not a number.
+    assert usage.total_tokens == 0
+
+
+def test_anthropic_drifted_usage_counters_do_not_raise_type_error():
+    completion = AnthropicProtocol().parse_completion(
+        {
+            "id": "msg-1",
+            "content": [],
+            "usage": {"input_tokens": "many", "output_tokens": 2},
+        },
+    )
+    usage = completion.usage
+    assert usage is not None
+    assert usage.input_tokens == 0
+    assert usage.output_tokens == 2
+    assert usage.total_tokens == 0

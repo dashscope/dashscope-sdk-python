@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional
 
 from pydantic import AliasChoices, Field
 
@@ -15,11 +15,15 @@ from dashscope.errors import (
     response_json,
 )
 from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     ResponseBase,
     response_envelope,
     with_headers,
 )
+
+if TYPE_CHECKING:
+    import httpx
 
 _BASE_PATH = "/models"
 
@@ -54,7 +58,12 @@ class ModelList(ResponseBase):
     models: List[Model] = []
 
 
-def _parse_list(body: Dict[str, Any]) -> ModelList:
+def _parse_list(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional[httpx.Response] = None,
+) -> ModelList:
     # ``get`` is this same endpoint filtered by query params, and the
     # native envelope nests its page under ``output``; ``data`` stays
     # accepted for gateways that re-wrap the page OpenAI-style.
@@ -66,12 +75,17 @@ def _parse_list(body: Dict[str, Any]) -> ModelList:
         total = data.get("total", len(models))
     else:
         models, page_no, page_size, total = data, 1, 10, len(data)
-    return ModelList(
-        page_no=page_no,
-        page_size=page_size,
-        total_count=total,
-        models=models,
-        **response_envelope(body),
+    return parse_model(
+        ModelList,
+        {
+            "page_no": page_no,
+            "page_size": page_size,
+            "total_count": total,
+            "models": models,
+            **response_envelope(body),
+        },
+        strict=strict,
+        response=response,
     )
 
 
@@ -128,7 +142,11 @@ class Models:
             ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        result = _parse_list(response_json(response))
+        result = _parse_list(
+            response_json(response),
+            strict=self._client.config.strict_validation,
+            response=response,
+        )
         if provider:
             result.models = [
                 m for m in result.models if _match_provider(m, provider)
@@ -172,9 +190,25 @@ class Models:
                     body=body,
                     headers=response.headers,
                 )
-            return with_headers(Model(**response_envelope(body)), response)
+            return with_headers(
+                parse_model(
+                    Model,
+                    response_envelope(body),
+                    strict=self._client.config.strict_validation,
+                    response=response,
+                ),
+                response,
+            )
         return with_headers(
-            Model(**models[0], **response_envelope(body)),
+            parse_model(
+                Model,
+                # Dict merge, not ``**`` twice: a wire entry carrying an
+                # envelope key of its own would otherwise raise a
+                # duplicate-keyword TypeError instead of being parsed.
+                {**models[0], **response_envelope(body)},
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
             response,
         )
 
@@ -211,7 +245,11 @@ class AsyncModels:
             ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        result = _parse_list(response_json(response))
+        result = _parse_list(
+            response_json(response),
+            strict=self._client.config.strict_validation,
+            response=response,
+        )
         if provider:
             result.models = [
                 m for m in result.models if _match_provider(m, provider)
@@ -255,8 +293,24 @@ class AsyncModels:
                     body=body,
                     headers=response.headers,
                 )
-            return with_headers(Model(**response_envelope(body)), response)
+            return with_headers(
+                parse_model(
+                    Model,
+                    response_envelope(body),
+                    strict=self._client.config.strict_validation,
+                    response=response,
+                ),
+                response,
+            )
         return with_headers(
-            Model(**models[0], **response_envelope(body)),
+            parse_model(
+                Model,
+                # Dict merge, not ``**`` twice: a wire entry carrying an
+                # envelope key of its own would otherwise raise a
+                # duplicate-keyword TypeError instead of being parsed.
+                {**models[0], **response_envelope(body)},
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
             response,
         )

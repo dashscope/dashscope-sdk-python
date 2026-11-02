@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import (
+    TYPE_CHECKING,
     Any,
     Awaitable,
     Callable,
@@ -33,6 +34,7 @@ from dashscope.errors import (
     response_json,
 )
 from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     ResponseBase,
     Usage,
@@ -40,6 +42,9 @@ from dashscope.types.common import (
     response_envelope,
     with_headers,
 )
+
+if TYPE_CHECKING:
+    import httpx
 
 __all__ = [
     "AsyncJobs",
@@ -158,10 +163,20 @@ class Job(ResponseBase):
 
     @property
     def results(self) -> List[JobResult]:
+        """Artifacts the task produced.
+
+        Always degrades rather than raising: a property has no client to
+        read ``strict_validation`` from and no response to attach, so the
+        strict check belongs to the parse boundary that built this Job.
+        """
         items = (self.output or {}).get("results") or []
         if not items:
             items = _image_choices(self.output or {})
-        return [JobResult(**item) for item in items if isinstance(item, dict)]
+        return [
+            parse_model(JobResult, item)
+            for item in items
+            if isinstance(item, dict)
+        ]
 
     @property
     def image_urls(self) -> List[str]:
@@ -181,13 +196,24 @@ class Job(ResponseBase):
         return output.get("url") or self.video_url
 
     @classmethod
-    def from_payload(cls, body: Dict[str, Any]) -> "Job":
+    def from_payload(
+        cls,
+        body: Dict[str, Any],
+        *,
+        strict: bool = False,
+        response: Optional[httpx.Response] = None,
+    ) -> "Job":
         output = body.get("output")
         payload = flatten_envelope(body)
         payload["output"] = output if isinstance(output, dict) else None
         if not isinstance(payload.get("usage"), dict):
             payload.pop("usage", None)
-        return cls(**payload)
+        return parse_model(
+            cls,
+            payload,
+            strict=strict,
+            response=response,
+        )
 
 
 class JobList(ResponseBase):
@@ -203,18 +229,33 @@ class JobList(ResponseBase):
     tasks: List[Job] = []
 
     @classmethod
-    def from_payload(cls, body: Dict[str, Any]) -> "JobList":
+    def from_payload(
+        cls,
+        body: Dict[str, Any],
+        *,
+        strict: bool = False,
+        response: Optional[httpx.Response] = None,
+    ) -> "JobList":
         # The list endpoint answers flat (no ``output`` wrapper), but
         # flatten_envelope also accepts an output-wrapped variant.
         data = flatten_envelope(body)
-        tasks = data.pop("tasks", None) or []
+        tasks = data.pop("tasks", None)
+        # A retyped ``tasks`` would blow up in the comprehension below,
+        # ahead of the model layer that repairs the field.
+        if not isinstance(tasks, list):
+            tasks = []
         items = [task for task in tasks if isinstance(task, dict)]
-        return cls(
-            page_no=data.get("page_no", 1),
-            page_size=data.get("page_size", 10),
-            total=data.get("total", len(items)),
-            tasks=items,
-            **response_envelope(data),
+        return parse_model(
+            cls,
+            {
+                "page_no": data.get("page_no", 1),
+                "page_size": data.get("page_size", 10),
+                "total": data.get("total", len(items)),
+                "tasks": items,
+                **response_envelope(data),
+            },
+            strict=strict,
+            response=response,
         )
 
 
@@ -404,7 +445,11 @@ class Jobs:
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            JobList.from_payload(response_json(response)),
+            JobList.from_payload(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
             response,
         )
 
@@ -477,7 +522,14 @@ class Jobs:
 
     def _parse(self, response: Any) -> Job:
         payload = response_json(response)
-        job = with_headers(Job.from_payload(payload), response)
+        job = with_headers(
+            Job.from_payload(
+                payload,
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
         if job.status == FAILED and self._client.raise_on_error:
             raise error_from_business_code(
                 message=job.message or f"task {job.task_id} failed",
@@ -653,7 +705,11 @@ class AsyncJobs:
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            JobList.from_payload(response_json(response)),
+            JobList.from_payload(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
             response,
         )
 
@@ -713,7 +769,14 @@ class AsyncJobs:
 
     def _parse(self, response: Any) -> Job:
         payload = response_json(response)
-        job = with_headers(Job.from_payload(payload), response)
+        job = with_headers(
+            Job.from_payload(
+                payload,
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
         if job.status == FAILED and self._client.raise_on_error:
             raise error_from_business_code(
                 message=job.message or f"task {job.task_id} failed",

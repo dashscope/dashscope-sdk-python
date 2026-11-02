@@ -283,6 +283,7 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_WEBSOCKET_BASE_URL` | Override the WebSocket endpoint | derived from region/workspace |
 | `DASHSCOPE_TIMEOUT` | Request timeout (seconds) | `300` |
 | `DASHSCOPE_MAX_RETRIES` | Automatic retries | `2` |
+| `DASHSCOPE_STRICT_VALIDATION` | Raise on a response body that does not fit its typed model instead of degrading it | `false` |
 | `DASHSCOPE_HTTP_MAX_CONNECTIONS` | Connection-pool size | `100` |
 | `DASHSCOPE_HTTP_MAX_KEEPALIVE_CONNECTIONS` | Keep-alive connections held in the pool | `20` |
 | `DASHSCOPE_HTTP_KEEPALIVE_EXPIRY` | Keep-alive expiry (seconds) | `5.0` |
@@ -291,6 +292,8 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_API_KEY_FILE_PATH` | Path to the 1.x key file (lowest-priority auth tier) | `~/.dashscope/api_key` |
 
 The three `DASHSCOPE_HTTP_*` pool variables are also settable as `http_max_connections`, `http_max_keepalive_connections` and `http_keepalive_expiry` in `settings` and `config.toml`. Passing your own `http_client=` takes precedence over all of them.
+
+By default a response body that does not fit the SDK's typed models is parsed in degraded form — the offending fields fall back to their defaults and the rest of the payload stays usable — with the drift recorded at `DEBUG` on the `dashscope._logging.parse` logger. Set `DASHSCOPE_STRICT_VALIDATION=true` (or `Client(strict_validation=True)`, `settings.strict_validation = True`, `strict_validation = true` in `config.toml`) to raise `APIResponseValidationError` instead, which is what you want in CI or contract tests. Strict validation raises even under `raise_on_error=False`: that flag governs service errors, this one governs parse errors.
 
 **Config file** (`~/.dashscope/config.toml`):
 

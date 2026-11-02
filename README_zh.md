@@ -283,6 +283,7 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_WEBSOCKET_BASE_URL` | 覆盖 WebSocket 端点 | 由地域/业务空间推导 |
 | `DASHSCOPE_TIMEOUT` | 请求超时（秒） | `300` |
 | `DASHSCOPE_MAX_RETRIES` | 自动重试次数 | `2` |
+| `DASHSCOPE_STRICT_VALIDATION` | 响应体与类型模型不符时抛错，而不是降级解析 | `false` |
 | `DASHSCOPE_HTTP_MAX_CONNECTIONS` | 连接池大小 | `100` |
 | `DASHSCOPE_HTTP_MAX_KEEPALIVE_CONNECTIONS` | 连接池保持的 keep-alive 连接数 | `20` |
 | `DASHSCOPE_HTTP_KEEPALIVE_EXPIRY` | keep-alive 过期时间（秒） | `5.0` |
@@ -291,6 +292,8 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_API_KEY_FILE_PATH` | 1.x key 文件路径（优先级最低的鉴权层） | `~/.dashscope/api_key` |
 
 三个 `DASHSCOPE_HTTP_*` 连接池变量同样可以在 `settings` 和 `config.toml` 中以 `http_max_connections`、`http_max_keepalive_connections`、`http_keepalive_expiry` 设置。传入自备的 `http_client=` 时，以它为准，上述配置全部被忽略。
+
+默认情况下，若响应体与 SDK 的类型模型不符，会走降级解析——出问题的字段回退到各自的默认值，报文中其余部分照常可用——同时把漂移以 `DEBUG` 级别记录到 `dashscope._logging.parse` 这个 logger。设置 `DASHSCOPE_STRICT_VALIDATION=true`（或 `Client(strict_validation=True)`、`settings.strict_validation = True`、`config.toml` 里的 `strict_validation = true`）则改为抛出 `APIResponseValidationError`，这正是 CI 或契约测试想要的行为。严格校验即使在 `raise_on_error=False` 下也会抛错：那个开关管的是服务端错误，这个管的是解析错误。
 
 **配置文件**（`~/.dashscope/config.toml`）：
 

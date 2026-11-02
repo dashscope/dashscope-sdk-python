@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Any, Dict, List, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional
 
 from pydantic import AliasChoices, Field
 
@@ -20,11 +20,15 @@ from dashscope.errors import (
     response_json,
 )
 from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     ResponseBase,
     response_envelope,
     with_headers,
 )
+
+if TYPE_CHECKING:
+    import httpx
 
 _BASE_PATH = "/files"
 
@@ -81,18 +85,40 @@ class DeletionStatus(ResponseBase):
     deleted: bool = False
 
 
-def _parse_upload(body: Dict[str, Any]) -> File:
+def _parse_upload(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional[httpx.Response] = None,
+) -> File:
     data = body.get("data") or {}
     if not isinstance(data, dict):
-        return File(**response_envelope(body))
+        return parse_model(
+            File,
+            response_envelope(body),
+            strict=strict,
+            response=response,
+        )
     if "uploaded_files" in data:
         # The endpoint always answers with a list even though one file went up.
         uploaded = data["uploaded_files"] or []
         data = uploaded[0] if uploaded else {}
-    return File(**data, **response_envelope(body))
+    # Dict merge, not ``**`` twice: a record carrying an envelope key of
+    # its own would otherwise raise a duplicate-keyword TypeError.
+    return parse_model(
+        File,
+        {**data, **response_envelope(body)},
+        strict=strict,
+        response=response,
+    )
 
 
-def _parse_list(body: Dict[str, Any]) -> FileList:
+def _parse_list(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional[httpx.Response] = None,
+) -> FileList:
     data = body.get("data") or {}
     if isinstance(data, dict):
         files = data.get("files") or []
@@ -101,28 +127,58 @@ def _parse_list(body: Dict[str, Any]) -> FileList:
         total = data.get("total", len(files))
     else:
         files, page_no, page_size, total = data, 1, 10, len(data)
-    return FileList(
-        page_no=page_no,
-        page_size=page_size,
-        total_count=total,
-        files=files,
-        **response_envelope(body),
+    return parse_model(
+        FileList,
+        {
+            "page_no": page_no,
+            "page_size": page_size,
+            "total_count": total,
+            "files": files,
+            **response_envelope(body),
+        },
+        strict=strict,
+        response=response,
     )
 
 
-def _parse_file(body: Dict[str, Any]) -> File:
+def _parse_file(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional[httpx.Response] = None,
+) -> File:
     data = body.get("data") or {}
     if not isinstance(data, dict):
-        return File(**response_envelope(body))
-    return File(**data, **response_envelope(body))
+        return parse_model(
+            File,
+            response_envelope(body),
+            strict=strict,
+            response=response,
+        )
+    return parse_model(
+        File,
+        {**data, **response_envelope(body)},
+        strict=strict,
+        response=response,
+    )
 
 
-def _parse_delete(body: Dict[str, Any]) -> DeletionStatus:
+def _parse_delete(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional[httpx.Response] = None,
+) -> DeletionStatus:
     data = body.get("data") or {}
     deleted = True
     if isinstance(data, dict) and "deleted" in data:
         deleted = bool(data["deleted"])
-    return DeletionStatus(deleted=deleted, **response_envelope(body))
+    return parse_model(
+        DeletionStatus,
+        {"deleted": deleted, **response_envelope(body)},
+        strict=strict,
+        response=response,
+    )
 
 
 def _is_valid_jsonl(file_path: str) -> bool:
@@ -242,7 +298,14 @@ class Files:
             ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_upload(response_json(response)), response)
+        return with_headers(
+            _parse_upload(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     def list(
         self,
@@ -271,7 +334,14 @@ class Files:
             ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response_json(response)), response)
+        return with_headers(
+            _parse_list(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     def get(
         self,
@@ -302,7 +372,14 @@ class Files:
             response,
             raise_on_error=self._client.raise_on_error,
         )
-        return with_headers(_parse_file(response_json(response)), response)
+        return with_headers(
+            _parse_file(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     def delete(
         self,
@@ -333,7 +410,14 @@ class Files:
             response,
             raise_on_error=self._client.raise_on_error,
         )
-        return with_headers(_parse_delete(response_json(response)), response)
+        return with_headers(
+            _parse_delete(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
 
 class AsyncFiles:
@@ -371,7 +455,14 @@ class AsyncFiles:
             ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_upload(response_json(response)), response)
+        return with_headers(
+            _parse_upload(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     async def list(
         self,
@@ -400,7 +491,14 @@ class AsyncFiles:
             ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response_json(response)), response)
+        return with_headers(
+            _parse_list(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     async def get(
         self,
@@ -431,7 +529,14 @@ class AsyncFiles:
             response,
             raise_on_error=self._client.raise_on_error,
         )
-        return with_headers(_parse_file(response_json(response)), response)
+        return with_headers(
+            _parse_file(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     async def delete(
         self,
@@ -462,4 +567,11 @@ class AsyncFiles:
             response,
             raise_on_error=self._client.raise_on_error,
         )
-        return with_headers(_parse_delete(response_json(response)), response)
+        return with_headers(
+            _parse_delete(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )

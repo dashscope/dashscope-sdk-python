@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from typing import (
+    TYPE_CHECKING,
     Any,
     Dict,
     Iterator,
@@ -33,6 +34,7 @@ from dashscope.resources._oss import (
 from dashscope.resources.chat._params import (
     should_modify_incremental_output,
 )
+from dashscope.types._parse import parse_model
 from dashscope.types.common import Usage, with_headers
 from dashscope.types.completions import (
     ChatCompletion,
@@ -52,6 +54,9 @@ from dashscope.types.messages import (
     has_media_parts,
     normalize_messages,
 )
+
+if TYPE_CHECKING:
+    import httpx
 
 __all__ = [
     "AsyncChatStream",
@@ -225,10 +230,14 @@ class ChatStream:
         *,
         merge_incremental: bool = False,
         server_cumulative: bool = False,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> None:
         self._inner = inner
         self._merge = merge_incremental
         self._server_cumulative = server_cumulative
+        self._strict_validation = strict_validation
+        self._response = response
 
     def __iter__(self) -> Iterator[ChatCompletionChunk]:
         if self._merge:
@@ -258,7 +267,11 @@ class ChatStream:
 
     def get_final_message(self) -> ChatCompletion:
         if self._merge or self._server_cumulative:
-            final = _final_from_cumulative(list(self))
+            final = _final_from_cumulative(
+                list(self),
+                strict_validation=self._strict_validation,
+                response=self._response,
+            )
         else:
             final = _aggregate(self)
         final.headers = self.headers
@@ -280,10 +293,14 @@ class AsyncChatStream:
         *,
         merge_incremental: bool = False,
         server_cumulative: bool = False,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> None:
         self._inner = inner
         self._merge = merge_incremental
         self._server_cumulative = server_cumulative
+        self._strict_validation = strict_validation
+        self._response = response
 
     def __aiter__(self):
         if self._merge:
@@ -328,7 +345,11 @@ class AsyncChatStream:
     async def get_final_message(self) -> ChatCompletion:
         chunks = [chunk async for chunk in self]
         if self._merge or self._server_cumulative:
-            final = _final_from_cumulative(chunks)
+            final = _final_from_cumulative(
+                chunks,
+                strict_validation=self._strict_validation,
+                response=self._response,
+            )
         else:
             final = _aggregate(chunks)
         final.headers = self.headers
@@ -468,7 +489,10 @@ def _cumulative_chunk(
             signature = _signature_from_blocks(slot["reasoning_blocks"])
         # model_copy keeps provider extras the rebuild would otherwise
         # drop (delta-level omni audio); accumulated logprobs override
-        # the current frame's fragment.
+        # the current frame's fragment. It bypasses validation on
+        # purpose: every value here was accumulated from chunks that
+        # already went through parse_model, so there is nothing left to
+        # repair and strict mode has already had its say per event.
         new_delta = choice.delta.model_copy(
             update={
                 "role": slot["role"],
@@ -497,6 +521,9 @@ def _accumulate_chunks(
 
 def _final_from_cumulative(
     chunks: List[ChatCompletionChunk],
+    *,
+    strict_validation: bool = False,
+    response: Optional[httpx.Response] = None,
 ) -> ChatCompletion:
     """Final message for a cumulative stream: per choice, its last snapshot.
 
@@ -531,12 +558,22 @@ def _final_from_cumulative(
             tool_calls=choice.delta.tool_calls,
             **(choice.delta.model_extra or {}),
         )
+        # Extras first, so a wire field that collides with a computed one
+        # (a chunk carrying both ``delta`` and ``message`` puts the latter
+        # in ``model_extra``) is overridden instead of raising a
+        # duplicate-keyword TypeError -- and so a drifted extra is
+        # repaired rather than escaping as a bare ValidationError.
         choices.append(
-            Choice(
-                index=index,
-                finish_reason=choice.finish_reason,
-                message=message,
-                **(choice.model_extra or {}),
+            parse_model(
+                Choice,
+                {
+                    **(choice.model_extra or {}),
+                    "index": index,
+                    "finish_reason": choice.finish_reason,
+                    "message": message,
+                },
+                strict=strict_validation,
+                response=response,
             ),
         )
     return ChatCompletion(
@@ -646,13 +683,21 @@ def _checked_completion(
         return None
     if client.raise_on_error:
         raise error
-    return ChatCompletion(
-        request_id=error.request_id,
-        status_code=error.status_code,
-        code=error.code,
-        message=error.message,
-        is_error=True,
-        headers=dict(response.headers),
+    # The envelope fields are lifted straight off the body, so a gateway
+    # that types ``code`` as a number would otherwise escape as a bare
+    # ValidationError on the very path meant to avoid raising.
+    return parse_model(
+        ChatCompletion,
+        {
+            "request_id": error.request_id,
+            "status_code": error.status_code,
+            "code": error.code,
+            "message": error.message,
+            "is_error": True,
+            "headers": dict(response.headers),
+        },
+        strict=client.config.strict_validation,
+        response=response,
     )
 
 
@@ -685,9 +730,17 @@ def _send(
             options=options,
         )
         return ChatStream(
-            Stream(response, client.protocol.make_chunk_parser()),
+            Stream(
+                response,
+                client.protocol.make_chunk_parser(
+                    strict_validation=client.config.strict_validation,
+                    response=response,
+                ),
+            ),
             merge_incremental=merge_incremental,
             server_cumulative=server_cumulative,
+            strict_validation=client.config.strict_validation,
+            response=response,
         )
     response = transport.request(
         "POST",
@@ -705,7 +758,11 @@ def _send(
     if error_result is not None:
         return error_result
     return with_headers(
-        client.protocol.parse_completion(response_json(response)),
+        client.protocol.parse_completion(
+            response_json(response),
+            strict_validation=client.config.strict_validation,
+            response=response,
+        ),
         response,
     )
 
@@ -739,9 +796,17 @@ async def _asend(
             options=options,
         )
         return AsyncChatStream(
-            AsyncStream(response, client.protocol.make_chunk_parser()),
+            AsyncStream(
+                response,
+                client.protocol.make_chunk_parser(
+                    strict_validation=client.config.strict_validation,
+                    response=response,
+                ),
+            ),
             merge_incremental=merge_incremental,
             server_cumulative=server_cumulative,
+            strict_validation=client.config.strict_validation,
+            response=response,
         )
     response = await transport.request(
         "POST",
@@ -759,7 +824,11 @@ async def _asend(
     if error_result is not None:
         return error_result
     return with_headers(
-        client.protocol.parse_completion(response_json(response)),
+        client.protocol.parse_completion(
+            response_json(response),
+            strict_validation=client.config.strict_validation,
+            response=response,
+        ),
         response,
     )
 

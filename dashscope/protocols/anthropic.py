@@ -29,14 +29,27 @@ streams on one client stay isolated.
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from dashscope.errors import BadRequestError, DashScopeError, ErrorCode
 from dashscope.protocols.base import ChatProtocol, ChatRequest
+from dashscope.types._parse import parse_model
 from dashscope.types.completions import (
     ChatCompletion,
     ChatCompletionChunk,
 )
+
+if TYPE_CHECKING:
+    import httpx
 
 __all__ = [
     "AnthropicProtocol",
@@ -361,7 +374,7 @@ def _apply_extra_parameters(
     body.update(extra_parameters)
 
 
-def _canonical_usage(usage: Dict[str, Any]) -> Dict[str, Any]:
+def _canonical_usage(usage: Any) -> Any:
     """Usage bag with the derived ``total_tokens`` filled in.
 
     Anthropic already spells the canonical counters ``input_tokens`` /
@@ -371,13 +384,38 @@ def _canonical_usage(usage: Dict[str, Any]) -> Dict[str, Any]:
     streaming parser, which accumulates the whole bag across events —
     reducing it to three numbers would silently drop billing detail the
     caller cannot recover.
+
+    A bag that is not a mapping is passed through untouched so
+    ``parse_model`` can degrade the field; ``dict()`` on it here would
+    raise before the model layer ever saw the drift.
     """
+    if not isinstance(usage, dict):
+        return usage
     canonical = dict(usage)
-    canonical["total_tokens"] = usage.get("input_tokens", 0) + usage.get(
-        "output_tokens",
-        0,
-    )
+    counted = (usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+    # Summing a drifted counter (``"input_tokens": "many"``) would raise
+    # TypeError here, ahead of the model layer that repairs it; leave the
+    # total absent so ``Usage`` falls back to its own default.
+    if all(isinstance(value, int) for value in counted):
+        canonical["total_tokens"] = sum(counted)
     return canonical
+
+
+def _merge_usage(accumulated: Dict[str, Any], incoming: Any) -> Any:
+    """Fold one event's usage bag into the running total.
+
+    A bag that is not a mapping cannot be accumulated, and
+    ``dict.update()`` on it would raise ``ValueError``/``TypeError``
+    mid-stream -- outside any ``except DashScopeError`` the caller has.
+    It is passed through untouched, the same way ``_canonical_usage``
+    does, so ``parse_model`` gets to degrade the field.
+    """
+    if not isinstance(incoming, dict):
+        return incoming
+    if not incoming:
+        return None
+    accumulated.update(incoming)
+    return dict(accumulated)
 
 
 class _StreamParser:
@@ -388,12 +426,33 @@ class _StreamParser:
     parser instance; sharing one would mix chunks across streams.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
+    ) -> None:
         self._tools: Dict[int, Dict[str, Any]] = {}
         self._thinking: Dict[int, Dict[str, Any]] = {}
         self._usage: Dict[str, int] = {}
+        self._strict_validation = strict_validation
+        self._response = response
 
-    def parse(self, payload: Dict[str, Any]) -> Optional[ChatCompletionChunk]:
+    def parse(
+        self,
+        payload: Dict[str, Any],
+        *,
+        strict_validation: Optional[bool] = None,
+        response: Optional[httpx.Response] = None,
+    ) -> Optional[ChatCompletionChunk]:
+        """Translate one SSE event.
+
+        ``strict_validation=None`` keeps the mode this parser was built
+        with: it holds per-stream accumulation state, so a sequential
+        caller that wants a different mode for one event overrides it
+        here instead of forcing a fresh (stateless) parser. ``response``
+        overrides the same way, and only feeds a strict-mode failure.
+        """
         handlers = {
             "message_start": self._message_start,
             "content_block_start": self._block_start,
@@ -414,15 +473,22 @@ class _StreamParser:
             return None
         request_id, model, choices, usage = parsed
         if usage is not None:
-            usage["total_tokens"] = usage.get(
-                "input_tokens",
-                0,
-            ) + usage.get("output_tokens", 0)
-        return ChatCompletionChunk(
-            request_id=request_id,
-            model=model,
-            choices=choices,
-            usage=usage,
+            usage = _canonical_usage(usage)
+        strict = (
+            self._strict_validation
+            if strict_validation is None
+            else strict_validation
+        )
+        return parse_model(
+            ChatCompletionChunk,
+            {
+                "request_id": request_id,
+                "model": model,
+                "choices": choices,
+                "usage": usage,
+            },
+            strict=strict,
+            response=response if response is not None else self._response,
         )
 
     def _message_start(self, payload: Dict[str, Any]):
@@ -430,11 +496,7 @@ class _StreamParser:
         self._tools = {}
         self._thinking = {}
         self._usage = {}
-        usage: Optional[Dict[str, Any]] = None
-        start_usage = message.get("usage") or {}
-        if start_usage:
-            self._usage.update(start_usage)
-            usage = dict(self._usage)
+        usage = _merge_usage(self._usage, message.get("usage"))
         return (
             message.get("id") or payload.get("id"),
             message.get("model") or payload.get("model"),
@@ -544,12 +606,8 @@ class _StreamParser:
 
     def _message_delta(self, payload: Dict[str, Any]):
         choices: List[Dict[str, Any]] = []
-        usage: Optional[Dict[str, Any]] = None
         stop_reason = (payload.get("delta") or {}).get("stop_reason")
-        end_usage = payload.get("usage") or {}
-        if end_usage:
-            self._usage.update(end_usage)
-            usage = dict(self._usage)
+        usage = _merge_usage(self._usage, payload.get("usage"))
         if stop_reason is not None:
             choices.append(
                 {
@@ -592,9 +650,15 @@ class AnthropicProtocol(ChatProtocol):
 
     def make_chunk_parser(
         self,
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> Callable[[Dict[str, Any]], Optional[ChatCompletionChunk]]:
         """Return a fresh parser so concurrent streams stay isolated."""
-        return _StreamParser().parse
+        return _StreamParser(
+            strict_validation=strict_validation,
+            response=response,
+        ).parse
 
     def build_chat_request(
         self,
@@ -703,12 +767,23 @@ class AnthropicProtocol(ChatProtocol):
             headers={"anthropic-version": self.API_VERSION},
         )
 
-    def parse_completion(self, payload: Dict[str, Any]) -> ChatCompletion:
+    def parse_completion(
+        self,
+        payload: Dict[str, Any],
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
+    ) -> ChatCompletion:
         text_parts: List[str] = []
         thinking_parts: List[str] = []
         thinking_blocks: List[Dict[str, Any]] = []
         tool_calls: List[Dict[str, Any]] = []
         for block in payload.get("content") or []:
+            if not isinstance(block, dict):
+                # ``block.get`` on a drifted element (a bare string)
+                # would escape as an AttributeError before parse_model
+                # ever saw the body; there is nothing to translate.
+                continue
             if block.get("type") == "text":
                 text_parts.append(block.get("text", ""))
             elif block.get("type") == "thinking":
@@ -755,26 +830,38 @@ class AnthropicProtocol(ChatProtocol):
             message["tool_calls"] = tool_calls
         stop_reason = payload.get("stop_reason")
         usage = payload.get("usage") or {}
-        return ChatCompletion(
-            request_id=payload.get("id"),
-            model=payload.get("model"),
-            choices=[
-                {
-                    "index": 0,
-                    "finish_reason": _STOP_REASON_MAP.get(
-                        stop_reason,
-                        stop_reason,
-                    ),
-                    "message": message,
-                },
-            ],
-            usage=_canonical_usage(usage) if usage else None,
+        return parse_model(
+            ChatCompletion,
+            {
+                "request_id": payload.get("id"),
+                "model": payload.get("model"),
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": _STOP_REASON_MAP.get(
+                            stop_reason,
+                            stop_reason,
+                        ),
+                        "message": message,
+                    },
+                ],
+                "usage": _canonical_usage(usage) if usage else None,
+            },
+            strict=strict_validation,
+            response=response,
         )
 
     def parse_chunk(
         self,
         payload: Dict[str, Any],
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> Optional[ChatCompletionChunk]:
         # Sequential convenience path for direct calls; resources take
         # a per-stream parser from make_chunk_parser() instead.
-        return self._default_parser.parse(payload)
+        return self._default_parser.parse(
+            payload,
+            strict_validation=strict_validation,
+            response=response,
+        )

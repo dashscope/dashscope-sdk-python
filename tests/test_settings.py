@@ -30,6 +30,7 @@ def clean(monkeypatch):
         "DASHSCOPE_REGION",
         "DASHSCOPE_WEBSOCKET_BASE_URL",
         "DASHSCOPE_PROTOCOL",
+        "DASHSCOPE_STRICT_VALIDATION",
         "DASHSCOPE_LOG",
         "DASHSCOPE_CONFIG",
     ):
@@ -59,6 +60,7 @@ def test_defaults(clean):
     assert settings.protocol == "native"
     assert settings.websocket_base_url is None
     assert settings.log_level is None
+    assert settings.strict_validation is False
 
 
 def test_base_url_default_is_native_regardless_of_protocol(clean):
@@ -158,6 +160,43 @@ def test_setter_validation(clean):
         settings.max_retries = -1
     with pytest.raises(TypeError, match="base_url must be a string"):
         settings.base_url = 123
+
+
+def test_strict_validation_lazy_env_and_setter(clean):
+    assert settings.strict_validation is False
+    clean.setenv("DASHSCOPE_STRICT_VALIDATION", "true")
+    assert settings.strict_validation is True
+    settings.strict_validation = False
+    # An explicit False has to win over the env: a truthiness check here
+    # would fall through to it and report True.
+    assert settings.strict_validation is False
+    settings.clear()
+    assert settings.strict_validation is True
+
+
+def test_strict_validation_setter_uses_the_env_truth_table(clean):
+    for raw, expected in (
+        ("0", False),
+        ("off", False),
+        (0, False),
+        (1, True),
+        ("yes", True),
+        (True, True),
+    ):
+        settings.strict_validation = raw
+        assert settings.strict_validation is expected, raw
+    with pytest.raises(ValueError, match="strict_validation"):
+        settings.strict_validation = "maybe"
+
+
+def test_strict_validation_settings_beat_env_in_resolve(clean, tmp_path):
+    clean.setenv("DASHSCOPE_STRICT_VALIDATION", "0")
+    settings.strict_validation = True
+    cfg = resolve_config(
+        workspace="ws-123",
+        config_path=tmp_path / "absent.toml",
+    )
+    assert cfg.strict_validation is True
 
 
 def test_log_level_setter_applies_immediately(clean):

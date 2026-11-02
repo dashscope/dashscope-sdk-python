@@ -14,6 +14,7 @@ from dashscope._config import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_PROTOCOL,
     DEFAULT_REGION,
+    DEFAULT_STRICT_VALIDATION,
     DEFAULT_TIMEOUT,
     LEGACY_GATEWAY_HOSTS,
     LEGACY_WS_GATEWAY_HOSTS,
@@ -47,6 +48,7 @@ def clean_env(monkeypatch, tmp_path):
         "DASHSCOPE_PROTOCOL",
         "DASHSCOPE_TIMEOUT",
         "DASHSCOPE_MAX_RETRIES",
+        "DASHSCOPE_STRICT_VALIDATION",
         "DASHSCOPE_CONFIG",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -114,6 +116,10 @@ def test_defaults(clean_env, tmp_path):
         max_retries=DEFAULT_MAX_RETRIES,
         protocol_base_url=_WS_GATEWAY,
     )
+    # Spelled out even though both sides default to it: degradation is
+    # the shipped behaviour, so a flipped default must fail here loudly.
+    assert cfg.strict_validation is DEFAULT_STRICT_VALIDATION
+    assert cfg.strict_validation is False
 
 
 def test_protocol_default_base_url(clean_env, tmp_path):
@@ -657,4 +663,154 @@ async def test_async_with_options(clean_env, tmp_path):
     assert derived.transport.http_client is client.transport.http_client
     await derived.aclose()
     assert not client.transport.http_client.is_closed
+    await client.aclose()
+
+
+def test_strict_validation_defaults_to_false(clean_env, tmp_path):
+    from dashscope._config import settings
+
+    cfg = resolve_config(
+        workspace="ws-123",
+        config_path=tmp_path / "absent.toml",
+    )
+    assert cfg.strict_validation is False
+    assert settings.strict_validation is False
+    assert cfg.strict_validation is DEFAULT_STRICT_VALIDATION
+    bare = Config(
+        api_key=None,
+        base_url=_WS_GATEWAY,
+        workspace="ws-123",
+        protocol=DEFAULT_PROTOCOL,
+        timeout=DEFAULT_TIMEOUT,
+        max_retries=DEFAULT_MAX_RETRIES,
+        protocol_base_url=_WS_GATEWAY,
+    )
+    assert bare.strict_validation is False
+
+
+def test_strict_validation_env_truthy_spellings(clean_env, tmp_path):
+    absent = tmp_path / "absent.toml"
+    for raw in ("1", "true", "TRUE", "Yes", "on", "t", "y"):
+        clean_env.setenv("DASHSCOPE_STRICT_VALIDATION", raw)
+        cfg = resolve_config(workspace="ws-123", config_path=absent)
+        assert cfg.strict_validation is True, raw
+
+
+def test_strict_validation_env_zero_is_false_not_truthy(clean_env, tmp_path):
+    # A non-empty string is truthy in Python, so reading the env with
+    # bare truthiness (or ``bool(raw)``) would turn "off" into "on".
+    absent = tmp_path / "absent.toml"
+    for raw in ("0", "false", "FALSE", "No", "off", "f", "n"):
+        clean_env.setenv("DASHSCOPE_STRICT_VALIDATION", raw)
+        cfg = resolve_config(workspace="ws-123", config_path=absent)
+        assert cfg.strict_validation is False, raw
+
+
+def test_strict_validation_env_empty_counts_as_unset(clean_env, tmp_path):
+    clean_env.setenv("DASHSCOPE_STRICT_VALIDATION", "")
+    cfg = resolve_config(
+        workspace="ws-123",
+        config_path=tmp_path / "absent.toml",
+    )
+    assert cfg.strict_validation is False
+
+
+def test_strict_validation_env_garbage_names_the_variable(clean_env):
+    clean_env.setenv("DASHSCOPE_STRICT_VALIDATION", "maybe")
+    with pytest.raises(ValueError, match="DASHSCOPE_STRICT_VALIDATION"):
+        resolve_config(config_path="/nonexistent/config.toml")
+
+
+def test_strict_validation_param_beats_env(clean_env, tmp_path):
+    absent = tmp_path / "absent.toml"
+    clean_env.setenv("DASHSCOPE_STRICT_VALIDATION", "true")
+    cfg = resolve_config(
+        strict_validation=False,
+        workspace="ws-123",
+        config_path=absent,
+    )
+    assert cfg.strict_validation is False
+    clean_env.delenv("DASHSCOPE_STRICT_VALIDATION")
+    cfg = resolve_config(
+        strict_validation=True,
+        workspace="ws-123",
+        config_path=absent,
+    )
+    assert cfg.strict_validation is True
+
+
+def test_strict_validation_from_config_file(clean_env, tmp_path):
+    path = _write_config(
+        tmp_path,
+        'workspace = "ws-123"\nstrict_validation = true\n',
+    )
+    assert resolve_config(config_path=path).strict_validation is True
+    # The env outranks the file, as for every other knob.
+    clean_env.setenv("DASHSCOPE_STRICT_VALIDATION", "0")
+    assert resolve_config(config_path=path).strict_validation is False
+
+
+def test_strict_validation_quoted_config_file_value_is_coerced(
+    clean_env,
+    tmp_path,
+):
+    # ``bool("false")`` is True, so a hand-written config that quotes the
+    # value has to go through the same truth table as the env does.
+    path = _write_config(
+        tmp_path,
+        'workspace = "ws-123"\nstrict_validation = "false"\n',
+    )
+    assert resolve_config(config_path=path).strict_validation is False
+
+
+def test_client_kwarg_beats_env_for_strict_validation(clean_env, tmp_path):
+    clean_env.setenv("DASHSCOPE_STRICT_VALIDATION", "true")
+    client = Client(
+        api_key="k",
+        workspace="ws-123",
+        strict_validation=False,
+        config_path=tmp_path / "absent.toml",
+    )
+    assert client.config.strict_validation is False
+    client.close()
+
+
+def test_strict_validation_survives_with_options(clean_env, tmp_path):
+    client = Client(
+        api_key="k",
+        workspace="ws-123",
+        strict_validation=True,
+        config_path=tmp_path / "absent.toml",
+    )
+    assert client.config.strict_validation is True
+    # with_options rebuilds a client from an explicit field list instead
+    # of cloning Config, so a field left off that list is silently
+    # dropped on the derived client.
+    derived = client.with_options(max_retries=0)
+    assert derived.config.strict_validation is True
+    relaxed = client.with_options(strict_validation=False)
+    assert relaxed.config.strict_validation is False
+    derived.close()
+    relaxed.close()
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_strict_validation_survives_with_options(
+    clean_env,
+    tmp_path,
+):
+    client = AsyncClient(
+        api_key="k",
+        workspace="ws-123",
+        strict_validation=True,
+        config_path=tmp_path / "absent.toml",
+    )
+    assert client.config.strict_validation is True
+    derived = client.with_options(max_retries=0)
+    assert derived.config.strict_validation is True
+    relaxed = client.with_options(strict_validation=False)
+    assert relaxed.config.strict_validation is False
+    await derived.aclose()
+    await relaxed.aclose()
     await client.aclose()
