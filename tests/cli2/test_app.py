@@ -15,7 +15,10 @@ from dashscope.version import __version__
 
 
 def _runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:  # click >= 8.2 always separates the streams
+        return CliRunner()
 
 
 @pytest.fixture

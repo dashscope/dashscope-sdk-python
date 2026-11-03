@@ -35,7 +35,10 @@ from tests.cli2.conftest import strip_ansi_codes
 
 def _runner() -> CliRunner:
     """Separate stdout/stderr: the CLI promises clean JSON on stdout."""
-    return CliRunner(mix_stderr=False)
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:  # click >= 8.2 always separates the streams
+        return CliRunner()
 
 
 class TestTierIsomorphism:
