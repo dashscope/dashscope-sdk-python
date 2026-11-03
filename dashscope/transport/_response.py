@@ -177,8 +177,12 @@ class APIResponse:
 
         This is the generic direct-mapping path. Resources whose body needs
         reshaping beyond the envelope -- one item picked out of a list, a
-        legacy singular field folded into a plural one -- keep their own
-        parser and read :meth:`json` instead.
+        legacy singular field folded into a plural one, a page delivered as
+        a bare array -- keep their own parser and read :meth:`json` instead.
+        ``parse`` does not replay that reshaping, so on such an endpoint
+        ``resource.method(raw=True).parse(Model)`` can return less than
+        ``resource.method()`` did for the very same body. Read the
+        resource's own docstring before relying on the raw path's parse.
         """
         if cast_to is None:
             return self.json()

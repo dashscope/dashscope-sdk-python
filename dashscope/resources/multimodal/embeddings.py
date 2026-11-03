@@ -178,7 +178,11 @@ class MultimodalEmbeddings:
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            parse_embedding_response(response_json(response)),
+            parse_embedding_response(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
             response,
         )
 
@@ -240,6 +244,10 @@ class AsyncMultimodalEmbeddings:
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            parse_embedding_response(response_json(response)),
+            parse_embedding_response(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
             response,
         )

@@ -45,6 +45,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Set,
     Tuple,
     Type,
     TypeVar,
@@ -393,21 +394,29 @@ def _construct_degraded(
 
     ``model_construct`` ignores aliases, so alias-keyed entries are
     renamed to field names first; anything left over is an extra and
-    rides along, which ``extra="allow"`` keeps readable.
+    rides along, which ``extra="allow"`` keeps readable. A key that
+    became a field is not *also* an extra -- carrying both makes
+    ``model_dump()`` emit the value twice (``open_source`` alongside the
+    wire spelling ``opensource``), which then fails to round-trip into an
+    ``extra="forbid"`` model.
     """
     fields = cls.model_fields
     aliases = _alias_map(cls)
     kwargs: Dict[str, Any] = {}
     extras: Dict[str, Any] = {}
+    consumed: Set[str] = set()
     for key, value in salvaged.items():
         if key in fields:
             kwargs[key] = value
-        else:
-            extras[key] = value
+            consumed.add(key)
     for key, value in salvaged.items():
         name = aliases.get(key)
         if name is not None and name not in kwargs:
             kwargs[name] = value
+            consumed.add(key)
+    for key, value in salvaged.items():
+        if key not in consumed:
+            extras[key] = value
     instance = cls.model_construct(**kwargs, **extras)
     _rerun_after_validators(cls, instance)
     return instance

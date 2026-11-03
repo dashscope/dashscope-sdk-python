@@ -25,7 +25,13 @@ from typing import (
     Union,
 )
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+)
 
 from dashscope.errors import (
     DashScopeError,
@@ -149,6 +155,13 @@ class Job(ResponseBase):
     output: Optional[Dict[str, Any]] = None
     usage: Optional[Usage] = None
 
+    # ``output`` is an untyped dict, so the parse boundary that built this
+    # Job validates the envelope but never looks inside it. Carrying the
+    # mode here is what lets ``results`` be as strict as that boundary was,
+    # instead of silently degrading under ``strict_validation=True``.
+    _strict_validation: bool = PrivateAttr(default=False)
+    _response: Optional["httpx.Response"] = PrivateAttr(default=None)
+
     @property
     def job_id(self) -> str:
         """``FineTune`` spells the same identifier ``job_id``."""
@@ -166,15 +179,25 @@ class Job(ResponseBase):
     def results(self) -> List[JobResult]:
         """Artifacts the task produced.
 
-        Always degrades rather than raising: a property has no client to
-        read ``strict_validation`` from and no response to attach, so the
-        strict check belongs to the parse boundary that built this Job.
+        Parsed with the strictness and the response this Job was built
+        with (see :meth:`from_payload`), so under ``strict_validation``
+        a drifted artifact raises here rather than degrading to ``None``.
+        A Job built directly rather than through ``from_payload`` has
+        neither and gets the lenient default.
         """
-        items = (self.output or {}).get("results") or []
+        output = self.output or {}
+        items = output.get("results")
+        if not isinstance(items, list):
+            items = []
         if not items:
-            items = _image_choices(self.output or {})
+            items = _image_choices(output)
         return [
-            parse_model(JobResult, item)
+            parse_model(
+                JobResult,
+                item,
+                strict=self._strict_validation,
+                response=self._response,
+            )
             for item in items
             if isinstance(item, dict)
         ]
@@ -209,12 +232,19 @@ class Job(ResponseBase):
         payload["output"] = output if isinstance(output, dict) else None
         if not isinstance(payload.get("usage"), dict):
             payload.pop("usage", None)
-        return parse_model(
+        job = parse_model(
             cls,
             payload,
             strict=strict,
             response=response,
         )
+        # Post-hoc: private attrs are not fields, so parse_model cannot
+        # carry them through validation or through its construct fallback.
+        # pylint: disable=protected-access
+        job._strict_validation = strict
+        job._response = response
+        # pylint: enable=protected-access
+        return job
 
 
 class JobList(BasePage[Job]):

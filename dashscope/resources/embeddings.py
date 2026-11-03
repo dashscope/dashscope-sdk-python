@@ -36,6 +36,7 @@ from dashscope.resources._jobs import (
     Jobs,
 )
 from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     ResponseBase,
     Usage,
@@ -44,6 +45,8 @@ from dashscope.types.common import (
 )
 
 if TYPE_CHECKING:
+    import httpx
+
     from dashscope.transport._response import APIResponse
 
 _PATH = "/services/embeddings/text-embedding/text-embedding"
@@ -76,9 +79,26 @@ class EmbeddingResponse(ResponseBase):
     usage: Optional[Usage] = None
 
 
-def parse_embedding_response(body: Dict[str, Any]) -> EmbeddingResponse:
-    """Shared by the text and multimodal endpoints: one response shape."""
-    output = body.get("output") or {}
+def parse_embedding_response(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional[httpx.Response] = None,
+) -> EmbeddingResponse:
+    """Shared by the text and multimodal endpoints: one response shape.
+
+    Built through :func:`~dashscope.types._parse.parse_model` like every
+    other v2 response parser, so a drifted field degrades instead of
+    raising a bare ``ValidationError`` -- and ``strict`` reaches it, which
+    is what makes ``strict_validation`` mean the same thing here as on
+    ``models`` / ``files`` / ``jobs``. Both endpoints forward the
+    client's setting, including ``multimodal.embeddings`` on the
+    pre-``request_api`` transport path, whose ``request`` returns the
+    same ``httpx.Response``.
+    """
+    output = body.get("output")
+    if not isinstance(output, dict):
+        output = {}
     embeddings = output.get("embeddings") or []
     if not embeddings and output.get("embedding"):
         # multimodal-embedding-one-peace-v1 predates the plural list: it
@@ -87,10 +107,15 @@ def parse_embedding_response(body: Dict[str, Any]) -> EmbeddingResponse:
         # shape regardless of model generation. 1.x exposed the raw key via
         # response.output["embedding"]; v2 normalizes instead.
         embeddings = [{"index": 0, "embedding": output["embedding"]}]
-    return EmbeddingResponse(
-        embeddings=embeddings,
-        usage=body.get("usage"),
-        **response_envelope(body),
+    return parse_model(
+        EmbeddingResponse,
+        {
+            "embeddings": embeddings,
+            "usage": body.get("usage"),
+            **response_envelope(body),
+        },
+        strict=strict,
+        response=response,
     )
 
 
@@ -509,7 +534,11 @@ class Embeddings:
             return resp
         resp.raise_for_status()
         return with_headers(
-            parse_embedding_response(resp.json()),
+            parse_embedding_response(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
             resp.http_response,
         )
 
@@ -607,6 +636,10 @@ class AsyncEmbeddings:
             return resp
         resp.raise_for_status()
         return with_headers(
-            parse_embedding_response(resp.json()),
+            parse_embedding_response(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
             resp.http_response,
         )

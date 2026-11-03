@@ -12,7 +12,7 @@ from typing import Optional
 
 import httpx
 import pytest
-from pydantic import BaseModel, ConfigDict
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from pydantic import ValidationError, model_validator
 
 from dashscope.errors import APIResponseValidationError, DashScopeError
@@ -287,6 +287,25 @@ class _CrossField(BaseModel):
         return self
 
 
+class _AliasedCrossField(BaseModel):
+    """Stage 3 with an aliased field, to pin how the wire spelling lands."""
+
+    model_config = ConfigDict(extra="allow")
+
+    low: int = 0
+    high: int = 0
+    open_source: Optional[bool] = Field(
+        None,
+        validation_alias=AliasChoices("open_source", "opensource"),
+    )
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "_AliasedCrossField":
+        if self.low > self.high:
+            raise ValueError("low must not exceed high")
+        return self
+
+
 class _BeforeAlwaysFails(BaseModel):
     """Forces stage 3: no validation pass can ever succeed."""
 
@@ -314,6 +333,33 @@ def test_a_cross_field_invariant_falls_back_to_construct():
     assert parsed.low == 5
     assert parsed.high == 1
     assert parsed.model_extra == {"extra": "kept"}
+
+
+def test_a_degraded_alias_is_not_also_kept_as_an_extra():
+    # ``model_construct`` ignores aliases, so the wire spelling is renamed
+    # onto its field. Keeping the original key as an extra as well made
+    # ``model_dump()`` emit the value twice (``open_source`` *and*
+    # ``opensource``), which no longer round-trips into a model that
+    # forbids extras.
+    parsed = parse_model(
+        _AliasedCrossField,
+        {"low": 5, "high": 1, "opensource": True},
+    )
+    assert parsed.open_source is True
+    assert "opensource" not in parsed.model_dump()
+    assert parsed.model_extra == {}
+
+
+def test_a_degraded_alias_shadowed_by_the_field_name_stays_an_extra():
+    # The direct field name wins the slot, and a *conflicting* wire spelling
+    # is then genuinely extra data -- folding it away would lose what the
+    # server actually sent.
+    parsed = parse_model(
+        _AliasedCrossField,
+        {"low": 5, "high": 1, "open_source": False, "opensource": True},
+    )
+    assert parsed.open_source is False
+    assert parsed.model_extra == {"opensource": True}
 
 
 def test_an_after_validator_that_still_fails_does_not_raise():

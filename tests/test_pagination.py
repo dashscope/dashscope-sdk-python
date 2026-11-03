@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any, Dict, List
 
 import httpx
@@ -237,6 +238,66 @@ async def test_models_async_iter_current_page():
 
     page = await client.models.list(page_no=1, page_size=2)
     assert [m.model async for m in page] == ["m0", "m1"]
+
+
+@pytest.mark.asyncio
+async def test_models_async_page_rejects_sync_next_page():
+    # One BasePage serves both clients, so nothing static stops a caller
+    # from pairing an async-fetched page with the sync traversal. The
+    # resource binds a closure, not the coroutine function itself, so the
+    # refusal has to come from the un-awaited result rather than from
+    # inspecting the callback.
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    client = _make_async_client(_models_handler(catalog, []))
+
+    page = await client.models.list(page_no=1, page_size=2)
+    with pytest.raises(TypeError, match="next_page_async"):
+        page.next_page()
+
+
+@pytest.mark.asyncio
+async def test_models_async_page_rejects_sync_iter_pages():
+    # Same refusal, reached through the generator: consuming it must raise
+    # the actionable TypeError rather than an AttributeError on a coroutine.
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    client = _make_async_client(_models_handler(catalog, []))
+
+    page = await client.models.list(page_no=1, page_size=2)
+    with pytest.raises(TypeError, match="iter_pages_async"):
+        list(page.iter_pages())
+
+
+def test_sync_page_next_page_leaves_no_unawaited_coroutine():
+    # The guard closes the coroutine it rejects, so a mis-traversal does not
+    # also leak "coroutine ... was never awaited" into the test run.
+    page = ModelList(models=[], page_no=1, page_size=1, total_count=5)
+
+    async def fetch(page_no, page_size):
+        return ModelList(
+            models=[],
+            page_no=page_no,
+            page_size=1,
+            total_count=5,
+        )
+
+    page.bind_pagination(fetch)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(TypeError, match="next_page_async"):
+            page.next_page()
+    assert not [w for w in caught if issubclass(w.category, RuntimeWarning)]
+
+
+def test_sync_page_next_page_still_advances():
+    # The async guard must not trip on a plain callable.
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    seen: List[int] = []
+    client = _make_client(_models_handler(catalog, seen))
+
+    page = client.models.list(page_no=1, page_size=2)
+    second = page.next_page()
+    assert second is not None and second.page_no == 2
+    assert seen == [1, 2]
 
 
 # --- files.list (sync) ----------------------------------------------------

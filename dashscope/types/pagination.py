@@ -42,6 +42,42 @@ __all__ = ["BasePage"]
 
 T = TypeVar("T")
 
+_ASYNC_TRAVERSAL_HINT = (
+    "this page was fetched through AsyncClient, so advancing it is a "
+    "coroutine; use next_page_async() or iter_pages_async() instead of the "
+    "synchronous traversal"
+)
+
+
+def _reject_async_callback(callback: Callable[[int, int], Any]) -> None:
+    """Best-effort early refusal of a sync traversal over an async page.
+
+    Fires when the resource bound the coroutine function itself. Resources
+    that bind a closure around it (``lambda no, size: self.list(...)``) are
+    not coroutine functions and are caught later, by
+    :func:`_reject_awaitable_page`.
+    """
+    if inspect.iscoroutinefunction(callback):
+        raise TypeError(_ASYNC_TRAVERSAL_HINT)
+
+
+def _reject_awaitable_page(result: Any) -> Any:
+    """Refuse a page that came back un-awaited, and say which method to use.
+
+    One class serves both clients, so nothing static stops a caller from
+    pairing an async-fetched page with the synchronous traversal. Handing
+    back the coroutine instead would let it read as a page and fail two
+    frames later with ``AttributeError``, naming neither the mistake nor the
+    fix; the coroutine is closed first so it does not also leak a
+    ``RuntimeWarning`` about never having been awaited.
+    """
+    if not inspect.isawaitable(result):
+        return result
+    close = getattr(result, "close", None)
+    if callable(close):
+        close()
+    raise TypeError(_ASYNC_TRAVERSAL_HINT)
+
 
 class BasePage(ResponseBase, Generic[T]):
     """One page of an offset-paginated list, with traversal helpers.
@@ -100,11 +136,16 @@ class BasePage(ResponseBase, Generic[T]):
         """Fetch the following page, or ``None`` at the end of the list.
 
         Returns ``None`` when there is no next page or when no fetch callback
-        was injected (a standalone page cannot advance itself).
+        was injected (a standalone page cannot advance itself). Raises
+        ``TypeError`` on a page fetched through ``AsyncClient`` -- use
+        :meth:`next_page_async` there.
         """
         if not self.has_next_page() or self._fetch_next is None:
             return None
-        return self._fetch_next(self.page_no + 1, self.page_size)
+        _reject_async_callback(self._fetch_next)
+        return _reject_awaitable_page(
+            self._fetch_next(self.page_no + 1, self.page_size),
+        )
 
     async def next_page_async(self) -> Optional["BasePage[T]"]:
         """Async :meth:`next_page`; awaits the callback when it is a coroutine."""
@@ -129,7 +170,16 @@ class BasePage(ResponseBase, Generic[T]):
         return _gen()
 
     def iter_pages(self) -> Iterator["BasePage[T]"]:
-        """Yield this page and every following one, advancing via :meth:`next_page`."""
+        """Yield this page and every following one, advancing via :meth:`next_page`.
+
+        Raises ``TypeError`` on a page fetched through ``AsyncClient``; use
+        :meth:`iter_pages_async` there. When the resource bound the coroutine
+        function directly the refusal happens before anything is yielded;
+        when it bound a closure around one, the first page is yielded and the
+        advance that follows raises.
+        """
+        if self._fetch_next is not None:
+            _reject_async_callback(self._fetch_next)
         page: Optional["BasePage[T]"] = self
         while page is not None:
             yield page

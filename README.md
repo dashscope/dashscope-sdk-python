@@ -183,6 +183,75 @@ resp.request_id
 
 All responses share a common envelope: `request_id`, `status_code`, `code`, `message`, `is_error`, and raw `headers`.
 
+### Pagination
+
+List endpoints return a page object you can iterate and advance instead of looping `page_no` by hand:
+
+```python
+page = client.models.list(page_no=1, page_size=10)
+
+for model in page:            # this page's items
+    ...
+page.total_count              # catalog total, as reported by the gateway
+page.has_next_page()
+page.next_page()              # None on the last page
+
+for page in client.models.list(page_size=50).iter_pages():   # every page
+    ...
+```
+
+On `AsyncClient` use `await page.next_page_async()` and `async for page in page.iter_pages_async()`. Calling the synchronous traversal on an async-fetched page raises `TypeError` naming the async method, rather than handing back an un-awaited coroutine. `client.files.list()` and `client.jobs.list()` paginate the same way.
+
+Serialize a page with `model_dump()`. Iterating a page yields its *items*, so `dict(page)` is not a way to read its fields.
+
+`models.list(provider=...)` filters client-side: it narrows each page's `models`, while `total_count` stays the whole-catalog total. Pagination therefore walks the unfiltered catalog and the filter is applied to each page as it arrives.
+
+### Raw responses
+
+Pass `raw=True` to get the response object itself, before any error check:
+
+```python
+resp = client.models.list(raw=True)
+
+resp.status_code
+resp.headers                  # includes non-standard gateway headers
+resp.request_id
+resp.elapsed
+resp.json()                   # decoded body
+resp.parse(ModelList)         # typed model, memoized per type
+```
+
+`raw=True` skips the error check, so a 4xx/5xx is returned to you instead of raising. `raise_for_status()` applies it after the fact.
+
+`parse(...)` needs the model class, and the v2 resource models are not re-exported from the top-level package — import them from where they are defined:
+
+```python
+from dashscope.resources.models import ModelList, Model
+from dashscope.resources.files import FileList, File
+from dashscope.resources._jobs import Job, JobList
+from dashscope.resources.embeddings import EmbeddingResponse
+```
+
+`resp.parse(...)` is the generic envelope mapping and does not replay a resource's own reshaping — on `models.list`, a page the gateway delivered as a bare list parses through it as empty. Use `resp.json()` when you need exactly what the resource method would have built.
+
+### Per-request options
+
+Every resource method takes the same three escape hatches, for anything this SDK does not model yet:
+
+```python
+client.chat.completions.create(
+    model="qwen-plus",
+    messages=["hi"],
+    extra_headers={"x-gateway-experiment": "on"},
+    extra_query={"debug": "1"},
+    extra_body={"parameters": {"top_k": 5}},
+)
+```
+
+`extra_headers` sits above every other layer — the SDK identity headers, the client defaults, your `headers=`, and a per-call `api_key=` / `workspace=` — matched case-insensitively. `extra_body` deep-merges nested dicts, so adding one nested field keeps its siblings; lists and scalars replace. A request whose body is not a JSON object (a file upload, raw bytes) has nothing to merge into, so `extra_body` is dropped with a warning rather than silently lost.
+
+Retries stay a client-level setting; narrow them for a whole client with `client.with_options(max_retries=0)`.
+
 ### Streaming
 
 `stream=True` returns a `ChatStream` (`AsyncChatStream` for `AsyncClient`) with typed helpers:
@@ -294,6 +363,8 @@ dashscope.settings.log_level = "INFO"
 The three `DASHSCOPE_HTTP_*` pool variables are also settable as `http_max_connections`, `http_max_keepalive_connections` and `http_keepalive_expiry` in `settings` and `config.toml`. Passing your own `http_client=` takes precedence over all of them.
 
 By default a response body that does not fit the SDK's typed models is parsed in degraded form — the offending fields fall back to their defaults and the rest of the payload stays usable — with the drift recorded at `DEBUG` on the `dashscope._logging.parse` logger. Set `DASHSCOPE_STRICT_VALIDATION=true` (or `Client(strict_validation=True)`, `settings.strict_validation = True`, `strict_validation = true` in `config.toml`) to raise `APIResponseValidationError` instead, which is what you want in CI or contract tests. Strict validation raises even under `raise_on_error=False`: that flag governs service errors, this one governs parse errors.
+
+Two caveats. `DEBUG` is below the SDK's default log level, so a degraded parse is silent unless you raise it — see [Logging](#logging) — and `strict_validation` is the only way to make drift fail loudly. And the typed-parse path currently covers `chat.completions`, `models`, `files`, `jobs`, `images`, `embeddings` and `multimodal.embeddings`; the remaining surfaces (audio, fine-tuning, apps, decision, deployments, reinforcement learning, rerank, tokenization, tingwu) still construct their models directly and raise a plain `pydantic.ValidationError` on drift, ignoring both settings.
 
 **Config file** (`~/.dashscope/config.toml`):
 

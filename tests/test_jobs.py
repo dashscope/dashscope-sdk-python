@@ -14,7 +14,7 @@ import httpx
 import pytest
 
 from dashscope import AsyncClient, Client
-from dashscope.errors import DashScopeError
+from dashscope.errors import APIResponseValidationError, DashScopeError
 from dashscope.resources._jobs import AsyncJobs, Job, JobList, Jobs
 
 BASE_URL = "https://api.test.local/api/v1"
@@ -83,6 +83,72 @@ def test_job_from_payload():
     # pylint: disable-next=unsubscriptable-object
     assert output["results"][0]["url"] == "https://cdn.example.com/a.png"
     assert job.usage.image_count == 1
+
+
+def test_results_degrades_under_lenient_parsing():
+    # ``output`` is an untyped dict, so nothing at the parse boundary
+    # inspects ``results``; the typed view is the only place the drift can
+    # be caught, and by default it keeps the artifact rather than raising.
+    job = Job.from_payload(
+        _job_body("SUCCEEDED", results=[{"url": 12345}]),
+    )
+    assert [r.url for r in job.results] == [None]
+    assert job.image_urls == []
+
+
+def test_results_raises_under_strict_validation():
+    # The mode the Job was built with has to reach the typed view, or
+    # strict mode silently misses exactly the drift it exists to catch.
+    job = Job.from_payload(
+        _job_body("SUCCEEDED", results=[{"url": 12345}]),
+        strict=True,
+    )
+    with pytest.raises(APIResponseValidationError):
+        _ = job.results
+
+
+def test_strict_results_still_reads_a_healthy_payload():
+    job = Job.from_payload(
+        _job_body("SUCCEEDED", results=[{"url": "https://cdn/a.png"}]),
+        strict=True,
+    )
+    assert job.image_urls == ["https://cdn/a.png"]
+    assert job.result_url == "https://cdn/a.png"
+
+
+def test_directly_built_job_has_no_strict_mode_to_inherit():
+    # Only ``from_payload`` knows the client's setting; a Job a caller
+    # builds by hand keeps the lenient default instead of raising.
+    job = Job(
+        task_id="task-9",
+        status="SUCCEEDED",
+        output={"results": [{"url": 12345}]},
+    )
+    assert [r.url for r in job.results] == [None]
+
+
+def test_results_survives_a_retyped_results_container():
+    # ``for item in 5`` would escape as a bare TypeError from a property,
+    # outside any ``except DashScopeError`` the caller has.
+    job = Job.from_payload(_job_body("SUCCEEDED", results=5))
+    assert job.results == []
+
+
+def test_results_falls_back_to_choices_when_results_is_retyped():
+    job = Job.from_payload(
+        {
+            "request_id": "req-1",
+            "output": {
+                "task_id": "task-1",
+                "task_status": "SUCCEEDED",
+                "results": "none",
+                "choices": [
+                    {"message": {"content": [{"image": "https://cdn/b.png"}]}},
+                ],
+            },
+        },
+    )
+    assert job.image_urls == ["https://cdn/b.png"]
 
 
 def test_create_submits_async_task():

@@ -32,6 +32,8 @@ from dashscope.types.common import (
 from dashscope.types.pagination import BasePage
 
 if TYPE_CHECKING:
+    import httpx
+
     from dashscope.transport._response import APIResponse
 
 _BASE_PATH = "/models"
@@ -74,6 +76,56 @@ class ModelList(BasePage[Model]):
     @property
     def items(self) -> List[Model]:
         return self.models
+
+
+def _parse_list(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional[httpx.Response] = None,
+) -> ModelList:
+    """Build a page from the native envelope.
+
+    ``get`` is this same endpoint filtered by query params, and the native
+    gateway nests its page under ``output``; ``data`` stays accepted for
+    gateways that re-wrap the page OpenAI-style.
+
+    A body carrying the page as a bare list has no ``page_no`` / ``total`` to
+    read, so the list is taken as one whole page: the generic envelope
+    lifter only unwraps a *dict*, and letting this shape through it would
+    parse as an empty catalog rather than as the malformed one it is. The
+    ``total`` fallback to ``len(models)`` keeps ``total_count`` meaningful
+    for gateways that omit it, matching ``files.list``.
+    """
+    data = body.get("output") or body.get("data") or {}
+    if isinstance(data, dict):
+        models = data.get("models")
+        # A retyped ``models`` would both poison the ``len()`` below (a
+        # string's length is not a page total) and blow up in the model
+        # layer's repair of a list field. Empty is the honest reading of
+        # "not a list", matching ``JobList.from_payload``.
+        if not isinstance(models, list):
+            models = []
+        page_no = data.get("page_no", 1)
+        page_size = data.get("page_size", 10)
+        total = data.get("total", len(models))
+    else:
+        # Only a genuine list can be read as a whole page; ``len()`` on a
+        # drifted scalar would escape as a bare TypeError from here.
+        models = data if isinstance(data, list) else []
+        page_no, page_size, total = 1, 10, len(models)
+    return parse_model(
+        ModelList,
+        {
+            "page_no": page_no,
+            "page_size": page_size,
+            "total_count": total,
+            "models": models,
+            **response_envelope(body),
+        },
+        strict=strict,
+        response=response,
+    )
 
 
 def _parse_get_models(body: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -154,6 +206,11 @@ class Models:
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         instead of a ``ModelList``, before any error check, so callers can
         read the raw response (status, headers, ``elapsed``) or re-parse it.
+        Note that ``resp.parse(ModelList)`` is the generic envelope mapping
+        and does not replay this method's own reshaping: a page delivered as
+        a bare list, or one whose ``total`` the gateway omitted, parses
+        through it as an empty catalog. Use ``resp.json()`` and
+        ``_parse_list`` when the raw path has to agree with this one.
         """
         resp = self._client.transport.request_api(
             "GET",
@@ -173,7 +230,11 @@ class Models:
         if raw:
             return resp
         resp.raise_for_status()
-        result = resp.parse(ModelList)
+        result = _parse_list(
+            resp.json(),
+            strict=self._client.config.strict_validation,
+            response=resp.http_response,
+        )
         if provider:
             result.models = [
                 m for m in result.models if _match_provider(m, provider)
@@ -191,7 +252,7 @@ class Models:
                 extra_body=extra_body,
             ),
         )
-        return result
+        return with_headers(result, resp.http_response)
 
     @overload
     def get(
@@ -357,7 +418,11 @@ class AsyncModels:
         if raw:
             return resp
         resp.raise_for_status()
-        result = resp.parse(ModelList)
+        result = _parse_list(
+            resp.json(),
+            strict=self._client.config.strict_validation,
+            response=resp.http_response,
+        )
         if provider:
             result.models = [
                 m for m in result.models if _match_provider(m, provider)
@@ -375,7 +440,7 @@ class AsyncModels:
                 extra_body=extra_body,
             ),
         )
-        return result
+        return with_headers(result, resp.http_response)
 
     @overload
     async def get(

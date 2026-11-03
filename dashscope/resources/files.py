@@ -130,12 +130,21 @@ def _parse_list(
 ) -> FileList:
     data = body.get("data") or {}
     if isinstance(data, dict):
-        files = data.get("files") or []
+        files = data.get("files")
+        # A retyped ``files`` would both poison the ``len()`` below (a
+        # string's length is not a page total) and blow up in the model
+        # layer's repair of a list field. Empty is the honest reading of
+        # "not a list", matching ``JobList.from_payload``.
+        if not isinstance(files, list):
+            files = []
         page_no = data.get("page_no", 1)
         page_size = data.get("page_size", 10)
         total = data.get("total", len(files))
     else:
-        files, page_no, page_size, total = data, 1, 10, len(data)
+        # Only a genuine list can be read as a whole page; ``len()`` on a
+        # drifted scalar would escape as a bare TypeError from here.
+        files = data if isinstance(data, list) else []
+        page_no, page_size, total = 1, 10, len(files)
     return parse_model(
         FileList,
         {

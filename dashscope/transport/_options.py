@@ -6,10 +6,15 @@ Every resource method offers the same three escape hatches --
 ``extra_headers`` / ``extra_query`` / ``extra_body`` -- and hands them to
 the transport as one :class:`RequestOptions`. They exist so a caller can
 attach something this SDK does not model yet (a gateway experiment flag,
-a parameter a newer backend added) without waiting for a release, and so
-``max_retries`` can be narrowed for one call -- a long-running job
-submission that must not be replayed, without deriving a second client
-through ``with_options`` just to change that one number.
+a parameter a newer backend added) without waiting for a release.
+
+``timeout`` and ``max_retries`` are honored by the transports but are
+*not yet reachable from a resource method*: no resource signature takes
+them and :func:`request_options` does not forward them, so today the only
+way to narrow retries for one call is a derived client
+(``client.with_options(max_retries=0)``). Wiring the last mile means
+adding the parameter to every resource signature and overload; until
+that lands, do not read the fields below as caller-facing.
 
 ``None`` means "no opinion" everywhere here, so a call that sets no
 option behaves exactly as it did before this channel existed. Header
