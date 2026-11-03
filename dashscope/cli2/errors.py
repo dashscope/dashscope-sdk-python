@@ -459,6 +459,18 @@ class ErrorHandlingGroup(_GroupBase):
 
 
 def _click_passthrough() -> Tuple[type[BaseException], ...]:
+    """Exception types click renders and exit-codes on its own.
+
+    The handler re-raises these untouched so a command-line mistake keeps
+    click's usage message and exit 2 instead of being relabelled. The
+    classes are gathered from *both* click namespaces in play: the real
+    ``click`` and, on ``typer>=0.27``, the private ``typer._click``
+    compatibility shim. The shim's exception classes are not subclasses of
+    the real click ones, so listing only ``click`` lets a missing argument
+    (``typer._click.exceptions.MissingParameter``) slip past the
+    ``except`` below into the generic branch and come out mislabelled
+    ``server``.
+    """
     import click  # pylint: disable=import-outside-toplevel
 
     classes = [click.exceptions.Exit, click.UsageError, click.Abort]
@@ -467,6 +479,18 @@ def _click_passthrough() -> Tuple[type[BaseException], ...]:
     typer_exit = getattr(typer, "Exit", None)
     if typer_exit is not None and typer_exit not in classes:
         classes.append(typer_exit)
+    # The same three names, from typer's vendored click shim when present.
+    # The shim ships UsageError but not Exit/Abort, so getattr skips those.
+    try:
+        # pylint: disable=import-outside-toplevel
+        from typer import _click as _typer_click
+    except ImportError:  # older typer raises the real click classes only
+        _typer_click = None
+    shim = getattr(_typer_click, "exceptions", None)
+    for name in ("Exit", "UsageError", "Abort"):
+        klass = getattr(shim, name, None)
+        if klass is not None and klass not in classes:
+            classes.append(klass)
     return tuple(classes)
 
 
