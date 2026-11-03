@@ -28,6 +28,7 @@ examples/
 ├── 02_advanced_engineering/  Engineering patterns: local mock debugging, semantic cache, circuit breaker + multi-region DR
 ├── 03_agent_recipes/         Agent recipes: tool-call loop, RAG, MCP server
 ├── 04_real_world_scenarios/  Flagship best practices: stitch the three tiers above into end-to-end production harnesses
+├── 05_cli/                   The `dashscope` command line: output formats, exit codes, configuration and CI recipes
 └── legacy_1x/                1.x module-level API examples (dashscope.Generation etc.), for reference only
 ```
 
@@ -37,7 +38,8 @@ What the tiers mean (an advancement path from "quickref" to "production blueprin
 - **02 Advanced engineering**: wraps the SDK in the patterns real production cares about (saving money, resisting pressure, offline debugging).
 - **03 Agent recipes**: multi-step, composable end-to-end agent flows.
 - **04 Real-world scenarios**: not "how to call some capability", but a whole real business built end to end into a production-grade harness (with guardrails, context budgets, fault tolerance, disaster recovery, state machines and other production tradeoffs); each case ships its own `README.md` explaining "why it is written this way".
-- **legacy_1x**: the old 1.x module-level style, subdirectory layout kept exactly as-is, for reference only; new projects should prefer the four tiers above.
+- **05 Command line**: the same capabilities behind a shell/CI contract rather than a Python one — machine-readable output, layered exit codes, a fixed stderr error line and a documented configuration precedence; both files run offline.
+- **legacy_1x**: the old 1.x module-level style, subdirectory layout kept exactly as-is, for reference only; new projects should prefer the five tiers above.
 
 ## Getting ready
 
@@ -59,7 +61,7 @@ What the tiers mean (an advancement path from "quickref" to "production blueprin
    python3 examples/01_atomic_capabilities/text_generation/chat.py
    ```
 
-> **Runs offline (no API key needed)**: `02_advanced_engineering/local_mock_debugging.py`, `02_advanced_engineering/circuit_breaker_retry.py`, `03_agent_recipes/mcp_server_demo/client_demo.py`, `04_real_world_scenarios/production_ready_rag_harness.py`, `04_real_world_scenarios/realtime_audio_meeting_harness.py` and `04_real_world_scenarios/ticket_triage_harness.py` use mock transports / scripted seams / subprocesses — fully offline and deterministic, ideal for a first hands-on look at the call shapes.
+> **Runs offline (no API key needed)**: `02_advanced_engineering/local_mock_debugging.py`, `02_advanced_engineering/circuit_breaker_retry.py`, `03_agent_recipes/mcp_server_demo/client_demo.py`, `04_real_world_scenarios/production_ready_rag_harness.py`, `04_real_world_scenarios/realtime_audio_meeting_harness.py`, `04_real_world_scenarios/ticket_triage_harness.py`, `05_cli/cli_output_and_errors.py` and `05_cli/cli_ci_harness.py` use mock transports / a local mock gateway / scripted seams / subprocesses — fully offline and deterministic, ideal for a first hands-on look at the call shapes.
 
 ## Common environment variables
 
@@ -81,6 +83,7 @@ What the tiers mean (an advancement path from "quickref" to "production blueprin
 | `RAG_HARNESS_LIVE` | Set to `1` for `production_ready_rag_harness.py` to hit the real gateway (otherwise offline mock) | unset (offline) |
 | `MEETING_HARNESS_LIVE` | Set to `1` for `realtime_audio_meeting_harness.py` to hit the real gateway (otherwise offline mock) | unset (offline) |
 | `TRIAGE_HARNESS_LIVE` | Set to `1` for `ticket_triage_harness.py` to hit the real gateway (otherwise scripted decision backend) | unset (offline) |
+| `CLI_HARNESS_LIVE` | Set to `1` for `cli_ci_harness.py` to hit the real gateway, read-only scenarios only (otherwise a local mock gateway) | unset (offline) |
 | `DASHSCOPE_TINGWU_MODEL` | TingWu realtime model (`realtime_audio_meeting_harness.py`) | `tingwu-turbo` |
 | `MEETING_MAX_CONCURRENT` | Realtime meeting concurrency cap (i.e. the active-socket cap) | `4` |
 
@@ -136,6 +139,19 @@ Composes `01`–`03` into complete, directly comparable business cases with prod
 | `ticket_triage_harness.py` | Decision-model ticket triage: one decision round per ticket (choice / noul / score in a single forward pass) + local threshold policy (confidence floor, escalation cut, severity bands) + fail-closed degradation to the human queue + per-ticket isolation and an exact input-token cost ledger; runs offline with a scripted decision backend by default | No |
 
 See [`04_real_world_scenarios/README.md`](./04_real_world_scenarios/README.md).
+
+## 05_cli — Command line
+
+The same capabilities behind a **shell** contract rather than a Python one: three output formats with a documented stdout/stderr split, layered exit codes (0 ok / 1 server / 2 usage / 3 auth / 4 not found), one fixed `Error [category]: message` line on stderr, and four configuration layers with a stated precedence. Both files run offline and deterministically — no key, no network.
+
+| Path | Contents | Network |
+| --- | --- | --- |
+| `cli_output_and_errors.py` | The contract from the inside: one fake client driven in-process through `typer.testing.CliRunner`, printing stdout / stderr / exit code side by side for table vs json vs yaml, NDJSON streaming, the `@file` / stdin / `--messages` input shapes, and every failure tier including the destructive-command refusal | No |
+| `cli_ci_harness.py` | The contract from the outside: a stdlib mock gateway on an ephemeral port driving the real CLI in real subprocesses — parse `-o json`, branch and retry on exit codes, consume an NDJSON stream line by line, isolate configuration with `DASHSCOPE_CONFIG`, and pass `--yes` where CI has no terminal | No |
+
+The command surface itself (`chat create`, `ft create|get|list|stream|cancel|delete`, `config set|get|list`, `version`), the full exit-code and precedence tables, and copy-pasteable shell recipes live in the tier's own README.
+
+See [`05_cli/README.md`](./05_cli/README.md).
 
 ## legacy_1x — 1.x module-level API (reference only)
 

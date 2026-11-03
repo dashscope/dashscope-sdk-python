@@ -28,6 +28,7 @@ examples/
 ├── 02_advanced_engineering/  工程模式：本地 mock 调试、语义缓存、熔断 + 多地域容灾
 ├── 03_agent_recipes/         Agent 配方：工具调用循环、RAG、MCP server
 ├── 04_real_world_scenarios/  旗舰最佳实践：把上面三层组装成端到端生产 harness
+├── 05_cli/                   `dashscope` 命令行：输出格式、退出码、配置与 CI 配方
 └── legacy_1x/                1.x 模块级 API 示例（dashscope.Generation 等），仅供参考
 ```
 
@@ -37,7 +38,8 @@ examples/
 - **02 进阶工程**：把 SDK 包进真实生产关心的模式里（省钱、抗压、离线调试）。
 - **03 Agent 配方**：多步骤、可组合的端到端 agent 流程。
 - **04 真实场景**：不是"怎么调某个能力"，而是把一个完整业务端到端建成生产级 harness（护栏、上下文预算、容错、容灾、状态机等生产权衡）；每个案例配有自己的 `README.md`，讲清"为什么这样写"。
-- **legacy_1x**：旧的 1.x 模块级风格，子目录布局原样保留，仅供参考；新项目请优先使用上面四层。
+- **05 命令行**：同一批能力的 shell/CI 契约面，而不是 Python 契约面——机器可读输出、分层退出码、固定的一行 stderr 错误，以及写明的配置优先级；两个文件都离线可跑。
+- **legacy_1x**：旧的 1.x 模块级风格，子目录布局原样保留，仅供参考；新项目请优先使用上面五层。
 
 ## 准备工作
 
@@ -59,7 +61,7 @@ examples/
    python3 examples/01_atomic_capabilities/text_generation/chat.py
    ```
 
-> **离线运行（无需 API key）**：`02_advanced_engineering/local_mock_debugging.py`、`02_advanced_engineering/circuit_breaker_retry.py`、`03_agent_recipes/mcp_server_demo/client_demo.py`、`04_real_world_scenarios/production_ready_rag_harness.py`、`04_real_world_scenarios/realtime_audio_meeting_harness.py` 和 `04_real_world_scenarios/ticket_triage_harness.py` 使用 mock transport / 脚本化接缝 / 子进程——完全离线且输出确定，适合先动手感受调用形态。
+> **离线运行（无需 API key）**：`02_advanced_engineering/local_mock_debugging.py`、`02_advanced_engineering/circuit_breaker_retry.py`、`03_agent_recipes/mcp_server_demo/client_demo.py`、`04_real_world_scenarios/production_ready_rag_harness.py`、`04_real_world_scenarios/realtime_audio_meeting_harness.py`、`04_real_world_scenarios/ticket_triage_harness.py`、`05_cli/cli_output_and_errors.py` 和 `05_cli/cli_ci_harness.py` 使用 mock transport / 本地 mock 网关 / 脚本化接缝 / 子进程——完全离线且输出确定，适合先动手感受调用形态。
 
 ## 常用环境变量
 
@@ -81,6 +83,7 @@ examples/
 | `RAG_HARNESS_LIVE` | 置 `1` 时 `production_ready_rag_harness.py` 打真实网关（否则离线 mock） | 未设置（离线） |
 | `MEETING_HARNESS_LIVE` | 置 `1` 时 `realtime_audio_meeting_harness.py` 打真实网关（否则离线 mock） | 未设置（离线） |
 | `TRIAGE_HARNESS_LIVE` | 置 `1` 时 `ticket_triage_harness.py` 打真实网关（否则脚本化决策后端） | 未设置（离线） |
+| `CLI_HARNESS_LIVE` | 置 `1` 时 `cli_ci_harness.py` 打真实网关，仅只读场景（否则本地 mock 网关） | 未设置（离线） |
 | `DASHSCOPE_TINGWU_MODEL` | 听悟 realtime 模型（`realtime_audio_meeting_harness.py`） | `tingwu-turbo` |
 | `MEETING_MAX_CONCURRENT` | 实时会议并发上限（即活跃 socket 上限） | `4` |
 
@@ -136,6 +139,19 @@ examples/
 | `ticket_triage_harness.py` | 决策模型工单分诊：每张工单一次决策 round（单次前向推理回答 choice / noul / score）+ 本地阈值策略（置信度下限、升级阈值、严重度分档）+ 失败封闭降级到人工队列 + 单工单隔离与精确的 input-token 成本账本；默认用脚本化决策后端离线运行 | 否 |
 
 详见 [`04_real_world_scenarios/README.md`](./04_real_world_scenarios/README.md)。
+
+## 05_cli —— 命令行
+
+同一批能力，只是契约面从 Python 换成了 **shell**：三档输出格式并有明确的 stdout/stderr 分工、分层退出码（0 成功 / 1 服务端 / 2 用法 / 3 鉴权 / 4 不存在）、stderr 上一行固定的 `Error [category]: message`，以及四层配置和写明的优先级。两个文件都离线、确定性运行——不需要密钥，不联网。
+
+| 路径 | 内容 | 联网 |
+| --- | --- | --- |
+| `cli_output_and_errors.py` | 从内部看契约：一个假 client 通过 `typer.testing.CliRunner` 在进程内驱动，把 table / json / yaml 三档、NDJSON 流式、`@file` / stdin / `--messages` 输入形态，以及包括破坏性命令拒绝在内的每一档失败的 stdout / stderr / 退出码并排打印 | 否 |
+| `cli_ci_harness.py` | 从外部看契约：在临时端口用标准库起一个 mock 网关，在真实子进程里驱动真实 CLI——解析 `-o json`、按退出码分支与重试、逐行消费 NDJSON 流、用 `DASHSCOPE_CONFIG` 隔离配置，并在 CI 没有终端时传 `--yes` | 否 |
+
+命令面本身（`chat create`、`ft create|get|list|stream|cancel|delete`、`config set|get|list`、`version`）、完整的退出码与优先级表格，以及可直接复制的 shell 配方，都在这一层自己的 README 里。
+
+详见 [`05_cli/README.md`](./05_cli/README.md)。
 
 ## legacy_1x —— 1.x 模块级 API（仅供参考）
 
