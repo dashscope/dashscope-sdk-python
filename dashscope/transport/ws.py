@@ -16,6 +16,7 @@ from dashscope._config import (
     settings,
     workspace_ws_url,
 )
+from dashscope._logging import get_logger, request_id_from_headers
 from dashscope.errors import (
     APIConnectionError,
     WsEventError,
@@ -41,6 +42,42 @@ EVENT_FINISHED = "task-finished"
 EVENT_FAILED = "task-failed"
 
 Connector = Callable[[str, Dict[str, str]], Any]
+
+_logger = get_logger("transport.ws")
+
+
+def _log_error(
+    operation: str,
+    exc: BaseException,
+    request_id: Optional[str] = None,
+) -> None:
+    # Exception text/tracebacks can contain credentials or entire frames.
+    if isinstance(exc, Exception):
+        _logger.error(
+            "websocket %s failed request_id=%s error_type=%s",
+            operation,
+            request_id or "unknown",
+            type(exc).__name__,
+        )
+
+
+def _handshake_request_id(exc: BaseException) -> Optional[str]:
+    headers = getattr(exc, "resp_headers", None)
+    request_id = request_id_from_headers(
+        headers if isinstance(headers, Mapping) else None,
+    )
+    body = getattr(exc, "resp_body", None)
+    if isinstance(body, (str, bytes, bytearray)):
+        try:
+            body = json.loads(body)
+        except Exception:
+            # Diagnostic parsing must not replace the handshake exception.
+            return request_id
+    if isinstance(body, dict):
+        body_id = body.get("request_id")
+        if isinstance(body_id, str) and body_id.strip():
+            return body_id
+    return request_id
 
 
 def _default_connector(
@@ -108,10 +145,15 @@ def _connect(
     except BaseException as exc:
         from websocket import WebSocketTimeoutException
 
+        request_id = _handshake_request_id(exc)
+        _log_error("handshake", exc, request_id)
         if isinstance(exc, WebSocketTimeoutException):
             from dashscope.errors import APITimeoutError
 
-            raise APITimeoutError(detail=str(exc)) from exc
+            raise APITimeoutError(
+                detail=str(exc),
+                request_id=request_id,
+            ) from exc
         raise
     try:
         if timeout is not None:
@@ -157,7 +199,10 @@ class _EventProcessor:
             event.get("header"),
             dict,
         ):
-            raise WsEventError(detail="expected a websocket event header")
+            raise WsEventError(
+                detail="expected a websocket event header",
+                request_id=self._request_id,
+            )
         header = event["header"]
         if header.get("task_id") not in (None, self.task_id):
             raise WsEventError(
@@ -165,19 +210,20 @@ class _EventProcessor:
                 request_id=self._request_id,
                 body=event,
             )
-        self._request_id = (
-            header.get("request_id")
-            or header.get("task_id")
-            or self._request_id
-        )
+        request_id = header.get("request_id")
+        if isinstance(request_id, str) and request_id.strip():
+            self._request_id = request_id
         if header.get("event") == EVENT_FAILED:
             self._finished = True
-            raise error_from_business_code(
+            error = error_from_business_code(
                 message=header.get("error_message") or "task failed",
                 code=header.get("error_code"),
                 body=event,
                 headers={"x-request-id": self._request_id},
             )
+            error.request_id = self._request_id
+            _log_error(EVENT_FAILED, error, self._request_id)
+            raise error
         if header.get("event") == EVENT_FINISHED:
             self._finished = True
         return event
@@ -244,12 +290,17 @@ class WsSession(_EventProcessor):
         }
 
     def _send(self, data: Any, *, opcode: int = 1) -> None:
+        sending = opcode == 2
         try:
             if opcode == 2:
                 self._ws.send(data, opcode=2)
             else:
-                self._ws.send(json.dumps(data))
-        except BaseException:
+                encoded = json.dumps(data)
+                sending = True
+                self._ws.send(encoded)
+        except BaseException as exc:
+            if sending and not self._closed:
+                _log_error("send", exc, self.request_id)
             self.close()
             raise
 
@@ -359,7 +410,11 @@ class WsSession(_EventProcessor):
             if isinstance(raw, (bytes, bytearray)):
                 return bytes(raw)
             return self._process_event(json.loads(raw))
-        except BaseException:
+        except BaseException as exc:
+            # task-failed is already logged by _process_event; a concurrent
+            # explicit close should still wake receivers without an error log.
+            if not self._finished and not self._closed:
+                _log_error("receive", exc, self.request_id)
             self.close()
             raise
 

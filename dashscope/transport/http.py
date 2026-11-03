@@ -11,7 +11,7 @@ from typing import Any, Mapping, Optional, Union
 import httpx
 
 from dashscope._config import DEFAULT_TIMEOUT
-from dashscope._logging import get_logger
+from dashscope._logging import get_logger, request_id_from_headers
 from dashscope.errors import (
     APIConnectionError,
     APITimeoutError,
@@ -27,7 +27,10 @@ DEFAULT_CONNECT_TIMEOUT = 5.0
 _WORKSPACE_HEADER = "X-DashScope-WorkSpace"
 
 
-def _map_transport_error(exc: httpx.TransportError) -> DashScopeError:
+def _map_transport_error(
+    exc: httpx.TransportError,
+    request_id: Optional[str] = None,
+) -> DashScopeError:
     """Map raw httpx transport failures into the SDK error hierarchy.
 
     The message text comes from the catalog entry behind each class
@@ -35,8 +38,8 @@ def _map_transport_error(exc: httpx.TransportError) -> DashScopeError:
     the ``{detail}``.
     """
     if isinstance(exc, httpx.TimeoutException):
-        return APITimeoutError(detail=str(exc))
-    return APIConnectionError(detail=str(exc))
+        return APITimeoutError(detail=str(exc), request_id=request_id)
+    return APIConnectionError(detail=str(exc), request_id=request_id)
 
 
 def _resolve_timeout(
@@ -204,39 +207,62 @@ class SyncTransport:
     ) -> httpx.Response:
         url = _abs_url(base_url or self._base_url, path)
         for attempt in range(self._max_retries + 1):
+            response = None
             try:
-                response = self._client.request(
-                    method,
-                    url,
-                    json=json,
-                    content=content,
-                    data=data,
-                    files=files,
-                    params=params,
-                    headers=_request_headers(
-                        self._default_headers,
-                        sdk_headers(sdk_module),
-                        headers,
-                        api_key,
-                        workspace,
+                response = self._client.send(
+                    self._client.build_request(
+                        method,
+                        url,
+                        json=json,
+                        content=content,
+                        data=data,
+                        files=files,
+                        params=params,
+                        headers=_request_headers(
+                            self._default_headers,
+                            sdk_headers(sdk_module),
+                            headers,
+                            api_key,
+                            workspace,
+                        ),
+                        **_timeout_kwarg(
+                            (
+                                self._request_timeout
+                                if timeout is None
+                                else timeout
+                            ),
+                        ),
                     ),
-                    **_timeout_kwarg(
-                        self._request_timeout if timeout is None else timeout,
-                    ),
+                    stream=True,
                 )
+                try:
+                    response.read()
+                finally:
+                    response.close()
             except httpx.TransportError as exc:
+                request_id = (
+                    request_id_from_headers(response.headers)
+                    if response is not None
+                    else None
+                )
+                context = (
+                    f" (request_id={request_id or 'unknown'})"
+                    if response is not None
+                    else ""
+                )
                 if attempt >= self._max_retries:
                     logger.warning(
-                        "request %s %s failed after %d attempt(s): %s",
+                        "request %s %s failed after %d attempt(s): %s%s",
                         method,
                         path,
                         attempt + 1,
                         exc,
+                        context,
                     )
-                    raise _map_transport_error(exc) from exc
+                    raise _map_transport_error(exc, request_id) from exc
                 delay = backoff_delay(attempt, None)
                 logger.info(
-                    "retrying %s %s in %.2fs (attempt %d/%d): %s: %s",
+                    "retrying %s %s in %.2fs (attempt %d/%d): %s: %s%s",
                     method,
                     path,
                     delay,
@@ -244,10 +270,11 @@ class SyncTransport:
                     self._max_retries,
                     type(exc).__name__,
                     exc,
+                    context,
                 )
                 _sleep(delay)
                 continue
-            request_id = response.headers.get("x-request-id")
+            request_id = request_id_from_headers(response.headers) or "unknown"
             logger.debug(
                 "request %s %s -> %d (request_id=%s)",
                 method,
@@ -312,9 +339,11 @@ class SyncTransport:
                             workspace,
                         ),
                         **_timeout_kwarg(
-                            self._request_timeout
-                            if timeout is None
-                            else timeout,
+                            (
+                                self._request_timeout
+                                if timeout is None
+                                else timeout
+                            ),
                         ),
                     ),
                     stream=True,
@@ -340,7 +369,9 @@ class SyncTransport:
                 attempt < self._max_retries
             ):
                 delay = backoff_delay(attempt, response.headers)
-                request_id = response.headers.get("x-request-id")
+                request_id = (
+                    request_id_from_headers(response.headers) or "unknown"
+                )
                 try:
                     response.read()
                 except httpx.TransportError:
@@ -368,7 +399,12 @@ class SyncTransport:
                     response.read()
                     check_response(response)
                 except httpx.TransportError as exc:
-                    raise _map_transport_error(exc) from exc
+                    request_id = request_id_from_headers(response.headers)
+                    logger.error(
+                        "Failed to read HTTP response, request_id=%s",
+                        request_id or "unknown",
+                    )
+                    raise _map_transport_error(exc, request_id) from exc
                 finally:
                     response.close()
             logger.debug(
@@ -376,7 +412,7 @@ class SyncTransport:
                 method,
                 path,
                 response.status_code,
-                response.headers.get("x-request-id"),
+                request_id_from_headers(response.headers) or "unknown",
             )
             return response
         raise AssertionError("unreachable")
@@ -441,39 +477,62 @@ class AsyncTransport:
     ) -> httpx.Response:
         url = _abs_url(base_url or self._base_url, path)
         for attempt in range(self._max_retries + 1):
+            response = None
             try:
-                response = await self._client.request(
-                    method,
-                    url,
-                    json=json,
-                    content=content,
-                    data=data,
-                    files=files,
-                    params=params,
-                    headers=_request_headers(
-                        self._default_headers,
-                        sdk_headers(sdk_module),
-                        headers,
-                        api_key,
-                        workspace,
+                response = await self._client.send(
+                    self._client.build_request(
+                        method,
+                        url,
+                        json=json,
+                        content=content,
+                        data=data,
+                        files=files,
+                        params=params,
+                        headers=_request_headers(
+                            self._default_headers,
+                            sdk_headers(sdk_module),
+                            headers,
+                            api_key,
+                            workspace,
+                        ),
+                        **_timeout_kwarg(
+                            (
+                                self._request_timeout
+                                if timeout is None
+                                else timeout
+                            ),
+                        ),
                     ),
-                    **_timeout_kwarg(
-                        self._request_timeout if timeout is None else timeout,
-                    ),
+                    stream=True,
                 )
+                try:
+                    await response.aread()
+                finally:
+                    await response.aclose()
             except httpx.TransportError as exc:
+                request_id = (
+                    request_id_from_headers(response.headers)
+                    if response is not None
+                    else None
+                )
+                context = (
+                    f" (request_id={request_id or 'unknown'})"
+                    if response is not None
+                    else ""
+                )
                 if attempt >= self._max_retries:
                     logger.warning(
-                        "request %s %s failed after %d attempt(s): %s",
+                        "request %s %s failed after %d attempt(s): %s%s",
                         method,
                         path,
                         attempt + 1,
                         exc,
+                        context,
                     )
-                    raise _map_transport_error(exc) from exc
+                    raise _map_transport_error(exc, request_id) from exc
                 delay = backoff_delay(attempt, None)
                 logger.info(
-                    "retrying %s %s in %.2fs (attempt %d/%d): %s: %s",
+                    "retrying %s %s in %.2fs (attempt %d/%d): %s: %s%s",
                     method,
                     path,
                     delay,
@@ -481,10 +540,11 @@ class AsyncTransport:
                     self._max_retries,
                     type(exc).__name__,
                     exc,
+                    context,
                 )
                 await _asleep(delay)
                 continue
-            request_id = response.headers.get("x-request-id")
+            request_id = request_id_from_headers(response.headers) or "unknown"
             logger.debug(
                 "request %s %s -> %d (request_id=%s)",
                 method,
@@ -567,7 +627,9 @@ class AsyncTransport:
                 attempt < self._max_retries
             ):
                 delay = backoff_delay(attempt, response.headers)
-                request_id = response.headers.get("x-request-id")
+                request_id = (
+                    request_id_from_headers(response.headers) or "unknown"
+                )
                 try:
                     await response.aread()
                 except httpx.TransportError:
@@ -593,7 +655,12 @@ class AsyncTransport:
                     await response.aread()
                     check_response(response)
                 except httpx.TransportError as exc:
-                    raise _map_transport_error(exc) from exc
+                    request_id = request_id_from_headers(response.headers)
+                    logger.error(
+                        "Failed to read HTTP response, request_id=%s",
+                        request_id or "unknown",
+                    )
+                    raise _map_transport_error(exc, request_id) from exc
                 finally:
                     await response.aclose()
             logger.debug(
@@ -601,7 +668,7 @@ class AsyncTransport:
                 method,
                 path,
                 response.status_code,
-                response.headers.get("x-request-id"),
+                request_id_from_headers(response.headers) or "unknown",
             )
             return response
         raise AssertionError("unreachable")

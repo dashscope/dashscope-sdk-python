@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterator, List, Mapping, Optional, Union, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dashscope._config import WS_REALTIME_PATH, workspace_ws_url
+from dashscope._logging import get_logger, request_id_from_headers
 from dashscope.errors import (
     APIConnectionError,
     APITimeoutError,
@@ -30,6 +31,27 @@ __all__ = [
 MODULE = "audio"
 
 _UNSET = object()
+_logger = get_logger("audio.realtime")
+
+
+def _event_request_id(event: Any) -> Optional[str]:
+    """Read real request IDs only; event_id is a protocol correlation ID."""
+    if not isinstance(event, dict):
+        return None
+    error = event.get("error")
+    response = event.get("response")
+    details = (
+        response.get("status_details") if isinstance(response, dict) else None
+    )
+    response_error = (
+        details.get("error") if isinstance(details, dict) else None
+    )
+    for source in (event, error, response_error):
+        if isinstance(source, dict):
+            value = source.get("request_id")
+            if isinstance(value, str) and value.strip():
+                return value
+    return None
 
 
 def _default_connector(
@@ -147,6 +169,10 @@ class RealtimeSession:
         self._reset_state()
 
     def _reset_state(self) -> None:
+        # Logging context is separate from the public latency/response metrics.
+        self._request_id: Optional[str] = None
+        self._protocol_request_id: Optional[str] = None
+        self._header_request_id: Optional[str] = None
         self._closed = False
         self._finish_requested = False
         self._finished = False
@@ -173,6 +199,7 @@ class RealtimeSession:
             if self._ws is not None:
                 raise RuntimeError("realtime session is already open")
             self._generation += 1
+            self._reset_state()
             try:
                 if self._connector is None:
                     self._ws = _default_connector(
@@ -182,9 +209,30 @@ class RealtimeSession:
                     )
                 else:
                     self._ws = self._connector(self._url, self._headers)
+                self._header_request_id = request_id_from_headers(
+                    getattr(self._ws, "headers", None),
+                )
                 if self._timeout is not None:
                     self._ws.settimeout(self._timeout)
             except BaseException as exc:
+                body = getattr(exc, "resp_body", None)
+                if isinstance(body, (str, bytes, bytearray)):
+                    try:
+                        body = json.loads(body)
+                    except (ValueError, UnicodeError, RecursionError):
+                        body = None
+                request_id = (
+                    _event_request_id(body)
+                    or request_id_from_headers(
+                        getattr(exc, "resp_headers", None),
+                    )
+                    or self._header_request_id
+                )
+                _logger.error(
+                    "Realtime handshake failed: %s, request_id=%s",
+                    type(exc).__name__,
+                    request_id or "unknown",
+                )
                 self.close()
                 self._reset_state()
                 from websocket import WebSocketTimeoutException
@@ -192,8 +240,15 @@ class RealtimeSession:
                 if isinstance(exc, WebSocketTimeoutException):
                     raise APITimeoutError(detail=str(exc)) from exc
                 raise
-            self._reset_state()
         return self
+
+    def _request_id_for_log(self) -> str:
+        return (
+            self._request_id
+            or self._header_request_id
+            or self._protocol_request_id
+            or "unknown"
+        )
 
     def __enter__(self) -> "RealtimeSession":
         return self.connect()
@@ -219,7 +274,12 @@ class RealtimeSession:
                 self._ws.send(raw)
                 if payload.get("type") == "response.create":
                     self._pending_response_ids.append(payload["event_id"])
-            except BaseException:
+            except BaseException as exc:
+                _logger.error(
+                    "Realtime send failed: %s, request_id=%s",
+                    type(exc).__name__,
+                    self._request_id_for_log(),
+                )
                 self.close()
                 raise
 
@@ -680,6 +740,7 @@ class RealtimeSession:
                         return None
                     raise RuntimeError("realtime session is not open")
             failure = None
+            received_on_current_connection = False
             try:
                 try:
                     raw = ws.recv()
@@ -693,9 +754,14 @@ class RealtimeSession:
                     if ws is not self._ws:
                         self._check_unfinished()
                         return None
+                    received_on_current_connection = True
                     if raw is None or raw == "" or raw == b"":
                         self.close()
                         self._check_unfinished()
+                        _logger.debug(
+                            "Realtime connection closed, request_id=%s",
+                            self._request_id_for_log(),
+                        )
                         return None
                     if isinstance(raw, (bytes, bytearray)):
                         raw = raw.decode("utf-8")
@@ -722,6 +788,15 @@ class RealtimeSession:
                             code=code,
                             body=event,
                         )
+                        # Only real IDs belong on exceptions; protocol fallbacks
+                        # and "unknown" are strictly logging context.
+                        explicit_request_id = _event_request_id(event)
+                        if explicit_request_id is not None:
+                            failure.request_id = explicit_request_id
+                        _logger.error(
+                            "Realtime business error, request_id=%s",
+                            self._request_id_for_log(),
+                        )
                         recoverable = (
                             error.get("type") == "invalid_request_error"
                         )
@@ -735,8 +810,16 @@ class RealtimeSession:
                                 self._pending_response_ids.remove(request_id)
                         if not recoverable or self._finish_requested:
                             self.close()
-            except BaseException:
+            except BaseException as exc:
                 with self._lock:
+                    if generation == self._generation and (
+                        ws is self._ws or received_on_current_connection
+                    ):
+                        _logger.error(
+                            "Realtime receive failed: %s, request_id=%s",
+                            type(exc).__name__,
+                            self._request_id_for_log(),
+                        )
                     if ws is self._ws and generation == self._generation:
                         self.close()
                 raise
@@ -763,8 +846,37 @@ class RealtimeSession:
                 "realtime connection closed before response.done",
             )
 
+    def _track_request_context(self, event: Dict[str, Any]) -> None:
+        """Keep request logging separate from response latency tracking."""
+        kind = event.get("type")
+        self._request_id = _event_request_id(event) or self._request_id
+        protocol_id = event.get("response_id") or event.get("session_id")
+        response = event.get("response")
+        if kind in {"session.created", "session.updated"}:
+            session = event.get("session")
+            protocol_id = (
+                session.get("id") if isinstance(session, dict) else None
+            ) or protocol_id
+        elif isinstance(kind, str) and kind.startswith("response."):
+            protocol_id = (
+                response.get("id") if isinstance(response, dict) else None
+            ) or protocol_id
+        if isinstance(protocol_id, str) and protocol_id.strip():
+            self._protocol_request_id = protocol_id
+        if kind == "conversation.item.input_audio_transcription.failed" or (
+            kind == "response.done"
+            and isinstance(response, dict)
+            and response.get("status") == "failed"
+        ):
+            # These are raw terminal events, not exceptions in this API.
+            _logger.error(
+                "Realtime ASR/TTS response failed, request_id=%s",
+                self._request_id_for_log(),
+            )
+
     def _track_event(self, event: Dict[str, Any]) -> None:
         """Track first-output delays in monotonic milliseconds per response."""
+        self._track_request_context(event)
         kind = event.get("type")
         if kind in {"session.created", "session.updated"}:
             self.session_id = (event.get("session") or {}).get(

@@ -911,7 +911,8 @@ def test_recognition_results_preserve_optional_request_id_and_extra_fields():
             assert result.get_usage() == {"duration": 0}
             assert result.future_field == {"ok": True}
             assert result.request_id is None
-            assert rec.request_id == rec.session.task_id
+            # An event without request_id must not erase task-started's ID.
+            assert rec.request_id == "r"
 
 
 def test_recognition_same_object_restarts_with_fresh_state_after_close():
@@ -1020,9 +1021,11 @@ def test_recognition_rejects_foreign_task_id(phase):
                         {
                             "header": {
                                 "event": "task-started",
-                                "task_id": "foreign-task"
-                                if phase == "start"
-                                else task_id,
+                                "task_id": (
+                                    "foreign-task"
+                                    if phase == "start"
+                                    else task_id
+                                ),
                             },
                             "payload": {},
                         },

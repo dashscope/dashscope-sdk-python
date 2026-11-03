@@ -40,7 +40,14 @@ import httpx
 
 from dashscope import _error_registry as _registry
 from dashscope._error_registry import PublicError, SdkErrorDef
+from dashscope._logging import (
+    get_logger,
+    request_id_for_log,
+    request_id_from_headers,
+)
 from dashscope._shared._errors import DashScopeException
+
+logger = get_logger("response")
 
 
 class ErrorCode(str, Enum):
@@ -369,7 +376,7 @@ def _request_id(
     body: Dict[str, Any],
     headers: Mapping[str, str],
 ) -> Optional[str]:
-    return body.get("request_id") or headers.get("x-request-id")
+    return body.get("request_id") or request_id_from_headers(headers)
 
 
 def _catalog_message(
@@ -540,13 +547,20 @@ def internal_response_error(
     """Build the catalog ``internal_error`` for an unusable response body."""
     entry = _entry("internal_error")
     data = body if isinstance(body, dict) else {}
+    request_id = _request_id(data, response.headers)
+    logger.error(
+        "Failed to parse HTTP response, status=%s, request_id=%s",
+        response.status_code,
+        request_id_for_log(
+            request_id,
+            request_id_from_headers(response.headers),
+        ),
+    )
     return InternalServerError(
         entry.error_msg,
         code=entry.error_code,
         status_code=entry.status_code,
-        request_id=(
-            data.get("request_id") or response.headers.get("x-request-id")
-        ),
+        request_id=request_id,
         body=body,
         headers=response.headers,
     )
@@ -609,5 +623,15 @@ def check_response(
     raise_on_error: bool = True,
 ) -> None:
     error = response_error(response)
-    if error is not None and raise_on_error:
-        raise error
+    if error is not None:
+        logger.error(
+            "HTTP service error: status=%s, code=%s, request_id=%s",
+            response.status_code,
+            error.code,
+            request_id_for_log(
+                error.request_id,
+                request_id_from_headers(response.headers),
+            ),
+        )
+        if raise_on_error:
+            raise error

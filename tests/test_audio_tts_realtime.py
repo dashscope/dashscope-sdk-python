@@ -8,15 +8,18 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 from websocket import (
+    WebSocketBadStatusException,
     WebSocketConnectionClosedException,
     WebSocketTimeoutException,
 )
 
 from dashscope import Client
 from dashscope.errors import (
+    APIConnectionError,
     APITimeoutError,
     BadRequestError,
     DashScopeError,
@@ -507,3 +510,426 @@ def test_realtime_recv_raises_on_transport_error():
     ) as rt:
         with pytest.raises(APITimeoutError):
             rt.recv_event()
+
+
+_REALTIME_LOGGER = "dashscope._logging.audio.realtime"
+
+
+def _realtime_errors(caplog):
+    return [
+        record
+        for record in caplog.records
+        if record.name == _REALTIME_LOGGER and record.levelno >= logging.ERROR
+    ]
+
+
+def _assert_realtime_log(caplog, request_id):
+    (record,) = _realtime_errors(caplog)
+    assert f"request_id={request_id}" in record.getMessage()
+    assert record.exc_info is None
+    assert "private-payload" not in record.getMessage()
+    assert "private-key" not in record.getMessage()
+    return record
+
+
+@pytest.mark.parametrize(
+    "body, headers, expected_id",
+    [
+        ({"request_id": "body-id"}, {"X-Request-ID": "header-id"}, "body-id"),
+        (
+            {"request_id": "", "error": {"request_id": "nested-id"}},
+            {"X-DashScope-RequestId": "header-id"},
+            "nested-id",
+        ),
+        (
+            b'{"request_id":"bytes-id"}',
+            {"X-DashScope-Request-ID": "header-id"},
+            "bytes-id",
+        ),
+        (
+            "private-payload not JSON",
+            {"X-Request-ID": "", "X-DashScope-Request-ID": "alias-id"},
+            "alias-id",
+        ),
+        ("[" * 2000, {"X-Request-ID": "header-id"}, "header-id"),
+        ({"event_id": "not-a-request"}, {}, "unknown"),
+    ],
+)
+def test_realtime_handshake_request_id_logs(
+    caplog,
+    body,
+    headers,
+    expected_id,
+):
+    caplog.set_level(logging.ERROR, logger=_REALTIME_LOGGER)
+    failure = WebSocketBadStatusException(
+        "private-payload Bearer private-key",
+        status_code=401,
+        resp_headers=headers,
+        resp_body=json.dumps(body) if isinstance(body, dict) else body,
+    )
+
+    def connector(url, request_headers):
+        raise failure
+
+    with _make_client() as client:
+        session = client.audio.realtime.connect(
+            model="omni",
+            connector=connector,
+        )
+        with pytest.raises(WebSocketBadStatusException) as caught:
+            session.connect()
+        assert caught.value is failure
+        assert session.session_id is None
+        assert session.last_response_id is None
+    _assert_realtime_log(caplog, expected_id)
+
+
+@pytest.mark.parametrize(
+    "outer_id, nested_id, expected_id",
+    [
+        ("outer-id", "nested-id", "outer-id"),
+        (None, "nested-id", "nested-id"),
+        (None, None, "handshake-id"),
+    ],
+)
+@pytest.mark.parametrize("recoverable", [False, True])
+def test_realtime_business_request_id_context(
+    caplog,
+    outer_id,
+    nested_id,
+    expected_id,
+    recoverable,
+):
+    caplog.set_level(logging.ERROR, logger=_REALTIME_LOGGER)
+    event = {
+        "type": "error",
+        "event_id": "server-event-not-request",
+        "request_id": outer_id,
+        "error": {
+            "type": "invalid_request_error" if recoverable else "server_error",
+            "code": "InvalidParameter",
+            "message": "private-payload Bearer private-key",
+            "request_id": nested_id,
+            "event_id": "client-event-not-request",
+        },
+    }
+    ws = FakeWebSocket(
+        [
+            json.dumps(
+                {"type": "session.created", "session": {"id": "session-id"}},
+            ),
+            json.dumps(event),
+        ],
+    )
+    ws.headers = {"X-DashScope-RequestId": "handshake-id"}
+    with _make_client() as client:
+        with client.audio.realtime.connect(
+            model="omni",
+            connector=lambda url, headers: ws,
+        ) as session:
+            session.recv_event()
+            with pytest.raises(BadRequestError) as caught:
+                session.recv_event()
+            assert caught.value.request_id == (outer_id or nested_id)
+            assert caught.value.body == event
+            assert caught.value.status_code == 200
+            assert session.session_id == "session-id"
+            assert session.last_response_id is None
+            assert ws.closed == (not recoverable)
+            if recoverable:
+                session.commit()
+                assert not ws.closed
+    _assert_realtime_log(caplog, expected_id)
+
+
+@pytest.mark.parametrize("stage", ["send", "recv", "disconnect", "parse"])
+@pytest.mark.parametrize(
+    "context, expected_id",
+    [
+        ({}, "unknown"),
+        ({"session": {"id": "session-id"}}, "session-id"),
+        (
+            {"request_id": "body-id", "session": {"id": "session-id"}},
+            "body-id",
+        ),
+    ],
+)
+def test_realtime_runtime_errors_log_request_context(
+    caplog,
+    monkeypatch,
+    stage,
+    context,
+    expected_id,
+):
+    caplog.set_level(logging.ERROR, logger=_REALTIME_LOGGER)
+    ws = FakeWebSocket([json.dumps({"type": "session.created", **context})])
+    with _make_client() as client:
+        with client.audio.realtime.connect(
+            model="omni",
+            connector=lambda url, headers: ws,
+        ) as session:
+            session.recv_event()
+            if stage == "disconnect":
+                session.create_response()
+                with pytest.raises(APIConnectionError) as caught:
+                    session.recv_event()
+                assert caught.value.request_id is None
+            elif stage == "parse":
+                ws.inbox.append("private-payload not JSON")
+                with pytest.raises(json.JSONDecodeError):
+                    session.recv_event()
+            else:
+                failure = WebSocketTimeoutException(
+                    "private-payload Bearer private-key",
+                )
+
+                def fail(*args):
+                    raise failure
+
+                monkeypatch.setattr(ws, stage, fail)
+                expected_type = (
+                    WebSocketTimeoutException
+                    if stage == "send"
+                    else APITimeoutError
+                )
+                with pytest.raises(expected_type) as caught:
+                    if stage == "send":
+                        session.commit()
+                    else:
+                        session.recv_event()
+                if stage == "send":
+                    assert caught.value is failure
+                else:
+                    assert caught.value.__cause__ is failure
+                    assert caught.value.request_id is None
+            assert ws.closed
+    _assert_realtime_log(caplog, expected_id)
+
+
+@pytest.mark.parametrize("kind", ["asr", "tts"])
+@pytest.mark.parametrize("explicit_id", [None, "failure-id"])
+def test_realtime_raw_asr_tts_failures_log_without_changing_events(
+    caplog,
+    kind,
+    explicit_id,
+):
+    caplog.set_level(logging.ERROR, logger=_REALTIME_LOGGER)
+    error = {
+        "code": "InternalError",
+        "message": "private-payload",
+        "request_id": explicit_id,
+    }
+    event = (
+        {
+            "type": "conversation.item.input_audio_transcription.failed",
+            "error": error,
+        }
+        if kind == "asr"
+        else {
+            "type": "response.done",
+            "response": {
+                "id": "response-id",
+                "status": "failed",
+                "status_details": {"error": error},
+            },
+        }
+    )
+    ws = FakeWebSocket(
+        [
+            json.dumps(
+                {"type": "session.created", "session": {"id": "session-id"}},
+            ),
+            json.dumps(
+                {
+                    "type": "response.created",
+                    "response": {"id": "response-id"},
+                },
+            ),
+            json.dumps(event),
+        ],
+    )
+    with _make_client() as client:
+        with client.audio.realtime.connect(
+            model="omni",
+            connector=lambda url, headers: ws,
+        ) as session:
+            session.recv_event()
+            session.recv_event()
+            started = session.last_response_create_time
+            assert session.recv_event() == event
+            assert session.last_message == event
+            assert session.last_response_id == "response-id"
+            assert session.last_response_create_time == started
+            assert not ws.closed
+    _assert_realtime_log(caplog, explicit_id or "response-id")
+
+
+def test_realtime_reconnect_drops_old_request_context(caplog):
+    caplog.set_level(logging.ERROR, logger=_REALTIME_LOGGER)
+    old = FakeWebSocket(
+        [json.dumps({"type": "session.created", "request_id": "old-id"})],
+    )
+    fresh = FakeWebSocket(
+        [
+            json.dumps(
+                {
+                    "type": "error",
+                    "event_id": "server-event",
+                    "error": {"code": "InvalidParameter"},
+                },
+            ),
+        ],
+    )
+    handshake = WebSocketBadStatusException(
+        "private-payload",
+        status_code=401,
+        resp_headers={},
+        resp_body="bad",
+    )
+    attempts = iter([old, handshake, fresh])
+
+    def connector(url, headers):
+        result = next(attempts)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    with _make_client() as client:
+        session = client.audio.realtime.connect(
+            model="omni",
+            connector=connector,
+        )
+        with session:
+            session.recv_event()
+        with pytest.raises(WebSocketBadStatusException):
+            session.connect()
+        _assert_realtime_log(caplog, "unknown")
+        caplog.clear()
+        with session:
+            assert session.session_id is None
+            assert session.last_response_id is None
+            with pytest.raises(BadRequestError) as caught:
+                session.recv_event()
+            assert caught.value.request_id is None
+        _assert_realtime_log(caplog, "unknown")
+
+
+def test_realtime_validation_and_proactive_close_do_not_log_errors(caplog):
+    caplog.set_level(logging.DEBUG, logger=_REALTIME_LOGGER)
+    ws = FakeWebSocket()
+    with _make_client() as client:
+        with pytest.raises(ValueError):
+            client.audio.realtime.connect(model="omni", timeout=0)
+        session = client.audio.realtime.connect(
+            model="omni",
+            connector=lambda url, headers: ws,
+        )
+        with pytest.raises(RuntimeError):
+            session.commit()
+        with session:
+            with pytest.raises(RuntimeError):
+                session.connect()
+            with pytest.raises(TypeError):
+                session.send_event({"type": "custom", "payload": object()})
+            with pytest.raises(TypeError):
+                session.append_audio(123)
+        assert session.recv_event() is None
+    assert not _realtime_errors(caplog)
+
+
+@pytest.mark.parametrize("field", ["session_id", "response_id"])
+def test_realtime_error_protocol_id_is_logging_only(caplog, field):
+    caplog.set_level(logging.ERROR, logger=_REALTIME_LOGGER)
+    event = {
+        "type": "error",
+        field: "protocol-id",
+        "event_id": "server-event",
+        "error": {"code": "InvalidParameter", "event_id": "client-event"},
+    }
+    ws = FakeWebSocket([json.dumps(event)])
+    with _make_client() as client:
+        with client.audio.realtime.connect(
+            model="omni",
+            connector=lambda url, headers: ws,
+        ) as session:
+            with pytest.raises(BadRequestError) as caught:
+                session.recv_event()
+            assert caught.value.request_id is None
+            assert caught.value.body == event
+            assert session.session_id is None
+            assert session.last_response_id is None
+    _assert_realtime_log(caplog, "protocol-id")
+
+
+@pytest.mark.parametrize("stage", ["handshake", "receive"])
+def test_realtime_successful_handshake_header_context(
+    caplog,
+    monkeypatch,
+    stage,
+):
+    caplog.set_level(logging.ERROR, logger=_REALTIME_LOGGER)
+    ws = FakeWebSocket(exc=WebSocketTimeoutException("private-payload"))
+    ws.headers = {"X-Request-ID": "", "X-DashScope-RequestId": "header-id"}
+    if stage == "handshake":
+
+        def fail_timeout(seconds):
+            raise WebSocketTimeoutException("private-payload")
+
+        monkeypatch.setattr(ws, "settimeout", fail_timeout)
+    with _make_client() as client:
+        session = client.audio.realtime.connect(
+            model="omni",
+            connector=lambda url, headers: ws,
+        )
+        with pytest.raises(APITimeoutError) as caught:
+            session.connect()
+            session.recv_event()
+        assert caught.value.request_id is None
+        assert isinstance(caught.value.__cause__, WebSocketTimeoutException)
+        assert ws.closed
+    _assert_realtime_log(caplog, "header-id")
+
+
+@pytest.mark.parametrize("reconnect", [False, True])
+def test_realtime_retired_reader_does_not_log_current_request_errors(
+    caplog,
+    monkeypatch,
+    reconnect,
+):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    caplog.set_level(logging.ERROR, logger=_REALTIME_LOGGER)
+    entered, release = threading.Event(), threading.Event()
+    old = FakeWebSocket()
+    fresh = FakeWebSocket()
+    sockets = iter([old, fresh])
+
+    def delayed_recv():
+        entered.set()
+        assert release.wait(2)
+        raise ConnectionResetError("private-payload")
+
+    monkeypatch.setattr(old, "recv", delayed_recv)
+    with _make_client() as client:
+        session = client.audio.realtime.connect(
+            model="omni",
+            connector=lambda url, headers: next(sockets),
+        )
+        session.connect()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            pending = executor.submit(session.recv_event)
+            try:
+                assert entered.wait(2)
+                session.close()
+                if reconnect:
+                    session.connect()
+                release.set()
+                with pytest.raises(ConnectionResetError):
+                    pending.result(timeout=2)
+                assert not fresh.closed
+            finally:
+                release.set()
+                session.close()
+    assert not _realtime_errors(caplog)
