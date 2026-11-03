@@ -543,7 +543,7 @@ class WsConnection:
             self._heartbeat_stop.set()
             self._binary_uplink_owner = None
             self._binary_downlink_owner = None
-            request_ids = [
+            request_ids: List[Optional[str]] = [
                 task._routing_request_id
                 for task in self._tasks.values()
                 if not task._closed
