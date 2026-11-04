@@ -11,7 +11,8 @@ Two wire protocols hide behind one resource, picked by model name:
 * multimodal-generation — one-shot sync calls hit
   ``/services/aigc/multimodal-generation/generation``, async tasks hit
   ``/services/aigc/image-generation/generation``; ``messages`` input,
-  ``choices`` output. wan2.6-t2i / wan2.6-image only answer here.
+  ``choices`` output. wan2.6-t2i / wan2.6-image / wan2.7-image only
+  answer here.
 
 The split follows the same convention as ``chat.completions`` routing
 media messages to the multimodal endpoint on its own: the caller passes
@@ -68,8 +69,12 @@ TASK_SERVICE = "aigc/image-generation/generation"
 MODULE = "aigc"
 
 # Models that only answer on the multimodal-generation protocol. Prefix
-# match so ``-preview``-style variants route the same way.
-MULTIMODAL_MODEL_PREFIXES = ("wan2.6-t2i", "wan2.6-image")
+# match so ``-pro`` / dated variants route the same way.
+MULTIMODAL_MODEL_PREFIXES = (
+    "wan2.6-t2i",
+    "wan2.6-image",
+    "wan2.7-image",
+)
 
 
 def _uses_multimodal_protocol(model: str) -> bool:

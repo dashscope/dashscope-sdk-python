@@ -139,6 +139,38 @@ def test_images_generate_wan26_uses_multimodal_endpoint():
     assert job.usage.image_count == 1
 
 
+@pytest.mark.parametrize("model", ["wan2.7-image", "wan2.7-image-pro"])
+def test_images_generate_wan27_uses_multimodal_endpoint(model):
+    captured = {}
+
+    def handler(request):
+        captured["path"] = request.url.path
+        captured["header"] = request.headers.get("x-dashscope-async")
+        return httpx.Response(200, json=_multimodal_image_body())
+
+    client = _make_client(handler)
+    job = client.images.generate(model=model, prompt="a cat", n=1)
+    assert captured["path"] == MULTIMODAL_IMAGE_PATH
+    # One-shot sync call: no async header, no polling.
+    assert captured["header"] is None
+    assert job.succeeded is True
+    assert job.image_urls == ["https://cdn.example.com/1.png"]
+
+
+def test_images_jobs_wan27_uses_image_generation_task_endpoint():
+    captured = {}
+
+    def handler(request):
+        captured["path"] = request.url.path
+        captured["header"] = request.headers.get("x-dashscope-async")
+        return httpx.Response(200, json=_task_body("PENDING"))
+
+    client = _make_client(handler)
+    client.images.jobs.create(model="wan2.7-image", prompt="a cat")
+    assert captured["path"] == TASK_IMAGE_PATH
+    assert captured["header"] == "enable"
+
+
 def test_images_generate_wan26_image_reference_urls():
     captured = {}
 

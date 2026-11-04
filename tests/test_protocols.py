@@ -640,6 +640,46 @@ def test_openai_parse_completion_and_chunk():
     assert not final.choices
 
 
+def test_openai_parse_preserves_media_parts():
+    protocol = OpenAIProtocol()
+    image_part = {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/wan27.png"},
+    }
+    completion = protocol.parse_completion(
+        {
+            "id": "chatcmpl-media",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {"type": "text", "text": "done"},
+                            image_part,
+                        ],
+                    },
+                },
+            ],
+        },
+        strict_validation=True,
+    )
+    message = completion.choices[0].message
+    assert message.content == "done"
+    assert message.content_parts == [image_part]
+
+    chunk = protocol.parse_chunk(
+        {
+            "id": "chatcmpl-media",
+            "choices": [{"index": 0, "delta": {"content": [image_part]}}],
+        },
+        strict_validation=True,
+    )
+    assert chunk.delta is not None
+    assert chunk.delta.content is None
+    assert chunk.delta.content_parts == [image_part]
+
+
 def test_openai_usage_details_survive_translation():
     # Only the canonical counters are renamed. The gateway's own detail
     # objects must stay readable: cached and reasoning tokens are billed

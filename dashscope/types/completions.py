@@ -51,6 +51,10 @@ class ChatCompletionMessage(BaseModel):
 
     role: str = "assistant"
     content: Optional[str] = None
+    # Non-text parts of a list-form content (image / audio / ...). Text
+    # already reads through ``content``; without this, flattening the
+    # list would drop generated media such as wan2.7 image URLs.
+    content_parts: Optional[List[Dict[str, Any]]] = None
     reasoning_content: Optional[str] = None
     reasoning_signature: Optional[str] = None
     tool_calls: Optional[List[ToolCall]] = None
@@ -61,6 +65,7 @@ class Delta(BaseModel):
 
     role: Optional[str] = None
     content: Optional[str] = None
+    content_parts: Optional[List[Dict[str, Any]]] = None
     reasoning_content: Optional[str] = None
     reasoning_signature: Optional[str] = None
     tool_calls: Optional[List[ToolCall]] = None
@@ -120,6 +125,33 @@ def _flatten_content(content: Any) -> Any:
     return content
 
 
+def _media_parts(content: Any) -> Optional[List[Dict[str, Any]]]:
+    """The non-text parts of a list-form content.
+
+    ``content`` stays a string for compatibility, so image / audio parts
+    need their own field -- dropping them loses generated media URLs.
+    """
+    if not isinstance(content, list):
+        return None
+    parts = [
+        part
+        for part in content
+        if isinstance(part, dict) and not part.get("text")
+    ]
+    return parts or None
+
+
+def _normalize_message_content(message: Dict[str, Any]) -> Dict[str, Any]:
+    """Flatten text and keep media parts on one message / delta."""
+    normalized = dict(message)
+    content = normalized.get("content")
+    normalized["content"] = _flatten_content(content)
+    parts = _media_parts(content)
+    if parts is not None:
+        normalized["content_parts"] = parts
+    return normalized
+
+
 def _output(body: Dict[str, Any]) -> Dict[str, Any]:
     """``body["output"]`` when it is a mapping, else empty.
 
@@ -147,9 +179,7 @@ def _canonical_choices(output: Dict[str, Any]) -> List[Any]:
             for key in ("message", "delta"):
                 msg = raw.get(key)
                 if isinstance(msg, dict):
-                    msg = dict(msg)
-                    msg["content"] = _flatten_content(msg.get("content"))
-                    raw[key] = msg
+                    raw[key] = _normalize_message_content(msg)
             canonical.append(raw)
         return canonical
     text = output.get("text")

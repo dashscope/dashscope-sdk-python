@@ -19,6 +19,7 @@ from dashscope.types._parse import parse_model
 from dashscope.types.completions import (
     ChatCompletion,
     ChatCompletionChunk,
+    _normalize_message_content,
 )
 
 if TYPE_CHECKING:
@@ -264,12 +265,20 @@ class OpenAIProtocol(ChatProtocol):
         strict_validation: bool = False,
         response: Optional[httpx.Response] = None,
     ) -> ChatCompletion:
+        choices = []
+        for raw in payload.get("choices") or []:
+            if isinstance(raw, dict):
+                raw = dict(raw)
+                message = raw.get("message")
+                if isinstance(message, dict):
+                    raw["message"] = _normalize_message_content(message)
+            choices.append(raw)
         return parse_model(
             ChatCompletion,
             {
                 "request_id": payload.get("request_id") or payload.get("id"),
                 "model": payload.get("model"),
-                "choices": payload.get("choices") or [],
+                "choices": choices,
                 "usage": _canonical_usage(payload.get("usage")),
             },
             strict=strict_validation,
@@ -292,6 +301,8 @@ class OpenAIProtocol(ChatProtocol):
             if isinstance(raw, dict):
                 raw = dict(raw)
                 raw.setdefault("delta", {})
+                if isinstance(raw["delta"], dict):
+                    raw["delta"] = _normalize_message_content(raw["delta"])
             choices.append(raw)
         return parse_model(
             ChatCompletionChunk,
