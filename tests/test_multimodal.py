@@ -215,6 +215,64 @@ def test_streaming_preserves_image_parts():
     assert chunks[0].choices[0].delta.content_parts == [image_part]
 
 
+def test_create_accepts_directive_input_without_messages():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return _vl_response()
+
+    client = _make_client(handler)
+    client.multimodal.chat.create(
+        model="image-agent",
+        extra_input={"directive": "generate", "app_id": "app-1"},
+    )
+    assert captured["body"]["input"] == {
+        "directive": "generate",
+        "app_id": "app-1",
+    }
+
+
+def test_create_allows_empty_messages_with_audio_address():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return _vl_response()
+
+    client = _make_client(handler)
+    client.multimodal.chat.create(
+        model="fun-asr",
+        messages=[],
+        parameters={"audio_address": "wss://example.com/audio"},
+    )
+    assert captured["body"]["input"] == {"messages": []}
+    assert captured["body"]["parameters"]["audio_address"] == (
+        "wss://example.com/audio"
+    )
+
+
+def test_create_accepts_translation_input_fields():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return _vl_response()
+
+    client = _make_client(handler)
+    client.multimodal.chat.create(
+        model="qwen-mt-uni",
+        extra_input={
+            "target_lang": "en",
+            "fileUrl": "https://example.com/source.txt",
+        },
+    )
+    assert captured["body"]["input"] == {
+        "target_lang": "en",
+        "fileUrl": "https://example.com/source.txt",
+    }
+
+
 def test_create_non_streaming_native():
     captured = {}
 
@@ -636,6 +694,25 @@ def test_openai_protocol_translates_omni_content_items():
         "total_pixels": 4096,
     }
     assert resp.output_text == "OK"
+
+
+@pytest.mark.asyncio
+async def test_async_create_accepts_extra_input_without_messages():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return _vl_response()
+
+    client = _make_async_client(handler)
+    await client.multimodal.chat.create(
+        model="qwen-mt-uni",
+        extra_input={"target_lang": "en", "fileUrl": "file-1"},
+    )
+    assert captured["body"]["input"] == {
+        "target_lang": "en",
+        "fileUrl": "file-1",
+    }
 
 
 @pytest.mark.asyncio

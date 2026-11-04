@@ -88,12 +88,51 @@ def _endpoint(
     return None
 
 
+def _normalize_request_messages(
+    client,
+    *,
+    multimodal: bool,
+    messages: Optional[Union[str, List[MessageInput]]],
+) -> List[Message]:
+    if messages is None:
+        if not multimodal or client.protocol.name != "native":
+            raise ValueError("messages must not be empty")
+        return []
+    if multimodal and client.protocol.name == "native" and messages == []:
+        return []
+    return normalize_messages(messages)
+
+
+def _merge_input_overrides(
+    client,
+    request: ChatRequest,
+    *,
+    multimodal: bool,
+    messages: Optional[Union[str, List[MessageInput]]],
+    extra_input: Optional[Dict[str, Any]],
+) -> ChatRequest:
+    if extra_input and (not multimodal or client.protocol.name != "native"):
+        raise ValueError(
+            "extra_input requires multimodal.chat with the native protocol",
+        )
+    if not extra_input and messages is not None:
+        return request
+    body = dict(request.body)
+    input_data = dict(body.get("input") or {})
+    if messages is None:
+        input_data.pop("messages", None)
+    if extra_input:
+        input_data.update(extra_input)
+    body["input"] = input_data
+    return replace(request, body=body)
+
+
 def _build_request(
     client,
     *,
     multimodal: bool,
     model: str,
-    messages: Union[str, List[MessageInput]],
+    messages: Optional[Union[str, List[MessageInput]]],
     stream: bool,
     tools: Optional[List[Dict[str, Any]]],
     temperature: Optional[float],
@@ -118,8 +157,13 @@ def _build_request(
     parameters: Optional[Dict[str, Any]],
     api_key: Optional[str] = None,
     workspace: Optional[str] = None,
+    extra_input: Optional[Dict[str, Any]] = None,
 ) -> Tuple[ChatRequest, str, bool, bool]:
-    normalized = normalize_messages(messages)
+    normalized = _normalize_request_messages(
+        client,
+        multimodal=multimodal,
+        messages=messages,
+    )
     # 1.x tags the whole chat family "aigc" (MultiModalConversation lives
     # in dashscope.legacy_1x.aigc); media routing does not change the module tag.
     module = "aigc"
@@ -203,6 +247,13 @@ def _build_request(
         parallel_tool_calls=parallel_tool_calls,
         extra_parameters=parameters,
         path=_endpoint(client, normalized, multimodal=multimodal),
+    )
+    request = _merge_input_overrides(
+        client,
+        request,
+        multimodal=multimodal,
+        messages=messages,
+        extra_input=extra_input,
     )
     if uploaded:
         request = replace(

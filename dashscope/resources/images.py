@@ -11,8 +11,8 @@ Two wire protocols hide behind one resource, picked by model name:
 * multimodal-generation — one-shot sync calls hit
   ``/services/aigc/multimodal-generation/generation``, async tasks hit
   ``/services/aigc/image-generation/generation``; ``messages`` input,
-  ``choices`` output. wan2.6-t2i / wan2.6-image / wan2.7-image only
-  answer here.
+  ``choices`` output. wan2.6/wan2.7, kling-image, vidu-image and
+  z-image models only answer here.
 
 The split follows the same convention as ``chat.completions`` routing
 media messages to the multimodal endpoint on its own: the caller passes
@@ -74,6 +74,9 @@ MULTIMODAL_MODEL_PREFIXES = (
     "wan2.6-t2i",
     "wan2.6-image",
     "wan2.7-image",
+    "kling-image",
+    "vidu-image",
+    "z-image",
 )
 
 
@@ -113,12 +116,14 @@ def _upload_inputs(
 
 
 def _build_input(
-    prompt: str,
+    prompt: Optional[str],
     negative_prompt: Optional[str],
     extra_input: Optional[Dict[str, Any]],
     function: Optional[str] = None,
 ) -> Dict[str, Any]:
-    input_data: Dict[str, Any] = {"prompt": prompt}
+    input_data: Dict[str, Any] = {}
+    if prompt is not None:
+        input_data["prompt"] = prompt
     if negative_prompt is not None:
         input_data["negative_prompt"] = negative_prompt
     if extra_input:
@@ -129,18 +134,20 @@ def _build_input(
 
 
 def _build_multimodal_input(
-    prompt: str,
+    prompt: Optional[str],
     image_urls: Optional[List[str]],
     extra_input: Optional[Dict[str, Any]],
     function: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Messages-style input: text part plus one part per reference image."""
-    content: List[Dict[str, Any]] = [{"text": prompt}]
+    content: List[Dict[str, Any]] = []
+    if prompt is not None:
+        content.append({"text": prompt})
     for url in image_urls or []:
         content.append({"image": url})
-    input_data: Dict[str, Any] = {
-        "messages": [{"role": "user", "content": content}],
-    }
+    input_data: Dict[str, Any] = {}
+    if content:
+        input_data["messages"] = [{"role": "user", "content": content}]
     if extra_input:
         input_data.update(extra_input)
     if function is not None:
@@ -308,7 +315,7 @@ class ImageJobs:
         self,
         *,
         model: str,
-        prompt: str,
+        prompt: Optional[str] = None,
         negative_prompt: Optional[str] = None,
         n: Optional[int] = None,
         size: Optional[str] = None,
@@ -583,7 +590,7 @@ class AsyncImageJobs:
         self,
         *,
         model: str,
-        prompt: str,
+        prompt: Optional[str] = None,
         negative_prompt: Optional[str] = None,
         n: Optional[int] = None,
         size: Optional[str] = None,

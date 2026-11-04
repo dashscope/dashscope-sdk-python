@@ -139,8 +139,17 @@ def test_images_generate_wan26_uses_multimodal_endpoint():
     assert job.usage.image_count == 1
 
 
-@pytest.mark.parametrize("model", ["wan2.7-image", "wan2.7-image-pro"])
-def test_images_generate_wan27_uses_multimodal_endpoint(model):
+@pytest.mark.parametrize(
+    "model",
+    [
+        "wan2.7-image",
+        "wan2.7-image-pro",
+        "kling-image",
+        "vidu-image",
+        "z-image",
+    ],
+)
+def test_images_generate_multimodal_model_prefixes(model):
     captured = {}
 
     def handler(request):
@@ -157,7 +166,11 @@ def test_images_generate_wan27_uses_multimodal_endpoint(model):
     assert job.image_urls == ["https://cdn.example.com/1.png"]
 
 
-def test_images_jobs_wan27_uses_image_generation_task_endpoint():
+@pytest.mark.parametrize(
+    "model",
+    ["wan2.7-image", "kling-image", "vidu-image", "z-image"],
+)
+def test_images_jobs_multimodal_models_use_task_endpoint(model):
     captured = {}
 
     def handler(request):
@@ -166,9 +179,54 @@ def test_images_jobs_wan27_uses_image_generation_task_endpoint():
         return httpx.Response(200, json=_task_body("PENDING"))
 
     client = _make_client(handler)
-    client.images.jobs.create(model="wan2.7-image", prompt="a cat")
+    client.images.jobs.create(model=model, prompt="a cat")
     assert captured["path"] == TASK_IMAGE_PATH
     assert captured["header"] == "enable"
+
+
+def test_images_jobs_create_allows_template_without_prompt():
+    captured = {}
+
+    def handler(request):
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_task_body("PENDING"))
+
+    client = _make_client(handler)
+    client.images.jobs.create(
+        model="wanx-poster-generation-v1",
+        extra_input={
+            "template_id": "poster-template",
+            "params": {"title": "Spring sale"},
+        },
+    )
+    assert captured["path"] == IMAGE_PATH
+    assert captured["body"]["input"] == {
+        "template_id": "poster-template",
+        "params": {"title": "Spring sale"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_images_jobs_create_allows_template_without_prompt():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_task_body("PENDING"))
+
+    client = _make_async_client(handler)
+    await client.images.jobs.create(
+        model="wanx-poster-generation-v1",
+        extra_input={
+            "template_id": "poster-template",
+            "params": {"title": "Spring sale"},
+        },
+    )
+    assert captured["body"]["input"] == {
+        "template_id": "poster-template",
+        "params": {"title": "Spring sale"},
+    }
 
 
 def test_images_generate_wan26_image_reference_urls():
