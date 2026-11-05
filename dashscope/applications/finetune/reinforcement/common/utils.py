@@ -219,13 +219,10 @@ _PYPI_REPO_RE = re.compile(r"^https?://[^\s'\"`$\\]+/?$")
 # A single pip requirement token: either a named requirement
 # ("dashscope", "dashscope==1.2.3", "pkg[extra]==1.0") or a local
 # wheel/sdist path ("./dashscope-2.0.3-py3-none-any.whl",
-# "/abs/x.whl", "../x.whl", "torch-1.0.0+cpu-...whl"). FC_PYPI_LIB is
-# documented as a space-separated list of wheel paths, so "/" and "+"
-# are allowed. Every permitted character is a subset of shlex.quote's
-# safe set, so a token survives emission unchanged and still word-splits
-# correctly in the script's `local_packages=($SDK_PACKAGE)`. Shell
-# metacharacters ($ ` ; | & ( ) < > quotes, backslash, glob *, and ~
-# which shlex.quote would wrap and break word-splitting) stay excluded.
+# "/abs/x.whl", "../x.whl", "torch-1.0.0+cpu-...whl"). Tokens are
+# whitelist-validated before joining them into a double-quoted assignment.
+# The script uses `read -r -a` to split them without interpreting quotes or
+# performing glob expansion.
 _PIP_REQUIREMENT_RE = re.compile(
     r"^[A-Za-z0-9._\-/+]+(\[[A-Za-z0-9,_\-]+\])?(==[A-Za-z0-9._*+-]+)?$",
 )
@@ -269,9 +266,8 @@ def generate_agentic_script(
     Raises:
         InputError: If any embedded value fails whitelist validation.
     """
-    # Whitelist-validate structured values, then emit every interpolated
-    # value as a shlex-quoted shell literal so quotes, $(), backticks,
-    # spaces or newlines can never break out of the assignment.
+    # Scalar values are shlex-quoted. SDK_PACKAGE tokens are joined raw only
+    # after the whitelist rejects characters special inside double quotes.
     _validate_shell_value(str(func_type), _FUNC_TYPE_RE, "func_type")
     _validate_shell_value(classpath, _MODULE_CLASSPATH_RE, "classpath")
     _validate_shell_value(fc_pypi_repo, _PYPI_REPO_RE, "pypi repo")
@@ -292,8 +288,8 @@ set -euo pipefail  # Strict error handling
 SERVICE_TYPE={shlex.quote(str(func_type))}                          # reward|rollout
 PROCESSOR_CLASS={shlex.quote(classpath)}  # Full class path
 PYPI_REPO={shlex.quote(fc_pypi_repo)}
-# Kept unquoted so the shell word-splits multiple packages below.
-SDK_PACKAGE="{' '.join(shlex.quote(t) for t in sdk_package_tokens)}"
+# Split below without quote interpretation or glob expansion.
+SDK_PACKAGE="{' '.join(sdk_package_tokens)}"
 REQUIREMENTS_FILE={shlex.quote(requirements_path or "")}
 SERVER_CLASSPATH={shlex.quote(FC_SERVER_CLASSPATH)}
 WORKERS_COUNT={shlex.quote(str(FC_WORKERS_COUNT))}
@@ -373,7 +369,7 @@ main() {
 
     # Phase 3: Default dependency Setup
     log "Installing default packages"
-    local_packages=($SDK_PACKAGE)
+    read -r -a local_packages <<< "$SDK_PACKAGE"
     for pkg in "${local_packages[@]}"; do
         if ! install_with_retry "$pkg"; then
             log "Failed to install default package: $pkg"

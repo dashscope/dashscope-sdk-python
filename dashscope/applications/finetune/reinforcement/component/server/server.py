@@ -211,7 +211,7 @@ async def validation_exception_handler(
         try:
             body_preview = str(deep_mask(json.loads(body_bytes)))[:2000]
         except Exception:
-            body_preview = body_bytes.decode("utf-8", errors="ignore")[:200]
+            body_preview = "<non-JSON body omitted>"
         logger.debug(f"[Server] Request body (masked): {body_preview}")
 
     return JSONResponse(
@@ -464,6 +464,16 @@ async def _cancel_task_on_disconnect(
     return False
 
 
+async def _cancel_disconnect_listener(disconnect_listener) -> None:
+    if disconnect_listener is None:
+        return
+    disconnect_listener.cancel()
+    try:
+        await disconnect_listener
+    except asyncio.CancelledError:
+        pass
+
+
 def _client_disconnect_response(request: "Request") -> JSONResponse:
     """Build the 499 response returned when the client disconnects."""
     logger.warning(
@@ -578,6 +588,11 @@ async def handle_endpoint(request: Request) -> JSONResponse:
 
         if disconnected_flag:
             cancelled = True
+            if admitted and not process_task.done():
+                process_task.add_done_callback(
+                    lambda _task: _release_admission(),
+                )
+                admitted = False
             return _client_disconnect_response(request)
 
         # Processing completed normally
@@ -610,13 +625,7 @@ async def handle_endpoint(request: Request) -> JSONResponse:
         if admitted:
             _release_admission()
 
-        # Cancel the disconnect listener if still running
-        if disconnect_listener is not None:
-            disconnect_listener.cancel()
-            try:
-                await disconnect_listener
-            except asyncio.CancelledError:
-                pass
+        await _cancel_disconnect_listener(disconnect_listener)
 
         # Clean up trace context
         await _cleanup_trace_context(_otel_ctx_token, _upstream_tokens)

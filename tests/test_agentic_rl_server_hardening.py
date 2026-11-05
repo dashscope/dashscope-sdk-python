@@ -19,6 +19,8 @@ import importlib
 import inspect
 import json
 import os
+import sys
+import threading
 from unittest.mock import MagicMock
 
 import pytest
@@ -34,11 +36,33 @@ _DEMO_PROCESSOR = (
 
 @pytest.fixture(scope="module")
 def server_mod():
-    """Import the FC server module with a valid demo configuration."""
+    """Import the FC server module without leaking process-wide state."""
+    imported_before = set(sys.modules)
     pytest.importorskip("fastapi")
+    env_before = {
+        key: os.environ.get(key) for key in ("FUNC_TYPE", "PROCESSOR_CLASS")
+    }
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    else:
+        loop = None
     os.environ.setdefault("FUNC_TYPE", "reward")
     os.environ.setdefault("PROCESSOR_CLASS", _DEMO_PROCESSOR)
-    return importlib.import_module(_SERVER_MODULE)
+    module = importlib.import_module(_SERVER_MODULE)
+    yield module
+    for name in set(sys.modules) - imported_before:
+        sys.modules.pop(name, None)
+    for key, value in env_before.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+    if loop is not None:
+        loop.close()
+        asyncio.set_event_loop(None)
 
 
 class _FakeRequest:
@@ -218,6 +242,99 @@ class TestDisconnectCancellation:
         with contextlib.suppress(asyncio.CancelledError):
             await disconnect_listener
 
+    @pytest.mark.asyncio
+    async def test_sync_cancellation_waits_for_worker(self, server_mod):
+        started = threading.Event()
+        release = threading.Event()
+
+        def blocking_worker():
+            started.set()
+            release.wait(5)
+
+        process_task = asyncio.create_task(
+            server_mod.func_manager._run_sync(blocking_worker),
+        )
+        while not started.is_set():
+            await asyncio.sleep(0.001)
+
+        try:
+            process_task.cancel()
+            await asyncio.sleep(0)
+            assert not process_task.done()
+        finally:
+            release.set()
+
+        with contextlib.suppress(asyncio.CancelledError):
+            await process_task
+
+    @pytest.mark.asyncio
+    async def test_disconnect_holds_admission_until_process_finishes(
+        self,
+        server_mod,
+        monkeypatch,
+    ):
+        semaphore = asyncio.BoundedSemaphore(1)
+        monkeypatch.setattr(server_mod, "_admission_semaphore", semaphore)
+        created = []
+        cancellation_seen = asyncio.Event()
+
+        class Manager:
+            async def processes(self, _input):
+                created.append(asyncio.current_task())
+                try:
+                    await asyncio.sleep(30)
+                except asyncio.CancelledError:
+                    cancellation_seen.set()
+                    await asyncio.sleep(30)
+
+        class Request(_FakeRequest):
+            async def receive(self):
+                return {"type": "http.disconnect"}
+
+        async def parse_body(_request):
+            return {}
+
+        async def parse_input(_body):
+            return object()
+
+        async def trace_context(_request):
+            return None, None
+
+        async def noop(*_args, **_kwargs):
+            return None
+
+        async def fake_wait_for(awaitable, timeout):
+            assert timeout == 5.0
+            awaitable.cancel()
+            raise asyncio.TimeoutError()
+
+        monkeypatch.setattr(server_mod, "func_manager", Manager())
+        monkeypatch.setattr(server_mod, "_parse_request_body", parse_body)
+        monkeypatch.setattr(server_mod, "_parse_processor_input", parse_input)
+        monkeypatch.setattr(
+            server_mod,
+            "_extract_trace_context",
+            trace_context,
+        )
+        monkeypatch.setattr(server_mod, "_cleanup_trace_context", noop)
+        monkeypatch.setattr(server_mod, "_log_request_metrics", noop)
+        monkeypatch.setattr(server_mod.asyncio, "wait_for", fake_wait_for)
+
+        try:
+            response = await server_mod.handle_endpoint(Request(b"{}"))
+            assert response.status_code == 499
+            await cancellation_seen.wait()
+            assert semaphore.locked()
+        finally:
+            for task in created:
+                task.cancel()
+            for task in created:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+        await asyncio.sleep(0)
+        assert not semaphore.locked()
+
 
 # ========================================================================== #
 #             P1 (§7): validation handler body masking                        #
@@ -295,7 +412,7 @@ class TestValidationBodyMasking:
         assert "sk-a****3456" in dbg
 
     @pytest.mark.asyncio
-    async def test_debug_non_json_body_is_truncated(
+    async def test_debug_non_json_body_is_omitted(
         self,
         server_mod,
         monkeypatch,
@@ -304,7 +421,7 @@ class TestValidationBodyMasking:
         monkeypatch.setattr(server_mod, "logger", logger_mock)
         monkeypatch.setattr(server_mod, "LOG_LEVEL", "DEBUG")
 
-        body = b"not-json-" + b"x" * 500
+        body = b'{"ground_truth": "SECRET-GROUND-TRUTH", broken'
         request = _FakeRequest(body, {"x-fc-request-id": "req-3"})
         exc = server_mod.RequestValidationError(
             [{"loc": ("body",), "msg": "err", "type": "t"}],
@@ -314,8 +431,8 @@ class TestValidationBodyMasking:
 
         assert resp.status_code == 422
         dbg = " ".join(str(c) for c in logger_mock.debug.call_args_list)
-        # Fallback path decodes and truncates to 200 chars.
-        assert "x" * 201 not in dbg
+        assert "SECRET-GROUND-TRUTH" not in dbg
+        assert "non-JSON body omitted" in dbg
 
     @pytest.mark.asyncio
     async def test_survives_unreadable_body(self, server_mod, monkeypatch):

@@ -190,7 +190,7 @@ class AgenticRL(AgenticRLTuning):
                 group_reward_instance_ids,
             ) = await self.tuning.register_functions(
                 lazy_load=lazy_load,
-                api_key=self._resolve_api_key(),
+                api_key=self._api_key,
             )
             logger.info("Function components registered")
         except Exception as e:

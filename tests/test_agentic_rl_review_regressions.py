@@ -98,6 +98,26 @@ class TestCredentialResolution:
         assert resolve_api_key("explicit") == "explicit"
         assert resolve_api_key(None) == "env-dash"
 
+    @pytest.mark.asyncio
+    async def test_register_functions_preserves_fc_env_fallback(
+        self,
+        monkeypatch,
+    ):
+        monkeypatch.setenv("DASHSCOPE_API_KEY", "env-dash")
+        monkeypatch.setenv("FC_API_KEY", "env-fc")
+        instance = AgenticRL()
+        instance.tuning = MagicMock()
+        instance.tuning.register_functions = AsyncMock(
+            return_value=([], [], [], [], [], []),
+        )
+
+        await instance.register_functions()
+
+        passed_key = instance.tuning.register_functions.await_args.kwargs[
+            "api_key"
+        ]
+        assert resolve_fc_api_key(passed_key) == "env-fc"
+
     def test_runtime_resolution_tracks_env_not_import_snapshot(
         self,
         monkeypatch,

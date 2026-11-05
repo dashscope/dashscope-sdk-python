@@ -182,7 +182,14 @@ class FuncManager:
         # Avoid blocking the uvicorn event loop when processor.process is sync.
         loop = asyncio.get_running_loop()
         ctx = contextvars.copy_context()
-        return await loop.run_in_executor(self.executor, ctx.run, fn)
+        future = loop.run_in_executor(self.executor, ctx.run, fn)
+        try:
+            return await asyncio.shield(future)
+        except asyncio.CancelledError:
+            # A running thread cannot be cancelled; keep the task pending so
+            # callers can retain admission accounting until the worker exits.
+            await asyncio.gather(future, return_exceptions=True)
+            raise
 
     async def setups(self):
         try:
