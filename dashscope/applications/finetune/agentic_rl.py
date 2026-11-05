@@ -21,7 +21,6 @@ Two deliberate differences from the 1.x class this was split out of:
 
 from __future__ import annotations
 
-import os
 import time
 from typing import Union, List, Optional, ClassVar, Dict, Any
 from typing_extensions import Self
@@ -58,6 +57,7 @@ from dashscope.applications.finetune.reinforcement import (
     generate_random_id,
     get_func_type_id,
     deep_remove_none,
+    resolve_api_key,
 )
 from dashscope.applications.finetune.reinforcement.common.errors import (
     RegistrationError,
@@ -148,7 +148,7 @@ class AgenticRL(AgenticRLTuning):
 
     def _resolve_api_key(self) -> str:
         """The key to submit with; see the module docstring."""
-        return self._api_key or os.environ.get("DASHSCOPE_API_KEY", "")
+        return resolve_api_key(self._api_key)
 
     def init(self, config_path: Optional[str] = None, **kwargs) -> Self:
         """
@@ -190,6 +190,7 @@ class AgenticRL(AgenticRLTuning):
                 group_reward_instance_ids,
             ) = await self.tuning.register_functions(
                 lazy_load=lazy_load,
+                api_key=self._resolve_api_key(),
             )
             logger.info("Function components registered")
         except Exception as e:
@@ -226,6 +227,7 @@ class AgenticRL(AgenticRLTuning):
             ) = await self.tuning.upload_datasets(
                 training_files=training_files or [],
                 validation_files=validation_files or [],
+                api_key=self._resolve_api_key(),
             )
             logger.info("Datasets uploaded")
         except Exception as e:
@@ -573,6 +575,7 @@ class AgenticRL(AgenticRLTuning):
             result = await AgenticRLFunctionComponent.verify_function(
                 value,
                 instance_id,
+                api_key=api_key,
             )
 
             if pull_logs:
@@ -581,6 +584,7 @@ class AgenticRL(AgenticRLTuning):
                     page_size=log_page_size,
                     start_time=start_time,
                     end_time=end_time,
+                    api_key=api_key,
                 )
 
             return result
@@ -629,6 +633,7 @@ class AgenticRL(AgenticRLTuning):
                 start_time=start_time,
                 end_time=end_time,
                 keywords=keywords,
+                api_key=api_key,
             )
 
         except Exception as e:
@@ -676,6 +681,7 @@ class AgenticRL(AgenticRLTuning):
                 start_time=start_time,
                 end_time=end_time,
                 keywords=keywords,
+                api_key=api_key,
             )
 
         except Exception as e:
@@ -713,6 +719,7 @@ class AgenticRL(AgenticRLTuning):
             fc_component = AgenticRLFunctionComponent
             return await fc_component.delete_function_instance(
                 function_instance_id=function_instance_id,
+                api_key=api_key,
             )
 
         except Exception as e:
@@ -730,6 +737,7 @@ class AgenticRL(AgenticRLTuning):
         page_size: int = 100,
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
+        api_key: Optional[str] = None,
     ) -> None:
         """Pull all logs of a function instance and print them between
         separator markers (best effort, never raises).
@@ -751,6 +759,7 @@ class AgenticRL(AgenticRLTuning):
                 page_size=page_size,
                 start_time=start_time,
                 end_time=end_time,
+                api_key=api_key,
             )
             for entry in logs:
                 logger.info(f"[function instance log] {entry}")

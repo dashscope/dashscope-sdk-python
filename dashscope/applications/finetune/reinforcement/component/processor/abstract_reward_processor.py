@@ -10,6 +10,7 @@ calculation logic.
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import copy
 from abc import abstractmethod
 from concurrent.futures import ThreadPoolExecutor, Executor
 from typing import Optional, Dict
@@ -68,6 +69,9 @@ class AbstractRewardProcessor(AbstractProcessor):
         """
         self.executor = executor or ThreadPoolExecutor()
         self._executor_owned = executor is None
+        # Instance-level flag so collection state is never shared through the
+        # class attribute.
+        self.functions_collected = False
         # Collect all sub-functions and aggregate functions during
         # initialization
         # IMPORTANT: Subclasses MUST call super().__init__() to ensure
@@ -80,8 +84,16 @@ class AbstractRewardProcessor(AbstractProcessor):
         if self.functions_collected:
             return
 
-        # Ensure metadata exists
-        if not hasattr(self, "reward_meta"):
+        # Build an instance-level copy of the class metadata. The decorator
+        # attaches a single ``reward_meta`` to the class, so mutating it
+        # directly would make every instance share one object: the bound
+        # methods collected for a later instance would overwrite the ones
+        # stored for earlier instances. Deep-copying per instance keeps each
+        # processor's sub-functions bound to its own object.
+        class_meta = getattr(type(self), "reward_meta", None)
+        if class_meta is not None:
+            self.reward_meta = copy.deepcopy(class_meta)
+        else:
             self.reward_meta = RewardProcessorMeta("default")
 
         # Iterate through class methods to collect marked functions

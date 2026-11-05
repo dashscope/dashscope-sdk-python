@@ -39,6 +39,7 @@ dashscope.finetune.reinforcement.component.demo.reward_processor_demo.DemoReward
 """
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -50,6 +51,8 @@ from fastapi.responses import JSONResponse
 
 from ...common.log import logger
 from ...common.utils import (
+    LOG_LEVEL,
+    deep_mask,
     get_fc_request_id,
     get_business_summary,
 )
@@ -133,6 +136,13 @@ logger.info(f"[Server] PROCESSOR_CLASS={_PROCESSOR_CLASS_ENV}")
 # event loop)
 executor = ThreadPoolExecutor(max_workers=_THREAD_POOL_WORKERS)
 
+# Admission control: bound total in-flight requests to
+# workers + queue capacity. The semaphore is acquired atomically inside the
+# event loop, so unlike probing ``executor._work_queue.qsize()`` it cannot be
+# passed by multiple concurrent requests between check and submit.
+_MAX_INFLIGHT = _THREAD_POOL_WORKERS + _THREAD_POOL_QUEUE
+_admission_semaphore = asyncio.Semaphore(_MAX_INFLIGHT)
+
 # Initialize FuncManager for unified parsing and processing
 func_manager: FuncManager = FuncManager.create_from_env(
     func_type=func_type,
@@ -167,7 +177,13 @@ async def validation_exception_handler(
     request: Request,
     exc: RequestValidationError,
 ) -> JSONResponse:
-    """Handles request validation errors, logs details and returns 422."""
+    """Handles request validation errors, logs details and returns 422.
+
+    The raw request body may contain prompts, ground truth, agent output or
+    user conversations, so it is never logged or echoed by default. Only the
+    request id, body size and the failing field locations are recorded; the
+    full body (deep-masked and truncated) is emitted at DEBUG level only.
+    """
     errors = exc.errors()
     error_details = [
         {
@@ -179,18 +195,30 @@ async def validation_exception_handler(
         for e in errors
     ]
 
+    fc_req_id = get_fc_request_id(request)
     try:
         body_bytes = await request.body()
-        body_str = body_bytes.decode("utf-8", errors="ignore")
-    except Exception as ex:
-        body_str = f"Failed to read request body: {str(ex)}"
+        body_size = len(body_bytes)
+    except Exception:
+        body_bytes = None
+        body_size = -1
 
-    logger.error(f"[Server] Request validation error: {error_details}")
-    logger.error(f"[Server] Request body: {body_str}")
+    logger.error(
+        f"[Server] Request validation error: {error_details} | "
+        f"fc_request_id={fc_req_id} | body_size={body_size}",
+    )
+    if body_bytes is not None and LOG_LEVEL == "DEBUG":
+        try:
+            body_preview = str(deep_mask(json.loads(body_bytes)))[:2000]
+        except Exception:
+            body_preview = (
+                body_bytes.decode("utf-8", errors="ignore")[:200]
+            )
+        logger.debug(f"[Server] Request body (masked): {body_preview}")
 
     return JSONResponse(
         status_code=422,
-        content={"detail": error_details, "body": body_str},
+        content={"detail": error_details},
     )
 
 
@@ -349,24 +377,35 @@ async def _parse_processor_input(raw_body: Dict) -> BaseDataModel:
 
 async def _check_queue_capacity():
     """
-    Check if thread pool queue has capacity for new requests.
+    Acquire one admission slot for a new request.
+
+    Admission is bounded by ``_admission_semaphore``
+    (workers + queue capacity). The caller MUST release the slot via
+    ``_release_admission()`` in a ``finally`` block once admitted.
 
     Raises:
-        HTTPException: If queue is full (503 Service Unavailable)
+        HTTPException: If the in-flight limit is reached (503)
     """
-    # pylint: disable=protected-access
-    queue_size = executor._work_queue.qsize()
-    if queue_size >= _THREAD_POOL_QUEUE:
+    if _admission_semaphore.locked():
         error_msg = (
             f"Too many concurrent requests. "
-            f"Thread pool queue is full (queue_size={queue_size}, "
-            f"max={_THREAD_POOL_QUEUE})"
+            f"In-flight limit reached (max={_MAX_INFLIGHT})"
         )
         logger.error(f"[Server] {error_msg}")
         raise HTTPException(
             status_code=503,
             detail="Server is busy, please try again later.",
         )
+    await _admission_semaphore.acquire()
+
+
+def _release_admission() -> None:
+    """Release an admission slot acquired by ``_check_queue_capacity``."""
+    try:
+        _admission_semaphore.release()
+    except ValueError:
+        # Semaphore released more times than acquired; ignore.
+        pass
 
 
 def _serialize_result(result: Any) -> Dict:
@@ -404,9 +443,24 @@ async def _cancel_task_on_disconnect(
     if disconnected.is_set():
         process_task.cancel()
         try:
-            await process_task
+            await asyncio.wait_for(
+                asyncio.shield(process_task),
+                timeout=5.0,
+            )
         except asyncio.CancelledError:
             pass
+        except Exception:
+            pass
+        if not process_task.done():
+            # asyncio cancellation cannot interrupt a sync processor that
+            # already started running inside a worker thread; surface it so
+            # the "HTTP cancelled but worker still busy" case is observable.
+            logger.warning(
+                "[Server] HTTP request cancelled but the worker is still "
+                "running (sync processors cannot be interrupted by "
+                "asyncio cancel); in-flight capacity remains held until "
+                "it completes.",
+            )
         return True
 
     return False
@@ -460,6 +514,7 @@ async def handle_endpoint(request: Request) -> JSONResponse:
     success = False
     cancelled = False
     processor_input = None
+    admitted = False
 
     disconnect_listener = None
     disconnected = asyncio.Event()
@@ -487,8 +542,10 @@ async def handle_endpoint(request: Request) -> JSONResponse:
         # Parse request using FuncManager
         processor_input = await _parse_processor_input(raw_body)
 
-        # Check thread pool queue capacity
+        # Admission control: acquire an in-flight slot (atomic within the
+        # event loop) before creating the processing task
         await _check_queue_capacity()
+        admitted = True
 
         # Start listening for disconnect only AFTER the request body has been
         # fully read.  Otherwise the background listener competes with the body
@@ -547,6 +604,10 @@ async def handle_endpoint(request: Request) -> JSONResponse:
             content={"message": str(ex)},
         )
     finally:
+        # Release the admission slot held by this request
+        if admitted:
+            _release_admission()
+
         # Cancel the disconnect listener if still running
         if disconnect_listener is not None:
             disconnect_listener.cancel()

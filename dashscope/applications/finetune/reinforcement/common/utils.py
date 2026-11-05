@@ -5,6 +5,8 @@ import copy
 import fnmatch
 import json
 import os
+import re
+import shlex
 import uuid
 import zipfile
 from typing import Optional, List, Any, Dict, Union, Tuple, Literal
@@ -23,6 +25,7 @@ from tenacity import (
 from dashscope._shared._sdk_ident import get_sdk_headers, get_user_agent
 from .. import logger
 from .errors import (
+    AgenticRLError,
     InputError,
     OutputError,
     ConfigurationError,
@@ -32,7 +35,6 @@ from .errors import (
 )
 from .. import (
     LOG_LEVEL,
-    DASHSCOPE_API_KEY,
     BAILIAN_FILE_API,
     BAILIAN_FILE_TIMEOUT,
     HTTP_REQUEST_TIMEOUT,
@@ -47,6 +49,7 @@ from .. import (
     LOGGER_FILTER_FIELDS,
     FC_WORKERS_COUNT,
 )
+from .constants import resolve_api_key
 from .model_types import (
     FileSpec,
     FunctionType,
@@ -67,45 +70,48 @@ async def async_http_request(
     timeout: int = 10,
     retry_times: int = 3,
 ) -> Dict[str, Any]:
-    """Perform an asynchronous HTTP request with tenacity retries."""
+    """Perform an asynchronous HTTP request with tenacity retries.
 
-    async def _make_request() -> Dict[str, Any]:
+    A single ``aiohttp.ClientSession`` is created per logical request and
+    shared by all retry attempts, so DNS/TCP/TLS connections can be reused
+    from the session's connection pool instead of being re-established on
+    every attempt.
+    """
+
+    async def _request_once(
+        session: "aiohttp.ClientSession",
+    ) -> Dict[str, Any]:
         """Single attempt: return result on success, raise exception on
         failure."""
-        async with aiohttp.ClientSession(
-            headers=headers,
-            timeout=aiohttp.ClientTimeout(total=timeout),
-            trust_env=True,
-        ) as session:
-            method_upper = method.upper()
+        method_upper = method.upper()
 
-            if method_upper == "GET":
-                async with session.get(url, params=data) as response:
-                    result = await _handle_response(response)
-            elif method_upper == "POST":
-                async with session.post(url, json=data) as response:
-                    result = await _handle_response(response)
-            elif method_upper == "POST-DATA":
-                async with session.post(url, data=data) as response:
-                    result = await _handle_response(response)
-            else:
-                # Logical error – do not retry
-                raise InputError(
-                    f"Unsupported method: {method}",
-                    error_code=4001,
-                )
+        if method_upper == "GET":
+            async with session.get(url, params=data) as response:
+                result = await _handle_response(response)
+        elif method_upper == "POST":
+            async with session.post(url, json=data) as response:
+                result = await _handle_response(response)
+        elif method_upper == "POST-DATA":
+            async with session.post(url, data=data) as response:
+                result = await _handle_response(response)
+        else:
+            # Logical error – do not retry
+            raise InputError(
+                f"Unsupported method: {method}",
+                error_code=4001,
+            )
 
-            # Treat server 5xx responses as transient failures and trigger a
-            # retry
-            if (
-                isinstance(result.get("status"), Dict)
-                and result.get("status").get("code") >= 500
-            ):
-                raise aiohttp.ClientError(
-                    f"Server error {result['status']['code']}:"
-                    f" {result['status']['message']}",
-                )
-            return result
+        # Treat server 5xx responses as transient failures and trigger a
+        # retry
+        if (
+            isinstance(result.get("status"), Dict)
+            and result.get("status").get("code") >= 500
+        ):
+            raise aiohttp.ClientError(
+                f"Server error {result['status']['code']}:"
+                f" {result['status']['message']}",
+            )
+        return result
 
     # Retry only on network errors, timeouts, and 5xx (wrapped as ClientError)
     retryer = AsyncRetrying(
@@ -122,9 +128,14 @@ async def async_http_request(
     )
 
     try:
-        async for attempt in retryer:
-            with attempt:
-                return await _make_request()
+        async with aiohttp.ClientSession(
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=timeout),
+            trust_env=True,
+        ) as session:
+            async for attempt in retryer:
+                with attempt:
+                    return await _request_once(session)
     except InputError:
         raise
     except asyncio.TimeoutError as e:
@@ -197,6 +208,35 @@ def check_file(file: str) -> None:
         )
 
 
+# Whitelist patterns for values embedded into the generated start.sh.
+# Anything that does not match is rejected instead of being escaped into
+# the script, so a malformed value can never change shell semantics.
+_MODULE_CLASSPATH_RE = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$",
+)
+_FUNC_TYPE_RE = re.compile(r"^[a-z_]+$")
+_PYPI_REPO_RE = re.compile(r"^https?://[^\s'\"`$\\]+/?$")
+# A single pip requirement token, e.g. "dashscope" or "dashscope==1.2.3".
+_PIP_REQUIREMENT_RE = re.compile(
+    r"^[A-Za-z0-9._\-]+(\[[A-Za-z0-9,_\-]+\])?(==[A-Za-z0-9._*+-]+)?$",
+)
+
+
+def _validate_shell_value(
+    value: str,
+    pattern: "re.Pattern",
+    field: str,
+) -> str:
+    """Validate a value destined for the startup script against a
+    whitelist pattern."""
+    if not pattern.match(value or ""):
+        raise InputError(
+            f"Invalid {field} for startup script: {value!r}",
+            error_code=4025,
+        )
+    return value
+
+
 def generate_agentic_script(
     fc_pypi_lib: str,
     fc_pypi_repo: str,
@@ -216,20 +256,39 @@ def generate_agentic_script(
 
     Returns:
         Generated bash script content
+
+    Raises:
+        InputError: If any embedded value fails whitelist validation.
     """
+    # Whitelist-validate structured values, then emit every interpolated
+    # value as a shlex-quoted shell literal so quotes, $(), backticks,
+    # spaces or newlines can never break out of the assignment.
+    _validate_shell_value(str(func_type), _FUNC_TYPE_RE, "func_type")
+    _validate_shell_value(classpath, _MODULE_CLASSPATH_RE, "classpath")
+    _validate_shell_value(fc_pypi_repo, _PYPI_REPO_RE, "pypi repo")
+    _validate_shell_value(
+        FC_SERVER_CLASSPATH,
+        _MODULE_CLASSPATH_RE,
+        "server classpath",
+    )
+    sdk_package_tokens = shlex.split(fc_pypi_lib or "")
+    for token in sdk_package_tokens:
+        _validate_shell_value(token, _PIP_REQUIREMENT_RE, "sdk package")
+
     shell_script_header = f"""#!/usr/bin/env bash
 
 set -euo pipefail  # Strict error handling
 
 # ================= Configuration ==================
-SERVICE_TYPE="{func_type}"                          # reward|rollout
-PROCESSOR_CLASS="{classpath}"  # Full class path
-PYPI_REPO="{fc_pypi_repo}"
-SDK_PACKAGE="{fc_pypi_lib}"
-REQUIREMENTS_FILE="{requirements_path}"
-SERVER_CLASSPATH="{FC_SERVER_CLASSPATH}"
-WORKERS_COUNT="{FC_WORKERS_COUNT}"
-FUNCTION_LAYER="{function_layer_used}"
+SERVICE_TYPE={shlex.quote(str(func_type))}                          # reward|rollout
+PROCESSOR_CLASS={shlex.quote(classpath)}  # Full class path
+PYPI_REPO={shlex.quote(fc_pypi_repo)}
+# Kept unquoted so the shell word-splits multiple packages below.
+SDK_PACKAGE="{' '.join(shlex.quote(t) for t in sdk_package_tokens)}"
+REQUIREMENTS_FILE={shlex.quote(requirements_path or "")}
+SERVER_CLASSPATH={shlex.quote(FC_SERVER_CLASSPATH)}
+WORKERS_COUNT={shlex.quote(str(FC_WORKERS_COUNT))}
+FUNCTION_LAYER={shlex.quote(str(function_layer_used))}
 LOG_DIR="/tmp/log/agentic_rl"
 MAX_RETRIES=3
 """
@@ -391,6 +450,9 @@ def create_deployment_files(
             os.chmod(start_file, 0o755)
 
         logger.debug(f"Generated startup script: {start_file}")
+    except AgenticRLError:
+        # Keep the specific classification (code/solution/allow_retry)
+        raise
     except Exception as e:
         raise RuntimeErrorWithCode(
             "Deployment file creation error",
@@ -605,7 +667,10 @@ async def upload_zip_to_oss_and_by_signed_url(
         raise
 
 
-async def to_bailian_data(files: List[FileSpec]) -> List[str]:
+async def to_bailian_data(
+    files: List[FileSpec],
+    api_key: Optional[str] = None,
+) -> List[str]:
     """
     Upload files to Bailian file storage service.
 
@@ -618,7 +683,7 @@ async def to_bailian_data(files: List[FileSpec]) -> List[str]:
     headers = {
         "user-agent": get_user_agent(),
         **get_sdk_headers(module="finetune"),
-        "Authorization": f"Bearer {DASHSCOPE_API_KEY}",
+        "Authorization": f"Bearer {resolve_api_key(api_key)}",
     }
     form_data = FormData()
     uploaded_files = []
@@ -709,6 +774,11 @@ async def to_bailian_data(files: List[FileSpec]) -> List[str]:
         logger.debug(f"Uploaded {len(uploaded_files)} files")
         return uploaded_files
 
+    except AgenticRLError:
+        # Preserve the specific classification (error code, solution and
+        # allow_retry) of errors raised above instead of flattening them
+        # into a generic 4034 OutputError.
+        raise
     except Exception as e:
         raise OutputError(
             "File upload error",
@@ -772,7 +842,7 @@ def set_api_key(api_key: Optional[str] = None) -> None:
         os.environ["DASHSCOPE_API_KEY"] = api_key
         logger.debug(
             f"Set environ DASHSCOPE_API_KEY: "
-            f"{api_key if LOG_LEVEL == 'DEBUG' else deep_mask(api_key)}",
+            f"{api_key if LOG_LEVEL == 'DEBUG' else secret_part_str(api_key)}",
         )
         return
 

@@ -41,6 +41,8 @@ from .common.constants import (
     DATASETS_FILE_SIZE_WARNING,
     HTTP_REQUEST_TIMEOUT,
     LOGGER_FILTER_FIELDS,
+    resolve_api_key,
+    resolve_fc_api_key,
 )
 from .common.errors import (
     AgenticRLError,
@@ -174,6 +176,8 @@ __all__ = [
     "DATASETS_FILE_SIZE_WARNING",
     "HTTP_REQUEST_TIMEOUT",
     "LOGGER_FILTER_FIELDS",
+    "resolve_api_key",
+    "resolve_fc_api_key",
     # Errors
     "AgenticRLError",
     "InputError",

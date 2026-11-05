@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import os
+from typing import Optional
 
 
 # --------------------------
@@ -29,8 +30,42 @@ DASHSCOPE_HTTP_BASE_URL = os.environ.get(
 )
 
 # API Key configuration
+#
+# ``DASHSCOPE_API_KEY`` / ``FC_API_KEY`` below are import-time snapshots,
+# kept only for backwards compatibility with code that reads them
+# directly. They must NOT be used as the runtime credential source: a key
+# passed to ``AgenticRL(api_key=...)`` -- or written to the environment
+# after this module is imported -- never reaches a value frozen at import,
+# and several ``AgenticRL`` instances in one process would fight over the
+# same module global. Resolve credentials at call time through
+# ``resolve_api_key`` / ``resolve_fc_api_key`` instead.
 DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", "")
 FC_API_KEY = os.environ.get("FC_API_KEY", DASHSCOPE_API_KEY)
+
+
+def resolve_api_key(api_key: Optional[str] = None) -> str:
+    """Resolve the DashScope credential at call time.
+
+    Prefers an explicitly supplied key (instance-scoped), then falls back
+    to the current environment. Never reads the import-time constant, so a
+    key set after import -- or held by one ``AgenticRL`` instance among
+    many in the same process -- is honored.
+    """
+    return api_key or os.environ.get("DASHSCOPE_API_KEY", "") or ""
+
+
+def resolve_fc_api_key(api_key: Optional[str] = None) -> str:
+    """Resolve the Function Compute credential at call time.
+
+    Prefers an explicitly supplied key (instance-scoped), then ``FC_API_KEY``,
+    then ``DASHSCOPE_API_KEY`` from the current environment.
+    """
+    return (
+        api_key
+        or os.environ.get("FC_API_KEY")
+        or os.environ.get("DASHSCOPE_API_KEY")
+        or ""
+    )
 
 # --------------------------
 # Logging Configuration

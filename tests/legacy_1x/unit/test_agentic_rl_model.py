@@ -18,6 +18,7 @@ from dashscope.finetune.reinforcement import (
     FunctionComponentRuntime,
     RegistrationError,
     OSSUploadError,
+    OutputError,
     get_filepath_classname,
 )
 
@@ -274,21 +275,25 @@ class TestAgenticRLTuning:
     # pylint: disable=redefined-outer-name
     @pytest.mark.asyncio
     async def test_upload_datasets_failure(self, agentic_rl_tuning):
-        """Test dataset registration failure"""
+        """Test dataset registration failure.
+
+        A real upload failure (missing file) now surfaces as the
+        specific OutputError(4034) raised by to_bailian_data instead of
+        being flattened into a generic OSSUploadError wrapper.
+        """
         # Mock file system operations
         with patch("os.path.exists", return_value=True), patch(
             "os.path.isfile",
             return_value=True,
-        ), patch("os.path.getsize", return_value=100), patch(
-            "dashscope.finetune.reinforcement.common.utils.to_bailian_data",
-            new_callable=AsyncMock,
-            side_effect=Exception("Upload failed"),
-        ):
-            with pytest.raises(OSSUploadError) as exc_info:
+        ), patch("os.path.getsize", return_value=100):
+            with pytest.raises(OutputError) as exc_info:
                 await agentic_rl_tuning.tuning.upload_datasets()
 
-            assert "Dataset registration failed" in str(
-                exc_info.value,
+            assert "File upload error" in str(exc_info.value)
+            assert exc_info.value.error_code == 4034
+            assert isinstance(
+                exc_info.value.__cause__,
+                FileNotFoundError,
             )
 
     # pylint: disable=redefined-outer-name

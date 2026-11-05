@@ -97,8 +97,8 @@ loongsuite-util-genai==0.4.0
 Configure logging verbosity via the `LOG_LEVEL` environment variable:
 
 ```bash
-export LOG_LEVEL="DEBUG"   # Most verbose (masks sensitive info like API keys)
-export LOG_LEVEL="INFO"    # Default
+export LOG_LEVEL="DEBUG"   # Most verbose (WARNING: logs may contain full credentials such as API keys; disable before sharing logs)
+export LOG_LEVEL="INFO"    # Default (sensitive info like API keys is masked)
 export LOG_LEVEL="WARNING"
 export LOG_LEVEL="ERROR"
 export LOG_LEVEL="CRITICAL"

@@ -232,7 +232,7 @@ class FuncManager:
             partial(self._processor.process, input_data),
         )
 
-    def execute(self, raw_data: Dict[str, Any]) -> Any:
+    async def execute(self, raw_data: Dict[str, Any]) -> Any:
         """
         Complete processing pipeline: parse + execute.
 
@@ -242,8 +242,8 @@ class FuncManager:
         Returns:
             Processing result
         """
-        input_data = self.parse(raw_data)
-        return self.process(input_data)
+        input_data = self.parses(raw_data)
+        return await self.processes(input_data)
 
     @classmethod
     def create_from_env(
