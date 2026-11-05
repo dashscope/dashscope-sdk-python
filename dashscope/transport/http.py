@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 import asyncio
+import functools
+import os
+import sys
 import time
 from typing import Any, Mapping, Optional, Union
 
@@ -217,6 +220,24 @@ def default_user_agent() -> str:
     return f"dashscope-v2-python/{__version__}"
 
 
+_DEV_MODE_ENV = "DASHSCOPE_DEV_MOCK"
+
+
+def _dev_mock_requested() -> bool:
+    """Whether the dev mock is on, checked before every send.
+
+    Near-zero overhead when disabled: one env lookup plus a
+    ``sys.modules`` probe that never imports :mod:`dashscope.devkit` on
+    the production path. Callers check this *before* building the
+    ``real`` partial, so an ordinary request pays no allocation for the
+    mock seam. The devkit module is only imported once this is True.
+    """
+    if os.environ.get(_DEV_MODE_ENV):
+        return True
+    devkit = sys.modules.get("dashscope.devkit")
+    return devkit is not None and devkit.is_active()
+
+
 class SyncTransport:
     def __init__(
         self,
@@ -254,6 +275,74 @@ class SyncTransport:
         return self._client
 
     def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        content: Optional[bytes] = None,
+        data: Optional[Mapping[str, Any]] = None,
+        files: Any = None,
+        params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        base_url: Optional[str] = None,
+        timeout: Union[float, httpx.Timeout, None] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        sdk_module: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+    ) -> httpx.Response:
+        if not _dev_mock_requested():
+            return self._request_impl(
+                method,
+                path,
+                json=json,
+                content=content,
+                data=data,
+                files=files,
+                params=params,
+                headers=headers,
+                base_url=base_url,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                sdk_module=sdk_module,
+                options=options,
+            )
+        real = functools.partial(
+            self._request_impl,
+            method,
+            path,
+            json=json,
+            content=content,
+            data=data,
+            files=files,
+            params=params,
+            headers=headers,
+            base_url=base_url,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            sdk_module=sdk_module,
+            options=options,
+        )
+        from dashscope import devkit
+
+        return devkit.intercept(
+            method=method,
+            path=path,
+            json_body=json,
+            content=content,
+            data=data,
+            files=files,
+            params=params,
+            headers=headers,
+            base_url=base_url or self._base_url,
+            stream=False,
+            real=real,
+        )
+
+    def _request_impl(
         self,
         method: str,
         path: str,
@@ -424,6 +513,62 @@ class SyncTransport:
         response is returned, ownership transfers to the caller and the SDK
         never retries or replays stream contents.
         """
+        if not _dev_mock_requested():
+            return self._open_stream_impl(
+                method,
+                path,
+                json=json,
+                params=params,
+                headers=headers,
+                base_url=base_url,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                sdk_module=sdk_module,
+                options=options,
+            )
+        real = functools.partial(
+            self._open_stream_impl,
+            method,
+            path,
+            json=json,
+            params=params,
+            headers=headers,
+            base_url=base_url,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            sdk_module=sdk_module,
+            options=options,
+        )
+        from dashscope import devkit
+
+        return devkit.intercept(
+            method=method,
+            path=path,
+            json_body=json,
+            params=params,
+            headers=headers,
+            base_url=base_url or self._base_url,
+            stream=True,
+            real=real,
+        )
+
+    def _open_stream_impl(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        base_url: Optional[str] = None,
+        timeout: Union[float, httpx.Timeout, None] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        sdk_module: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+    ) -> httpx.Response:
         url = _abs_url(base_url or self._base_url, path)
         client_request_id = _ident.client_request_id()
         max_retries = resolve_max_retries(self._max_retries, options)
@@ -584,6 +729,74 @@ class AsyncTransport:
         sdk_module: Optional[str] = None,
         options: Optional[RequestOptions] = None,
     ) -> httpx.Response:
+        if not _dev_mock_requested():
+            return await self._arequest_impl(
+                method,
+                path,
+                json=json,
+                content=content,
+                data=data,
+                files=files,
+                params=params,
+                headers=headers,
+                base_url=base_url,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                sdk_module=sdk_module,
+                options=options,
+            )
+        real = functools.partial(
+            self._arequest_impl,
+            method,
+            path,
+            json=json,
+            content=content,
+            data=data,
+            files=files,
+            params=params,
+            headers=headers,
+            base_url=base_url,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            sdk_module=sdk_module,
+            options=options,
+        )
+        from dashscope import devkit
+
+        return await devkit.aintercept(
+            method=method,
+            path=path,
+            json_body=json,
+            content=content,
+            data=data,
+            files=files,
+            params=params,
+            headers=headers,
+            base_url=base_url or self._base_url,
+            stream=False,
+            real=real,
+        )
+
+    async def _arequest_impl(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        content: Optional[bytes] = None,
+        data: Optional[Mapping[str, Any]] = None,
+        files: Any = None,
+        params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        base_url: Optional[str] = None,
+        timeout: Union[float, httpx.Timeout, None] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        sdk_module: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+    ) -> httpx.Response:
         url = _abs_url(base_url or self._base_url, path)
         client_request_id = _ident.client_request_id()
         max_retries = resolve_max_retries(self._max_retries, options)
@@ -725,6 +938,62 @@ class AsyncTransport:
         options: Optional[RequestOptions] = None,
     ) -> httpx.Response:
         """Async twin of :meth:`SyncTransport.open_stream`."""
+        if not _dev_mock_requested():
+            return await self._aopen_stream_impl(
+                method,
+                path,
+                json=json,
+                params=params,
+                headers=headers,
+                base_url=base_url,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                sdk_module=sdk_module,
+                options=options,
+            )
+        real = functools.partial(
+            self._aopen_stream_impl,
+            method,
+            path,
+            json=json,
+            params=params,
+            headers=headers,
+            base_url=base_url,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            sdk_module=sdk_module,
+            options=options,
+        )
+        from dashscope import devkit
+
+        return await devkit.aintercept(
+            method=method,
+            path=path,
+            json_body=json,
+            params=params,
+            headers=headers,
+            base_url=base_url or self._base_url,
+            stream=True,
+            real=real,
+        )
+
+    async def _aopen_stream_impl(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        base_url: Optional[str] = None,
+        timeout: Union[float, httpx.Timeout, None] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        sdk_module: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+    ) -> httpx.Response:
         url = _abs_url(base_url or self._base_url, path)
         client_request_id = _ident.client_request_id()
         max_retries = resolve_max_retries(self._max_retries, options)

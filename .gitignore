@@ -146,3 +146,8 @@ cython_debug/
 
 # Local PyPI investigation tooling; the CI guard lives in tests/legacy_1x/unit/.
 /scripts/
+
+# Dev mock record/replay fixtures — recorded response bodies can carry
+# generated content, tool-call arguments or account data. Never commit them.
+dashscope_mock.jsonl
+*.dashscope_mock.jsonl
