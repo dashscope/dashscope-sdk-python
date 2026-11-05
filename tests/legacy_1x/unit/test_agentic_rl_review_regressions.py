@@ -40,10 +40,10 @@ from dashscope.applications.finetune.reinforcement import (
     to_bailian_data,
 )
 from dashscope.applications.finetune.reinforcement.common import constants
-from dashscope.applications.finetune.reinforcement.component.demo.reward_processor_demo import (  # noqa: E501
+from dashscope.applications.finetune.reinforcement.component.demo import (
     DemoRewardProcessor,
 )
-from dashscope.applications.finetune.reinforcement.component.func_manager import (  # noqa: E501
+from dashscope.applications.finetune.reinforcement.component.func_manager import (
     FuncManager,
 )
 
@@ -252,6 +252,9 @@ class TestRewardProcessorInstanceIsolation:
             ),
         )
 
+        # ``@reward_func`` injects ``process()`` and clears
+        # ``__abstractmethods__`` at decoration time, which astroid cannot see.
+        # pylint: disable=abstract-class-instantiated
         p1 = _IsolationProcessor(1.0)
         p2 = _IsolationProcessor(2.0)
 

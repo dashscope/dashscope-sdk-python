@@ -67,6 +67,7 @@ def resolve_fc_api_key(api_key: Optional[str] = None) -> str:
         or ""
     )
 
+
 # --------------------------
 # Logging Configuration
 # --------------------------

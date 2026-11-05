@@ -17,7 +17,6 @@ from dashscope.finetune.reinforcement import (
     FunctionComponentModel,
     FunctionComponentRuntime,
     RegistrationError,
-    OSSUploadError,
     OutputError,
     get_filepath_classname,
 )

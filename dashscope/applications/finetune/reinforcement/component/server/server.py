@@ -211,9 +211,7 @@ async def validation_exception_handler(
         try:
             body_preview = str(deep_mask(json.loads(body_bytes)))[:2000]
         except Exception:
-            body_preview = (
-                body_bytes.decode("utf-8", errors="ignore")[:200]
-            )
+            body_preview = body_bytes.decode("utf-8", errors="ignore")[:200]
         logger.debug(f"[Server] Request body (masked): {body_preview}")
 
     return JSONResponse(
@@ -466,6 +464,19 @@ async def _cancel_task_on_disconnect(
     return False
 
 
+def _client_disconnect_response(request: "Request") -> JSONResponse:
+    """Build the 499 response returned when the client disconnects."""
+    logger.warning(
+        "[Server] Client disconnected during processing, "
+        "task cancelled. x-fc-request-id: %s",
+        get_fc_request_id(request),
+    )
+    return JSONResponse(
+        status_code=499,
+        content={"message": "Client disconnected, request cancelled."},
+    )
+
+
 async def _log_request_metrics(
     request: "Request",
     processor_input,
@@ -567,16 +578,7 @@ async def handle_endpoint(request: Request) -> JSONResponse:
 
         if disconnected_flag:
             cancelled = True
-            fc_request_id = get_fc_request_id(request)
-            logger.warning(
-                "[Server] Client disconnected during processing, "
-                "task cancelled. x-fc-request-id: %s",
-                fc_request_id,
-            )
-            return JSONResponse(
-                status_code=499,
-                content={"message": "Client disconnected, request cancelled."},
-            )
+            return _client_disconnect_response(request)
 
         # Processing completed normally
         result = process_task.result()

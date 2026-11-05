@@ -1323,7 +1323,11 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         if keywords:
             request_data["keywords"] = keywords
 
-        result = await client_fc(resolve_fc_api_key(api_key), url, request_data)
+        result = await client_fc(
+            resolve_fc_api_key(api_key),
+            url,
+            request_data,
+        )
         status = result.get("status", {})
         if isinstance(status, Dict) and status.get("code", 200) != 200:
             raise InstanceQueryError(

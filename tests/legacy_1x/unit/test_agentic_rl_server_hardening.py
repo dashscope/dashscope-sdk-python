@@ -209,9 +209,7 @@ class TestDisconnectCancellation:
         )
 
         assert result is True
-        logged = " ".join(
-            str(c) for c in logger_mock.warning.call_args_list
-        )
+        logged = " ".join(str(c) for c in logger_mock.warning.call_args_list)
         assert "still running" in logged
 
         with contextlib.suppress(asyncio.CancelledError):
