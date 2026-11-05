@@ -7,7 +7,6 @@ on:
   pull_request:
     branches:
       - 'main'
-  workflow_dispatch:
 
 jobs:
   current:
@@ -64,7 +63,7 @@ jobs:
           coverage report -m
 
   legacy:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ !(github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'docs:')) }}
 
     runs-on: ${{ matrix.os }}
     strategy:
