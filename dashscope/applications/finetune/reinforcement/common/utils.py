@@ -216,9 +216,18 @@ _MODULE_CLASSPATH_RE = re.compile(
 )
 _FUNC_TYPE_RE = re.compile(r"^[a-z_]+$")
 _PYPI_REPO_RE = re.compile(r"^https?://[^\s'\"`$\\]+/?$")
-# A single pip requirement token, e.g. "dashscope" or "dashscope==1.2.3".
+# A single pip requirement token: either a named requirement
+# ("dashscope", "dashscope==1.2.3", "pkg[extra]==1.0") or a local
+# wheel/sdist path ("./dashscope-2.0.3-py3-none-any.whl",
+# "/abs/x.whl", "../x.whl", "torch-1.0.0+cpu-...whl"). FC_PYPI_LIB is
+# documented as a space-separated list of wheel paths, so "/" and "+"
+# are allowed. Every permitted character is a subset of shlex.quote's
+# safe set, so a token survives emission unchanged and still word-splits
+# correctly in the script's `local_packages=($SDK_PACKAGE)`. Shell
+# metacharacters ($ ` ; | & ( ) < > quotes, backslash, glob *, and ~
+# which shlex.quote would wrap and break word-splitting) stay excluded.
 _PIP_REQUIREMENT_RE = re.compile(
-    r"^[A-Za-z0-9._\-]+(\[[A-Za-z0-9,_\-]+\])?(==[A-Za-z0-9._*+-]+)?$",
+    r"^[A-Za-z0-9._\-/+]+(\[[A-Za-z0-9,_\-]+\])?(==[A-Za-z0-9._*+-]+)?$",
 )
 
 
