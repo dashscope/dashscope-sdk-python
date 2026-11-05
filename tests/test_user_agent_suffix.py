@@ -26,7 +26,7 @@ from dashscope.transport.ws import with_client_user_agent
 from dashscope.version import __version__
 
 BASE_URL = "https://api.test.local"
-BASE_AGENT = f"dashscope-v2-python/{__version__}"
+BASE_AGENT = f"dashscope-sdk-python/{__version__}"
 
 
 def _make_client(handler, **kwargs):

@@ -269,7 +269,7 @@ def test_one_version_reaches_every_identity_string(monkeypatch):
     assert v2_ident.SDK_CLIENT_VALUE.split("/")[1] == version
 
     http = importlib.import_module("dashscope.transport.http")
-    assert http.default_user_agent() == f"dashscope-v2-python/{version}"
+    assert http.default_user_agent() == f"dashscope-sdk-python/{version}"
 
     studio = importlib.import_module("dashscope.agentstudio.client")
     agent = studio._user_agent("https://agentstudio.invalid")

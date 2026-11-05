@@ -300,7 +300,7 @@ def test_oss_post_carries_no_dashscope_credential(tmp_path, monkeypatch):
     assert "sk-test" not in seen["body"]
     assert seen["headers"].get("Accept") == "application/json"
     user_agent = seen["headers"].get("User-Agent", "")
-    assert user_agent.startswith("dashscope-v2-python/")
+    assert user_agent.startswith("dashscope-sdk-python/")
 
 
 def test_oss_post_keeps_the_configured_user_agent_suffix(
@@ -319,7 +319,7 @@ def test_oss_post_keeps_the_configured_user_agent_suffix(
     _oss_upload.upload_local_file(client, "qwen-vl-max", _png(tmp_path))
 
     user_agent = seen["headers"].get("User-Agent", "")
-    assert user_agent.startswith("dashscope-v2-python/")
+    assert user_agent.startswith("dashscope-sdk-python/")
     assert "dashscope-cli/2.0" in user_agent
 
 

@@ -153,7 +153,7 @@ def default_user_agent(suffix: Optional[str] = None) -> str:
         from dashscope.version import __version__
     except Exception:
         __version__ = "0.0.0"
-    agent = f"dashscope-v2-python/{__version__}"
+    agent = f"dashscope-sdk-python/{__version__}"
     return f"{agent} {suffix}" if suffix else agent
 
 
