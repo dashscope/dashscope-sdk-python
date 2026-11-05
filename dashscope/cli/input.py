@@ -224,20 +224,22 @@ def read_prompt_or_messages(
     messages: Optional[str],
     system: Optional[str] = None,
     allow_stdin_prompt: bool = True,
+    explicit_stdin: bool = False,
 ) -> Any:
     """Resolve the conversation for a generate-style command.
 
-    Precedence: ``--messages`` > ``--prompt`` > piped stdin. Stdin is
-    treated as a message payload when it parses as JSON and as prompt
-    text otherwise, so both ``cat msgs.json | dashscope chat create -``
-    and ``echo hi | dashscope chat create -m qwen-plus`` work.
+    Precedence: ``--messages`` > ``--prompt`` > stdin. Stdin is treated
+    as a message payload when it parses as JSON and as prompt text
+    otherwise, so both ``cat msgs.json | dashscope chat create -`` and
+    ``echo hi | dashscope chat create -m qwen-plus`` work. Explicit stdin
+    also reads from a terminal; implicit stdin requires a pipe.
     """
     if messages is not None:
         return parse_messages_arg(messages)
     if prompt is not None:
         text = read_text_arg(prompt, option_name="--prompt")
         return messages_from_prompt(text or "", system)
-    if allow_stdin_prompt and stdin_is_piped():
+    if allow_stdin_prompt and (explicit_stdin or stdin_is_piped()):
         text = read_stdin().strip()
         if text:
             if _looks_like_json(text):

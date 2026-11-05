@@ -298,6 +298,10 @@ class TestJobs:
                 "SUCCEEDED",
                 "--model",
                 "wan2.2-t2i-flash",
+                "--api-key-id",
+                "key-1",
+                "--region",
+                "cn-beijing",
             ],
         )
         assert resource.jobs.calls[0]["kwargs"] == {
@@ -305,6 +309,8 @@ class TestJobs:
             "page_size": 5,
             "status": "SUCCEEDED",
             "model_name": "wan2.2-t2i-flash",
+            "api_key_id": "key-1",
+            "region": "cn-beijing",
             "start_time": None,
             "end_time": None,
         }

@@ -161,10 +161,11 @@ class TestCreate:
         )
         assert result.exit_code == 2
 
-    def test_create_requires_capacity(self, invoke, deployments):
-        deployments(create=_deployment())
+    def test_create_defaults_capacity_to_one(self, invoke, deployments):
+        resource = deployments(create=_deployment())
         result = invoke(["deployments", "create", "-m", "qwen-plus-ft"])
-        assert result.exit_code == 2
+        assert result.exit_code == 0
+        assert resource.calls[0]["kwargs"]["capacity"] == 1
 
 
 class TestRead:

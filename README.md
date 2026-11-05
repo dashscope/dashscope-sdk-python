@@ -439,23 +439,23 @@ The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built 
 
 ## Command line
 
-`pip install -U dashscope` puts **two** commands on your `PATH`:
+`pip install -U dashscope` puts one `dashscope` command on your `PATH`. It serves both the SDK-shaped **2.0** command tree and the existing **1.x** command forms, so current 1.x invocations need no migration:
 
-| Command | Runs | Typical subcommands |
-|---------|------|---------------------|
-| `dashscope` | the **2.0** CLI | `chat create`, `ft create/get/wait/list/stream/logs/cancel/delete`, `files upload/list/get/delete`, `models list/get`, `images generate`, `images jobs create/get/wait/list/cancel`, `videos generate`, `videos jobs create/get/wait/list/cancel`, `embeddings create`, `embeddings jobs create/get/wait/list/cancel`, `multimodal chat create`, `multimodal embeddings create`, `rerank create`, `tokenization count`, `apps completions create`, `deployments create/get/list/scale/delete/stream`, `rl jobs create/get/wait/list/logs/cancel/delete`, `rl functions register/test/upload-data/logs/delete`, `audio tts synthesize/http`, `audio asr transcribe/get/wait/recognize`, `audio realtime run`, `audio vocabularies/phrases/voices/voice-design` management, `tingwu call`, `decision create`, `agentstudio agents create/get/list/versions/update/archive`, `agentstudio sessions create/get/list/update/archive/delete`, `agentstudio sessions events send/list/stream`, `config set/get/list`, `version` |
-| `dashscope1` | the **1.x** CLI (legacy) | `generation`, `application`, `image-synthesis`, `multimodal-conversation`, `auth`, `oss`, … |
+| Form | Examples |
+|------|----------|
+| **2.0**, following the SDK resource tree | `chat create`, `apps completions create`, `multimodal chat create`, `rl jobs create`, `rl functions register`, `images jobs create`, `audio asr transcribe`, `agentstudio sessions events send` |
+| **1.x**, kept compatible | `generation call`, `application call`, `image-synthesis create`, `multimodal-conversation call`, `fine-tunes call`, `agentic-rl run`, `auth login`, `oss upload` |
 
-The module entry points are equivalent:
+Legacy-only names and dotted commands run against the frozen 1.x implementation. Shared names are served by 2.0 with compatible 1.x option spellings and defaults. The module entry point uses the same router:
 
 ```bash
-python -m dashscope.cli           # 2.0
-python -m dashscope.legacy_1x.cli # 1.x
+python -m dashscope.cli generation call ...
+python -m dashscope.cli apps completions create ...
 ```
 
 Running `dashscope` with no arguments starts the [AI assistant](#ai-assistant-dashscope-sdk-expert) instead of the CLI.
 
-For the full 2.0 CLI contract — output formats, exit codes, configuration precedence, CI recipes — see [`examples/05_cli/README.md`](examples/05_cli/README.md).
+For the complete CLI command map, 1.x compatibility rules, output formats, exit codes, configuration precedence and CI recipes, see the CLI section in [`examples/README.md`](examples/README.md).
 
 ## Shell completion
 
@@ -473,7 +473,7 @@ Preview the script without installing:
 dashscope --show-completion bash
 ```
 
-The 1.x CLI (`dashscope1`) has its own completion — run `dashscope1 --install-completion <shell>` separately if you still use it.
+Completion is installed through the single `dashscope` entry point.
 
 ## Logging
 
@@ -497,10 +497,11 @@ examples/
 ├── 02_advanced_engineering/  Mock debugging, semantic cache, circuit breaker + multi-region DR
 ├── 03_agent_recipes/         Tool-call loop, RAG, MCP server, AgentStudio
 ├── 04_real_world_scenarios/  End-to-end production harnesses (RAG, realtime meetings, customer service)
+├── 05_cli/                   Offline CLI output/error and subprocess CI harnesses
 └── legacy_1x/                1.x module-level API examples, for reference
 ```
 
-See [`examples/README.md`](examples/README.md). Several flagship cases run fully offline (mock transports) with no API key.
+See [`examples/README.md`](examples/README.md) for the full guide, including the complete CLI command map and shell/CI recipes. Several flagship cases and both CLI harnesses run fully offline with no API key.
 
 ## Migrating from 1.x
 

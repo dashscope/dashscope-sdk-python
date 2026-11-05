@@ -773,5 +773,5 @@ if __name__ == "__main__":
 #   Offline mock debugging: 02_advanced_engineering/local_mock_debugging.py
 #   Backoff + breaker DR: 02_advanced_engineering/circuit_breaker_retry.py
 #   CLI contract walkthrough: 05_cli/cli_output_and_errors.py
-#   Recipes and reference: 05_cli/README.md
+#   Recipes and reference: README.md (05_cli section)
 # -------------------------------------------------------------

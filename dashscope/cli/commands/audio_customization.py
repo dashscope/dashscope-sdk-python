@@ -5,7 +5,7 @@
 Four registries that the speech commands consume but do not own:
 
 * ``vocabularies`` -- ASR hot-word tables, referenced by
-  ``audio asr recognize --vocabulary-id``;
+  ``audio asr stream --vocabulary-id``;
 * ``phrases`` -- compiled phrase sets, referenced by
   ``audio asr transcribe --phrase-id``;
 * ``voices`` -- voices cloned from a sample recording;

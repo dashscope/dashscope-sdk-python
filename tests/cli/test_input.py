@@ -238,6 +238,18 @@ class TestReadPromptOrMessages:
         assert info.value.category == "usage"
         assert "--prompt" in info.value.message
 
+    def test_explicit_stdin_reads_from_a_terminal(self, monkeypatch):
+        class Tty(io.StringIO):
+            def isatty(self):
+                return True
+
+        monkeypatch.setattr("sys.stdin", Tty("terminal input"))
+        assert read_prompt_or_messages(
+            prompt=None,
+            messages=None,
+            explicit_stdin=True,
+        ) == [{"role": "user", "content": "terminal input"}]
+
     def test_stdin_can_be_disabled(self, pipe_stdin):
         pipe_stdin("ignored")
         with pytest.raises(CliError):

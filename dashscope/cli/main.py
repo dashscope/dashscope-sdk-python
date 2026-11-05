@@ -1,43 +1,76 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-"""Console-script entry point for ``dashscope``: the v2 tree, or the agent.
+"""Route ``dashscope`` to the SDK-shaped v2 tree, frozen 1.x commands, or agent.
 
-Everything this entry point runs is SDK 2.0. The 1.x command tree still
-ships, and still answers to its own console script ``dashscope1``, but
-``dashscope`` no longer delegates to it: a 1.x-only name is *rejected*, with
-the v2 spelling that replaces it. Delegating would leave two SDKs reachable
-from one command, and the point of the v2 tree is that there is one.
-
-The single thing still imported from ``legacy_1x`` is ``_route_to_expert``,
-the bundled agent behind ``expert`` and a bare ``dashscope``. That is not
-part of the 1.x command tree -- it merely lives in the same module -- and
-the import is deferred so ``--help`` and every v2 command skip paying for
-it.
+Legacy-only command names and dotted spellings keep their original 1.x
+implementation. Shared names such as ``ft`` and ``files`` are served by v2
+with compatible option spellings. There is only one console entry point.
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from typing import List, Optional, Sequence
 
 from rich.console import Console
 
-from dashscope.cli.errors import fail, usage_error
+from dashscope.cli.compat_1x import normalize_argv
+from dashscope.cli.errors import CliError, fail
 
 NEW = "new"
 AGENT = "agent"
-REMOVED = "removed"
+LEGACY = "legacy"
 
-# Names this entry point serves itself. ``fine-tunes`` is the hidden alias
-# the 1.x tree already used for ``ft``, so muscle memory keeps working.
-# Pinned to the groups ``app.py`` actually registers by a test.
+LEGACY_GROUPS = frozenset(
+    {
+        "generation",
+        "application",
+        "image-synthesis",
+        "image-generation",
+        "video-synthesis",
+        "multimodal-conversation",
+        "multimodal-embedding",
+        "transcription",
+        "speech-synthesis",
+    },
+)
+
+LEGACY_DOTTED_COMMANDS = frozenset(
+    {
+        "fine_tunes.call",
+        "fine_tunes.get",
+        "fine_tunes.list",
+        "fine_tunes.stream",
+        "fine_tunes.cancel",
+        "fine_tunes.delete",
+        "generation.call",
+        "files.upload",
+        "files.get",
+        "files.list",
+        "files.delete",
+        "deployments.call",
+        "deployments.get",
+        "deployments.list",
+        "deployments.scale",
+        "deployments.delete",
+        "oss.upload",
+    },
+)
+
+# Names this entry point serves itself. ``fine-tunes`` and ``agentic-rl``
+# are the hidden aliases the 1.x tree already used for ``ft`` and ``rl``,
+# so muscle memory keeps working. Pinned to the groups ``app.py`` actually
+# registers by a test.
 NEW_COMMANDS = frozenset(
     {
+        "auth",
         "chat",
         "ft",
         "fine-tunes",
         "files",
         "models",
+        "oss",
         "images",
         "videos",
         "embeddings",
@@ -47,6 +80,7 @@ NEW_COMMANDS = frozenset(
         "apps",
         "deployments",
         "rl",
+        "agentic-rl",
         "audio",
         "tingwu",
         "decision",
@@ -55,34 +89,6 @@ NEW_COMMANDS = frozenset(
         "version",
     },
 )
-
-# 1.x command groups whose v2 replacement has landed. The rejection names
-# the replacement, so an old script is told what to change into rather than
-# only that it stopped working.
-#
-# argv is deliberately *not* rewritten to the v2 spelling: the two trees do
-# not share an option surface (``generation call --prompt`` has no
-# ``chat create --prompt``), so a translated command line would fail on the
-# first flag and blame the user for a mistake the CLI made. Naming the
-# replacement and stopping is honest; guessing at it is not.
-REPLACED_COMMANDS = {
-    "application": "apps completions create",
-    "agentic-rl": "rl",
-    "generation": "chat create",
-    "image-generation": "images generate",
-    "image-synthesis": "images generate",
-    "multimodal-conversation": "multimodal chat create",
-    "multimodal-embedding": "multimodal embeddings create",
-    "speech-synthesis": "audio tts synthesize",
-    "transcription": "audio asr transcribe",
-    "video-synthesis": "videos generate",
-}
-
-# 1.x command groups with no v2 equivalent. ``dashscope1`` still serves
-# them, so the rejection can say where to go instead of only saying no.
-UNSUPPORTED_COMMANDS = frozenset({"auth", "oss"})
-
-REMOVED_COMMANDS = frozenset(REPLACED_COMMANDS) | UNSUPPORTED_COMMANDS
 
 # The bundled agent's routing keyword, the flags that pick its interactive
 # mode, and the help request it answers itself.
@@ -115,8 +121,10 @@ _VALUE_TAKING_OPTIONS = frozenset(
     {
         "-k",
         "--api-key",
+        "--api_key",
         "--protocol",
         "--base-url",
+        "--base_url",
         "--workspace",
         "--region",
         "--timeout",
@@ -129,7 +137,7 @@ _VALUE_TAKING_OPTIONS = frozenset(
 # The spellings that set the API key. Kept separate from the above because
 # only these drive the bare-``dashscope`` decision, and because the agent
 # wants the value itself rather than merely needing to step over it.
-_VALUE_OPTIONS = ("-k", "--api-key")
+_VALUE_OPTIONS = ("-k", "--api-key", "--api_key")
 
 
 def _first_command_token(argv: Sequence[str]) -> Optional[str]:
@@ -193,37 +201,6 @@ def _api_key_from(argv: Sequence[str]) -> Optional[str]:
     return None
 
 
-def _legacy_group(token: str) -> str:
-    """The command group *token* names, dotted spelling resolved.
-
-    ``fine_tunes.list`` is the pre-Typer form the 1.x tree translated
-    through a table of its own. Its group half regularises to the v2 name
-    by swapping underscores for hyphens, which is what lets the router
-    judge a dotted spelling without carrying that table again.
-    """
-    return token.partition(".")[0].replace("_", "-")
-
-
-def _replacement_for(token: str) -> Optional[str]:
-    """The v2 command that takes over *token*, or ``None`` if none does.
-
-    Covers the dotted spellings too: the translation is regular enough to
-    derive -- ``call`` was the old spelling of ``create`` -- so deriving it
-    keeps one less table in step with the v2 groups.
-    """
-    if token in REPLACED_COMMANDS:
-        return REPLACED_COMMANDS[token]
-    if "." not in token:
-        return None
-    group = _legacy_group(token)
-    sub = token.partition(".")[2]
-    if group in NEW_COMMANDS:
-        return f"{group} {'create' if sub == 'call' else sub}"
-    # ``generation.call``: the group is gone, so fall back to whatever
-    # replaced it and let that carry the subcommand.
-    return REPLACED_COMMANDS.get(group)
-
-
 def _classify_without_command(argv: Sequence[str]) -> str:
     """Route an invocation that names no command."""
     if "-h" in argv or "--help" in argv:
@@ -243,44 +220,26 @@ def _classify_without_command(argv: Sequence[str]) -> str:
 
 
 def classify(argv: Sequence[str]) -> str:
-    """Decide what serves *argv*: the v2 tree, the agent, or a rejection."""
+    """Route legacy-only names to 1.x and everything else to v2 or agent."""
     token = _first_command_token(argv)
     if token is None:
         return _classify_without_command(argv)
     if token == _AGENT_COMMAND:
         return AGENT
-    if token in NEW_COMMANDS:
-        return NEW
-    # A removed 1.x name -- or a dotted spelling of one, whose group half
-    # decides it. Everything else, unknown or misspelled, goes to the v2
-    # parser, so a typo gets a real usage error and the exit code matches
-    # the new tiers.
-    if (
-        _legacy_group(token) in REMOVED_COMMANDS
-        or _replacement_for(token) is not None
-    ):
-        return REMOVED
+    if token in LEGACY_GROUPS or token in LEGACY_DOTTED_COMMANDS:
+        return LEGACY
     return NEW
 
 
-def _removed_error(token: str):
-    """The rejection for a 1.x name this entry point no longer serves."""
-    replacement = _replacement_for(token)
-    if replacement is None:
-        return usage_error(
-            f"`dashscope {token}` is a 1.x command with no v2 equivalent.",
-            solution=(
-                f"`dashscope1 {token}` still runs it against the 1.x "
-                "client. `dashscope --help` lists the v2 commands."
-            ),
-        )
-    return usage_error(
-        f"`dashscope {token}` is a 1.x command and is no longer served here.",
-        solution=(
-            f"Use `dashscope {replacement}` instead. "
-            "`dashscope --help` lists the v2 commands."
-        ),
-    )
+def _run_legacy(argv: Sequence[str]) -> None:
+    previous = sys.argv
+    sys.argv = ["dashscope", *argv]
+    try:
+        from dashscope.legacy_1x.cli import main as legacy_main
+
+        legacy_main(prog_name="dashscope")
+    finally:
+        sys.argv = previous
 
 
 def _run_agent(argv: Sequence[str]) -> None:
@@ -307,11 +266,9 @@ def _run_agent(argv: Sequence[str]) -> None:
 
         dashscope.api_key = api_key
 
-    # Importing this module builds the 1.x Typer app and its eighteen
-    # command groups as a side effect, so the import stays in here: only an
-    # agent invocation should pay for it.
+    # Keep the agent and its optional dependencies off every other command.
     # pylint: disable-next=import-outside-toplevel
-    from dashscope.legacy_1x.cli import _route_to_expert
+    from dashscope.acli.expert import _route_to_expert
 
     _route_to_expert(" ".join(tokens).strip() or None, tui=tui)
 
@@ -319,13 +276,33 @@ def _run_agent(argv: Sequence[str]) -> None:
 def main(args: Optional[Sequence[str]] = None) -> None:
     """Entry point for the ``dashscope`` console script."""
     argv: List[str] = list(sys.argv[1:] if args is None else args)
+
+    # Shell completion bypasses the agent and follows the same CLI routing.
+    # Click signals a completion run through this env var, and a completion call
+    # often names no command, which would otherwise classify as a bare
+    # ``dashscope`` and open the agent instead of listing completions.
+    if os.environ.get("_DASHSCOPE_COMPLETE"):
+        if classify(argv) is LEGACY:
+            _run_legacy(argv)
+            return
+        from dashscope.cli.app import build_app
+
+        build_app()(argv)
+        return
+
     target = classify(argv)
+    if target is LEGACY:
+        _run_legacy(argv)
+        return
+
+    try:
+        argv = normalize_argv(argv)
+    except CliError as exc:
+        fail(exc)
 
     if target is AGENT:
         _run_agent(argv)
         return
-    if target is REMOVED:
-        fail(_removed_error(_first_command_token(argv) or ""))
 
     from dashscope.cli.app import build_app
 

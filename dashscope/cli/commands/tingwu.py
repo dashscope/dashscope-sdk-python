@@ -8,7 +8,7 @@ with the parsed ``output`` dict.
 
 ``client.tingwu.realtime`` is deliberately not exposed here. It is a
 duplex websocket that needs a TingWu app id and a live audio feed, which
-is not a shape a shell pipeline can own; ``audio asr recognize`` already
+is not a shape a shell pipeline can own; ``audio asr stream`` already
 covers the file-driven recognizer case.
 """
 

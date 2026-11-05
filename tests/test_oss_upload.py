@@ -85,7 +85,14 @@ def _capture_oss(monkeypatch, status=200):
             text="<Error><Code>AccessDenied</Code></Error>",
         )
 
-    def patched(upload_host, form, file_name, file_path, transport=None):
+    def patched(
+        upload_host,
+        form,
+        file_name,
+        file_path,
+        transport=None,
+        user_agent=None,
+    ):
         seen["form"] = form
         seen["file_name"] = file_name
         return real_post(
@@ -94,6 +101,7 @@ def _capture_oss(monkeypatch, status=200):
             file_name,
             file_path,
             transport=httpx.MockTransport(handler),
+            user_agent=user_agent,
         )
 
     monkeypatch.setattr(_oss_upload, "_post_to_oss", patched)
@@ -293,6 +301,26 @@ def test_oss_post_carries_no_dashscope_credential(tmp_path, monkeypatch):
     assert seen["headers"].get("Accept") == "application/json"
     user_agent = seen["headers"].get("User-Agent", "")
     assert user_agent.startswith("dashscope-v2-python/")
+
+
+def test_oss_post_keeps_the_configured_user_agent_suffix(
+    tmp_path,
+    monkeypatch,
+):
+    # The CLI appends its own suffix to the client identity; the OSS hop
+    # must not drop it back to the bare SDK default.
+    seen = _capture_oss(monkeypatch)
+    calls = []
+    client = _make_client(
+        _policy_handler(calls),
+        user_agent_suffix="dashscope-cli/2.0",
+    )
+
+    _oss_upload.upload_local_file(client, "qwen-vl-max", _png(tmp_path))
+
+    user_agent = seen["headers"].get("User-Agent", "")
+    assert user_agent.startswith("dashscope-v2-python/")
+    assert "dashscope-cli/2.0" in user_agent
 
 
 def test_oss_post_failure_maps_to_a_dashscope_error(tmp_path, monkeypatch):

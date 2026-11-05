@@ -9,11 +9,12 @@ and the management plane (``vocabularies``, ``phrases``, ``voices``,
 
 ``tts synthesize`` runs over websocket and hands back raw bytes, so the CLI
 writes them to ``--out`` or to stdout -- ``dashscope audio tts synthesize
-"hi" > hi.mp3``. ``tts http`` is the one-POST variant that answers with a
-URL instead of a payload, which is what a pipeline that stores audio wants.
+"hi" > hi.mp3``. ``tts stream`` writes each chunk as it arrives. ``tts http``
+is the one-POST variant that answers with a URL instead of a payload, which
+is what a pipeline that stores audio wants.
 
 ``asr transcribe`` is the batch service: submit file URLs and wait. ``asr
-recognize`` streams one local file over websocket and prints the sentences.
+stream`` streams one local file over websocket and prints the sentences.
 
 ``realtime run`` is the one-turn slice of a socket that is otherwise
 bidirectional and open-ended: it feeds a whole audio file, asks for one
@@ -29,11 +30,12 @@ from __future__ import annotations
 import base64
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 import typer
 
 from dashscope.cli.commands.audio_customization import build_admin_apps
+from dashscope.cli.confirm import confirm_or_die
 from dashscope.cli.errors import usage_error
 from dashscope.cli.input import (
     parse_json_object_arg,
@@ -46,26 +48,27 @@ from dashscope.cli.progress import validate_wait_timeout, wait_job
 _HELP = r"""Speech synthesis and recognition.
 
 `audio tts synthesize` writes audio bytes to --out or stdout; `audio tts
-http` answers with a download URL. `audio asr transcribe` submits file URLs
-to the batch service and waits; `audio asr recognize` streams one local file.
-`audio realtime run` feeds a file to the duplex Omni socket and prints one
-turn. The `vocabularies`, `phrases`, `voices` and `voice-design` subgroups
-manage the registries those commands consume.
+stream` writes chunks as they arrive; `audio tts http` answers with a download
+URL. `audio asr transcribe` submits file URLs to the batch service and waits;
+`audio asr stream` streams one local file. `audio realtime run` feeds a file
+to the duplex Omni socket and prints one turn. The `vocabularies`, `phrases`,
+`voices` and `voice-design` subgroups manage the registries those commands
+consume.
 """
 
 _TTS_HELP = r"""Text to speech.
 
-`synthesize` runs over websocket and returns the audio itself, so it needs
-somewhere to put it: --out, or stdout when stdout is redirected.
+`synthesize` returns the complete audio; `stream` writes chunks as they
+arrive. Both run over websocket and write to --out or stdout.
 `http` is a single POST that answers with a URL.
 """
 
 _ASR_HELP = r"""Speech to text.
 
 `transcribe` submits public file URLs to the batch service and waits for the
-transcripts. `recognize` streams one local audio file over websocket and
-prints the recognized sentences as they complete. `get` checks a batch task
-submitted with --no-wait.
+transcripts. `stream` streams one local audio file over websocket and prints
+the recognized sentences as they complete. `get` checks a batch task submitted
+with --no-wait.
 """
 
 _REALTIME_HELP = r"""One turn over the duplex realtime socket.
@@ -170,23 +173,37 @@ def _read_text(text: Optional[str], *, option_name: str) -> str:
     return resolved
 
 
-def _write_audio(data: bytes, out: Optional[str], renderer: Renderer) -> None:
+def _write_audio(
+    data: Union[bytes, Iterable[bytes]],
+    out: Optional[str],
+    renderer: Renderer,
+) -> None:
     """Bytes to a file, or to stdout when no ``--out`` was given."""
+    chunks = (data,) if isinstance(data, bytes) else data
     if out:
         path = Path(out).expanduser()
         try:
-            path.write_bytes(data)
+            output = path.open("wb")
         except OSError as exc:
             raise usage_error(f"cannot write {path}: {exc}") from exc
-        renderer.note(f"wrote {len(data)} bytes to {path}")
+        size = 0
+        with output:
+            for chunk in chunks:
+                try:
+                    output.write(chunk)
+                except OSError as exc:
+                    raise usage_error(f"cannot write {path}: {exc}") from exc
+                size += len(chunk)
+        renderer.note(f"wrote {size} bytes to {path}")
         return
     stream = getattr(sys.stdout, "buffer", None)
     if stream is None:  # pragma: no cover - stdout replaced by a text stub
         raise usage_error(
             "cannot write audio to stdout: pass --out PATH instead",
         )
-    stream.write(data)
-    stream.flush()
+    for chunk in chunks:
+        stream.write(chunk)
+        stream.flush()
 
 
 def _render_synthesis(renderer: Renderer, result: Any) -> None:
@@ -235,12 +252,22 @@ def _render_job(renderer: Renderer, job: Any) -> None:
     renderer.print_object(job, columns=_JOB_COLUMNS)
 
 
+def _asr_jobs(client: Any) -> Any:
+    from dashscope.resources._jobs import Jobs
+
+    return Jobs(client, "audio/asr/transcription", "audio")
+
+
 def build_app() -> typer.Typer:  # pylint: disable=too-many-statements
     app = typer.Typer(help=_HELP, no_args_is_help=True)
 
     # ---- tts subgroup ---- #
     tts_app = typer.Typer(help=_TTS_HELP, no_args_is_help=True)
 
+    @tts_app.command(
+        "stream",
+        help="Stream synthesized audio chunks as they arrive.",
+    )
     @tts_app.command("synthesize")
     def tts_synthesize(  # pylint: disable=too-many-arguments,too-many-locals
         ctx: typer.Context,
@@ -290,7 +317,9 @@ def build_app() -> typer.Typer:  # pylint: disable=too-many-statements
     ) -> None:
         """Synthesize speech and write the audio out."""
         obj = ctx.obj
-        data = obj.client.audio.tts.synthesize(
+        tts = obj.client.audio.tts
+        method = tts.stream if ctx.command.name == "stream" else tts.synthesize
+        data = method(
             _read_text(text, option_name="TEXT"),
             model=model,
             voice=voice,
@@ -475,8 +504,54 @@ def build_app() -> typer.Typer:  # pylint: disable=too-many-statements
         )
         _render_job(renderer, job)
 
-    @asr_app.command("recognize")
-    def asr_recognize(  # pylint: disable=too-many-arguments
+    @asr_app.command("list")
+    def asr_list(  # pylint: disable=too-many-arguments
+        ctx: typer.Context,
+        page: int = typer.Option(1, "--page", help="1-based page number."),
+        size: int = typer.Option(10, "--size", help="Tasks per page."),
+        status: Optional[str] = typer.Option(None, "--status"),
+        model_name: Optional[str] = typer.Option(None, "--model"),
+        api_key_id: Optional[str] = typer.Option(None, "--api-key-id"),
+        region: Optional[str] = typer.Option(None, "--region"),
+        start_time: Optional[str] = typer.Option(None, "--start-time"),
+        end_time: Optional[str] = typer.Option(None, "--end-time"),
+    ) -> None:
+        """List batch transcription tasks."""
+        obj = ctx.obj
+        result = _asr_jobs(obj.client).list(
+            page_no=page,
+            page_size=size,
+            status=status,
+            model_name=model_name,
+            api_key_id=api_key_id,
+            region=region,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        obj.renderer.print_rows(
+            result.tasks,
+            columns=_JOB_COLUMNS,
+            envelope=result,
+        )
+
+    @asr_app.command("cancel")
+    def asr_cancel(
+        ctx: typer.Context,
+        task_id: str = typer.Argument(..., help="Transcription task id."),
+        yes: bool = typer.Option(
+            False,
+            "-y",
+            "--yes",
+            help="Skip the confirmation prompt.",
+        ),
+    ) -> None:
+        """Cancel a batch transcription task."""
+        confirm_or_die(f"cancel transcription task {task_id}?", yes=yes)
+        obj = ctx.obj
+        obj.renderer.print_object(_asr_jobs(obj.client).cancel(task_id))
+
+    @asr_app.command("stream")
+    def asr_stream(  # pylint: disable=too-many-arguments
         ctx: typer.Context,
         path: str = typer.Argument(..., help="Local audio file to recognize."),
         model: str = typer.Option(

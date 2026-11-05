@@ -439,23 +439,23 @@ SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供�
 
 ## 命令行
 
-`pip install -U dashscope` 会在 `PATH` 上安装**两个**命令：
+`pip install -U dashscope` 只安装一个 `dashscope` 命令。它同时提供按 SDK 资源树设计的 **2.0** 命令和现有 **1.x** 命令形式，现有 1.x 调用无需迁移：
 
-| 命令 | 跑的是 | 典型子命令 |
-|------|--------|-----------|
-| `dashscope` | **2.0** CLI | `chat create`、`ft create/get/wait/list/stream/logs/cancel/delete`、`files upload/list/get/delete`、`models list/get`、`images generate`、`images jobs create/get/wait/list/cancel`、`videos generate`、`videos jobs create/get/wait/list/cancel`、`embeddings create`、`embeddings jobs create/get/wait/list/cancel`、`multimodal chat create`、`multimodal embeddings create`、`rerank create`、`tokenization count`、`apps completions create`、`deployments create/get/list/scale/delete/stream`、`rl jobs create/get/wait/list/logs/cancel/delete`、`rl functions register/test/upload-data/logs/delete`、`audio tts synthesize/http`、`audio asr transcribe/get/wait/recognize`、`audio realtime run`、`audio vocabularies/phrases/voices/voice-design` 管理面、`tingwu call`、`decision create`、`agentstudio agents create/get/list/versions/update/archive`、`agentstudio sessions create/get/list/update/archive/delete`、`agentstudio sessions events send/list/stream`、`config set/get/list`、`version` |
-| `dashscope1` | **1.x** CLI（历史） | `generation`、`application`、`image-synthesis`、`multimodal-conversation`、`auth`、`oss`…… |
+| 形式 | 示例 |
+|------|------|
+| **2.0**，对齐 SDK 资源树 | `chat create`、`apps completions create`、`multimodal chat create`、`rl jobs create`、`rl functions register`、`images jobs create`、`audio asr transcribe`、`agentstudio sessions events send` |
+| **1.x**，保持兼容 | `generation call`、`application call`、`image-synthesis create`、`multimodal-conversation call`、`fine-tunes call`、`agentic-rl run`、`auth login`、`oss upload` |
 
-模块入口等价：
+1.x 专有名称和点式命令仍由冻结的 1.x 实现执行；共享名称由 2.0 执行，并兼容 1.x 参数拼写和默认值。模块入口使用同一个路由器：
 
 ```bash
-python -m dashscope.cli           # 2.0
-python -m dashscope.legacy_1x.cli # 1.x
+python -m dashscope.cli generation call ...
+python -m dashscope.cli apps completions create ...
 ```
 
 不带参数运行 `dashscope` 会启动 [AI 助手](#ai-助手dashscope-sdk-expert)，而不是 CLI。
 
-完整的 2.0 CLI 契约 —— 输出格式、退出码、配置优先级、CI 配方 —— 见 [`examples/05_cli/README_zh.md`](examples/05_cli/README_zh.md)。
+完整的 CLI 命令地图、1.x 兼容规则、输出格式、退出码、配置优先级和 CI 配方，见 [`examples/README_zh.md`](examples/README_zh.md) 的命令行章节。
 
 ## Shell 命令补全
 
@@ -473,7 +473,7 @@ python -m dashscope.legacy_1x.cli # 1.x
 dashscope --show-completion bash
 ```
 
-1.x CLI（`dashscope1`）有自己独立的补全 —— 如果仍在使用，请单独运行 `dashscope1 --install-completion <shell>`。
+命令补全通过唯一的 `dashscope` 入口安装。
 
 ## 日志
 
@@ -497,10 +497,11 @@ examples/
 ├── 02_advanced_engineering/  本地 mock 调试、语义缓存、熔断 + 多地域容灾
 ├── 03_agent_recipes/         工具调用循环、RAG、MCP server、AgentStudio
 ├── 04_real_world_scenarios/  端到端生产级 harness（RAG、实时会议、智能客服）
+├── 05_cli/                   离线 CLI 输出/错误契约与子进程 CI 示例
 └── legacy_1x/                1.x 模块级 API 示例，仅供参考
 ```
 
-详见 [`examples/README_zh.md`](examples/README_zh.md)。其中若干旗舰案例可完全离线运行（mock 传输），无需 API Key。
+完整指南见 [`examples/README_zh.md`](examples/README_zh.md)，其中包含 CLI 命令地图和 shell/CI 配方。若干旗舰案例与两个 CLI 示例都可完全离线运行，无需 API Key。
 
 ## 从 1.x 迁移
 

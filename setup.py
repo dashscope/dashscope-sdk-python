@@ -144,7 +144,6 @@ setuptools.setup(
     entry_points={
         "console_scripts": [
             "dashscope = dashscope.cli.main:main",
-            "dashscope1 = dashscope.legacy_1x.cli:main",
         ],
     },
 )

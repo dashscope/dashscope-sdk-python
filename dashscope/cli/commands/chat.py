@@ -8,7 +8,9 @@ from typing import Any, Dict, List, Optional
 
 import typer
 
+from dashscope.cli.errors import usage_error
 from dashscope.cli.input import (
+    STDIN_TOKEN,
     parse_json_object_arg,
     parse_tools_arg,
     read_prompt_or_messages,
@@ -18,9 +20,10 @@ from dashscope.cli.output import render_completion, render_text_stream
 _HELP = r"""Generate text with a chat model.
 
 The conversation comes from `--messages` (JSON or JSONL, `@file` or `-` for
-stdin), from `--prompt` (optionally prefixed with `--system`), or from piped
-stdin -- in that order of preference. Local image and video paths inside the
-messages are uploaded by the SDK itself; pass them through untouched.
+stdin), from `--prompt` (optionally prefixed with `--system`), or from stdin
+-- in that order of preference. A positional `-` explicitly selects stdin.
+Local image and video paths inside the messages are uploaded by the SDK
+itself; pass them through untouched.
 
 Streaming writes incremental text to stdout in table mode, and one JSON
 object per line in json/yaml mode, so `--stream --output json | jq` works.
@@ -33,6 +36,11 @@ def build_app() -> typer.Typer:
     @app.command("create")
     def create(
         ctx: typer.Context,
+        source: Optional[str] = typer.Argument(
+            None,
+            metavar="-",
+            help="Read the prompt or messages from stdin.",
+        ),
         model: Optional[str] = typer.Option(
             None,
             "-m",
@@ -67,6 +75,7 @@ def build_app() -> typer.Typer:
         ),
         temperature: Optional[float] = typer.Option(None, "--temperature"),
         top_p: Optional[float] = typer.Option(None, "--top-p"),
+        top_k: Optional[int] = typer.Option(None, "--top-k"),
         max_tokens: Optional[int] = typer.Option(None, "--max-tokens"),
         stop: Optional[List[str]] = typer.Option(
             None,
@@ -74,6 +83,15 @@ def build_app() -> typer.Typer:
             help="Stop sequence. Repeatable.",
         ),
         seed: Optional[int] = typer.Option(None, "--seed"),
+        repetition_penalty: Optional[float] = typer.Option(
+            None,
+            "--repetition-penalty",
+        ),
+        presence_penalty: Optional[float] = typer.Option(
+            None,
+            "--presence-penalty",
+        ),
+        n: Optional[int] = typer.Option(None, "--n"),
         enable_thinking: Optional[bool] = typer.Option(
             None,
             "--enable-thinking/--no-enable-thinking",
@@ -94,10 +112,13 @@ def build_app() -> typer.Typer:
         """Send one chat completion request."""
         obj = ctx.obj
         renderer = obj.renderer
+        if source not in (None, STDIN_TOKEN):
+            raise usage_error("chat create: positional input must be '-'")
         conversation = read_prompt_or_messages(
             prompt=prompt,
             messages=messages,
             system=system,
+            explicit_stdin=source == STDIN_TOKEN,
         )
         kwargs: Dict[str, Any] = {
             "model": obj.resolve_model(model),
@@ -105,9 +126,13 @@ def build_app() -> typer.Typer:
             "tools": parse_tools_arg(tools),
             "temperature": temperature,
             "top_p": top_p,
+            "top_k": top_k,
             "max_tokens": max_tokens,
             "stop": list(stop) if stop else None,
             "seed": seed,
+            "repetition_penalty": repetition_penalty,
+            "presence_penalty": presence_penalty,
+            "n": n,
             "enable_thinking": enable_thinking,
             "enable_search": enable_search,
             "parameters": parse_json_object_arg(

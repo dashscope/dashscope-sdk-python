@@ -325,9 +325,18 @@ class AsyncChatStream:
             if delta is not None and delta.tool_calls:
                 yield delta.tool_calls
 
+    @property
+    def cumulative(self) -> bool:
+        """True when each frame carries the whole text so far, not a delta.
+
+        Async twin of :attr:`ChatStream.cumulative`; see that docstring for
+        why a caller appending frames to a terminal has to check it.
+        """
+        return self._merge or self._server_cumulative
+
     async def get_final_message(self) -> ChatCompletion:
         chunks = [chunk async for chunk in self]
-        if self._merge or self._server_cumulative:
+        if self.cumulative:
             final = _final_from_cumulative(chunks)
         else:
             final = _aggregate(chunks)

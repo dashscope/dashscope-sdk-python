@@ -15,13 +15,16 @@ you watch a deployment come up without polling ``get`` in a loop.
 
 from __future__ import annotations
 
-from typing import Optional
+import time
+from typing import Any, Optional
 
 import typer
 
 from dashscope.cli.confirm import confirm_or_die
+from dashscope.cli.errors import SERVER, CliError
 from dashscope.cli.input import parse_json_object_arg
 from dashscope.cli.output import render_stream_event
+from dashscope.cli.progress import validate_wait_timeout
 
 _HELP = r"""Provision and manage model deployments.
 
@@ -44,6 +47,33 @@ _DEPLOYMENT_COLUMNS = (
 
 _LIST_COLUMNS = ("deployed_model", "model", "status", "capacity")
 
+DEFAULT_WAIT_TIMEOUT = 3600.0
+POLL_INTERVAL = 30.0
+_PENDING_STATUSES = {"PENDING", "DEPLOYING"}
+
+
+def _wait_for_deployment(
+    client: Any,
+    deployment: Any,
+    deployed_model: Optional[str],
+    timeout: float,
+) -> Any:
+    name = deployed_model or getattr(deployment, "deployed_model", None)
+    if not name:
+        raise CliError(SERVER, "deployment response has no deployed_model")
+    deadline = time.monotonic() + timeout
+    current = deployment
+    while getattr(current, "status", None) in _PENDING_STATUSES:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise CliError(
+                SERVER,
+                f"timed out after {timeout}s waiting for deployment {name}",
+            )
+        time.sleep(min(POLL_INTERVAL, remaining))
+        current = client.deployments.get(name)
+    return current
+
 
 def build_app() -> typer.Typer:
     app = typer.Typer(help=_HELP, no_args_is_help=True)
@@ -58,7 +88,8 @@ def build_app() -> typer.Typer:
             help="Model to deploy, e.g. a fine-tune output model.",
         ),
         capacity: int = typer.Option(
-            ...,
+            1,
+            "-c",
             "--capacity",
             help="Provisioned capacity to request.",
         ),
@@ -89,6 +120,16 @@ def build_app() -> typer.Typer:
             "--billing-method",
             help="Required by MU deployments, together with --deploy-spec.",
         ),
+        wait: bool = typer.Option(
+            False,
+            "--wait/--no-wait",
+            help="Block until the deployment leaves PENDING/DEPLOYING.",
+        ),
+        timeout: float = typer.Option(
+            DEFAULT_WAIT_TIMEOUT,
+            "--timeout",
+            help="With --wait, how long to block before giving up (seconds).",
+        ),
     ) -> None:
         """Create a deployment."""
         obj = ctx.obj
@@ -106,6 +147,14 @@ def build_app() -> typer.Typer:
             ),
             billing_method=billing_method,
         )
+        if wait:
+            validate_wait_timeout(timeout)
+            deployment = _wait_for_deployment(
+                obj.client,
+                deployment,
+                None,
+                timeout,
+            )
         if renderer.table_mode:
             renderer.print_object(deployment, columns=_DEPLOYMENT_COLUMNS)
         else:
@@ -124,6 +173,30 @@ def build_app() -> typer.Typer:
             renderer.print_object(deployment, columns=_DEPLOYMENT_COLUMNS)
         else:
             renderer.print_object(deployment)
+
+    @app.command("wait")
+    def wait(
+        ctx: typer.Context,
+        deployed_model: str = typer.Argument(..., help="Deployed model name."),
+        timeout: float = typer.Option(
+            DEFAULT_WAIT_TIMEOUT,
+            "--timeout",
+            help="How long to block before giving up (seconds).",
+        ),
+    ) -> None:
+        """Wait until a deployment leaves PENDING/DEPLOYING."""
+        obj = ctx.obj
+        validate_wait_timeout(timeout)
+        deployment = _wait_for_deployment(
+            obj.client,
+            obj.client.deployments.get(deployed_model),
+            deployed_model,
+            timeout,
+        )
+        if obj.renderer.table_mode:
+            obj.renderer.print_object(deployment, columns=_DEPLOYMENT_COLUMNS)
+        else:
+            obj.renderer.print_object(deployment)
 
     @app.command("list")
     def list_deployments(

@@ -356,6 +356,8 @@ def build_app() -> typer.Typer:
             "--model",
             help="Filter by model name.",
         ),
+        api_key_id: Optional[str] = typer.Option(None, "--api-key-id"),
+        region: Optional[str] = typer.Option(None, "--region"),
         start_time: Optional[str] = typer.Option(None, "--start-time"),
         end_time: Optional[str] = typer.Option(None, "--end-time"),
     ) -> None:
@@ -367,6 +369,8 @@ def build_app() -> typer.Typer:
             page_size=size,
             status=status,
             model_name=model_name,
+            api_key_id=api_key_id,
+            region=region,
             start_time=start_time,
             end_time=end_time,
         )

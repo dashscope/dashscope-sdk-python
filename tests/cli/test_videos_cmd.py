@@ -344,6 +344,10 @@ class TestJobs:
                 "2026-01-01",
                 "--end-time",
                 "2026-02-01",
+                "--api-key-id",
+                "key-1",
+                "--region",
+                "cn-beijing",
             ],
         )
         assert resource.jobs.calls[0]["kwargs"] == {
@@ -351,6 +355,8 @@ class TestJobs:
             "page_size": 5,
             "status": "SUCCEEDED",
             "model_name": "wan2.2-t2v-plus",
+            "api_key_id": "key-1",
+            "region": "cn-beijing",
             "start_time": "2026-01-01",
             "end_time": "2026-02-01",
         }

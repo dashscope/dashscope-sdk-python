@@ -231,6 +231,50 @@ class TestInputPrecedence:
             {"role": "user", "content": "piped question"},
         ]
 
+    def test_stdin_positional_reads_json_messages(self, invoke, completions):
+        recorder = completions()
+        result = invoke(
+            ["-m", "qwen-plus", "-"],
+            input='[{"role": "user", "content": "from stdin"}]',
+        )
+        assert result.exit_code == 0
+        assert recorder.calls[0]["messages"] == [
+            {"role": "user", "content": "from stdin"},
+        ]
+
+    def test_stdin_positional_reads_plain_text(self, invoke, completions):
+        recorder = completions()
+        result = invoke(["-m", "qwen-plus", "-"], input="from stdin\n")
+        assert result.exit_code == 0
+        assert recorder.calls[0]["messages"] == [
+            {"role": "user", "content": "from stdin"},
+        ]
+
+    def test_prompt_keeps_precedence_over_stdin_positional(
+        self,
+        invoke,
+        completions,
+    ):
+        recorder = completions()
+        result = invoke(
+            ["-m", "qwen-plus", "-", "--prompt", "kept"],
+            input="ignored",
+        )
+        assert result.exit_code == 0
+        assert recorder.calls[0]["messages"] == [
+            {"role": "user", "content": "kept"},
+        ]
+
+    def test_other_positional_input_is_a_usage_error(
+        self,
+        invoke,
+        completions,
+    ):
+        completions()
+        result = invoke(["-m", "qwen-plus", "literal"])
+        assert result.exit_code == 2
+        assert "positional input must be '-'" in result.stderr
+
     def test_no_input_is_a_usage_error(self, invoke, completions):
         completions()
         result = invoke(["-m", "qwen-plus"])

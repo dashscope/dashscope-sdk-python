@@ -602,6 +602,6 @@ if __name__ == "__main__":
 # Contract-level walkthrough above; to drive the CLI for real, see:
 #   Shell/CI scripting: 05_cli/cli_ci_harness.py (local mock gateway +
 #   subprocess, retry by exit code, config isolation, secret masking)
-#   Recipes and reference: 05_cli/README.md
+#   Recipes and reference: README.md (05_cli section)
 #   SDK-side offline debugging: 02_advanced_engineering/local_mock_debugging.py
 # -------------------------------------------------------------

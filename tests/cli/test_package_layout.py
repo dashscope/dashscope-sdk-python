@@ -2,10 +2,9 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 """Structural invariants of the CLI package layout.
 
-``dashscope.cli`` is the v2 CLI. The 1.x command tree lives at
-``dashscope.legacy_1x.cli`` and is reachable through its own console
-script (``dashscope1``); ``dashscope`` itself serves the v2 tree only and
-rejects 1.x command names, pointing at whatever replaced them.
+``dashscope.cli`` is the v2 command tree and sole console entry point. It
+routes frozen 1.x-only commands to ``dashscope.legacy_1x.cli`` lazily; v2
+commands never pay that import cost. There is only one console entry point.
 """
 
 import ast
@@ -46,6 +45,33 @@ def test_cli_never_loads_the_1x_command_tree():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_v2_argv_executes_without_loading_the_legacy_cli():
+    result = _run_python(
+        "import sys\n"
+        "from dashscope.cli.main import main\n"
+        "try:\n"
+        "    main(['apps', 'completions', 'create', '--help'])\n"
+        "except SystemExit as exc:\n"
+        "    assert exc.code == 0\n"
+        "assert 'dashscope.legacy_1x.cli' not in sys.modules\n",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_legacy_argv_routes_to_the_legacy_cli():
+    result = _run_python(
+        "import sys\n"
+        "from dashscope.cli.main import main\n"
+        "try:\n"
+        "    main(['generation', 'call', '--help'])\n"
+        "except SystemExit as exc:\n"
+        "    assert exc.code == 0\n"
+        "assert 'dashscope.legacy_1x.cli' in sys.modules\n",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Usage: dashscope generation call" in result.stdout
+
+
 def _module_level_imports(path: Path):
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     for node in tree.body:
@@ -55,6 +81,28 @@ def _module_level_imports(path: Path):
         elif isinstance(node, ast.ImportFrom):
             if node.level == 0 and node.module:
                 yield node.module
+
+
+def _all_imports(path: Path):
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                yield alias.name
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0 and node.module:
+                yield node.module
+
+
+def test_only_the_entry_point_imports_legacy_1x():
+    offenders = []
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        for name in _all_imports(path):
+            if name.startswith("dashscope.legacy_1x") and not (
+                path.name == "main.py" and name == "dashscope.legacy_1x.cli"
+            ):
+                offenders.append(f"{path.relative_to(PACKAGE_ROOT)}: {name}")
+    assert offenders == []
 
 
 def test_command_modules_never_import_the_sdk_at_module_scope():
@@ -91,6 +139,14 @@ def test_console_script_target_resolves():
 
     module = import_module("dashscope.cli.main")
     assert callable(module.main)
+
+
+def test_legacy_tree_uses_the_shared_dashscope_name():
+    from importlib import import_module
+
+    module = import_module("dashscope.legacy_1x.cli")
+    assert callable(module.main)
+    assert module.app.info.name == "dashscope"
 
 
 def test_package_init_stays_lazy():

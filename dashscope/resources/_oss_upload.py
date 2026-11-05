@@ -116,16 +116,19 @@ def _post_to_oss(
     file_name: str,
     file_path: str,
     transport: Optional[httpx.BaseTransport] = None,
+    user_agent: Optional[str] = None,
 ) -> httpx.Response:
     """Post one file to OSS with a client that carries no DashScope auth.
 
     The file is streamed from a live handle rather than read into memory, so
     a large video does not have to fit in the process. ``transport`` exists
-    for tests to inject an ``httpx.MockTransport``.
+    for tests to inject an ``httpx.MockTransport``. ``user_agent`` is the
+    client's configured identity (including any CLI suffix); absent, the SDK
+    default is used.
     """
     headers = {
         "Accept": "application/json",
-        "User-Agent": default_user_agent(),
+        "User-Agent": user_agent or default_user_agent(),
     }
     with httpx.Client(
         timeout=_OSS_POST_TIMEOUT,
@@ -179,6 +182,7 @@ def upload_local_file(
         form,
         os.path.basename(file_path),
         file_path,
+        user_agent=getattr(client.transport, "user_agent", None),
     )
     if not response.is_success:
         logger.error(

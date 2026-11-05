@@ -2,14 +2,12 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 """The root Typer app: global options, ``version``, and the command groups.
 
-Global options follow click's convention and must precede the
-subcommand::
+Global options follow click's convention and precede the subcommand::
 
     dashscope -k sk-xxx --output json chat create -m qwen-plus --prompt hi
 
-The 1.x tree tolerated a trailing ``-k`` by surgically rewriting argv.
-That tolerance is deliberately *not* reimplemented here: a dangling option
-is a command-line mistake, and click already renders one.
+The console entry point also dispatches frozen 1.x-only commands and
+normalises compatible options on shared commands before invoking this app.
 """
 
 from __future__ import annotations
@@ -20,7 +18,6 @@ import typer
 
 from dashscope.cli.context import CliContext, GlobalOptions
 from dashscope.cli.errors import ErrorHandlingGroup, usage_error
-from dashscope.cli.main import REPLACED_COMMANDS, UNSUPPORTED_COMMANDS
 from dashscope.cli.output import OUTPUT_FORMATS
 
 # `\[` is Rich markup escaping: unescaped, Rich reads the bracketed run as a
@@ -37,25 +34,10 @@ line, 3 auth, 4 not found.
 
 
 def _epilog() -> str:
-    """What happened to the 1.x command names.
-
-    ``dashscope`` serves the v2 tree only, so an old name is rejected
-    rather than delegated. Naming the removals here means ``--help``
-    answers the question the rejection raises, before the user has to hit
-    it. Generated from the same constants the router uses, so the list
-    cannot drift from the routing.
-
-    Written as prose because Rich re-flows the epilog to the terminal
-    width; hand-placed line breaks would not survive.
-    """
-    replaced = ", ".join(sorted(REPLACED_COMMANDS))
-    unsupported = ", ".join(sorted(UNSUPPORTED_COMMANDS))
     return (
-        "1.x command names are not served here; the entry point runs the "
-        f"v2 CLI only. Replaced by a v2 command: {replaced}. No v2 "
-        f"equivalent, still available as `dashscope1`: {unsupported}. "
-        "A bare `dashscope` opens the bundled `expert` agent "
-        "interactively."
+        "Frozen 1.x commands such as `generation create`, `application create` "
+        "and dotted spellings remain available under this same entry point. "
+        "A bare `dashscope` opens the bundled `expert` agent interactively."
     )
 
 
@@ -178,25 +160,30 @@ def build_app() -> typer.Typer:
     # Command modules are thin by contract (no SDK import at module
     # scope), so mounting them all here costs nothing; the expensive part
     # is the client, which stays lazy behind ``ctx.obj.client``.
-    from dashscope.cli.commands import agentstudio as agentstudio_command
-    from dashscope.cli.commands import apps as apps_command
-    from dashscope.cli.commands import audio as audio_command
-    from dashscope.cli.commands import chat as chat_command
-    from dashscope.cli.commands import config as config_command
-    from dashscope.cli.commands import decision as decision_command
-    from dashscope.cli.commands import deployments as deployments_command
-    from dashscope.cli.commands import embeddings as embeddings_command
-    from dashscope.cli.commands import files as files_command
-    from dashscope.cli.commands import ft as ft_command
-    from dashscope.cli.commands import images as images_command
-    from dashscope.cli.commands import models as models_command
-    from dashscope.cli.commands import multimodal as multimodal_command
-    from dashscope.cli.commands import rerank as rerank_command
-    from dashscope.cli.commands import rl as rl_command
-    from dashscope.cli.commands import tingwu as tingwu_command
-    from dashscope.cli.commands import tokenization as tokenization_command
-    from dashscope.cli.commands import videos as videos_command
+    from dashscope.cli.commands import (
+        agentstudio as agentstudio_command,
+        apps as apps_command,
+        audio as audio_command,
+        auth as auth_command,
+        chat as chat_command,
+        config as config_command,
+        decision as decision_command,
+        deployments as deployments_command,
+        embeddings as embeddings_command,
+        files as files_command,
+        ft as ft_command,
+        images as images_command,
+        models as models_command,
+        multimodal as multimodal_command,
+        oss as oss_command,
+        rerank as rerank_command,
+        rl as rl_command,
+        tingwu as tingwu_command,
+        tokenization as tokenization_command,
+        videos as videos_command,
+    )
 
+    app.add_typer(auth_command.build_app(), name="auth")
     app.add_typer(chat_command.build_app(), name="chat")
     app.add_typer(ft_command.build_app(), name="ft")
     # Hidden alias, following the 1.x tree's convention: the long name stays
@@ -205,6 +192,7 @@ def build_app() -> typer.Typer:
     app.add_typer(ft_command.build_app(), name="fine-tunes", hidden=True)
     app.add_typer(files_command.build_app(), name="files")
     app.add_typer(models_command.build_app(), name="models")
+    app.add_typer(oss_command.build_app(), name="oss")
     app.add_typer(images_command.build_app(), name="images")
     app.add_typer(videos_command.build_app(), name="videos")
     app.add_typer(embeddings_command.build_app(), name="embeddings")
@@ -214,6 +202,8 @@ def build_app() -> typer.Typer:
     app.add_typer(apps_command.build_app(), name="apps")
     app.add_typer(deployments_command.build_app(), name="deployments")
     app.add_typer(rl_command.build_app(), name="rl")
+    # Hidden alias of ``rl``, mirroring the ``fine-tunes`` alias of ``ft``.
+    app.add_typer(rl_command.build_app(), name="agentic-rl", hidden=True)
     app.add_typer(audio_command.build_app(), name="audio")
     app.add_typer(tingwu_command.build_app(), name="tingwu")
     app.add_typer(decision_command.build_app(), name="decision")

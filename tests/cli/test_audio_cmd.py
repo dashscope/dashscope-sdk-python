@@ -76,8 +76,16 @@ class _Tts:
         )
 
     def synthesize(self, text, **kwargs):
-        self.calls.append({"text": text, "kwargs": kwargs})
+        self.calls.append(
+            {"method": "synthesize", "text": text, "kwargs": kwargs},
+        )
         return _AUDIO
+
+    def stream(self, text, **kwargs):
+        self.calls.append(
+            {"method": "stream", "text": text, "kwargs": kwargs},
+        )
+        return iter((_AUDIO[:2], _AUDIO[2:]))
 
 
 class _HttpTts:
@@ -341,6 +349,50 @@ class TestTtsSynthesize:
         assert "cannot write" in result.stderr
 
 
+class TestTtsStream:
+    def test_streams_the_audio_to_stdout(self, invoke, audio):
+        resource = audio()
+        result = invoke(["audio", "tts", "stream", "hello"])
+        assert result.exit_code == 0
+        assert result.stdout_bytes == _AUDIO
+        assert resource.tts.calls[0]["method"] == "stream"
+        assert resource.tts.calls[0]["text"] == "hello"
+
+    def test_streams_the_audio_to_a_file(self, invoke, audio, tmp_path):
+        resource = audio()
+        out = tmp_path / "hello.mp3"
+        result = invoke(
+            ["audio", "tts", "stream", "hello", "--out", str(out)],
+        )
+        assert result.exit_code == 0
+        assert out.read_bytes() == _AUDIO
+        assert result.stdout_bytes == b""
+        assert resource.tts.calls[0]["method"] == "stream"
+        assert "wrote 15 bytes" in result.stderr
+
+    def test_shares_the_synthesis_options(self, invoke, audio):
+        resource = audio()
+        result = invoke(
+            [
+                "audio",
+                "tts",
+                "stream",
+                "hello",
+                "-m",
+                "cosyvoice-v2",
+                "--voice",
+                "longcheng",
+                "--parameters",
+                '{"a": 1}',
+            ],
+        )
+        assert result.exit_code == 0
+        kwargs = resource.tts.calls[0]["kwargs"]
+        assert kwargs["model"] == "cosyvoice-v2"
+        assert kwargs["voice"] == "longcheng"
+        assert kwargs["parameters"] == {"a": 1}
+
+
 class TestTtsHttp:
     def test_prints_the_audio_url(self, invoke, audio):
         resource = audio()
@@ -530,7 +582,7 @@ class TestAsrJobs:
         assert resource.asr.jobs.calls == []
 
 
-class TestAsrRecognize:
+class TestAsrStream:
     def test_prints_only_the_final_sentences(self, invoke, audio, tmp_path):
         source = tmp_path / "a.wav"
         source.write_bytes(b"RIFF")
@@ -546,7 +598,7 @@ class TestAsrRecognize:
             [
                 "audio",
                 "asr",
-                "recognize",
+                "stream",
                 str(source),
                 "-m",
                 "paraformer-realtime-v2",
@@ -566,7 +618,7 @@ class TestAsrRecognize:
             [
                 "audio",
                 "asr",
-                "recognize",
+                "stream",
                 str(source),
                 "-m",
                 "paraformer-realtime-v2",
@@ -599,7 +651,7 @@ class TestAsrRecognize:
             [
                 "audio",
                 "asr",
-                "recognize",
+                "stream",
                 str(source),
                 "-m",
                 "paraformer-realtime-v2",
@@ -616,7 +668,7 @@ class TestAsrRecognize:
             [
                 "audio",
                 "asr",
-                "recognize",
+                "stream",
                 str(tmp_path / "nope.wav"),
                 "-m",
                 "paraformer-realtime-v2",
