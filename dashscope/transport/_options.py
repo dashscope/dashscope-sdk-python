@@ -2,19 +2,25 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 """Per-request customization channel for the v2 transports.
 
-Every resource method offers the same three escape hatches --
-``extra_headers`` / ``extra_query`` / ``extra_body`` -- and hands them to
-the transport as one :class:`RequestOptions`. They exist so a caller can
-attach something this SDK does not model yet (a gateway experiment flag,
-a parameter a newer backend added) without waiting for a release.
+Every resource method that routes its own HTTP request offers the same
+three escape hatches (``extra_headers`` / ``extra_query`` /
+``extra_body``) and hands them to the transport as one
+:class:`RequestOptions`. They exist so a caller can attach something this
+SDK does not model yet (a gateway experiment flag, a parameter a newer
+backend added) without waiting for a release. The websocket methods
+(``audio.asr.recognize`` / ``recognize_file``, ``tingwu.realtime``) are
+the exception: ``transport/ws.py`` has no per-request options channel, so
+a parameter there would be silently inert.
 
-``timeout`` and ``max_retries`` are honored by the transports but are
-*not yet reachable from a resource method*: no resource signature takes
-them and :func:`request_options` does not forward them, so today the only
-way to narrow retries for one call is a derived client
-(``client.with_options(max_retries=0)``). Wiring the last mile means
-adding the parameter to every resource signature and overload; until
-that lands, do not read the fields below as caller-facing.
+``timeout`` and ``max_retries`` ride the same channel, with one
+difference in how they reach it. ``max_retries`` is a resource-method
+parameter: passing it narrows or widens the client's retry budget for
+one request, which used to mean deriving a whole client
+(``client.with_options(max_retries=0)``). ``timeout`` is *not* exposed
+through a resource signature, because every resource method already
+declares its own ``timeout=`` and the transport prefers that one (see
+:class:`RequestOptions`); the field here serves callers that build
+:class:`RequestOptions` directly.
 
 ``None`` means "no opinion" everywhere here, so a call that sets no
 option behaves exactly as it did before this channel existed. Header
@@ -64,19 +70,34 @@ def request_options(
     extra_headers: Optional[Mapping[str, str]] = None,
     extra_query: Optional[Mapping[str, Any]] = None,
     extra_body: Optional[Mapping[str, Any]] = None,
+    *,
+    timeout: Optional[Union[float, httpx.Timeout]] = None,
+    max_retries: Optional[int] = None,
 ) -> Optional[RequestOptions]:
-    """Options for a resource call's three extras, or ``None``.
+    """Options for a resource call's overrides, or ``None``.
 
     Resources call this rather than building :class:`RequestOptions`
     themselves, so an all-defaults call stays ``None`` and the transport
     keeps its no-options path.
+
+    ``timeout`` and ``max_retries`` are keyword-only so the three extras
+    stay positional: resources pass them by position, and a keyword-only
+    tail lets this grow without touching those call sites.
     """
-    if not (extra_headers or extra_query or extra_body):
+    if not (
+        extra_headers
+        or extra_query
+        or extra_body
+        or timeout is not None
+        or max_retries is not None
+    ):
         return None
     return RequestOptions(
         extra_headers=extra_headers,
         extra_query=extra_query,
         extra_body=extra_body,
+        timeout=timeout,
+        max_retries=max_retries,
     )
 
 

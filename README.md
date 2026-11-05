@@ -200,7 +200,7 @@ for page in client.models.list(page_size=50).iter_pages():   # every page
     ...
 ```
 
-On `AsyncClient` use `await page.next_page_async()` and `async for page in page.iter_pages_async()`. Calling the synchronous traversal on an async-fetched page raises `TypeError` naming the async method, rather than handing back an un-awaited coroutine. `client.files.list()` and `client.jobs.list()` paginate the same way.
+On `AsyncClient` use `await page.next_page_async()` and `async for page in page.iter_pages_async()`. Calling the synchronous traversal on an async-fetched page raises `TypeError` naming the async method, rather than handing back an un-awaited coroutine. `client.files.list()` and `client.images.jobs.list()` paginate the same way.
 
 Serialize a page with `model_dump()`. Iterating a page yields its *items*, so `dict(page)` is not a way to read its fields.
 
@@ -236,7 +236,7 @@ from dashscope.resources.embeddings import EmbeddingResponse
 
 ### Per-request options
 
-Every resource method takes the same three escape hatches, for anything this SDK does not model yet:
+Every resource method that makes an HTTP request takes the same three escape hatches, for anything this SDK does not model yet:
 
 ```python
 client.chat.completions.create(
@@ -250,7 +250,14 @@ client.chat.completions.create(
 
 `extra_headers` sits above every other layer — the SDK identity headers, the client defaults, your `headers=`, and a per-call `api_key=` / `workspace=` — matched case-insensitively. `extra_body` deep-merges nested dicts, so adding one nested field keeps its siblings; lists and scalars replace. A request whose body is not a JSON object (a file upload, raw bytes) has nothing to merge into, so `extra_body` is dropped with a warning rather than silently lost.
 
-Retries stay a client-level setting; narrow them for a whole client with `client.with_options(max_retries=0)`.
+`max_retries` narrows or widens the retry budget for a single call, so a request that must not be replayed no longer needs a whole derived client:
+
+```python
+client.deployments.list(max_retries=0)          # one attempt, no retry
+client.with_options(max_retries=5)              # still works, client-wide
+```
+
+Streaming methods take all four: `open_stream` retries only while no event has reached you yet, so a mid-stream failure is never replayed. The websocket methods (`audio.asr.recognize` / `recognize_file`, `tingwu.realtime`) take none of them — that transport has no per-request options channel, so a parameter there would be silently inert.
 
 ### Streaming
 
@@ -364,7 +371,7 @@ The three `DASHSCOPE_HTTP_*` pool variables are also settable as `http_max_conne
 
 By default a response body that does not fit the SDK's typed models is parsed in degraded form — the offending fields fall back to their defaults and the rest of the payload stays usable — with the drift recorded at `DEBUG` on the `dashscope._logging.parse` logger. Set `DASHSCOPE_STRICT_VALIDATION=true` (or `Client(strict_validation=True)`, `settings.strict_validation = True`, `strict_validation = true` in `config.toml`) to raise `APIResponseValidationError` instead, which is what you want in CI or contract tests. Strict validation raises even under `raise_on_error=False`: that flag governs service errors, this one governs parse errors.
 
-Two caveats. `DEBUG` is below the SDK's default log level, so a degraded parse is silent unless you raise it — see [Logging](#logging) — and `strict_validation` is the only way to make drift fail loudly. And the typed-parse path currently covers `chat.completions`, `models`, `files`, `jobs`, `images`, `embeddings` and `multimodal.embeddings`; the remaining surfaces (audio, fine-tuning, apps, decision, deployments, reinforcement learning, rerank, tokenization, tingwu) still construct their models directly and raise a plain `pydantic.ValidationError` on drift, ignoring both settings.
+One caveat: `DEBUG` is below the SDK's default log level, so a degraded parse is silent unless you raise it — see [Logging](#logging) — and `strict_validation` is the only way to make drift fail loudly. The typed-parse path covers every resource, and not only the final response object: streamed frames (`apps`, `deployments.stream_events`, `fine_tunes.stream_events`, `audio.tts.http.stream`) and websocket results (`audio.asr`) degrade frame by frame as well, so one malformed event cannot break an iteration partway through with a `pydantic.ValidationError` that no `except DashScopeError` would catch.
 
 **Config file** (`~/.dashscope/config.toml`):
 

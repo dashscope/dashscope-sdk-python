@@ -12,28 +12,35 @@ from __future__ import annotations
 import copy
 import json
 from typing import (
+    TYPE_CHECKING,
     Any,
     AsyncIterator,
     Dict,
     Iterator,
     List,
+    Literal,
+    Mapping,
     Optional,
     Union,
+    overload,
 )
 
 from pydantic import BaseModel, ConfigDict
 
-from dashscope.errors import (
-    check_response,
-    error_from_business_code,
-    response_json,
-)
+from dashscope.errors import error_from_business_code
+from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     ResponseBase,
     Usage,
     flatten_envelope,
     with_headers,
 )
+
+if TYPE_CHECKING:
+    import httpx
+
+    from dashscope.transport._response import APIResponse
 
 __all__ = [
     "AppCompletion",
@@ -133,11 +140,21 @@ class AppCompletion(ResponseBase):
     usage: Optional[AppUsage] = None
 
 
-def _parse(body: Dict[str, Any]) -> AppCompletion:
+def _parse(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
+) -> AppCompletion:
     # An SSE frame is not guaranteed to be JSON; _try_json hands back the raw
     # string in that case.
     payload = flatten_envelope(body) if isinstance(body, dict) else {}
-    return AppCompletion(**payload)
+    return parse_model(
+        AppCompletion,
+        payload,
+        strict=strict,
+        response=response,
+    )
 
 
 def _try_json(data: str) -> Any:
@@ -291,16 +308,29 @@ def _raise_frame_error(data: str) -> None:
     )
 
 
-def _error_event(data: str) -> AppCompletion:
+def _error_event(
+    data: str,
+    *,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
+) -> AppCompletion:
     # Non-raising mode: surface the stream error as a terminal event
-    # instead of silently truncating the stream.
+    # instead of silently truncating the stream. Built from a wire frame,
+    # so it degrades like any other parse -- raising here would replace a
+    # reported service error with an uncatchable schema error.
     body = _try_json(data)
     payload = body if isinstance(body, dict) else {}
-    return AppCompletion(
-        request_id=payload.get("request_id"),
-        code=payload.get("code"),
-        message=payload.get("message") or (None if payload else str(body)),
-        is_error=True,
+    return parse_model(
+        AppCompletion,
+        {
+            "request_id": payload.get("request_id"),
+            "code": payload.get("code"),
+            "message": payload.get("message")
+            or (None if payload else str(body)),
+            "is_error": True,
+        },
+        strict=strict,
+        response=response,
     )
 
 
@@ -365,6 +395,108 @@ class AppCompletions:
     def __init__(self, client) -> None:
         self._client = client
 
+    @overload
+    def create(
+        self,
+        *,
+        app_id: str,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+        stream: Literal[True],
+        session_id: Optional[str] = None,
+        biz_params: Optional[Dict[str, Any]] = None,
+        has_thoughts: Optional[bool] = None,
+        doc_tag_codes: Optional[List[str]] = None,
+        doc_reference_type: Optional[str] = None,
+        memory_id: Optional[str] = None,
+        image_list: Optional[List[str]] = None,
+        file_list: Optional[List[str]] = None,
+        rag_options: Optional[Dict[str, Any]] = None,
+        incremental_output: Optional[bool] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        seed: Optional[int] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> AppStream:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        app_id: str,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+        stream: Literal[False] = False,
+        session_id: Optional[str] = None,
+        biz_params: Optional[Dict[str, Any]] = None,
+        has_thoughts: Optional[bool] = None,
+        doc_tag_codes: Optional[List[str]] = None,
+        doc_reference_type: Optional[str] = None,
+        memory_id: Optional[str] = None,
+        image_list: Optional[List[str]] = None,
+        file_list: Optional[List[str]] = None,
+        rag_options: Optional[Dict[str, Any]] = None,
+        incremental_output: Optional[bool] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        seed: Optional[int] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> AppCompletion:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        app_id: str,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+        stream: Literal[False] = False,
+        session_id: Optional[str] = None,
+        biz_params: Optional[Dict[str, Any]] = None,
+        has_thoughts: Optional[bool] = None,
+        doc_tag_codes: Optional[List[str]] = None,
+        doc_reference_type: Optional[str] = None,
+        memory_id: Optional[str] = None,
+        image_list: Optional[List[str]] = None,
+        file_list: Optional[List[str]] = None,
+        rag_options: Optional[Dict[str, Any]] = None,
+        incremental_output: Optional[bool] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        seed: Optional[int] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
     def create(  # pylint: disable=too-many-locals
         self,
         *,
@@ -390,7 +522,12 @@ class AppCompletions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Union[AppCompletion, AppStream]:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[AppCompletion, AppStream, "APIResponse"]:
         """Call the application; ``stream=True`` returns an AppStream.
 
         Send ``prompt`` for one turn, ``messages`` for a transcript the
@@ -401,8 +538,14 @@ class AppCompletions:
         ``biz_params`` carries the application's own flow and plugin
         inputs; ``parameters`` holds model knobs and anything this
         signature does not name.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
         """
         _validate(app_id, prompt, messages)
+        if raw and stream:
+            raise ValueError("raw=True is not supported with stream=True")
         body = _build_body(
             prompt,
             messages,
@@ -434,9 +577,15 @@ class AppCompletions:
                 timeout=timeout,
                 api_key=api_key,
                 workspace=workspace,
+                options=request_options(
+                    extra_headers,
+                    extra_query,
+                    extra_body,
+                    max_retries=max_retries,
+                ),
             )
             return AppStream(self._events(response), response)
-        response = transport.request(
+        resp = transport.request_api(
             "POST",
             path,
             json=body,
@@ -444,19 +593,49 @@ class AppCompletions:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
 
     def _events(self, response) -> Iterator[AppCompletion]:
+        # Snapshotted once per stream: a flag flipped mid-flight should not
+        # change how the frames already being delivered are parsed.
+        strict = self._client.config.strict_validation
         try:
             for is_error, data in _sse_frames(response):
                 if is_error:
                     if self._client.raise_on_error:
                         _raise_frame_error(data)
-                    yield with_headers(_error_event(data), response)
+                    yield with_headers(
+                        _error_event(
+                            data,
+                            strict=strict,
+                            response=response,
+                        ),
+                        response,
+                    )
                     return
-                yield _parse(_try_json(data))
+                yield _parse(
+                    _try_json(data),
+                    strict=strict,
+                    response=response,
+                )
         finally:
             response.close()
 
@@ -473,6 +652,108 @@ class AsyncAppCompletions:
 
     def __init__(self, client) -> None:
         self._client = client
+
+    @overload
+    async def create(
+        self,
+        *,
+        app_id: str,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+        stream: Literal[True],
+        session_id: Optional[str] = None,
+        biz_params: Optional[Dict[str, Any]] = None,
+        has_thoughts: Optional[bool] = None,
+        doc_tag_codes: Optional[List[str]] = None,
+        doc_reference_type: Optional[str] = None,
+        memory_id: Optional[str] = None,
+        image_list: Optional[List[str]] = None,
+        file_list: Optional[List[str]] = None,
+        rag_options: Optional[Dict[str, Any]] = None,
+        incremental_output: Optional[bool] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        seed: Optional[int] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> AsyncAppStream:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        app_id: str,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+        stream: Literal[False] = False,
+        session_id: Optional[str] = None,
+        biz_params: Optional[Dict[str, Any]] = None,
+        has_thoughts: Optional[bool] = None,
+        doc_tag_codes: Optional[List[str]] = None,
+        doc_reference_type: Optional[str] = None,
+        memory_id: Optional[str] = None,
+        image_list: Optional[List[str]] = None,
+        file_list: Optional[List[str]] = None,
+        rag_options: Optional[Dict[str, Any]] = None,
+        incremental_output: Optional[bool] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        seed: Optional[int] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> AppCompletion:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        app_id: str,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, Any]]] = None,
+        stream: Literal[False] = False,
+        session_id: Optional[str] = None,
+        biz_params: Optional[Dict[str, Any]] = None,
+        has_thoughts: Optional[bool] = None,
+        doc_tag_codes: Optional[List[str]] = None,
+        doc_reference_type: Optional[str] = None,
+        memory_id: Optional[str] = None,
+        image_list: Optional[List[str]] = None,
+        file_list: Optional[List[str]] = None,
+        rag_options: Optional[Dict[str, Any]] = None,
+        incremental_output: Optional[bool] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        seed: Optional[int] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def create(  # pylint: disable=too-many-locals
         self,
@@ -499,8 +780,21 @@ class AsyncAppCompletions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Union[AppCompletion, AsyncAppStream]:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[AppCompletion, AsyncAppStream, "APIResponse"]:
+        """Async twin of :meth:`AppCompletions.create`.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
         _validate(app_id, prompt, messages)
+        if raw and stream:
+            raise ValueError("raw=True is not supported with stream=True")
         body = _build_body(
             prompt,
             messages,
@@ -532,9 +826,15 @@ class AsyncAppCompletions:
                 timeout=timeout,
                 api_key=api_key,
                 workspace=workspace,
+                options=request_options(
+                    extra_headers,
+                    extra_query,
+                    extra_body,
+                    max_retries=max_retries,
+                ),
             )
             return AsyncAppStream(self._events(response), response)
-        response = await transport.request(
+        resp = await transport.request_api(
             "POST",
             path,
             json=body,
@@ -542,11 +842,30 @@ class AsyncAppCompletions:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
 
     async def _events(self, response) -> AsyncIterator[AppCompletion]:
+        # Snapshotted once per stream: a flag flipped mid-flight should not
+        # change how the frames already being delivered are parsed.
+        strict = self._client.config.strict_validation
         try:
             is_error = False
             async for line in response.aiter_lines():
@@ -559,9 +878,20 @@ class AsyncAppCompletions:
                     if is_error:
                         if self._client.raise_on_error:
                             _raise_frame_error(data)
-                        yield with_headers(_error_event(data), response)
+                        yield with_headers(
+                            _error_event(
+                                data,
+                                strict=strict,
+                                response=response,
+                            ),
+                            response,
+                        )
                         return
-                    yield _parse(_try_json(data))
+                    yield _parse(
+                        _try_json(data),
+                        strict=strict,
+                        response=response,
+                    )
         finally:
             await response.aclose()
 

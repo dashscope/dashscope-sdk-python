@@ -117,6 +117,33 @@ def test_request_options_built_when_any_extra_is_set(kwargs):
         assert getattr(options, name) == value
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"timeout": 1.5},
+        {"max_retries": 0},
+        {"max_retries": 3},
+    ],
+)
+def test_request_options_built_when_a_keyword_only_field_is_set(kwargs):
+    # ``max_retries=0`` is a real override rather than "no opinion", so the
+    # all-defaults shortcut has to test for ``None`` and not for falsiness.
+    options = request_options(**kwargs)
+    assert isinstance(options, RequestOptions)
+    for name, value in kwargs.items():
+        assert getattr(options, name) == value
+
+
+def test_request_options_keeps_the_extras_positional():
+    # Resources pass the three extras by position; the keyword-only tail is
+    # what lets timeout/max_retries be added without touching those calls.
+    options = request_options({"X-A": "1"}, None, None, max_retries=2)
+    assert options.extra_headers == {"X-A": "1"}
+    assert options.extra_query is None
+    assert options.timeout is None
+    assert options.max_retries == 2
+
+
 def test_deep_merge_nested_dicts_merge_scalars_replace():
     base = {"model": "qwen-max", "params": {"top_p": 0.5, "seed": 1}}
     merged = deep_merge(base, {"params": {"top_p": 0.9}, "stream": True})

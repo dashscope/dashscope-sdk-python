@@ -7,17 +7,25 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Union,
+    overload,
+)
 
 from pydantic import AliasChoices, Field
 
 from dashscope.errors import (
     BadRequestError,
     NotFoundError,
-    check_response,
     response_error,
     sdk_error,
-    response_json,
 )
 from dashscope.transport._options import request_options
 from dashscope.types._parse import parse_model
@@ -30,6 +38,8 @@ from dashscope.types.pagination import BasePage
 
 if TYPE_CHECKING:
     import httpx
+
+    from dashscope.transport._response import APIResponse
 
 _BASE_PATH = "/files"
 
@@ -285,6 +295,7 @@ class Files:
     def __init__(self, client) -> None:
         self._client = client
 
+    @overload
     def upload(
         self,
         *,
@@ -297,10 +308,53 @@ class Files:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> File:
+        ...
+
+    @overload
+    def upload(
+        self,
+        *,
+        file_path: str,
+        purpose: str = "fine-tune",
+        description: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    def upload(
+        self,
+        *,
+        file_path: str,
+        purpose: str = "fine-tune",
+        description: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[File, "APIResponse"]:
+        """Upload a JSONL file for fine-tuning.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
         _validate_upload(file_path, purpose)
         data, files = _upload_form(file_path, description)
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "POST",
             _BASE_PATH,
             data=data,
@@ -313,19 +367,24 @@ class Files:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
+        if raw:
+            return resp
+        resp.raise_for_status()
         return with_headers(
             _parse_upload(
-                response_json(response),
+                resp.json(),
                 strict=self._client.config.strict_validation,
-                response=response,
+                response=resp.http_response,
             ),
-            response,
+            resp.http_response,
         )
 
-    def list(
+    @overload
+    def list(  # pylint: disable=redefined-builtin
         self,
         *,
         page_no: int = 1,
@@ -336,8 +395,51 @@ class Files:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> FileList:
-        response = self._client.transport.request(
+        ...
+
+    @overload
+    def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[FileList, "APIResponse"]:
+        """List uploaded files, one page at a time.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. A raw response
+        carries no pagination callback -- use ``FileList.iter_pages()`` on the
+        parsed result to cross pages.
+        """
+        resp = self._client.transport.request_api(
             "GET",
             _BASE_PATH,
             params={"page_no": page_no, "page_size": page_size},
@@ -349,13 +451,17 @@ class Files:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
+        if raw:
+            return resp
+        resp.raise_for_status()
         result = _parse_list(
-            response_json(response),
+            resp.json(),
             strict=self._client.config.strict_validation,
-            response=response,
+            response=resp.http_response,
         )
         result.bind_pagination(
             lambda next_no, next_size: self.list(
@@ -367,9 +473,44 @@ class Files:
                 extra_headers=extra_headers,
                 extra_query=extra_query,
                 extra_body=extra_body,
+                max_retries=max_retries,
             ),
+            requested_page_no=page_no,
+            requested_page_size=page_size,
         )
-        return with_headers(result, response)
+        return with_headers(result, resp.http_response)
+
+    @overload
+    def get(
+        self,
+        file_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> File:
+        ...
+
+    @overload
+    def get(
+        self,
+        file_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def get(
         self,
@@ -381,9 +522,20 @@ class Files:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
-    ) -> File:
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[File, "APIResponse"]:
+        """Fetch one uploaded file's metadata.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. It also skips the
+        ``NotFoundError`` refinement documented on
+        :func:`_check_by_id_response`: a missing file comes back as the
+        gateway's own 400 body rather than raising.
+        """
         _require_file_id(file_id)
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{file_id}",
             sdk_module=MODULE,
@@ -394,20 +546,56 @@ class Files:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
+            client=self._client,
         )
+        if raw:
+            return resp
         _check_by_id_response(
-            response,
+            resp.http_response,
             raise_on_error=self._client.raise_on_error,
         )
         return with_headers(
             _parse_file(
-                response_json(response),
+                resp.json(),
                 strict=self._client.config.strict_validation,
-                response=response,
+                response=resp.http_response,
             ),
-            response,
+            resp.http_response,
         )
+
+    @overload
+    def delete(
+        self,
+        file_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> DeletionStatus:
+        ...
+
+    @overload
+    def delete(
+        self,
+        file_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def delete(
         self,
@@ -419,9 +607,20 @@ class Files:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
-    ) -> DeletionStatus:
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[DeletionStatus, "APIResponse"]:
+        """Delete one uploaded file.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. It also skips the
+        ``NotFoundError`` refinement documented on
+        :func:`_check_by_id_response`: deleting a file that is already gone
+        comes back as the gateway's own 400 body rather than raising.
+        """
         _require_file_id(file_id)
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "DELETE",
             f"{_BASE_PATH}/{file_id}",
             sdk_module=MODULE,
@@ -432,25 +631,65 @@ class Files:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
+            client=self._client,
         )
+        if raw:
+            return resp
         _check_by_id_response(
-            response,
+            resp.http_response,
             raise_on_error=self._client.raise_on_error,
         )
         return with_headers(
             _parse_delete(
-                response_json(response),
+                resp.json(),
                 strict=self._client.config.strict_validation,
-                response=response,
+                response=resp.http_response,
             ),
-            response,
+            resp.http_response,
         )
 
 
 class AsyncFiles:
     def __init__(self, client) -> None:
         self._client = client
+
+    @overload
+    async def upload(
+        self,
+        *,
+        file_path: str,
+        purpose: str = "fine-tune",
+        description: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> File:
+        ...
+
+    @overload
+    async def upload(
+        self,
+        *,
+        file_path: str,
+        purpose: str = "fine-tune",
+        description: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def upload(
         self,
@@ -464,10 +703,18 @@ class AsyncFiles:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
-    ) -> File:
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[File, "APIResponse"]:
+        """Upload a JSONL file for fine-tuning.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
         _validate_upload(file_path, purpose)
         data, files = _upload_form(file_path, description)
-        response = await self._client.transport.request(
+        resp = await self._client.transport.request_api(
             "POST",
             _BASE_PATH,
             data=data,
@@ -480,19 +727,24 @@ class AsyncFiles:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
+        if raw:
+            return resp
+        resp.raise_for_status()
         return with_headers(
             _parse_upload(
-                response_json(response),
+                resp.json(),
                 strict=self._client.config.strict_validation,
-                response=response,
+                response=resp.http_response,
             ),
-            response,
+            resp.http_response,
         )
 
-    async def list(
+    @overload
+    async def list(  # pylint: disable=redefined-builtin
         self,
         *,
         page_no: int = 1,
@@ -503,8 +755,51 @@ class AsyncFiles:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> FileList:
-        response = await self._client.transport.request(
+        ...
+
+    @overload
+    async def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    async def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[FileList, "APIResponse"]:
+        """List uploaded files, one page at a time.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. A raw response
+        carries no pagination callback -- use ``FileList.iter_pages()`` on the
+        parsed result to cross pages.
+        """
+        resp = await self._client.transport.request_api(
             "GET",
             _BASE_PATH,
             params={"page_no": page_no, "page_size": page_size},
@@ -516,13 +811,17 @@ class AsyncFiles:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
+        if raw:
+            return resp
+        resp.raise_for_status()
         result = _parse_list(
-            response_json(response),
+            resp.json(),
             strict=self._client.config.strict_validation,
-            response=response,
+            response=resp.http_response,
         )
         result.bind_pagination(
             lambda next_no, next_size: self.list(
@@ -534,9 +833,44 @@ class AsyncFiles:
                 extra_headers=extra_headers,
                 extra_query=extra_query,
                 extra_body=extra_body,
+                max_retries=max_retries,
             ),
+            requested_page_no=page_no,
+            requested_page_size=page_size,
         )
-        return with_headers(result, response)
+        return with_headers(result, resp.http_response)
+
+    @overload
+    async def get(
+        self,
+        file_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> File:
+        ...
+
+    @overload
+    async def get(
+        self,
+        file_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def get(
         self,
@@ -548,9 +882,20 @@ class AsyncFiles:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
-    ) -> File:
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[File, "APIResponse"]:
+        """Fetch one uploaded file's metadata.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. It also skips the
+        ``NotFoundError`` refinement documented on
+        :func:`_check_by_id_response`: a missing file comes back as the
+        gateway's own 400 body rather than raising.
+        """
         _require_file_id(file_id)
-        response = await self._client.transport.request(
+        resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{file_id}",
             sdk_module=MODULE,
@@ -561,20 +906,56 @@ class AsyncFiles:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
+            client=self._client,
         )
+        if raw:
+            return resp
         _check_by_id_response(
-            response,
+            resp.http_response,
             raise_on_error=self._client.raise_on_error,
         )
         return with_headers(
             _parse_file(
-                response_json(response),
+                resp.json(),
                 strict=self._client.config.strict_validation,
-                response=response,
+                response=resp.http_response,
             ),
-            response,
+            resp.http_response,
         )
+
+    @overload
+    async def delete(
+        self,
+        file_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> DeletionStatus:
+        ...
+
+    @overload
+    async def delete(
+        self,
+        file_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def delete(
         self,
@@ -586,9 +967,20 @@ class AsyncFiles:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
-    ) -> DeletionStatus:
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[DeletionStatus, "APIResponse"]:
+        """Delete one uploaded file.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. It also skips the
+        ``NotFoundError`` refinement documented on
+        :func:`_check_by_id_response`: deleting a file that is already gone
+        comes back as the gateway's own 400 body rather than raising.
+        """
         _require_file_id(file_id)
-        response = await self._client.transport.request(
+        resp = await self._client.transport.request_api(
             "DELETE",
             f"{_BASE_PATH}/{file_id}",
             sdk_module=MODULE,
@@ -599,17 +991,21 @@ class AsyncFiles:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
+            client=self._client,
         )
+        if raw:
+            return resp
         _check_by_id_response(
-            response,
+            resp.http_response,
             raise_on_error=self._client.raise_on_error,
         )
         return with_headers(
             _parse_delete(
-                response_json(response),
+                resp.json(),
                 strict=self._client.config.strict_validation,
-                response=response,
+                response=resp.http_response,
             ),
-            response,
+            resp.http_response,
         )

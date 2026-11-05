@@ -200,7 +200,7 @@ for page in client.models.list(page_size=50).iter_pages():   # 遍历所有页
     ...
 ```
 
-`AsyncClient` 上请用 `await page.next_page_async()` 和 `async for page in page.iter_pages_async()`。对异步取回的页面调用同步翻页方法会抛出 `TypeError` 并指明该用哪个异步方法，而不是把一个未 await 的 coroutine 交给你。`client.files.list()` 和 `client.jobs.list()` 的分页方式相同。
+`AsyncClient` 上请用 `await page.next_page_async()` 和 `async for page in page.iter_pages_async()`。对异步取回的页面调用同步翻页方法会抛出 `TypeError` 并指明该用哪个异步方法，而不是把一个未 await 的 coroutine 交给你。`client.files.list()` 和 `client.images.jobs.list()` 的分页方式相同。
 
 序列化页面请用 `model_dump()`。迭代页面对象得到的是它的**条目**，所以 `dict(page)` 不是读取字段的方式。
 
@@ -236,7 +236,7 @@ from dashscope.resources.embeddings import EmbeddingResponse
 
 ### 单次请求定制
 
-每个资源方法都接受同样的三个逃生舱，用于承载 SDK 尚未建模的东西：
+所有发起 HTTP 请求的资源方法都接受同样的三个逃生舱，用于承载 SDK 尚未建模的东西：
 
 ```python
 client.chat.completions.create(
@@ -250,7 +250,14 @@ client.chat.completions.create(
 
 `extra_headers` 位于所有其他层之上——SDK 身份头、客户端默认头、你的 `headers=`、以及单次调用的 `api_key=` / `workspace=`——且大小写不敏感匹配。`extra_body` 对嵌套 dict 做深合并，所以新增一个嵌套字段不会丢掉它的兄弟字段；列表和标量则是整体替换。若请求体不是 JSON 对象（文件上传、裸字节），就无处可合并，此时 `extra_body` 会被丢弃并告警，而不是静默丢失。
 
-重试仍是客户端级设置；要为整个客户端收窄，用 `client.with_options(max_retries=0)`。
+`max_retries` 为单次调用收窄或放宽重试预算，所以一个绝不能被重放的请求不再需要派生整个客户端：
+
+```python
+client.deployments.list(max_retries=0)          # 只打一次，不重试
+client.with_options(max_retries=5)              # 依然有效，作用于整个客户端
+```
+
+流式方法四个都接受：`open_stream` 只在还没有任何事件到达你之前重试，所以流中途的失败绝不会被重放。WebSocket 方法（`audio.asr.recognize` / `recognize_file`、`tingwu.realtime`）一个都不接受——那条传输链路根本没有单次请求的 options 通道，加了形参也只会被静默忽略。
 
 ### 流式
 
@@ -364,7 +371,7 @@ dashscope.settings.log_level = "INFO"
 
 默认情况下，若响应体与 SDK 的类型模型不符，会走降级解析——出问题的字段回退到各自的默认值，报文中其余部分照常可用——同时把漂移以 `DEBUG` 级别记录到 `dashscope._logging.parse` 这个 logger。设置 `DASHSCOPE_STRICT_VALIDATION=true`（或 `Client(strict_validation=True)`、`settings.strict_validation = True`、`config.toml` 里的 `strict_validation = true`）则改为抛出 `APIResponseValidationError`，这正是 CI 或契约测试想要的行为。严格校验即使在 `raise_on_error=False` 下也会抛错：那个开关管的是服务端错误，这个管的是解析错误。
 
-两点需要注意。其一，`DEBUG` 低于 SDK 的默认日志级别，所以除非你调高它（见[日志](#日志)），降级解析是无声的——而 `strict_validation` 是让漂移大声失败的唯一手段。其二，类型化解析路径目前覆盖 `chat.completions`、`models`、`files`、`jobs`、`images`、`embeddings` 和 `multimodal.embeddings`；其余接口（语音、微调、应用、决策、部署、强化学习、重排、Token 计数、听悟）仍是直接构造模型，遇到漂移会抛出原始的 `pydantic.ValidationError`，两个开关都不生效。
+一点需要注意：`DEBUG` 低于 SDK 的默认日志级别，所以除非你调高它（见[日志](#日志)），降级解析是无声的——而 `strict_validation` 是让漂移大声失败的唯一手段。类型化解析路径覆盖全部资源，且不止最终的响应对象：流式帧（`apps`、`deployments.stream_events`、`fine_tunes.stream_events`、`audio.tts.http.stream`）和 WebSocket 结果（`audio.asr`）同样逐帧降级，因此单个畸形事件不会在迭代中途抛出 `except DashScopeError` 抓不到的 `pydantic.ValidationError`。
 
 **配置文件**（`~/.dashscope/config.toml`）：
 

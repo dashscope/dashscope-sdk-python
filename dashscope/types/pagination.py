@@ -93,6 +93,11 @@ class BasePage(ResponseBase, Generic[T]):
     _fetch_next: Optional[Callable[[int, int], Any]] = PrivateAttr(
         default=None,
     )
+    # The page this page was *requested* as, when the resource bound one.
+    # Traversal advances from here rather than from the parsed ``page_no`` /
+    # ``page_size``; see :meth:`bind_pagination`.
+    _requested_no: Optional[int] = PrivateAttr(default=None)
+    _requested_size: Optional[int] = PrivateAttr(default=None)
 
     page_no: int = 1
     page_size: int = 10
@@ -112,6 +117,8 @@ class BasePage(ResponseBase, Generic[T]):
     def bind_pagination(
         self,
         callback: Optional[Callable[[int, int], Any]],
+        requested_page_no: Optional[int] = None,
+        requested_page_size: Optional[int] = None,
     ) -> "BasePage[T]":
         """Attach the page-fetch callback the traversal methods use.
 
@@ -119,9 +126,34 @@ class BasePage(ResponseBase, Generic[T]):
         ``iter_pages()`` can request the following page. Returns ``self``
         for chaining. ``callback`` is stored in a ``PrivateAttr``, so
         binding it never changes ``model_dump()``.
+
+        ``requested_page_no`` / ``requested_page_size`` are the offsets the
+        resource actually sent, and traversal advances from them rather than
+        from the parsed :attr:`page_no` / :attr:`page_size`. A gateway that
+        omits ``page_no`` leaves every page reading the field's default of 1,
+        so advancing from the echo would request page 2 forever; one that
+        omits ``page_size`` would silently change the window and skip or
+        repeat items. The resource is the only party that reliably knows what
+        it asked for.
         """
         self._fetch_next = callback
+        self._requested_no = requested_page_no
+        self._requested_size = requested_page_size
         return self
+
+    @property
+    def _cursor_no(self) -> int:
+        """The page number to advance from: the request's, else the echo."""
+        if self._requested_no is not None:
+            return self._requested_no
+        return self.page_no
+
+    @property
+    def _cursor_size(self) -> int:
+        """The page size to advance with: the request's, else the echo."""
+        if self._requested_size is not None:
+            return self._requested_size
+        return self.page_size
 
     def has_next_page(self) -> bool:
         """Whether ``total_count`` implies a page after this one.
@@ -130,7 +162,7 @@ class BasePage(ResponseBase, Generic[T]):
         does not consult ``_fetch_next``, so it stays meaningful on a page
         built without a callback (e.g. parsed straight from a body).
         """
-        return self.page_no * self.page_size < self.total_count
+        return self._cursor_no * self._cursor_size < self.total_count
 
     def next_page(self) -> Optional["BasePage[T]"]:
         """Fetch the following page, or ``None`` at the end of the list.
@@ -144,14 +176,14 @@ class BasePage(ResponseBase, Generic[T]):
             return None
         _reject_async_callback(self._fetch_next)
         return _reject_awaitable_page(
-            self._fetch_next(self.page_no + 1, self.page_size),
+            self._fetch_next(self._cursor_no + 1, self._cursor_size),
         )
 
     async def next_page_async(self) -> Optional["BasePage[T]"]:
         """Async :meth:`next_page`; awaits the callback when it is a coroutine."""
         if not self.has_next_page() or self._fetch_next is None:
             return None
-        result = self._fetch_next(self.page_no + 1, self.page_size)
+        result = self._fetch_next(self._cursor_no + 1, self._cursor_size)
         if inspect.isawaitable(result):
             result = await result
         return result

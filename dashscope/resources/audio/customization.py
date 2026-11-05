@@ -20,10 +20,22 @@ transport's retry loop.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Union,
+    overload,
+)
 
 from pydantic import AliasChoices, Field
 
+from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     JobStatus,
     ResponseBase,
@@ -31,6 +43,9 @@ from dashscope.types.common import (
     response_body,
     with_headers,
 )
+
+if TYPE_CHECKING:
+    from dashscope.transport._response import APIResponse
 
 __all__ = [
     "DesignedVoice",
@@ -126,14 +141,23 @@ class _CustomizationBase:
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Any:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> "APIResponse":
+        """POST one customization action; returns the unchecked response.
+
+        Callers decide between the raw :class:`APIResponse` and the parsed
+        model, so nothing here inspects the status or the body.
+        """
         body: Dict[str, Any] = {
             "model": model or self.DEFAULT_MODEL,
             "input": {**fields, "action": action},
         }
         if parameters is not None:
             body["parameters"] = parameters
-        response = self._client.transport.request(
+        return self._client.transport.request_api(
             "POST",
             self.PATH,
             json=body,
@@ -142,8 +166,14 @@ class _CustomizationBase:
             sdk_module=MODULE,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        return response
 
     def _parse_response(self, response: Any) -> Dict[str, Any]:
         return flatten_envelope(
@@ -153,12 +183,63 @@ class _CustomizationBase:
             ),
         )
 
+    def _parse_model(self, model_cls, response: Any):
+        """Build one response model, degrading rather than raising."""
+        return parse_model(
+            model_cls,
+            self._parse_response(response),
+            strict=self._client.config.strict_validation,
+            response=response,
+        )
+
 
 class Vocabularies(_CustomizationBase):
     """``client.audio.vocabularies`` -- asr hot-word tables."""
 
     PATH = "/services/audio/asr/customization"
     DEFAULT_MODEL = "speech-biasing"
+
+    @overload
+    def create(
+        self,
+        *,
+        target_model: str,
+        prefix: str,
+        vocabulary: List[Dict[str, Any]],
+        model: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Vocabulary:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        target_model: str,
+        prefix: str,
+        vocabulary: List[Dict[str, Any]],
+        model: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def create(
         self,
@@ -172,9 +253,21 @@ class Vocabularies(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Vocabulary:
-        """Create a table; the result carries ``vocabulary_id``."""
-        response = self._call(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Vocabulary, "APIResponse"]:
+        """Create a table; the result carries ``vocabulary_id``.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
+        resp = self._call(
             "create_vocabulary",
             {
                 "target_model": target_model,
@@ -187,11 +280,57 @@ class Vocabularies(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            Vocabulary(**self._parse_response(response)),
-            response,
+            self._parse_model(Vocabulary, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def list(
+        self,
+        *,
+        prefix: Optional[str] = None,
+        page_index: int = 0,
+        page_size: int = 10,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> VocabularyList:
+        ...
+
+    @overload
+    def list(
+        self,
+        *,
+        prefix: Optional[str] = None,
+        page_index: int = 0,
+        page_size: int = 10,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def list(
         self,
@@ -204,15 +343,27 @@ class Vocabularies(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> VocabularyList:
-        """List tables, optionally narrowed to one ``prefix``."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[VocabularyList, "APIResponse"]:
+        """List tables, optionally narrowed to one ``prefix``.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         fields: Dict[str, Any] = {
             "page_index": page_index,
             "page_size": page_size,
         }
         if prefix:
             fields["prefix"] = prefix
-        response = self._call(
+        resp = self._call(
             "list_vocabulary",
             fields,
             model=model,
@@ -220,11 +371,53 @@ class Vocabularies(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            VocabularyList(**self._parse_response(response)),
-            response,
+            self._parse_model(VocabularyList, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def get(
+        self,
+        vocabulary_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Vocabulary:
+        ...
+
+    @overload
+    def get(
+        self,
+        vocabulary_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def get(
         self,
@@ -235,10 +428,22 @@ class Vocabularies(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Vocabulary:
-        """Fetch one table's contents (1.x ``query_vocabulary``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Vocabulary, "APIResponse"]:
+        """Fetch one table's contents (1.x ``query_vocabulary``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(vocabulary_id, "vocabulary_id")
-        response = self._call(
+        resp = self._call(
             "query_vocabulary",
             {"vocabulary_id": vocabulary_id},
             model=model,
@@ -246,11 +451,55 @@ class Vocabularies(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            Vocabulary(**self._parse_response(response)),
-            response,
+            self._parse_model(Vocabulary, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def update(
+        self,
+        vocabulary_id: str,
+        *,
+        vocabulary: List[Dict[str, Any]],
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobStatus:
+        ...
+
+    @overload
+    def update(
+        self,
+        vocabulary_id: str,
+        *,
+        vocabulary: List[Dict[str, Any]],
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def update(
         self,
@@ -262,10 +511,22 @@ class Vocabularies(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobStatus:
-        """Replace one table's contents."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobStatus, "APIResponse"]:
+        """Replace one table's contents.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(vocabulary_id, "vocabulary_id")
-        response = self._call(
+        resp = self._call(
             "update_vocabulary",
             {"vocabulary_id": vocabulary_id, "vocabulary": vocabulary},
             model=model,
@@ -273,11 +534,53 @@ class Vocabularies(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            JobStatus(**self._parse_response(response)),
-            response,
+            self._parse_model(JobStatus, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def delete(
+        self,
+        vocabulary_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobStatus:
+        ...
+
+    @overload
+    def delete(
+        self,
+        vocabulary_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def delete(
         self,
@@ -288,10 +591,22 @@ class Vocabularies(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobStatus:
-        """Delete one table."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobStatus, "APIResponse"]:
+        """Delete one table.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(vocabulary_id, "vocabulary_id")
-        response = self._call(
+        resp = self._call(
             "delete_vocabulary",
             {"vocabulary_id": vocabulary_id},
             model=model,
@@ -299,10 +614,16 @@ class Vocabularies(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            JobStatus(**self._parse_response(response)),
-            response,
+            self._parse_model(JobStatus, resp.http_response),
+            resp.http_response,
         )
 
 
@@ -311,6 +632,54 @@ class Voices(_CustomizationBase):
 
     PATH = "/services/audio/tts/customization"
     DEFAULT_MODEL = "voice-enrollment"
+
+    @overload
+    def create(
+        self,
+        *,
+        target_model: str,
+        prefix: str,
+        url: str,
+        language_hints: Optional[List[str]] = None,
+        max_prompt_audio_length: Optional[float] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+        model: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Voice:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        target_model: str,
+        prefix: str,
+        url: str,
+        language_hints: Optional[List[str]] = None,
+        max_prompt_audio_length: Optional[float] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+        model: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def create(
         self,
@@ -327,8 +696,20 @@ class Voices(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Voice:
-        """Clone a voice from the audio at ``url``; carries ``voice_id``."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Voice, "APIResponse"]:
+        """Clone a voice from the audio at ``url``; carries ``voice_id``.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         fields: Dict[str, Any] = dict(extra_input or {})
         # Named arguments win over the ``extra_input=`` escape hatch.
         fields.update(
@@ -338,7 +719,7 @@ class Voices(_CustomizationBase):
             fields["language_hints"] = language_hints
         if max_prompt_audio_length is not None:
             fields["max_prompt_audio_length"] = max_prompt_audio_length
-        response = self._call(
+        resp = self._call(
             "create_voice",
             fields,
             model=model,
@@ -347,11 +728,57 @@ class Voices(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            Voice(**self._parse_response(response)),
-            response,
+            self._parse_model(Voice, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def list(
+        self,
+        *,
+        prefix: Optional[str] = None,
+        page_index: int = 0,
+        page_size: int = 10,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> VoiceList:
+        ...
+
+    @overload
+    def list(
+        self,
+        *,
+        prefix: Optional[str] = None,
+        page_index: int = 0,
+        page_size: int = 10,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def list(
         self,
@@ -364,15 +791,27 @@ class Voices(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> VoiceList:
-        """List cloned voices, optionally narrowed to one ``prefix``."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[VoiceList, "APIResponse"]:
+        """List cloned voices, optionally narrowed to one ``prefix``.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         fields: Dict[str, Any] = {
             "page_index": page_index,
             "page_size": page_size,
         }
         if prefix:
             fields["prefix"] = prefix
-        response = self._call(
+        resp = self._call(
             "list_voice",
             fields,
             model=model,
@@ -380,11 +819,53 @@ class Voices(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            VoiceList(**self._parse_response(response)),
-            response,
+            self._parse_model(VoiceList, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def get(
+        self,
+        voice_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Voice:
+        ...
+
+    @overload
+    def get(
+        self,
+        voice_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def get(
         self,
@@ -395,10 +876,22 @@ class Voices(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Voice:
-        """Fetch one voice's details (1.x ``query_voice``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Voice, "APIResponse"]:
+        """Fetch one voice's details (1.x ``query_voice``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(voice_id, "voice_id")
-        response = self._call(
+        resp = self._call(
             "query_voice",
             {"voice_id": voice_id},
             model=model,
@@ -406,11 +899,55 @@ class Voices(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            Voice(**self._parse_response(response)),
-            response,
+            self._parse_model(Voice, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def update(
+        self,
+        voice_id: str,
+        *,
+        url: str,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobStatus:
+        ...
+
+    @overload
+    def update(
+        self,
+        voice_id: str,
+        *,
+        url: str,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def update(
         self,
@@ -422,10 +959,22 @@ class Voices(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobStatus:
-        """Re-clone one voice from the audio at ``url``."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobStatus, "APIResponse"]:
+        """Re-clone one voice from the audio at ``url``.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(voice_id, "voice_id")
-        response = self._call(
+        resp = self._call(
             "update_voice",
             {"voice_id": voice_id, "url": url},
             model=model,
@@ -433,11 +982,53 @@ class Voices(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            JobStatus(**self._parse_response(response)),
-            response,
+            self._parse_model(JobStatus, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def delete(
+        self,
+        voice_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobStatus:
+        ...
+
+    @overload
+    def delete(
+        self,
+        voice_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def delete(
         self,
@@ -448,10 +1039,22 @@ class Voices(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobStatus:
-        """Delete one cloned voice."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobStatus, "APIResponse"]:
+        """Delete one cloned voice.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(voice_id, "voice_id")
-        response = self._call(
+        resp = self._call(
             "delete_voice",
             {"voice_id": voice_id},
             model=model,
@@ -459,10 +1062,16 @@ class Voices(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            JobStatus(**self._parse_response(response)),
-            response,
+            self._parse_model(JobStatus, resp.http_response),
+            resp.http_response,
         )
 
 
@@ -477,6 +1086,54 @@ class VoiceDesign(_CustomizationBase):
 
     PATH = "/services/audio/tts/customization"
     DEFAULT_MODEL = "voice-enrollment"
+
+    @overload
+    def create(
+        self,
+        *,
+        target_model: str,
+        prefix: str,
+        voice_prompt: str,
+        preview_text: str,
+        language_hints: Optional[List[str]] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+        model: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> DesignedVoice:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        target_model: str,
+        prefix: str,
+        voice_prompt: str,
+        preview_text: str,
+        language_hints: Optional[List[str]] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+        model: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def create(
         self,
@@ -493,7 +1150,12 @@ class VoiceDesign(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> DesignedVoice:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[DesignedVoice, "APIResponse"]:
         """Design a voice from a text prompt; carries ``voice_id`` + preview.
 
         ``prefix`` becomes part of the generated id,
@@ -501,6 +1163,12 @@ class VoiceDesign(_CustomizationBase):
         ``language_hints`` is honoured, and it must match the language of
         ``preview_text``. The voice is unusable until its ``status`` leaves
         ``DEPLOYING``.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
         """
         fields: Dict[str, Any] = dict(extra_input or {})
         # Named arguments win over the ``extra_input=`` escape hatch.
@@ -514,7 +1182,7 @@ class VoiceDesign(_CustomizationBase):
         )
         if language_hints is not None:
             fields["language_hints"] = language_hints
-        response = self._call(
+        resp = self._call(
             "create_voice",
             fields,
             model=model,
@@ -523,11 +1191,57 @@ class VoiceDesign(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            DesignedVoice(**self._parse_response(response)),
-            response,
+            self._parse_model(DesignedVoice, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def list(
+        self,
+        *,
+        prefix: Optional[str] = None,
+        page_index: int = 0,
+        page_size: int = 10,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> DesignedVoiceList:
+        ...
+
+    @overload
+    def list(
+        self,
+        *,
+        prefix: Optional[str] = None,
+        page_index: int = 0,
+        page_size: int = 10,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def list(
         self,
@@ -540,15 +1254,27 @@ class VoiceDesign(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> DesignedVoiceList:
-        """List voices, optionally narrowed to one ``prefix``."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[DesignedVoiceList, "APIResponse"]:
+        """List voices, optionally narrowed to one ``prefix``.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         fields: Dict[str, Any] = {
             "page_index": page_index,
             "page_size": page_size,
         }
         if prefix:
             fields["prefix"] = prefix
-        response = self._call(
+        resp = self._call(
             "list_voice",
             fields,
             model=model,
@@ -556,11 +1282,53 @@ class VoiceDesign(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            DesignedVoiceList(**self._parse_response(response)),
-            response,
+            self._parse_model(DesignedVoiceList, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def get(
+        self,
+        voice_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> DesignedVoice:
+        ...
+
+    @overload
+    def get(
+        self,
+        voice_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def get(
         self,
@@ -571,10 +1339,22 @@ class VoiceDesign(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> DesignedVoice:
-        """Fetch one voice's details, including its review ``status``."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[DesignedVoice, "APIResponse"]:
+        """Fetch one voice's details, including its review ``status``.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(voice_id, "voice_id")
-        response = self._call(
+        resp = self._call(
             "query_voice",
             {"voice_id": voice_id},
             model=model,
@@ -582,11 +1362,53 @@ class VoiceDesign(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            DesignedVoice(**self._parse_response(response)),
-            response,
+            self._parse_model(DesignedVoice, resp.http_response),
+            resp.http_response,
         )
+
+    @overload
+    def delete(
+        self,
+        voice_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobStatus:
+        ...
+
+    @overload
+    def delete(
+        self,
+        voice_id: str,
+        *,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def delete(
         self,
@@ -597,10 +1419,22 @@ class VoiceDesign(_CustomizationBase):
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobStatus:
-        """Delete one designed voice, freeing its quota."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobStatus, "APIResponse"]:
+        """Delete one designed voice, freeing its quota.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(voice_id, "voice_id")
-        response = self._call(
+        resp = self._call(
             "delete_voice",
             {"voice_id": voice_id},
             model=model,
@@ -608,8 +1442,14 @@ class VoiceDesign(_CustomizationBase):
             headers=headers,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
+        if raw:
+            return resp
         return with_headers(
-            JobStatus(**self._parse_response(response)),
-            response,
+            self._parse_model(JobStatus, resp.http_response),
+            resp.http_response,
         )
