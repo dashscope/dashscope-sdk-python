@@ -10,6 +10,8 @@ from dashscope.agentstudio.resources._helpers import (
 from dashscope.agentstudio.types import (
     Agent,
     Credential,
+    Mount,
+    SessionResource,
     CredentialAuth,
     DeleteResponse,
     Environment,
@@ -323,3 +325,102 @@ def test_file_model_fields():
     assert f.size_bytes == 1024
     assert f.status == "checking"
     assert f.downloadable is None  # not set
+
+
+# ---------------------------------------------------------------------------
+# Session mounts (Mount input / SessionResource echo)
+# ---------------------------------------------------------------------------
+
+
+def test_mount_fields_roundtrip():
+    mount = Mount(
+        type="memory_store",
+        provider="agentstudio_memory",
+        memory_store_id="d7e534ca0e7d4fa8a4f4b079d314df3e",
+        entity_id="customer_001",
+        project_ids=["fact_rule_1", "skill_rule_1"],
+        profile_schema="7dfdc775eee5422dad37957e5ccf0081",
+        description="客户记忆",
+        access="read_only",
+    )
+    d = mount.to_dict()
+    assert d["type"] == "memory_store"
+    assert d["provider"] == "agentstudio_memory"
+    assert d["entity_id"] == "customer_001"
+    assert d["project_ids"] == ["fact_rule_1", "skill_rule_1"]
+    assert d["profile_schema"] == "7dfdc775eee5422dad37957e5ccf0081"
+    assert d["description"] == "客户记忆"
+    assert d["access"] == "read_only"
+
+    oss = Mount(
+        type="oss",
+        region="cn-beijing",
+        bucket="agentstudio-ma-oss-mnt",
+        oss_path="datasets/",
+        mount_path="/data",
+    ).to_dict()
+    assert oss == {
+        "type": "oss",
+        "region": "cn-beijing",
+        "bucket": "agentstudio-ma-oss-mnt",
+        "oss_path": "datasets/",
+        "mount_path": "/data",
+    }
+
+
+def test_session_resource_mount_fields():
+    r = SessionResource.from_dict(
+        {
+            "id": "sesrsc_1",
+            "type": "memory_store",
+            "provider": "agentstudio_memory",
+            "memory_store_id": "d7e534ca0e7d4fa8a4f4b079d314df3e",
+            "entity_id": "customer_001",
+            "project_ids": ["fact_rule_1"],
+            "profile_schema": "schema_demo",
+        },
+    )
+    assert r.provider == "agentstudio_memory"
+    assert r.entity_id == "customer_001"
+    assert r.project_ids == ["fact_rule_1"]
+    assert r.profile_schema == "schema_demo"
+    assert r.mount_path is None
+
+    o = SessionResource.from_dict(
+        {
+            "id": "sesrsc_2",
+            "type": "oss",
+            "region": "cn-beijing",
+            "bucket": "agentstudio-ma-oss-mnt",
+            "oss_path": "datasets/",
+            "mount_path": "/data",
+        },
+    )
+    assert o.region == "cn-beijing"
+    assert o.bucket == "agentstudio-ma-oss-mnt"
+    assert o.oss_path == "datasets/"
+    assert o.mount_path == "/data"
+
+
+def test_session_create_resources_accept_mount_or_dict():
+    from dashscope.agentstudio.types.params import SessionCreateParams
+
+    mount = Mount(
+        type="oss",
+        region="cn-beijing",
+        bucket="bkt",
+        mount_path="/data",
+    )
+    body = SessionCreateParams(
+        agent={"type": "agent", "id": "agent_1"},
+        resources=[mount, {"type": "file", "file_id": "file_1"}],
+    ).to_dict()
+    assert body["resources"] == [
+        {
+            "type": "oss",
+            "region": "cn-beijing",
+            "bucket": "bkt",
+            "mount_path": "/data",
+        },
+        {"type": "file", "file_id": "file_1"},
+    ]

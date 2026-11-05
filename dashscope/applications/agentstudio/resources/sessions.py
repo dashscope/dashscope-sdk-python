@@ -26,7 +26,11 @@ from dashscope.applications.agentstudio.resources.session_threads import (
     SessionThreads,
     AsyncSessionThreads,
 )
-from dashscope.applications.agentstudio.types import DeleteResponse, Session
+from dashscope.applications.agentstudio.types import (
+    DeleteResponse,
+    ResourceInput,
+    Session,
+)
 from dashscope.applications.agentstudio.types.params import (
     SessionCreateParams,
     SessionListParams,
@@ -52,12 +56,31 @@ class Sessions:
         agent: Any,
         environment_id: Optional[str] = None,
         title: Optional[str] = None,
-        resources: Optional[Sequence[Mapping[str, Any]]] = None,
+        resources: Optional[Sequence[ResourceInput]] = None,
         vault_ids: Optional[Sequence[str]] = None,
         environment_variables: Optional[Mapping[str, str]] = None,
         mcp_configs: Optional[Sequence[Mapping[str, Any]]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> Session:
+        """Create a session (``POST /sessions``).
+
+        ``agent`` is the Agent id string or an
+        ``{"type": "agent_with_overrides", ...}`` mapping. ``resources``
+        entries are wire-format mappings (or
+        :class:`~dashscope.agentstudio.types.Mount` objects, which
+        serialize to the same mappings)::
+
+            client.sessions.create(
+                agent=agent_id,
+                resources=[
+                    {"type": "memory_store", "memory_store_id": store_id,
+                     "access": "read_write"},
+                    {"type": "oss", "region": "cn-beijing", "bucket": "bkt",
+                     "oss_path": "datasets/", "mount_path": "/data",
+                     "access": "read_only"},
+                ],
+            )
+        """
         body = SessionCreateParams(
             agent=agent,
             environment_id=environment_id,
@@ -191,12 +214,31 @@ class AsyncSessions:
         agent: Any,
         environment_id: Optional[str] = None,
         title: Optional[str] = None,
-        resources: Optional[Sequence[Mapping[str, Any]]] = None,
+        resources: Optional[Sequence[ResourceInput]] = None,
         vault_ids: Optional[Sequence[str]] = None,
         environment_variables: Optional[Mapping[str, str]] = None,
         mcp_configs: Optional[Sequence[Mapping[str, Any]]] = None,
         metadata: Optional[Mapping[str, Any]] = None,
     ) -> Session:
+        """Create a session (``POST /sessions``).
+
+        ``agent`` is the Agent id string or an
+        ``{"type": "agent_with_overrides", ...}`` mapping. ``resources``
+        entries are wire-format mappings (or
+        :class:`~dashscope.agentstudio.types.Mount` objects, which
+        serialize to the same mappings)::
+
+            client.sessions.create(
+                agent=agent_id,
+                resources=[
+                    {"type": "memory_store", "memory_store_id": store_id,
+                     "access": "read_write"},
+                    {"type": "oss", "region": "cn-beijing", "bucket": "bkt",
+                     "oss_path": "datasets/", "mount_path": "/data",
+                     "access": "read_only"},
+                ],
+            )
+        """
         body = SessionCreateParams(
             agent=agent,
             environment_id=environment_id,
