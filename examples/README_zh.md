@@ -58,7 +58,7 @@ examples/
 3. 直接运行任意示例文件（从仓库根目录）：
 
    ```bash
-   python3 examples/01_atomic_capabilities/text_generation/chat.py
+   python examples/01_atomic_capabilities/text_generation/chat.py
    ```
 
 > **离线运行（无需 API key）**：`02_advanced_engineering/local_mock_debugging.py`、`02_advanced_engineering/circuit_breaker_retry.py`、`03_agent_recipes/mcp_server_demo/client_demo.py`、`04_real_world_scenarios/production_ready_rag_harness.py`、`04_real_world_scenarios/realtime_audio_meeting_harness.py`、`04_real_world_scenarios/ticket_triage_harness.py`、`05_cli/cli_output_and_errors.py` 和 `05_cli/cli_ci_harness.py` 使用 mock transport / 本地 mock 网关 / 脚本化接缝 / 子进程——完全离线且输出确定，适合先动手感受调用形态。
@@ -149,13 +149,15 @@ examples/
 | `cli_output_and_errors.py` | 从内部看契约：一个假 client 通过 `typer.testing.CliRunner` 在进程内驱动，把 table / json / yaml 三档、NDJSON 流式、`@file` / stdin / `--messages` 输入形态，以及包括破坏性命令拒绝在内的每一档失败的 stdout / stderr / 退出码并排打印 | 否 |
 | `cli_ci_harness.py` | 从外部看契约：在临时端口用标准库起一个 mock 网关，在真实子进程里驱动真实 CLI——解析 `-o json`、按退出码分支与重试、逐行消费 NDJSON 流、用 `DASHSCOPE_CONFIG` 隔离配置，并在 CI 没有终端时传 `--yes` | 否 |
 
-命令面本身（`chat create`、`ft create|get|list|stream|cancel|delete`、`config set|get|list`、`version`）、完整的退出码与优先级表格，以及可直接复制的 shell 配方，都在这一层自己的 README 里。
+命令面本身（`chat`、`ft`、`files`、`models`、`images`、`videos`、`embeddings`、`multimodal`、`rerank`、`tokenization`、`apps`、`deployments`、`rl`、`audio`、`tingwu`、`decision`、`agentstudio`、`config`、`version`）、完整的退出码与优先级表格，以及可直接复制的 shell 配方，都在这一层自己的 README 里。
 
 详见 [`05_cli/README.md`](./05_cli/README.md)。
 
 ## legacy_1x —— 1.x 模块级 API（仅供参考）
 
 以下使用旧的 1.x 风格（`dashscope.Generation`、`dashscope.MultiModalConversation` 等）。内部子目录布局原样保留、内容不做改动。新项目请使用上面的 2.0 分层示例。
+
+**1.x CLI：** 历史命令树通过 `dashscope1`（console script）或 `python -m dashscope.legacy_1x.cli`（模块入口）访问，与 [`05_cli/`](./05_cli/) 中的 2.0 `dashscope` 命令相互独立。
 
 | 路径 | 内容 |
 | --- | --- |

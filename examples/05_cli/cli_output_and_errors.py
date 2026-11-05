@@ -8,7 +8,7 @@ Python API: three output formats, a tiered exit code, and a rule about
 which channel carries what. This file walks that contract end to end
 without a network call, without an API key and without touching your
 ``~/.dashscope/config.toml``, by replacing the CLI's single SDK seam
-(``dashscope.cli2.sdk.build_client``) with a fake client that returns
+(``dashscope.cli.sdk.build_client``) with a fake client that returns
 canned -- but genuinely typed -- SDK responses.
 
 Five demonstrations:
@@ -24,7 +24,7 @@ Five demonstrations:
    and JSON array / JSONL / ``{"messages": [...]}`` for ``--messages``.
 4. **Exit-code tiers**: usage 2, auth 3, not-found 4, and 1 for the
    rate-limit / server / network failures -- each raised as the real SDK
-   error type, so the mapping in ``dashscope/cli2/errors.py`` is what
+   error type, so the mapping in ``dashscope/cli/errors.py`` is what
    actually runs rather than a description of it.
 5. **Destructive commands**: with no terminal attached, ``ft delete``
    refuses at exit 2 unless ``--yes`` is given -- the classic CI
@@ -32,7 +32,7 @@ Five demonstrations:
 
 Run it::
 
-    python3 examples/05_cli/cli_output_and_errors.py
+    python examples/05_cli/cli_output_and_errors.py
 
 Every invocation is checked against the exit code it is supposed to
 produce, so a silent contract change in the CLI turns this example red
@@ -51,8 +51,8 @@ from typing import Any, Dict, List, Optional
 from typer.testing import CliRunner
 
 from dashscope import errors as sdk_errors
-from dashscope.cli2 import sdk as cli_sdk
-from dashscope.cli2.app import build_app
+from dashscope.cli import sdk as cli_sdk
+from dashscope.cli.app import build_app
 from dashscope.resources.chat.completions import ChatStream
 from dashscope.resources.fine_tunes import FineTune
 from dashscope.types.common import JobStatus, Usage
@@ -74,7 +74,7 @@ REASONING = "这是一个地理常识问题，直接给一句话结论即可。"
 USAGE = {"input_tokens": 18, "output_tokens": 22, "total_tokens": 40}
 JOB_ID = "ft-20260101-demo"
 
-# The four tiers, mirroring dashscope/cli2/errors.py.
+# The four tiers, mirroring dashscope/cli/errors.py.
 EXIT_OK = 0
 EXIT_SERVER = 1  # server, ratelimit, network: "not your bug, try again"
 EXIT_USAGE = 2  # the command line was wrong
@@ -207,7 +207,7 @@ _CLIENT_KWARGS: List[Dict[str, Any]] = []
 
 
 def _fake_build_client(overrides):
-    """Replacement for ``dashscope.cli2.sdk.build_client``.
+    """Replacement for ``dashscope.cli.sdk.build_client``.
 
     ``CliContext.client`` calls the seam through the module attribute,
     so swapping it needs no HTTP mock, no server and no key. The

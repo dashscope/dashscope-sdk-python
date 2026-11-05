@@ -10,11 +10,12 @@ from typing import Any, Dict, List
 import pytest
 
 from dashscope import errors as sdk_errors
-from dashscope.cli2.app import build_app
+from dashscope.cli.app import build_app
 from dashscope.resources.fine_tunes import (
     FineTune,
     FineTuneEvent,
     FineTuneList,
+    JobLogs,
 )
 from dashscope.types.common import JobStatus, Usage
 
@@ -65,6 +66,9 @@ class _FineTunes:
         self._record("stream_events", job_id, **kwargs)
         return self._results["stream_events"]
 
+    def logs(self, job_id, **kwargs):
+        return self._record("logs", job_id, **kwargs)
+
     def wait(self, job, **kwargs):
         self._record("wait", job, **kwargs)
         return self._results.get("wait", job)
@@ -96,9 +100,9 @@ def fine_tunes(make_client):
 
 
 def _as_terminal_tty(monkeypatch, answer: bool):
-    monkeypatch.setattr("dashscope.cli2.confirm.stdin_is_tty", lambda: True)
+    monkeypatch.setattr("dashscope.cli.confirm.stdin_is_tty", lambda: True)
     monkeypatch.setattr(
-        "dashscope.cli2.confirm.typer.confirm",
+        "dashscope.cli.confirm.typer.confirm",
         lambda *a, **k: answer,
     )
 
@@ -116,7 +120,7 @@ class TestCreate:
         clean_env,
     ):
         """A chat default is not a fine-tune base model."""
-        from dashscope.cli2 import config_store
+        from dashscope.cli import config_store
 
         config_store.set_value("default_model", "qwen-plus")
         result = invoke(["ft", "create", "-t", "file-1"])
@@ -318,6 +322,105 @@ class TestWait:
         assert "Error [server]: training diverged" in result.stderr
 
 
+class TestWaitTimeoutIsCheckedBeforeSubmitting:
+    """``--wait --timeout -1`` used to create the job and then give up on it."""
+
+    @pytest.mark.parametrize("timeout", ["-1", "0", "nan", "inf"])
+    def test_no_job_is_created(self, invoke, fine_tunes, timeout):
+        resource = fine_tunes(create=_job(), wait=_job())
+        result = invoke(
+            [
+                "ft",
+                "create",
+                "-m",
+                "qwen-plus",
+                "-t",
+                "f",
+                "--wait",
+                "--timeout",
+                timeout,
+            ],
+        )
+        assert result.exit_code == 2
+        assert resource.calls == []
+        assert "--timeout" in result.stderr
+
+    def test_an_unused_timeout_is_not_newly_rejected(
+        self,
+        invoke,
+        fine_tunes,
+    ):
+        """``--timeout`` means nothing without ``--wait``."""
+        resource = fine_tunes(create=_job())
+        result = invoke(
+            ["ft", "create", "-m", "qwen-plus", "-t", "f", "--timeout", "-1"],
+        )
+        assert result.exit_code == 0
+        assert [call["method"] for call in resource.calls] == ["create"]
+
+    @pytest.mark.parametrize("timeout", ["0", "nan"])
+    def test_ft_wait_is_rejected_before_polling(
+        self,
+        invoke,
+        fine_tunes,
+        timeout,
+    ):
+        """``nan`` is false against every comparison, so the poll never ends."""
+        resource = fine_tunes(wait=_job())
+        result = invoke(["ft", "wait", "ft-1", "--timeout", timeout])
+        assert result.exit_code == 2
+        assert "--timeout" in result.stderr
+        assert resource.calls == []
+
+
+class TestWaitCommand:
+    """``ft wait``: block on a job this process did not create."""
+
+    def test_it_polls_the_id_and_nothing_else(self, invoke, fine_tunes):
+        resource = fine_tunes(wait=_job())
+        assert invoke(["ft", "wait", "ft-1"]).exit_code == 0
+        assert [call["method"] for call in resource.calls] == ["wait"]
+        assert resource.calls[0]["args"] == ("ft-1",)
+
+    def test_the_timeout_defaults_to_an_hour(self, invoke, fine_tunes):
+        resource = fine_tunes(wait=_job())
+        invoke(["ft", "wait", "ft-1"])
+        assert resource.calls[0]["kwargs"] == {"timeout": 3600.0}
+
+    def test_the_timeout_is_forwarded(self, invoke, fine_tunes):
+        resource = fine_tunes(wait=_job())
+        invoke(["ft", "wait", "ft-1", "--timeout", "30"])
+        assert resource.calls[0]["kwargs"] == {"timeout": 30.0}
+
+    def test_table_shows_the_settled_job(self, invoke, fine_tunes):
+        fine_tunes(wait=_job(status="SUCCEEDED"))
+        result = invoke(["ft", "wait", "ft-1"])
+        assert "SUCCEEDED" in result.stdout
+
+    def test_json_output_is_the_whole_job(self, invoke, fine_tunes):
+        fine_tunes(wait=_job())
+        result = invoke(["ft", "wait", "ft-1"], global_args=["-o", "json"])
+        payload = json.loads(result.stdout)
+        assert payload["job_id"] == "ft-202601011234-abc1"
+        assert payload["status"] == "SUCCEEDED"
+
+    def test_a_failed_job_exits_nonzero(self, invoke, fine_tunes):
+        """Same rule as `create --wait`: a failure is never exit 0."""
+        fine_tunes(wait=sdk_errors.InternalServerError("training diverged"))
+        result = invoke(["ft", "wait", "ft-1"])
+        assert result.exit_code == 1
+        assert "Error [server]: training diverged" in result.stderr
+
+    def test_a_missing_job_exits_four(self, invoke, fine_tunes):
+        fine_tunes(wait=sdk_errors.NotFoundError("job not found"))
+        assert invoke(["ft", "wait", "ft-nope"]).exit_code == 4
+
+    def test_the_job_id_is_required(self, invoke, fine_tunes):
+        resource = fine_tunes(wait=_job())
+        assert invoke(["ft", "wait"]).exit_code == 2
+        assert resource.calls == []
+
+
 class TestGet:
     def test_table_shows_the_real_created_at(self, invoke, fine_tunes):
         """Regression pin: the 1.x `rl get` printed ``creator`` for
@@ -443,6 +546,64 @@ class TestStream:
         assert result.exit_code == 4
 
 
+class TestLogs:
+    def test_prints_the_log_text_verbatim(self, invoke, fine_tunes):
+        """Raw text, not a table: a redirect must capture the trainer's own
+        output and nothing else."""
+        resource = fine_tunes(
+            logs=JobLogs(job_id="ft-1", content="epoch 1\nepoch 2\n"),
+        )
+        result = invoke(["ft", "logs", "ft-1"])
+        assert result.exit_code == 0
+        assert result.stdout == "epoch 1\nepoch 2\n\n"
+        assert resource.calls[0] == {
+            "method": "logs",
+            "args": ("ft-1",),
+            "kwargs": {"offset": 1, "lines": 1000},
+        }
+
+    def test_the_window_is_adjustable(self, invoke, fine_tunes):
+        resource = fine_tunes(logs=JobLogs(job_id="ft-1", content="tail"))
+        invoke(["ft", "logs", "ft-1", "--offset", "40", "--lines", "20"])
+        assert resource.calls[0]["kwargs"] == {"offset": 40, "lines": 20}
+
+    def test_json_output_keeps_the_envelope(self, invoke, fine_tunes):
+        fine_tunes(
+            logs=JobLogs(
+                job_id="ft-1",
+                content="epoch 1\n",
+                request_id="req-1",
+            ),
+        )
+        result = invoke(["ft", "logs", "ft-1"], global_args=["-o", "json"])
+        doc = json.loads(result.stdout)
+        assert doc["job_id"] == "ft-1"
+        assert doc["content"] == "epoch 1\n"
+        assert doc["request_id"] == "req-1"
+
+    def test_a_line_array_is_joined_by_the_sdk(self, invoke, fine_tunes):
+        """The service may send lines instead of one string."""
+        fine_tunes(logs=JobLogs(job_id="ft-1", content=["epoch 1", "epoch 2"]))
+        result = invoke(["ft", "logs", "ft-1"])
+        assert result.exit_code == 0
+        assert "epoch 1\nepoch 2" in result.stdout
+
+    def test_an_empty_log_is_not_an_error(self, invoke, fine_tunes):
+        fine_tunes(logs=JobLogs(job_id="ft-1", content=""))
+        result = invoke(["ft", "logs", "ft-1"])
+        assert result.exit_code == 0
+        assert result.stdout == "\n"
+
+    def test_the_job_id_is_required(self, invoke, fine_tunes):
+        fine_tunes(logs=JobLogs(job_id="ft-1", content="x"))
+        assert invoke(["ft", "logs"]).exit_code == 2
+
+    def test_a_missing_job_exits_four(self, invoke, fine_tunes):
+        fine_tunes(logs=sdk_errors.NotFoundError("job not found"))
+        result = invoke(["ft", "logs", "ft-nope"])
+        assert result.exit_code == 4
+
+
 class TestDestructiveCommands:
     @pytest.mark.parametrize("command", ["cancel", "delete"])
     def test_yes_skips_the_prompt(self, invoke, fine_tunes, command):
@@ -505,6 +666,35 @@ class TestDestructiveCommands:
         )
         assert json.loads(result.stdout)["status"] == "DELETED"
 
+    def test_an_interactive_prompt_leaves_json_stdout_parseable(
+        self,
+        invoke,
+        fine_tunes,
+        monkeypatch,
+    ):
+        """The real click prompt, on a terminal, with ``-o json``.
+
+        The prompt used to be written to stdout ahead of the JSON, so a
+        machine consumer got neither.
+        """
+        monkeypatch.setattr(
+            "dashscope.cli.confirm.stdin_is_tty",
+            lambda: True,
+        )
+        fine_tunes(delete=JobStatus(status="DELETED"))
+        result = invoke(
+            ["ft", "delete", "ft-1"],
+            global_args=["-o", "json"],
+            input="y\n",
+        )
+        assert result.exit_code == 0
+        assert "delete fine-tune job ft-1?" not in result.stdout
+        assert "delete fine-tune job ft-1?" in result.stderr
+        # CliRunner echoes the keystroke into stdout; a real terminal
+        # echoes it on the tty instead, so only the JSON is captured.
+        payload = result.stdout[result.stdout.index("{") :]  # noqa: E203
+        assert json.loads(payload)["status"] == "DELETED"
+
     def test_a_missing_job_exits_four(self, invoke, fine_tunes):
         fine_tunes(delete=sdk_errors.NotFoundError("job not found"))
         result = invoke(["ft", "delete", "ft-1", "--yes"])
@@ -529,7 +719,7 @@ class TestGroupShape:
         assert "\\" not in runner.invoke(app, ["ft", "--help"]).stdout
 
     def test_the_router_sends_both_names_to_the_new_tree(self):
-        from dashscope.cli2.main import classify
+        from dashscope.cli.main import NEW, classify
 
-        assert classify(["ft", "list"]) == ("new", False)
-        assert classify(["fine-tunes", "list"]) == ("new", False)
+        assert classify(["ft", "list"]) == NEW
+        assert classify(["fine-tunes", "list"]) == NEW

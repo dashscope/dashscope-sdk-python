@@ -6,13 +6,14 @@ import json
 
 import pytest
 
-from dashscope.cli2.output import (
+from dashscope.cli.output import (
     JSON,
     OUTPUT_FORMATS,
     TABLE,
     YAML,
     Renderer,
     is_machine_format,
+    render_text_stream,
     resolve_no_color,
     to_serializable,
 )
@@ -229,6 +230,61 @@ class TestSideChannels:
         result = capsys.readouterr()
         assert "done" in result.err
         assert result.out == ""
+
+
+class _Stream:
+    """A stand-in for ``ChatStream``: only ``text_stream`` matters here."""
+
+    def __init__(self, frames, cumulative=False):
+        self._frames = frames
+        self.cumulative = cumulative
+
+    @property
+    def text_stream(self):
+        return iter(self._frames)
+
+
+class _FlaglessStream:
+    """A chat-shaped stream that does not advertise the frame shape."""
+
+    def __init__(self, frames):
+        self._frames = frames
+
+    @property
+    def text_stream(self):
+        return iter(self._frames)
+
+
+class TestRenderTextStream:
+    def test_incremental_frames_are_appended(self, capsys):
+        render_text_stream(
+            Renderer(TABLE, no_color=True),
+            _Stream(["Hi", "!"]),
+        )
+        assert capsys.readouterr().out == "Hi!\n"
+
+    def test_cumulative_snapshots_are_not_concatenated(self, capsys):
+        """``incremental_output=false`` yields "Hi" then "Hi!" -- appending
+        both prints "HiHi!"."""
+        render_text_stream(
+            Renderer(TABLE, no_color=True),
+            _Stream(["Hi", "Hi!", "Hi! there"], cumulative=True),
+        )
+        assert capsys.readouterr().out == "Hi! there\n"
+
+    def test_a_cumulative_frame_that_shrinks_writes_nothing(self, capsys):
+        render_text_stream(
+            Renderer(TABLE, no_color=True),
+            _Stream(["Hi there", "Hi"], cumulative=True),
+        )
+        assert capsys.readouterr().out == "Hi there\n"
+
+    def test_a_stream_without_the_flag_is_read_as_incremental(self, capsys):
+        render_text_stream(
+            Renderer(TABLE, no_color=True),
+            _FlaglessStream(["a", "b"]),
+        )
+        assert capsys.readouterr().out == "ab\n"
 
 
 class TestNoColor:

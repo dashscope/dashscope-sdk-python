@@ -53,13 +53,20 @@ def _strip_transport(value: Any) -> Any:
 def to_serializable(obj: Any, *, verbose: bool = False) -> Any:
     """Flatten an SDK response into JSON-ready primitives.
 
-    Accepts pydantic models (every v2 response), plain containers, and
-    scalars. ``model_dump(mode="json")`` already converts datetimes and
-    enums, so nothing downstream has to know about SDK types.
+    Accepts pydantic models (every v2 response), AgentStudio's typed
+    containers, plain containers, and scalars. ``model_dump(mode="json")``
+    already converts datetimes and enums, so nothing downstream has to
+    know about SDK types.
     """
     dump = getattr(obj, "model_dump", None)
     if callable(dump):
         value = dump(mode="json", exclude_none=True)
+    elif callable(getattr(obj, "to_dict", None)):
+        # AgentStudio ships its own lightweight containers instead of
+        # pydantic models. ``to_dict`` already recurses into nested
+        # containers and its enums are ``StrEnum``, so the result is
+        # JSON-ready as it stands.
+        value = obj.to_dict()
     elif isinstance(obj, (str, int, float, bool)) or obj is None:
         value = obj
     elif isinstance(obj, dict):
@@ -238,6 +245,80 @@ class Renderer:
             else:
                 table.add_row(_cell(row))
         self._out.print(table)
+
+
+def render_completion(renderer: Renderer, result: Any) -> None:
+    """One chat completion: payload on stdout, diagnostics on stderr.
+
+    Keeping reasoning and usage off stdout is what makes
+    ``dashscope chat create ... > answer.txt`` usable.
+    """
+    if not renderer.table_mode:
+        renderer.print_object(result)
+        return
+    for choice in result.choices:
+        message = choice.message
+        if message.reasoning_content:
+            renderer.note(message.reasoning_content)
+        renderer.echo(message.content or "")
+    if result.usage is not None:
+        renderer.note(f"usage: {result.usage.model_dump(exclude_none=True)}")
+
+
+def render_text_stream(renderer: Renderer, stream: Any) -> None:
+    """A chat-shaped stream (``text_stream`` plus whole-chunk iteration).
+
+    Deliberately has no ``except``: a mid-stream failure must propagate to
+    the error handler and exit non-zero. The 1.x tree caught these,
+    printed a message, and returned -- which exits 0.
+    """
+    if renderer.table_mode:
+        _write_stream_text(renderer, stream)
+        renderer.echo()
+        return
+    for chunk in stream:
+        renderer.print_stream_chunk(chunk)
+
+
+def _write_stream_text(renderer: Renderer, stream: Any) -> None:
+    """Append the answer to the terminal, whatever the frame shape.
+
+    A ``cumulative`` stream (``incremental_output=False``, or a protocol
+    the SDK merges client-side) yields the whole text so far on every
+    frame, so only the tail that has not been written yet may go out --
+    appending snapshots verbatim repeats the answer. Read with a default
+    because not every chat-shaped stream carries the flag.
+    """
+    if not getattr(stream, "cumulative", False):
+        for text in stream.text_stream:
+            renderer.write(text)
+        return
+    written = 0
+    for text in stream.text_stream:
+        renderer.write(text[written:])
+        written = max(written, len(text))
+
+
+def render_stream_event(renderer: Renderer, event: Any) -> None:
+    """One server-sent event, in whichever format is active.
+
+    No ``except`` here or in the callers: ``stream_events`` raises on an
+    error frame (``raise_on_error`` is on by default), and that has to
+    reach the error handler. The 1.x tree caught it, printed, and returned
+    -- which exits 0.
+    """
+    if not renderer.table_mode:
+        renderer.print_stream_chunk(event)
+        return
+    output = event.output
+    if isinstance(output, str):
+        renderer.echo(output)
+    elif output is None:
+        renderer.echo("")
+    else:
+        renderer.echo(
+            json.dumps(output, ensure_ascii=False, separators=(",", ":")),
+        )
 
 
 def _cell(value: Any) -> str:

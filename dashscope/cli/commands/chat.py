@@ -8,12 +8,12 @@ from typing import Any, Dict, List, Optional
 
 import typer
 
-from dashscope.cli2.errors import usage_error
-from dashscope.cli2.input import (
-    parse_json_arg,
+from dashscope.cli.input import (
     parse_json_object_arg,
+    parse_tools_arg,
     read_prompt_or_messages,
 )
+from dashscope.cli.output import render_completion, render_text_stream
 
 _HELP = r"""Generate text with a chat model.
 
@@ -25,61 +25,6 @@ messages are uploaded by the SDK itself; pass them through untouched.
 Streaming writes incremental text to stdout in table mode, and one JSON
 object per line in json/yaml mode, so `--stream --output json | jq` works.
 """
-
-
-def _resolve_model(ctx: typer.Context, model: Optional[str]) -> str:
-    resolved = model or ctx.obj.defaults.default_model
-    if not resolved:
-        raise usage_error(
-            "no model given: pass -m/--model, or set a default with "
-            "`dashscope config set default_model qwen-plus`",
-        )
-    return resolved
-
-
-def _parse_tools(raw: Optional[str]) -> Optional[List[Dict[str, Any]]]:
-    tools = parse_json_arg(raw, option_name="--tools")
-    if tools is None:
-        return None
-    if not isinstance(tools, list):
-        raise usage_error(
-            f"--tools: expected a JSON array, got {type(tools).__name__}",
-        )
-    return tools
-
-
-def _render_completion(renderer, result) -> None:
-    """Non-streaming output: payload on stdout, diagnostics on stderr.
-
-    Keeping reasoning and usage off stdout is what makes
-    ``dashscope chat create ... > answer.txt`` usable.
-    """
-    if not renderer.table_mode:
-        renderer.print_object(result)
-        return
-    for choice in result.choices:
-        message = choice.message
-        if message.reasoning_content:
-            renderer.note(message.reasoning_content)
-        renderer.echo(message.content or "")
-    if result.usage is not None:
-        renderer.note(f"usage: {result.usage.model_dump(exclude_none=True)}")
-
-
-def _render_stream(renderer, stream) -> None:
-    """Streaming output.
-
-    Deliberately has no ``except``: a mid-stream failure must propagate to
-    the error handler and exit non-zero. The 1.x tree caught these, printed
-    a message, and returned -- which exits 0.
-    """
-    if renderer.table_mode:
-        for text in stream.text_stream:
-            renderer.write(text)
-        renderer.echo()
-        return
-    for chunk in stream:
-        renderer.print_stream_chunk(chunk)
 
 
 def build_app() -> typer.Typer:
@@ -155,9 +100,9 @@ def build_app() -> typer.Typer:
             system=system,
         )
         kwargs: Dict[str, Any] = {
-            "model": _resolve_model(ctx, model),
+            "model": obj.resolve_model(model),
             "messages": conversation,
-            "tools": _parse_tools(tools),
+            "tools": parse_tools_arg(tools),
             "temperature": temperature,
             "top_p": top_p,
             "max_tokens": max_tokens,
@@ -175,12 +120,12 @@ def build_app() -> typer.Typer:
         completions = obj.client.chat.completions
 
         if not stream:
-            _render_completion(renderer, completions.create(**kwargs))
+            render_completion(renderer, completions.create(**kwargs))
             return
 
         result = completions.create(stream=True, **kwargs)
         try:
-            _render_stream(renderer, result)
+            render_text_stream(renderer, result)
         finally:
             # Runs on Ctrl-C too, so the httpx stream is not left open.
             result.close()

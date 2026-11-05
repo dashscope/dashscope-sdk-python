@@ -4,10 +4,10 @@
 
 import pytest
 
-from dashscope.cli2.config_store import set_value
-from dashscope.cli2.context import CliContext, CliDefaults, GlobalOptions
-from dashscope.cli2.errors import CliError
-from dashscope.cli2.output import JSON, TABLE, YAML
+from dashscope.cli.config_store import set_value
+from dashscope.cli.context import CliContext, CliDefaults, GlobalOptions
+from dashscope.cli.errors import CliError
+from dashscope.cli.output import JSON, TABLE, YAML
 
 
 def _ctx(**kwargs) -> CliContext:
@@ -126,7 +126,7 @@ class TestCliDefaults:
     ):
         calls = []
         monkeypatch.setattr(
-            "dashscope.cli2.config_store.load_cli_section",
+            "dashscope.cli.config_store.load_cli_section",
             lambda *a, **k: calls.append(1) or {},
         )
         ctx = _ctx()

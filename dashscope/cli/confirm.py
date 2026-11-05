@@ -16,7 +16,7 @@ import sys
 
 import typer
 
-from dashscope.cli2.errors import usage_error
+from dashscope.cli.errors import usage_error
 
 
 def stdin_is_tty() -> bool:
@@ -41,5 +41,7 @@ def confirm_or_die(prompt: str, *, yes: bool) -> None:
             f"refusing to run a destructive command without a terminal; "
             f"pass --yes to confirm: {prompt}",
         )
-    if not typer.confirm(prompt, default=False):
+    # err=True: click writes the prompt to stdout by default, which would
+    # land ahead of the JSON a `-o json` caller is about to parse.
+    if not typer.confirm(prompt, default=False, err=True):
         raise usage_error("aborted by user")

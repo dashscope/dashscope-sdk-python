@@ -6,8 +6,8 @@ import io
 
 import pytest
 
-from dashscope.cli2.confirm import confirm_or_die, stdin_is_tty
-from dashscope.cli2.errors import CliError
+from dashscope.cli.confirm import confirm_or_die, stdin_is_tty
+from dashscope.cli.errors import CliError
 
 
 class _Tty(io.StringIO):
@@ -39,7 +39,7 @@ def answers(monkeypatch):
             return answer
 
         monkeypatch.setattr(
-            "dashscope.cli2.confirm.typer.confirm",
+            "dashscope.cli.confirm.typer.confirm",
             fake_confirm,
         )
         return asked
@@ -102,6 +102,12 @@ class TestInteractive:
         asked = answers(True)
         confirm_or_die("delete job-1?", yes=False)
         assert asked[0][1].get("default") is False
+
+    def test_the_prompt_is_written_to_stderr(self, tty, answers):
+        """click defaults to stdout, which would land ahead of ``-o json``."""
+        asked = answers(True)
+        confirm_or_die("delete job-1?", yes=False)
+        assert asked[0][1].get("err") is True
 
     def test_decline_is_a_usage_error(self, tty, answers):
         answers(False)

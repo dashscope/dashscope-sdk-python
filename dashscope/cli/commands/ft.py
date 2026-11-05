@@ -8,15 +8,15 @@ inspect, list, follow the event stream, wait to completion, cancel, delete.
 
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, List, Optional
 
 import typer
 
-from dashscope.cli2.confirm import confirm_or_die
-from dashscope.cli2.errors import usage_error
-from dashscope.cli2.input import parse_json_object_arg
-from dashscope.cli2.progress import wait_job
+from dashscope.cli.confirm import confirm_or_die
+from dashscope.cli.errors import usage_error
+from dashscope.cli.input import parse_json_object_arg
+from dashscope.cli.output import render_stream_event
+from dashscope.cli.progress import validate_wait_timeout, wait_job
 
 _HELP = r"""Create and manage fine-tune jobs.
 
@@ -65,26 +65,12 @@ def _merge_hyper_parameters(
     return merged or None
 
 
-def _render_event(renderer, event) -> None:
-    """One SSE frame.
-
-    No ``except`` here or in the caller: ``stream_events`` raises on an
-    error frame (``raise_on_error`` is on by default), and that has to
-    reach the error handler. The 1.x tree caught it, printed, and returned
-    -- which exits 0.
-    """
-    if not renderer.table_mode:
-        renderer.print_stream_chunk(event)
-        return
-    output = event.output
-    if isinstance(output, str):
-        renderer.echo(output)
-    elif output is None:
-        renderer.echo("")
+def _render_job(renderer, job: Any) -> None:
+    """Table mode trims to the lifecycle columns; JSON shows everything."""
+    if renderer.table_mode:
+        renderer.print_object(job, columns=_JOB_COLUMNS)
     else:
-        renderer.echo(
-            json.dumps(output, ensure_ascii=False, separators=(",", ":")),
-        )
+        renderer.print_object(job)
 
 
 def build_app() -> typer.Typer:
@@ -153,6 +139,8 @@ def build_app() -> typer.Typer:
         """Start a fine-tune job."""
         obj = ctx.obj
         renderer = obj.renderer
+        if wait:
+            validate_wait_timeout(timeout)
         shortcuts = {
             key: value
             for key, value in {
@@ -186,10 +174,7 @@ def build_app() -> typer.Typer:
                 timeout=timeout,
                 renderer=renderer,
             )
-        if renderer.table_mode:
-            renderer.print_object(job, columns=_JOB_COLUMNS)
-        else:
-            renderer.print_object(job)
+        _render_job(renderer, job)
 
     @app.command("get")
     def get(
@@ -200,10 +185,29 @@ def build_app() -> typer.Typer:
         obj = ctx.obj
         renderer = obj.renderer
         job = obj.client.fine_tunes.get(job_id)
-        if renderer.table_mode:
-            renderer.print_object(job, columns=_JOB_COLUMNS)
-        else:
-            renderer.print_object(job)
+        _render_job(renderer, job)
+
+    @app.command("wait")
+    def wait(
+        ctx: typer.Context,
+        job_id: str = typer.Argument(..., help="Fine-tune job id."),
+        timeout: float = typer.Option(
+            DEFAULT_WAIT_TIMEOUT,
+            "--timeout",
+            help="How long to block before giving up (seconds).",
+        ),
+    ) -> None:
+        """Block until a job reaches a terminal status."""
+        obj = ctx.obj
+        renderer = obj.renderer
+        validate_wait_timeout(timeout)
+        job = wait_job(
+            obj.client,
+            job_id,
+            timeout=timeout,
+            renderer=renderer,
+        )
+        _render_job(renderer, job)
 
     @app.command("list")
     def list_jobs(
@@ -235,7 +239,37 @@ def build_app() -> typer.Typer:
         obj = ctx.obj
         renderer = obj.renderer
         for event in obj.client.fine_tunes.stream_events(job_id):
-            _render_event(renderer, event)
+            render_stream_event(renderer, event)
+
+    @app.command("logs")
+    def logs(
+        ctx: typer.Context,
+        job_id: str = typer.Argument(..., help="Fine-tune job id."),
+        offset: int = typer.Option(
+            1,
+            "--offset",
+            help="1-based first log line to read.",
+        ),
+        lines: int = typer.Option(
+            1000,
+            "--lines",
+            help="How many lines to read.",
+        ),
+    ) -> None:
+        """Read a job's training logs."""
+        obj = ctx.obj
+        renderer = obj.renderer
+        result = obj.client.fine_tunes.logs(
+            job_id,
+            offset=offset,
+            lines=lines,
+        )
+        if renderer.table_mode:
+            # Raw text, not a table: the value here is the log itself, and
+            # a redirect should capture exactly what the trainer printed.
+            renderer.echo(result.content)
+        else:
+            renderer.print_object(result)
 
     @app.command("cancel")
     def cancel(

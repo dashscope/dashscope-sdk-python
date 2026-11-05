@@ -8,9 +8,9 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from dashscope.cli2.app import build_app
-from dashscope.cli2.errors import ErrorHandlingGroup
-from dashscope.cli2.main import _VALUE_TAKING_OPTIONS
+from dashscope.cli.app import build_app
+from dashscope.cli.errors import ErrorHandlingGroup
+from dashscope.cli.main import _VALUE_TAKING_OPTIONS
 from dashscope.version import __version__
 
 
@@ -44,14 +44,18 @@ class TestRootApp:
         assert "--install-completion" in opts
         assert "--show-completion" in opts
 
-    def test_help_lists_both_the_v2_and_the_1x_commands(self, app):
+    def test_help_lists_the_v2_commands_and_names_the_removed_1x_ones(
+        self, app
+    ):
         result = _invoke(app, ["--help"])
         assert result.exit_code == 0
         text = result.stdout
         assert "version" in text and "config" in text
-        # Delegated commands cannot be enumerated by typer, so the epilog
-        # carries them; assert one from each set.
+        # Removed 1.x names are not registered as commands, so the epilog
+        # carries them: one that was replaced, one that has no equivalent.
         assert "generation" in text
+        assert "oss" in text
+        # A registered v2 group, so it is enumerated by typer itself.
         assert "files" in text
 
     def test_short_help_flag_works(self, app):

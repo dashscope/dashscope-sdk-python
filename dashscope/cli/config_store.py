@@ -14,7 +14,9 @@ Two constraints shaped the implementation:
 * **The file is the user's.** It may hold comments and keys this CLI has
   never heard of. A regenerate-from-dict writer would destroy both, so
   this is a line editor: it replaces one line in place or appends one,
-  and leaves every other byte alone.
+  and leaves every other byte alone. Because a line editor can still be
+  wrong about what a line means, every candidate edit is re-parsed and
+  the key read back before it is allowed to land.
 
 CLI-only defaults live in a ``[cli]`` table. The SDK's reader filters to
 its own ``_FILE_KEYS`` allowlist, so it drops that table silently -- the
@@ -28,10 +30,11 @@ import json
 import os
 import stat
 import sys
+import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from dashscope.cli2.errors import usage_error
+from dashscope.cli.errors import usage_error
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -172,7 +175,7 @@ def _enum_choices() -> Dict[str, Tuple[str, Tuple[str, ...]]]:
         VALID_PROTOCOLS,
         VALID_REGIONS,
     )
-    from dashscope.cli2.output import (  # pylint: disable=import-outside-toplevel
+    from dashscope.cli.output import (  # pylint: disable=import-outside-toplevel
         OUTPUT_FORMATS,
     )
 
@@ -188,9 +191,12 @@ _POSITIVE_SECONDS = ("timeout", "http_keepalive_expiry")
 # Count-valued keys: a non-negative integer.
 _NON_NEGATIVE_INTS = (
     "max_retries",
-    "http_max_connections",
     "http_max_keepalive_connections",
 )
+# A pool with no connections cannot issue a request, and `Settings`
+# rejects it -- writing 0 here would leave a config file that makes every
+# later invocation fail at resolve time.
+_POSITIVE_INTS = ("http_max_connections",)
 
 
 def _validate_number(
@@ -228,11 +234,77 @@ def _validate(key: str, value: Any) -> Any:
         return _validate_number(key, value, integer=False, positive=True)
     if key in _NON_NEGATIVE_INTS:
         return _validate_number(key, value, integer=True, positive=False)
+    if key in _POSITIVE_INTS:
+        return _validate_number(key, value, integer=True, positive=True)
     if not isinstance(value, str):
         raise usage_error(f"{key} must be a string, got {value!r}")
     if not value.strip():
         raise usage_error(f"{key} must not be empty")
     return value
+
+
+_TRIPLE_QUOTES = ('"""', "'''")
+
+
+def _scan(line: str, quote: Optional[str]) -> Tuple[str, Optional[str]]:
+    """Strip *line*'s comment; return the rest and the still-open delimiter."""
+    out: List[str] = []
+    index = 0
+    while index < len(line):
+        character = line[index]
+        if quote is None:
+            if character == "#":
+                break
+            triple = line[index : index + 3]  # noqa: E203
+            if triple in _TRIPLE_QUOTES:
+                quote = triple
+                out.append(triple)
+                index += 3
+                continue
+            if character in "\"'":
+                quote = character
+            out.append(character)
+            index += 1
+        elif character == "\\":
+            out.append(line[index : index + 2])  # noqa: E203
+            index += 2
+        elif line.startswith(quote, index):
+            out.append(quote)
+            index += len(quote)
+            quote = None
+        else:
+            out.append(character)
+            index += 1
+    if quote not in _TRIPLE_QUOTES:
+        # A one-line string cannot stay open across a newline; what looks
+        # like one is a syntax error for the parser to report, not state
+        # to carry into the next line.
+        quote = None
+    return "".join(out), quote
+
+
+def _code_lines(lines: List[str]) -> Iterator[Tuple[int, str]]:
+    """``(index, line)`` for the lines that carry TOML syntax.
+
+    Comments come back stripped, so ``[cli] # mine`` still reads as a
+    table header. Lines inside a multi-line string are dropped: their
+    ``[table]`` and ``key = value`` shaped text is data, and editing it
+    would corrupt the string.
+    """
+    quote: Optional[str] = None
+    for index, line in enumerate(lines):
+        continuation = quote in _TRIPLE_QUOTES
+        text, quote = _scan(line, quote)
+        if not continuation:
+            yield index, text
+
+
+def _header_name(code: str) -> Optional[str]:
+    """The table name if *code* is a ``[table]`` header, else None."""
+    stripped = code.strip()
+    if not (stripped.startswith("[") and stripped.endswith("]")):
+        return None
+    return stripped[1:-1].strip().strip("\"'")
 
 
 def _find_key_line(
@@ -242,16 +314,14 @@ def _find_key_line(
 ) -> Optional[int]:
     """Index of ``key =`` inside *section*, or None."""
     current = ""
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            current = stripped[1:-1].strip()
+    for index, code in _code_lines(lines):
+        header = _header_name(code)
+        if header is not None:
+            current = header
             continue
-        if current != section:
+        if current != section or "=" not in code:
             continue
-        if stripped.startswith("#") or "=" not in stripped:
-            continue
-        name = stripped.split("=", 1)[0].strip().strip("\"'")
+        name = code.split("=", 1)[0].strip().strip("\"'")
         if name == key:
             return index
     return None
@@ -263,15 +333,15 @@ def _section_bounds(
 ) -> Optional[Tuple[int, int]]:
     """``(header_index, insert_index)`` for *section*, or None if absent."""
     header: Optional[int] = None
-    for index, line in enumerate(lines):
-        stripped = line.strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            name = stripped[1:-1].strip()
-            if header is None:
-                if name == section:
-                    header = index
-            elif name != section:
-                return header, index
+    for index, code in _code_lines(lines):
+        name = _header_name(code)
+        if name is None:
+            continue
+        if header is None:
+            if name == section:
+                header = index
+        elif name != section:
+            return header, index
     if header is None:
         return None
     return header, len(lines)
@@ -291,8 +361,8 @@ def _append_toplevel_key(lines: List[str], rendered: str) -> None:
     first_table = next(
         (
             index
-            for index, line in enumerate(lines)
-            if line.strip().startswith("[") and line.strip().endswith("]")
+            for index, code in _code_lines(lines)
+            if _header_name(code) is not None
         ),
         None,
     )
@@ -356,16 +426,37 @@ def set_value(
     else:
         _insert_key(lines, section, rendered)
 
-    _write(target, lines, original)
+    content = _rendered(lines)
+    data = _parsed_or_refuse(target, content)
+    _check_landed(target, data, section, bare, value)
+    _write(target, content)
     return bare, value
 
 
-def _write(target: Path, lines: List[str], original: Optional[str]) -> None:
+def _owner_only_mode(target: Path) -> Optional[int]:
+    """The mode to give a rewritten *target*, or None to keep 0600.
+
+    Keeps whatever owner bits the user chose but always drops group and
+    other access: this file can hold an API key, so a rewrite must never
+    widen it.
+    """
+    try:
+        mode = stat.S_IMODE(target.stat().st_mode)
+    except OSError:
+        return None
+    return mode & 0o600
+
+
+def _rendered(lines: List[str]) -> str:
     content = "\n".join(lines)
     if content and not content.endswith("\n"):
         content += "\n"
+    return content
+
+
+def _parsed_or_refuse(target: Path, content: str) -> Dict[str, Any]:
     try:
-        tomllib.loads(content)
+        data = tomllib.loads(content)
     except tomllib.TOMLDecodeError as exc:
         # Would leave the user with a file the SDK cannot parse. Bail out
         # with the original still on disk rather than corrupting it.
@@ -374,12 +465,57 @@ def _write(target: Path, lines: List[str], original: Optional[str]) -> None:
             f"({exc}). If the file uses inline tables or dotted keys, edit "
             f"it by hand.",
         ) from exc
+    return data if isinstance(data, dict) else {}
+
+
+def _check_landed(
+    target: Path,
+    data: Dict[str, Any],
+    section: str,
+    key: str,
+    value: Any,
+) -> None:
+    """Refuse to claim success for an edit the SDK would not read back.
+
+    The edit is placed by a line scanner, not by a TOML parser, so
+    syntax the scanner does not model -- a dotted key, an inline table --
+    can leave the real value somewhere else. Parsing the result and
+    reading the key back turns every such case into an error instead of
+    a silent no-op.
+    """
+    table: Any = data.get(section) if section else data
+    found = table.get(key) if isinstance(table, dict) else None
+    if found == value:
+        return
+    where = f"[{section}] {key}" if section else key
+    raise usage_error(
+        f"refusing to write {target}: {where} = {value!r} did not take "
+        f"effect; the file still resolves it to {found!r}. It probably "
+        f"uses dotted keys or inline tables, so edit it by hand.",
+        solution=(
+            f"Open {target} and set {where} directly, then re-run "
+            f"`dashscope config list` to confirm."
+        ),
+    )
+
+
+def _write(target: Path, content: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(target.name + ".tmp")
+    mode = _owner_only_mode(target)
+    # mkstemp is O_EXCL and 0600 whatever the umask, so the secret is
+    # unreadable to anyone else from the first byte and a symlink planted
+    # at a guessable name cannot redirect the write.
+    descriptor, name = tempfile.mkstemp(
+        dir=target.parent,
+        prefix=target.name + ".",
+        suffix=".tmp",
+    )
+    temporary = Path(name)
     try:
-        temporary.write_text(content, encoding="utf-8")
-        if original is not None and target.is_file():
-            os.chmod(temporary, stat.S_IMODE(target.stat().st_mode))
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            if mode is not None and hasattr(os, "fchmod"):
+                os.fchmod(handle.fileno(), mode)
         os.replace(temporary, target)
     except OSError as exc:
         temporary.unlink(missing_ok=True)

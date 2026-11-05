@@ -33,7 +33,6 @@ _ENV_KEYS = (
     "DASHSCOPE_LOG",
     "DASHSCOPE_CONFIG",
     "DASHSCOPE_API_KEY_FILE_PATH",
-    "DASHSCOPE_CLI_NO_DEPRECATION",
     "NO_COLOR",
     "FORCE_COLOR",
 )
@@ -117,7 +116,7 @@ def make_client(monkeypatch):
             calls.append(dict(overrides))
             return client
 
-        monkeypatch.setattr("dashscope.cli2.sdk.build_client", build)
+        monkeypatch.setattr("dashscope.cli.sdk.build_client", build)
         return client
 
     install.calls = calls

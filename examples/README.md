@@ -58,7 +58,7 @@ What the tiers mean (an advancement path from "quickref" to "production blueprin
 3. Run any example file directly (from the repository root):
 
    ```bash
-   python3 examples/01_atomic_capabilities/text_generation/chat.py
+   python examples/01_atomic_capabilities/text_generation/chat.py
    ```
 
 > **Runs offline (no API key needed)**: `02_advanced_engineering/local_mock_debugging.py`, `02_advanced_engineering/circuit_breaker_retry.py`, `03_agent_recipes/mcp_server_demo/client_demo.py`, `04_real_world_scenarios/production_ready_rag_harness.py`, `04_real_world_scenarios/realtime_audio_meeting_harness.py`, `04_real_world_scenarios/ticket_triage_harness.py`, `05_cli/cli_output_and_errors.py` and `05_cli/cli_ci_harness.py` use mock transports / a local mock gateway / scripted seams / subprocesses — fully offline and deterministic, ideal for a first hands-on look at the call shapes.
@@ -149,13 +149,15 @@ The same capabilities behind a **shell** contract rather than a Python one: thre
 | `cli_output_and_errors.py` | The contract from the inside: one fake client driven in-process through `typer.testing.CliRunner`, printing stdout / stderr / exit code side by side for table vs json vs yaml, NDJSON streaming, the `@file` / stdin / `--messages` input shapes, and every failure tier including the destructive-command refusal | No |
 | `cli_ci_harness.py` | The contract from the outside: a stdlib mock gateway on an ephemeral port driving the real CLI in real subprocesses — parse `-o json`, branch and retry on exit codes, consume an NDJSON stream line by line, isolate configuration with `DASHSCOPE_CONFIG`, and pass `--yes` where CI has no terminal | No |
 
-The command surface itself (`chat create`, `ft create|get|list|stream|cancel|delete`, `config set|get|list`, `version`), the full exit-code and precedence tables, and copy-pasteable shell recipes live in the tier's own README.
+The command surface itself (`chat`, `ft`, `files`, `models`, `images`, `videos`, `embeddings`, `multimodal`, `rerank`, `tokenization`, `apps`, `deployments`, `rl`, `audio`, `tingwu`, `decision`, `agentstudio`, `config`, `version`), the full exit-code and precedence tables, and copy-pasteable shell recipes live in the tier's own README.
 
 See [`05_cli/README.md`](./05_cli/README.md).
 
 ## legacy_1x — 1.x module-level API (reference only)
 
 The following use the old 1.x style (`dashscope.Generation`, `dashscope.MultiModalConversation`, etc.). The internal subdirectory layout is kept exactly as-is and the content is untouched. New projects should use the 2.0 tiered examples above.
+
+**1.x CLI:** the legacy command tree is available as `dashscope1` (console script) or `python -m dashscope.legacy_1x.cli` (module entry). It is separate from the 2.0 `dashscope` command documented in [`05_cli/`](./05_cli/).
 
 | Path | Contents |
 | --- | --- |

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from dashscope import errors as sdk_errors
-from dashscope.cli2.app import build_app
+from dashscope.cli.app import build_app
 from dashscope.resources.chat.completions import ChatStream
 from dashscope.types.common import Usage
 from dashscope.types.completions import (
@@ -134,7 +134,7 @@ class TestModelResolution:
         completions,
         clean_env,
     ):
-        from dashscope.cli2 import config_store
+        from dashscope.cli import config_store
 
         config_store.set_value("default_model", "qwen-plus")
         recorder = completions()
@@ -147,7 +147,7 @@ class TestModelResolution:
         completions,
         clean_env,
     ):
-        from dashscope.cli2 import config_store
+        from dashscope.cli import config_store
 
         config_store.set_value("default_model", "qwen-plus")
         recorder = completions()
@@ -366,6 +366,46 @@ class TestStreamingOutput:
         result = invoke(["-m", "qwen-plus", "--prompt", "hi", "--stream"])
         assert result.exit_code == 0
         assert result.stdout == "Hello world\n"
+
+    def test_table_does_not_repeat_server_cumulative_snapshots(
+        self,
+        invoke,
+        completions,
+    ):
+        """``--parameters '{"incremental_output": false}'``.
+
+        The server then streams whole snapshots, so appending each frame
+        in turn printed "HiHi!" instead of "Hi!".
+        """
+
+        def build(kwargs):
+            return ChatStream(
+                _Inner([_chunk(text) for text in ["Hi", "Hi!"]]),
+                server_cumulative=True,
+            )
+
+        completions(build)
+        result = invoke(["-m", "qwen-plus", "--prompt", "hi", "--stream"])
+        assert result.exit_code == 0
+        assert result.stdout == "Hi!\n"
+
+    def test_table_does_not_repeat_client_merged_snapshots(
+        self,
+        invoke,
+        completions,
+    ):
+        """The 1.x-compatible merge accumulates deltas into snapshots."""
+
+        def build(kwargs):
+            return ChatStream(
+                _Inner([_chunk(text) for text in ["Hel", "lo"]]),
+                merge_incremental=True,
+            )
+
+        completions(build)
+        result = invoke(["-m", "qwen-plus", "--prompt", "hi", "--stream"])
+        assert result.exit_code == 0
+        assert result.stdout == "Hello\n"
 
     def test_table_output_is_not_a_dict_repr(self, invoke, completions):
         """The 1.x tree printed ``chunk`` objects; the spec forbids that."""

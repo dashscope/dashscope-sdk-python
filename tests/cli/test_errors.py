@@ -11,8 +11,8 @@ from typer.testing import CliRunner
 
 from dashscope import _error_registry as registry
 from dashscope import errors as sdk_errors
-from dashscope.cli2 import errors as cli_errors
-from dashscope.cli2.errors import (
+from dashscope.cli import errors as cli_errors
+from dashscope.cli.errors import (
     AUTH,
     EXIT_AUTH,
     EXIT_NOT_FOUND,
@@ -30,7 +30,7 @@ from dashscope.cli2.errors import (
     exit_code_for,
     usage_error,
 )
-from tests.cli2.conftest import strip_ansi_codes
+from tests.cli.conftest import strip_ansi_codes
 
 
 def _runner() -> CliRunner:

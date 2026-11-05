@@ -31,12 +31,12 @@ Scenarios:
 
 Run it offline (the default)::
 
-    python3 examples/05_cli/cli_ci_harness.py
+    python examples/05_cli/cli_ci_harness.py
 
 Or point the read-only scenarios at the real gateway::
 
     CLI_HARNESS_LIVE=1 DASHSCOPE_API_KEY=sk-xxx \
-        python3 examples/05_cli/cli_ci_harness.py
+        python examples/05_cli/cli_ci_harness.py
 
 Live mode skips every scenario that injects a fault, writes a
 configuration file, or deletes a job.
@@ -77,7 +77,7 @@ ANSWER = "杭州是浙江省省会，以西湖与龙井茶闻名。"
 REQUEST_ID = "req-mock-0001"
 USAGE = {"input_tokens": 18, "output_tokens": 22, "total_tokens": 40}
 
-# The four tiers, mirroring dashscope/cli2/errors.py.
+# The four tiers, mirroring dashscope/cli/errors.py.
 EXIT_OK = 0
 EXIT_SERVER = 1  # server, ratelimit, network: worth retrying
 EXIT_USAGE = 2  # the command line was wrong: retrying cannot help
@@ -338,11 +338,11 @@ def _start_gateway() -> Tuple[ThreadingHTTPServer, str]:
 def _cli(*args: str) -> List[str]:
     """The command prefix that runs the real CLI in a subprocess.
 
-    ``python -m dashscope.cli2`` rather than the ``dashscope`` console
+    ``python -m dashscope.cli`` rather than the ``dashscope`` console
     script: the script only exists once the package is installed, and an
     example has to run from a source checkout too.
     """
-    return [sys.executable, "-m", "dashscope.cli2", *args]
+    return [sys.executable, "-m", "dashscope.cli", *args]
 
 
 def _child_env(config_path: str) -> Dict[str, str]:
@@ -713,10 +713,8 @@ def _scenario_ci_hygiene(base_url, env) -> None:
         "allocate a pseudo-terminal and then dump it into a log.",
     )
     print(
-        "  Also worth setting: DASHSCOPE_CLI_NO_DEPRECATION=1 to silence",
-        "the notice printed when a 1.x command is delegated to the legacy",
-        "tree, and DASHSCOPE_CONFIG to a job-local path so parallel jobs",
-        "never share one file.",
+        "  Also worth setting: DASHSCOPE_CONFIG to a job-local path so",
+        "parallel jobs never share one file.",
     )
 
 

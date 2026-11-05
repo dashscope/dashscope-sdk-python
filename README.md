@@ -437,6 +437,26 @@ The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built 
 - Install with the `acli` extra: `pip install "dashscope[acli]"`. Add `acli-voice` / `acli-camera` for voice and camera input, or `acli-all` for everything — see the [extras table](#installation).
 - Full walkthrough: [DashScope SDK Expert guide](https://help.aliyun.com/en/model-studio/dashscope-sdk-expert).
 
+## Command line
+
+`pip install -U dashscope` puts **two** commands on your `PATH`:
+
+| Command | Runs | Typical subcommands |
+|---------|------|---------------------|
+| `dashscope` | the **2.0** CLI | `chat create`, `ft create/get/wait/list/stream/logs/cancel/delete`, `files upload/list/get/delete`, `models list/get`, `images generate`, `images jobs create/get/wait/list/cancel`, `videos generate`, `videos jobs create/get/wait/list/cancel`, `embeddings create`, `embeddings jobs create/get/wait/list/cancel`, `multimodal chat create`, `multimodal embeddings create`, `rerank create`, `tokenization count`, `apps completions create`, `deployments create/get/list/scale/delete/stream`, `rl jobs create/get/wait/list/logs/cancel/delete`, `rl functions register/test/upload-data/logs/delete`, `audio tts synthesize/http`, `audio asr transcribe/get/wait/recognize`, `audio realtime run`, `audio vocabularies/phrases/voices/voice-design` management, `tingwu call`, `decision create`, `agentstudio agents create/get/list/versions/update/archive`, `agentstudio sessions create/get/list/update/archive/delete`, `agentstudio sessions events send/list/stream`, `config set/get/list`, `version` |
+| `dashscope1` | the **1.x** CLI (legacy) | `generation`, `application`, `image-synthesis`, `multimodal-conversation`, `auth`, `oss`, … |
+
+The module entry points are equivalent:
+
+```bash
+python -m dashscope.cli           # 2.0
+python -m dashscope.legacy_1x.cli # 1.x
+```
+
+Running `dashscope` with no arguments starts the [AI assistant](#ai-assistant-dashscope-sdk-expert) instead of the CLI.
+
+For the full 2.0 CLI contract — output formats, exit codes, configuration precedence, CI recipes — see [`examples/05_cli/README.md`](examples/05_cli/README.md).
+
 ## Shell completion
 
 Run the command for your shell once, then restart the shell (or re-source your config):
@@ -452,6 +472,8 @@ Preview the script without installing:
 ```shell
 dashscope --show-completion bash
 ```
+
+The 1.x CLI (`dashscope1`) has its own completion — run `dashscope1 --install-completion <shell>` separately if you still use it.
 
 ## Logging
 
@@ -495,6 +517,8 @@ The 1.x module-level API is unchanged and still supported — you can adopt 2.0 
 | `dashscope.api_key = "sk-xxx"` | `dashscope.Client(api_key=...)` or `dashscope.settings.api_key = ...` |
 | `dashscope.set_region(region, workspace_id)` | `dashscope.Client(region=..., workspace=...)` |
 | OpenAI-compatible via `dashscope.aigc.chat_completion.Completions` | `dashscope.Client(protocol="openai")` |
+
+The CLI follows the same split — see [Command line](#command-line) above.
 
 ### Package layout and compatibility
 

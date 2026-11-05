@@ -20,9 +20,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
-from dashscope.cli2 import config_store, sdk
-from dashscope.cli2.errors import usage_error
-from dashscope.cli2.output import TABLE, Renderer, resolve_no_color
+from dashscope.cli import config_store, sdk
+from dashscope.cli.errors import usage_error
+from dashscope.cli.output import TABLE, Renderer, resolve_no_color
 
 # Global flags that map straight onto Client(...) keywords.
 _FLAG_TO_SDK = {
@@ -169,6 +169,20 @@ class CliContext:
                 kwargs[sdk_name] = value
         return kwargs
 
+    def resolve_model(self, model: Optional[str]) -> str:
+        """``-m/--model``, else the configured ``default_model``.
+
+        Lives here rather than in a command module so every
+        generate-style command reports a missing model identically.
+        """
+        resolved = model or self.defaults.default_model
+        if not resolved:
+            raise usage_error(
+                "no model given: pass -m/--model, or set a default with "
+                "`dashscope config set default_model qwen-plus`",
+            )
+        return resolved
+
     # -- derived objects -------------------------------------------------
 
     @property
@@ -190,7 +204,7 @@ class CliContext:
     def client(self) -> Any:
         """The SDK client, built on first use.
 
-        Reached through the :mod:`dashscope.cli2.sdk` module attribute
+        Reached through the :mod:`dashscope.cli.sdk` module attribute
         rather than a direct import so tests have one seam to patch.
         """
         if self._client is None:

@@ -437,6 +437,26 @@ SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供�
 - 通过 `acli` extra 安装：`pip install "dashscope[acli]"`。需要语音/摄像头输入可加装 `acli-voice` / `acli-camera`，或直接用 `acli-all` 装齐 —— 详见[安装](#安装)一节的 extra 表格。
 - 完整使用指南：[DashScope SDK Expert 文档](https://help.aliyun.com/zh/model-studio/dashscope-sdk-expert)。
 
+## 命令行
+
+`pip install -U dashscope` 会在 `PATH` 上安装**两个**命令：
+
+| 命令 | 跑的是 | 典型子命令 |
+|------|--------|-----------|
+| `dashscope` | **2.0** CLI | `chat create`、`ft create/get/wait/list/stream/logs/cancel/delete`、`files upload/list/get/delete`、`models list/get`、`images generate`、`images jobs create/get/wait/list/cancel`、`videos generate`、`videos jobs create/get/wait/list/cancel`、`embeddings create`、`embeddings jobs create/get/wait/list/cancel`、`multimodal chat create`、`multimodal embeddings create`、`rerank create`、`tokenization count`、`apps completions create`、`deployments create/get/list/scale/delete/stream`、`rl jobs create/get/wait/list/logs/cancel/delete`、`rl functions register/test/upload-data/logs/delete`、`audio tts synthesize/http`、`audio asr transcribe/get/wait/recognize`、`audio realtime run`、`audio vocabularies/phrases/voices/voice-design` 管理面、`tingwu call`、`decision create`、`agentstudio agents create/get/list/versions/update/archive`、`agentstudio sessions create/get/list/update/archive/delete`、`agentstudio sessions events send/list/stream`、`config set/get/list`、`version` |
+| `dashscope1` | **1.x** CLI（历史） | `generation`、`application`、`image-synthesis`、`multimodal-conversation`、`auth`、`oss`…… |
+
+模块入口等价：
+
+```bash
+python -m dashscope.cli           # 2.0
+python -m dashscope.legacy_1x.cli # 1.x
+```
+
+不带参数运行 `dashscope` 会启动 [AI 助手](#ai-助手dashscope-sdk-expert)，而不是 CLI。
+
+完整的 2.0 CLI 契约 —— 输出格式、退出码、配置优先级、CI 配方 —— 见 [`examples/05_cli/README_zh.md`](examples/05_cli/README_zh.md)。
+
 ## Shell 命令补全
 
 针对你的 Shell 运行一次对应命令，然后重启 Shell（或重新 source 配置文件）：
@@ -452,6 +472,8 @@ SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供�
 ```shell
 dashscope --show-completion bash
 ```
+
+1.x CLI（`dashscope1`）有自己独立的补全 —— 如果仍在使用，请单独运行 `dashscope1 --install-completion <shell>`。
 
 ## 日志
 
@@ -495,6 +517,8 @@ examples/
 | `dashscope.api_key = "sk-xxx"` | `dashscope.Client(api_key=...)` 或 `dashscope.settings.api_key = ...` |
 | `dashscope.set_region(region, workspace_id)` | `dashscope.Client(region=..., workspace=...)` |
 | OpenAI 兼容通过 `dashscope.aigc.chat_completion.Completions` | `dashscope.Client(protocol="openai")` |
+
+CLI 也遵循同样的拆分 —— 见上方[命令行](#命令行)一节。
 
 ### 包布局与兼容策略
 

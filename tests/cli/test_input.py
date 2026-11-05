@@ -7,8 +7,8 @@ import json
 
 import pytest
 
-from dashscope.cli2.errors import CliError
-from dashscope.cli2.input import (
+from dashscope.cli.errors import CliError
+from dashscope.cli.input import (
     messages_from_prompt,
     parse_json_arg,
     parse_json_object_arg,

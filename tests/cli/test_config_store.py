@@ -7,7 +7,8 @@ import stat
 
 import pytest
 
-from dashscope.cli2.config_store import (
+from dashscope.cli import config_store
+from dashscope.cli.config_store import (
     CLI_SECTION,
     effective_values,
     get_value,
@@ -20,12 +21,22 @@ from dashscope.cli2.config_store import (
     restrict_permissions,
     set_value,
 )
-from dashscope.cli2.errors import CliError
+from dashscope.cli.errors import CliError
 
 
 @pytest.fixture
 def config(clean_env):
     return clean_env["config"]
+
+
+@pytest.fixture
+def permissive_umask():
+    """The ``umask 022`` default a world-readable temp file needs."""
+    previous = os.umask(0o022)
+    try:
+        yield
+    finally:
+        os.umask(previous)
 
 
 class TestValueParsing:
@@ -99,6 +110,8 @@ class TestValidation:
             ("timeout", "abc"),
             ("max_retries", "-1"),
             ("http_keepalive_expiry", "0"),
+            ("http_max_connections", "0"),
+            ("http_max_connections", "-1"),
             ("api_key", ""),
         ],
     )
@@ -106,6 +119,19 @@ class TestValidation:
         with pytest.raises(CliError) as info:
             set_value(key, value, path=config)
         assert info.value.category == "usage"
+
+    def test_the_pool_floor_matches_the_sdk_setters(self, config):
+        """A config file is read on every later invocation, so writing a
+        value `Settings` refuses would break the CLI permanently."""
+        assert set_value("http_max_connections", "1", path=config) == (
+            "http_max_connections",
+            1,
+        )
+        assert (
+            set_value("http_max_keepalive_connections", "0", path=config)[1]
+            == 0
+        )
+        assert set_value("max_retries", "0", path=config)[1] == 0
 
     def test_timeout_becomes_a_number(self, config):
         assert set_value("timeout", "30", path=config) == ("timeout", 30)
@@ -196,6 +222,98 @@ class TestPreservation:
         assert load_raw(target) == {"api_key": "sk-1"}
 
 
+class TestTomlSemantics:
+    """The editor reads the file as TOML, not as text that looks like it."""
+
+    def test_a_table_header_may_carry_a_comment(self, config):
+        config.write_text(
+            '[cli] # my settings\noutput = "json"\n',
+            encoding="utf-8",
+        )
+        set_value("workspace", "ws-1", path=config)
+        data = load_raw(config)
+        # Top level is where the SDK reads it; inside [cli] it is ignored.
+        assert data["workspace"] == "ws-1"
+        assert data["cli"] == {"output": "json"}
+
+    def test_a_key_inside_a_multiline_string_is_left_alone(self, config):
+        config.write_text(
+            'prompt = """\n[cli]\noutput = "yaml"\n"""\n',
+            encoding="utf-8",
+        )
+        set_value("output", "json", path=config)
+        data = load_raw(config)
+        assert data["prompt"] == '[cli]\noutput = "yaml"\n'
+        assert data["cli"]["output"] == "json"
+
+    def test_a_literal_multiline_string_is_left_alone(self, config):
+        config.write_text(
+            "prompt = '''\napi_key = \"not mine\"\n'''\n",
+            encoding="utf-8",
+        )
+        set_value("api_key", "sk-1", path=config)
+        data = load_raw(config)
+        assert data["prompt"] == 'api_key = "not mine"\n'
+        assert data["api_key"] == "sk-1"
+
+    def test_a_hash_inside_a_string_is_not_a_comment(self, config):
+        config.write_text('base_url = "http://host#frag"\n', encoding="utf-8")
+        set_value("base_url", "http://other#2", path=config)
+        assert load_raw(config)["base_url"] == "http://other#2"
+
+    def test_a_commented_out_key_is_not_revived(self, config):
+        config.write_text('# api_key = "old"\n', encoding="utf-8")
+        set_value("api_key", "sk-new", path=config)
+        text = config.read_text(encoding="utf-8")
+        assert text.startswith('# api_key = "old"')
+        assert load_raw(config)["api_key"] == "sk-new"
+
+    def test_a_quoted_table_header_is_recognised(self, config):
+        config.write_text('[ "cli" ]\n', encoding="utf-8")
+        set_value("output", "json", path=config)
+        assert load_raw(config)["cli"]["output"] == "json"
+
+    def test_a_top_level_key_stays_out_of_an_array_of_tables(self, config):
+        config.write_text('[[models]]\nid = "a"\n', encoding="utf-8")
+        set_value("workspace", "ws-1", path=config)
+        assert load_raw(config)["workspace"] == "ws-1"
+
+    def test_a_comment_after_a_header_does_not_leak_into_the_name(
+        self,
+        config,
+    ):
+        config.write_text("[cli] # see [docs]\n", encoding="utf-8")
+        set_value("output", "json", path=config)
+        set_value("workspace", "ws-1", path=config)
+        data = load_raw(config)
+        assert data["cli"]["output"] == "json"
+        assert data["workspace"] == "ws-1"
+
+
+class TestReadBack:
+    """An edit that would not be read back must not report success."""
+
+    def test_a_value_written_into_the_wrong_table_is_refused(
+        self,
+        config,
+        monkeypatch,
+    ):
+        # Stands in for any future scanner bug: force the key into [cli]
+        # and check the command fails instead of claiming success.
+        monkeypatch.setattr(
+            config_store,
+            "_insert_key",
+            lambda lines, section, rendered: lines.extend(
+                ["[cli]", rendered],
+            ),
+        )
+        with pytest.raises(CliError) as info:
+            set_value("workspace", "ws-1", path=config)
+        assert info.value.category == "usage"
+        assert "did not take effect" in info.value.message
+        assert not config.exists()
+
+
 class TestSafety:
     def test_refuses_to_write_invalid_toml_and_leaves_the_original(
         self,
@@ -210,7 +328,7 @@ class TestSafety:
         assert info.value.category == "usage"
         assert "invalid TOML" in info.value.message
         assert config.read_text(encoding="utf-8") == original
-        assert not (config.parent / (config.name + ".tmp")).exists()
+        assert not list(config.parent.glob("*.tmp"))
 
     def test_existing_invalid_file_is_reported_not_overwritten_silently(
         self,
@@ -232,6 +350,54 @@ class TestSafety:
         os.chmod(config, 0o600)
         set_value("api_key", "sk-2", path=config)
         assert stat.S_IMODE(os.stat(config).st_mode) == 0o600
+
+    def test_a_new_file_is_owner_only_under_a_permissive_umask(
+        self,
+        config,
+        permissive_umask,
+    ):
+        assert not config.exists()
+        set_value("api_key", "sk-secret", path=config)
+        assert stat.S_IMODE(os.stat(config).st_mode) == 0o600
+
+    def test_the_temp_file_already_holds_the_secret_at_0600(
+        self,
+        config,
+        permissive_umask,
+        monkeypatch,
+    ):
+        """There must be no window where the key is world-readable."""
+        modes = []
+        replace = os.replace
+
+        def spy(source, destination):
+            modes.append(stat.S_IMODE(os.stat(source).st_mode))
+            return replace(source, destination)
+
+        monkeypatch.setattr(os, "replace", spy)
+        set_value("api_key", "sk-secret", path=config)
+        assert modes == [0o600]
+
+    def test_group_and_other_bits_are_dropped_on_rewrite(
+        self,
+        config,
+        permissive_umask,
+    ):
+        config.write_text('api_key = "sk-1"\n', encoding="utf-8")
+        os.chmod(config, 0o644)
+        set_value("api_key", "sk-2", path=config)
+        assert stat.S_IMODE(os.stat(config).st_mode) == 0o600
+        assert load_raw(config)["api_key"] == "sk-2"
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX symlinks")
+    def test_a_planted_tmp_symlink_is_not_followed(self, config):
+        """The old fixed name let anyone redirect the write."""
+        victim = config.with_name("victim")
+        victim.write_text("precious", encoding="utf-8")
+        config.with_name(config.name + ".tmp").symlink_to(victim)
+        set_value("api_key", "sk-1", path=config)
+        assert victim.read_text(encoding="utf-8") == "precious"
+        assert load_raw(config) == {"api_key": "sk-1"}
 
     def test_restrict_permissions_tolerates_a_missing_file(self, tmp_path):
         restrict_permissions(tmp_path / "absent.toml")

@@ -8,9 +8,8 @@ subcommand::
     dashscope -k sk-xxx --output json chat create -m qwen-plus --prompt hi
 
 The 1.x tree tolerated a trailing ``-k`` by surgically rewriting argv.
-That tolerance is deliberately *not* reimplemented here: it only ever
-applied to the 1.x parser, and ``main.py`` still hands those invocations
-to it untouched.
+That tolerance is deliberately *not* reimplemented here: a dangling option
+is a command-line mistake, and click already renders one.
 """
 
 from __future__ import annotations
@@ -19,14 +18,10 @@ from typing import List, Optional
 
 import typer
 
-from dashscope.cli2.context import CliContext, GlobalOptions
-from dashscope.cli2.errors import (
-    NO_DEPRECATION_ENV,
-    ErrorHandlingGroup,
-    usage_error,
-)
-from dashscope.cli2.main import LEGACY_DEPRECATED, LEGACY_UNMIGRATED
-from dashscope.cli2.output import OUTPUT_FORMATS
+from dashscope.cli.context import CliContext, GlobalOptions
+from dashscope.cli.errors import ErrorHandlingGroup, usage_error
+from dashscope.cli.main import REPLACED_COMMANDS, UNSUPPORTED_COMMANDS
+from dashscope.cli.output import OUTPUT_FORMATS
 
 # `\[` is Rich markup escaping: unescaped, Rich reads the bracketed run as a
 # style tag and drops it from the rendered help. The string is raw so the
@@ -42,25 +37,25 @@ line, 3 auth, 4 not found.
 
 
 def _epilog() -> str:
-    """Static list of the 1.x commands that still work through this entry.
+    """What happened to the 1.x command names.
 
-    They are delegated to rather than mounted, so Typer cannot enumerate
-    them -- and mounting them would mean importing all eighteen 1.x
-    command modules just to render ``--help``. Generated from the same
-    constants the router uses, so the list cannot drift from the routing.
+    ``dashscope`` serves the v2 tree only, so an old name is rejected
+    rather than delegated. Naming the removals here means ``--help``
+    answers the question the rejection raises, before the user has to hit
+    it. Generated from the same constants the router uses, so the list
+    cannot drift from the routing.
 
     Written as prose because Rich re-flows the epilog to the terminal
     width; hand-placed line breaks would not survive.
     """
-    deprecated = ", ".join(sorted(LEGACY_DEPRECATED))
-    unmigrated = ", ".join(sorted(LEGACY_UNMIGRATED))
+    replaced = ", ".join(sorted(REPLACED_COMMANDS))
+    unsupported = ", ".join(sorted(UNSUPPORTED_COMMANDS))
     return (
-        "Legacy 1.x commands still run through this entry point. "
-        f"Deprecated: {deprecated}. "
-        f"Awaiting a v2 replacement: {unmigrated}. "
-        "`expert` forwards to the bundled agent, and a bare `dashscope` "
-        "opens it interactively. "
-        f"Set {NO_DEPRECATION_ENV}=1 to silence the deprecation notice."
+        "1.x command names are not served here; the entry point runs the "
+        f"v2 CLI only. Replaced by a v2 command: {replaced}. No v2 "
+        f"equivalent, still available as `dashscope1`: {unsupported}. "
+        "A bare `dashscope` opens the bundled `expert` agent "
+        "interactively."
     )
 
 
@@ -183,9 +178,24 @@ def build_app() -> typer.Typer:
     # Command modules are thin by contract (no SDK import at module
     # scope), so mounting them all here costs nothing; the expensive part
     # is the client, which stays lazy behind ``ctx.obj.client``.
-    from dashscope.cli2.commands import chat as chat_command
-    from dashscope.cli2.commands import config as config_command
-    from dashscope.cli2.commands import ft as ft_command
+    from dashscope.cli.commands import agentstudio as agentstudio_command
+    from dashscope.cli.commands import apps as apps_command
+    from dashscope.cli.commands import audio as audio_command
+    from dashscope.cli.commands import chat as chat_command
+    from dashscope.cli.commands import config as config_command
+    from dashscope.cli.commands import decision as decision_command
+    from dashscope.cli.commands import deployments as deployments_command
+    from dashscope.cli.commands import embeddings as embeddings_command
+    from dashscope.cli.commands import files as files_command
+    from dashscope.cli.commands import ft as ft_command
+    from dashscope.cli.commands import images as images_command
+    from dashscope.cli.commands import models as models_command
+    from dashscope.cli.commands import multimodal as multimodal_command
+    from dashscope.cli.commands import rerank as rerank_command
+    from dashscope.cli.commands import rl as rl_command
+    from dashscope.cli.commands import tingwu as tingwu_command
+    from dashscope.cli.commands import tokenization as tokenization_command
+    from dashscope.cli.commands import videos as videos_command
 
     app.add_typer(chat_command.build_app(), name="chat")
     app.add_typer(ft_command.build_app(), name="ft")
@@ -193,6 +203,21 @@ def build_app() -> typer.Typer:
     # usable but out of the way. Built twice so the two registrations do not
     # share one Typer instance.
     app.add_typer(ft_command.build_app(), name="fine-tunes", hidden=True)
+    app.add_typer(files_command.build_app(), name="files")
+    app.add_typer(models_command.build_app(), name="models")
+    app.add_typer(images_command.build_app(), name="images")
+    app.add_typer(videos_command.build_app(), name="videos")
+    app.add_typer(embeddings_command.build_app(), name="embeddings")
+    app.add_typer(multimodal_command.build_app(), name="multimodal")
+    app.add_typer(rerank_command.build_app(), name="rerank")
+    app.add_typer(tokenization_command.build_app(), name="tokenization")
+    app.add_typer(apps_command.build_app(), name="apps")
+    app.add_typer(deployments_command.build_app(), name="deployments")
+    app.add_typer(rl_command.build_app(), name="rl")
+    app.add_typer(audio_command.build_app(), name="audio")
+    app.add_typer(tingwu_command.build_app(), name="tingwu")
+    app.add_typer(decision_command.build_app(), name="decision")
+    app.add_typer(agentstudio_command.build_app(), name="agentstudio")
     app.add_typer(config_command.build_app(), name="config")
 
     return app

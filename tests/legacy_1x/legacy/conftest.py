@@ -45,13 +45,16 @@ def http_server(request):
     print("starting legacy server!!!!!!!!!")
     proc = multiprocessing.Process(target=run_server)
     proc.start()
-    wait_for_port(HTTP_SERVER_PORT)
 
     def stop_server():
         stop_process(proc)
         print("Stopping legacy server")
 
+    # Registered before the readiness poll: wait_for_port raises on
+    # timeout, and a finalizer that never got registered leaves a
+    # non-daemon child for multiprocessing's atexit join to hang on.
     request.addfinalizer(stop_server)
+    wait_for_port(HTTP_SERVER_PORT)
     return proc
 
 

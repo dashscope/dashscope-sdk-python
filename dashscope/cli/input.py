@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from dashscope.cli2.errors import CliError, usage_error
+from dashscope.cli.errors import CliError, usage_error
 
 STDIN_TOKEN = "-"
 
@@ -114,6 +114,22 @@ def parse_json_object_arg(
             f"{type(value).__name__}",
         )
     return value
+
+
+def parse_tools_arg(raw: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+    """``--tools``: a JSON array of tool definitions.
+
+    Shared by the text and multimodal chat commands, which take the same
+    schema and should reject a non-array with the same words.
+    """
+    tools = parse_json_arg(raw, option_name="--tools")
+    if tools is None:
+        return None
+    if not isinstance(tools, list):
+        raise usage_error(
+            f"--tools: expected a JSON array, got {type(tools).__name__}",
+        )
+    return tools
 
 
 def _looks_like_json(text: str) -> bool:

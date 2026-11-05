@@ -1021,13 +1021,16 @@ def create_mock_server(request):
         ),
     )
     proc.start()
-    wait_for_port(MOCK_SERVER_PORT)
 
     def stop_server():
         stop_process(proc)
         print("Mock server stopped")
 
+    # Registered before the readiness poll, not after: wait_for_port raises
+    # on timeout, and a finalizer that was never registered leaves a
+    # non-daemon child behind for multiprocessing's atexit join to hang on.
     request.addfinalizer(stop_server)
+    wait_for_port(MOCK_SERVER_PORT)
 
     return mock_web_server
 

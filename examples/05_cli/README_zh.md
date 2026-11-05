@@ -25,9 +25,11 @@ dashscope version
 在没装 console script 的源码检出里，模块入口完全等价：
 
 ```bash
-python3 -m dashscope.cli2 --help
-python3 -m dashscope.cli2 version
+python -m dashscope.cli --help
+python -m dashscope.cli version
 ```
+
+> 1.x CLI 有独立的入口（`dashscope1` / `python -m dashscope.legacy_1x.cli`），详见 [`../legacy_1x/`](../legacy_1x/)。
 
 密钥配一次，两种方式都行：
 
@@ -55,15 +57,75 @@ dashscope chat create -m qwen-plus --prompt "hi" --output json             # exi
 | `dashscope chat create` | 一次 chat 补全：`--prompt` / `--messages`、`--stream`、`--tools`、采样参数，其余走 `--parameters` |
 | `dashscope ft create` | 起一个微调作业；`--wait` 带 spinner 阻塞到终态，`--timeout` 限定等待时长 |
 | `dashscope ft get` | 查看单个作业 |
+| `dashscope ft wait` | 阻塞等待一个不是本进程创建的作业——`create --wait` 的后半段，适用于「一步提交、另一步收结果」的流水线。作业失败或被取消时退出码为 1 |
 | `dashscope ft list` | 分页列出作业：`--page`、`--size` |
 | `dashscope ft stream` | 跟随服务端事件流，直到服务端关闭它 |
+| `dashscope ft logs` | 读作业的训练日志：`--offset`、`--lines`。table 模式原样打印日志文本——不画表——所以 `> train.log` 拿到的就是训练器打出来的东西 |
 | `dashscope ft cancel` | 取消运行中的作业。**破坏性**——会确认，CI 里需要 `--yes` |
 | `dashscope ft delete` | 删除作业及其产出模型。**破坏性**——会确认，CI 里需要 `--yes` |
+| `dashscope files upload` | 上传微调用的文件；返回 `ft create -t` 需要的 `file_id` |
+| `dashscope files list` | 分页列出已上传文件：`--page`、`--size` |
+| `dashscope files get` | 按 id 查看单个文件 |
+| `dashscope files delete` | 删除文件。**破坏性**——会确认，CI 里需要 `--yes` |
+| `dashscope models list` | 分页浏览模型目录：`--page`、`--size`、`--provider` |
+| `dashscope models get` | 按名称查找模型；不存在时 exit 4 |
+| `dashscope embeddings create` | 同步生成向量：`--input`（文本或 JSON 数组）、`--text-type`、`--dimension` |
+| `dashscope embeddings jobs create` | 提交异步批量向量任务（文件 URL）；`--wait` 阻塞到完成 |
+| `dashscope embeddings jobs get` | 查看批量任务状态 |
+| `dashscope embeddings jobs wait` | 阻塞等待上一步拿到的批量任务 id，而不是循环轮询 `jobs get` |
+| `dashscope embeddings jobs list` | 分页列出批量任务：`--page`、`--size`、`--status` |
+| `dashscope embeddings jobs cancel` | 取消 pending 的批量任务。**破坏性**——会确认，CI 里需要 `--yes` |
+| `dashscope multimodal chat create` | 打到多模态端点的 `chat create`，用于那些即使不带媒体分片也必须走这个端点的会话 |
+| `dashscope multimodal embeddings create` | 把文本、图片、音频、视频嵌到同一个向量空间：可重复的 `--text`/`--image`/`--audio`/`--video`，或 `--input` JSON |
+| `dashscope rerank create` | 文档重排：`--query`、`--documents`（JSON 数组）或可重复的 `--document` |
+| `dashscope tokenization count` | 计算 prompt 或 messages 的 token 数 |
+| `dashscope apps completions create` | 按 `--app-id` 调用百炼**应用**：`--prompt`/`--messages`、可重复的 `--image`/`--file`、`--session-id`/`--memory-id`、`--rag-options`、`--biz-params`。带 `--stream` 时会同时要求增量帧，因为服务端默认每次重发整段答案 |
+| `dashscope images generate` | 生成图片并等到出图；一行一个 URL，所以 `$(...)` 和 `xargs wget` 直接能用 |
+| `dashscope images jobs create` | 只提交图片任务、立刻拿到 task_id；`--wait` 阻塞，或之后用 `jobs get`/`jobs list` 取结果 |
+| `dashscope images jobs get` / `list` / `wait` | 收取上一步提交的任务：查看单个、分页列出，或阻塞到它结束并像 `generate` 一样打印图片 URL |
+| `dashscope images jobs cancel` | 取消 pending 的图片任务。**破坏性**——会确认，CI 里需要 `--yes` |
+| `dashscope videos generate` | 生成视频并等到出片；打印视频 URL，所以 `$(...)` 和 `xargs wget` 直接能用。`--timeout` 默认一小时 |
+| `dashscope videos jobs create` | 只提交视频任务、立刻拿到 task_id；`--wait` 阻塞，或之后用 `jobs get`/`jobs list` 取结果 |
+| `dashscope videos jobs get` / `list` / `wait` | 收取上一步提交的任务：查看单个、分页列出，或阻塞到它结束并像 `generate` 一样打印视频 URL |
+| `dashscope videos jobs cancel` | 取消 pending 的视频任务。**破坏性**——会确认，CI 里需要 `--yes` |
+| `dashscope deployments create` | 为模型开通独享容量：`--capacity`，MU 部署还要 `--deploy-spec`/`--billing-method` |
+| `dashscope deployments get` / `list` | 查看单个部署，或分页列出 |
+| `dashscope deployments stream` | 跟随部署的服务端事件流，直到服务端关闭它 |
+| `dashscope deployments scale` | 调整部署容量。**破坏性**——会确认，CI 里需要 `--yes` |
+| `dashscope deployments delete` | 下线部署。**破坏性**——会确认，CI 里需要 `--yes` |
+| `dashscope rl jobs create` | 跑完整的 agentic-RL 流程（注册函数、上传数据、提交）；`--set key=value` 覆盖单个配置项，`--wait` 阻塞 |
+| `dashscope rl jobs get` / `list` / `logs` | 查看单个 RL 作业、分页列出，或读它的训练日志 |
+| `dashscope rl jobs wait` | 阻塞等待上一步拿到的 RL 作业 id；作业失败或被取消时退出码为 1 |
+| `dashscope rl jobs cancel` / `delete` | 取消或删除 RL 作业。**破坏性**——会确认，CI 里需要 `--yes` |
+| `dashscope rl functions register` | 上传 rollout/reward 代码；返回 entity id 和 instance id |
+| `dashscope rl functions test` | 用一份样例 `--input` 跑一个已注册的函数实例 |
+| `dashscope rl functions upload-data` | 上传数据集；返回 `rl jobs create` 要用的 file id |
+| `dashscope rl functions logs` | 读函数实例的日志；`--all` 聚合所有分页 |
+| `dashscope rl functions delete` | 删除函数实例。**破坏性**——会确认，CI 里需要 `--yes` |
+| `dashscope audio tts synthesize` | 把 `TEXT` 合成语音并写出音频：`--out speech.mp3`；不给 `--out` 就写 stdout，所以 `dashscope audio tts synthesize hi > hi.mp3` 能用。`--voice`、`--format`、`--sample-rate`、`--volume`、`--rate`、`--pitch` |
+| `dashscope audio tts http` | 走非流式端点的同一个请求，打印 `audio_url` 而不是音频字节。这里 `-m` 和 `--voice` 是**必填**的——流式端点那套 cosyvoice 默认值不适用 |
+| `dashscope audio asr transcribe` | 转写一个或多个音视频 URL 并**等待**结果；`--no-wait` 只提交、返回 task_id |
+| `dashscope audio asr get` / `wait` | 立刻读一个转写任务，或带 spinner 阻塞到它落定 |
+| `dashscope audio asr recognize` | 走实时识别器转写**本地文件**；table 模式只打句子，`-o json` 一行一个原始事件 |
+| `dashscope audio realtime run` | 在双工 Omni socket 上跑**一轮**：喂进一整个 `--audio` 文件（路径、`@路径`，或管道 stdin），打印答案文本和输入转写，把语音回复写进 `--out`。`-o json` 是这一轮里每个事件的 NDJSON 轨迹 |
+| `dashscope audio vocabularies create` / `list` / `get` / `update` / `delete` | 热词表，由 `asr recognize --vocabulary-id` 消费。`--vocabulary` 是词条的 JSON **数组**。`delete` 是**破坏性**的 |
+| `dashscope audio phrases create` / `list` / `get` / `update` / `delete` | 编译好的短语集，由 `asr transcribe --phrase-id` 消费。`--phrases` 是短语列表的 JSON **对象**。`delete` 是**破坏性**的 |
+| `dashscope audio voices create` / `list` / `get` / `update` / `delete` | 从 `--url` 上的一段样本录音克隆出来的音色。`delete` 是**破坏性**的 |
+| `dashscope audio voice-design create` / `list` / `get` / `delete` | 用文字描述（`--voice-prompt` + `--preview-text`）而不是录音造出来的音色——和 `voices` 共用同一个注册表、同一套 id 命名空间和同一份配额。没有 `update`，因为服务端就没有。`delete` 是**破坏性**的 |
+| `dashscope tingwu call` | 跑一个离线 TingWu 任务：`-m`，加上一份由业务定义的载荷，要么写成 `--input @task.json`，要么走 `--file-url` / `--app-id` 这一对——它们的优先级高于 JSON。实时 websocket 只有 SDK |
+| `dashscope decision create` | 针对一份 `--state`（自由文本、一段对话，或 JSON）回答**带类型**的问题：`--questions` 为每个 id 声明 `choice` / `noul` / `score`，每个答案回一行并带上它的置信度。模型不生成文本 |
+| `dashscope agentstudio agents create` / `get` / `list` / `versions` / `update` / `archive` | 管理一个**托管 agent**：`--name`、`-m`、`--system-prompt`，以及作为 JSON 数组的 `--tools` / `--mcp-servers` / `--skills`。`versions` 列出 `get --version` 和 `update --version` 要填的版本号。`update` 必须给 `--version`——版本对不上就是 409。`archive` 是**破坏性**的 |
+| `dashscope agentstudio sessions create` / `get` / `list` / `update` / `archive` / `delete` | 在某个 agent 上开一个会话（`--agent`、`--environment-id`、`--vault-ids`、`--env`、`--mcp-configs`）并查看它。`update` 打补丁，没给的字段保持原值；它的 `--agent-config` 是会话级的 agent 覆盖项（`system` / `tools` / `mcp_servers` / `skills`），**不是** agent id。`archive` 和 `delete` 都是**破坏性**的 |
+| `dashscope agentstudio sessions events send` | 投递一轮对话：`--message` 会被替你包成一条 user 消息，`--events` 原样发送一个 JSON 数组且优先级更高，`--thread-id` 指定线程 |
+| `dashscope agentstudio sessions events list` | 把会话已持久化的事件读回来：`--type`（可重复）、`--order`、`--limit`、`--page` |
+| `dashscope agentstudio sessions events stream` | 跟随这次运行直到落定：table 模式打印答案文本，`--deltas message` 选择接收增量帧，`-o json` 一行一个事件 |
 | `dashscope config set` | 往 `~/.dashscope/config.toml` 写一个键 |
 | `dashscope config get` | 读回一个键（api_key 默认打码，除非 `--reveal`） |
 | `dashscope config list` | 每个键、它的生效值，以及这个值来自哪一层 |
 
-同一个入口仍然能跑 1.x 命令，所以老的 shell 脚本不会断。`main.py` 把 argv 分成三类：上面这棵 v2 命令树、一组**已废弃**命令（`generation`、`application`、`image-synthesis`、`multimodal-conversation`、`speech-synthesis`、`transcription`、`video-synthesis`、`image-generation`、`multimodal-embedding`、`agentic-rl`，委派前先打印提示），以及一组**等待 v2 替代**的命令（`auth`、`deployments`、`embeddings`、`files`、`models`、`oss`、`rerank`、`rl`、`tokenization`，静默委派）。设 `DASHSCOPE_CLI_NO_DEPRECATION=1` 可以在构建日志里静音这条提示。不带子命令的裸 `dashscope` 会交互式打开内置的 `expert` agent。
+这个入口只跑 v2 CLI：它**不再**委派给 1.x 命令树，所以旧命令名会以退出码 2 被拒绝，而不是悄悄跑在旧客户端上。`main.py` 把 argv 分成三类——上面这棵 v2 命令树、一组**已被替代**的命令（`generation`、`application`、`image-synthesis`、`multimodal-conversation`、`speech-synthesis`、`transcription`、`video-synthesis`、`image-generation`、`multimodal-embedding`、`agentic-rl`，报错时会给出接管它的 v2 命令），以及一组**尚无 v2 等价物**的命令（`auth`、`oss`）。报错会直接告诉你 v2 的对应写法——它读的是 `main.py` 里的 `REPLACED_COMMANDS` 表，所以 `dashscope video-synthesis create ...` 会提示你改用 `dashscope videos generate`，而不是让你自己去翻。Typer 之前的点号写法同样被拒绝，并走同一张表解析：`dashscope fine_tunes.list` 会指向 `dashscope fine-tunes list`。仍然需要 1.x 客户端的场景，走 `dashscope1`。不带子命令的裸 `dashscope` 会交互式打开内置的 `expert` agent。
+
+这里*没有*的东西是一个决定，而不是一堆待办，而且这些空缺长得都一样：一条长连接的双向 socket，或者一长串 shell 加不出任何价值的 CRUD。`audio realtime run` 驱动双工 Omni socket 的**一轮**然后挂断；真正的实时麦克风——它跨多轮保持打开，并且要求音频以实时速率到达——是 Python 里的 `client.audio.realtime.connect()`，`tingwu realtime` 也是同一个故事。`agentstudio` 覆盖了你真会拿去写脚本的那个回路（agents、sessions、session events）；它另外九个顶层资源（deployments 及其 runs、environments、files、skills、vaults、memory stores、webhook endpoints、security），加上 session threads 和 session resources，仍然只有 SDK。SDK 暴露的其余东西都有命令了。
 
 ---
 
@@ -120,7 +182,7 @@ Error [ratelimit]: Rate limit exceeded.
 
 `Error [category]: message` 是稳定的；两行 dim 只在有内容可说时才出现。`request_id` 是提工单需要的东西，`solution` 是注册表自带的指引——单独一行，这样你永远能分清哪些字来自网关。
 
-HTTP 状态码如何变成 category（`cli2/errors.py` 的 `_STATUS_CATEGORY`）：
+HTTP 状态码如何变成 category（`cli/errors.py` 的 `_STATUS_CATEGORY`）：
 
 | 状态码 | category | 退出码 |
 | --- | --- | --- |
@@ -288,6 +350,104 @@ dashscope ft create -m qwen-plus -t "$FILE_ID" --n-epochs 2 --wait --timeout 180
 dashscope ft stream "$JOB_ID"
 ```
 
+**抓取作业的训练日志** 🔑
+
+```bash
+dashscope ft logs "$JOB_ID" --offset 1 --lines 500 > train.log
+```
+
+**取到生成的视频，然后下载** 🔑
+
+```bash
+url=$(dashscope videos generate -m wan2.2-t2v-plus --prompt "海浪拍打礁石" --timeout 1800)
+curl -o clip.mp4 "$url"
+```
+
+只提交、之后统一收结果的批量写法：
+
+```bash
+dashscope -o json videos jobs create -m wan2.2-t2v-plus --prompt @brief.md \
+  | jq -r '.task_id' >> task_ids.txt
+while read -r id; do dashscope videos jobs get "$id"; done < task_ids.txt
+```
+
+**一步提交，另一步阻塞等待** 🔑
+
+```bash
+# 第一步——提交并留下 id
+dashscope -o json images jobs create -m wan2.2-t2i-flash --prompt @brief.md \
+  | jq -r '.task_id' > task_id.txt
+
+# 第二步——可能是另一台 runner，可能是一小时之后
+dashscope images jobs wait "$(cat task_id.txt)" --timeout 1800
+```
+
+`wait` 收的是一个 **id**，不是作业对象，所以两步之间需要活下来的只有这一个字符串。任务失败或被取消时退出码为 1；`--timeout` 是它无法兑现的值时退出码为 2——`0` 和 `nan` 都算，因为 `nan` 与任何值比较都为假，轮询会永远转下去。`ft wait`、`videos jobs wait`、`embeddings jobs wait`、`rl jobs wait` 和 `audio asr wait` 都是同一个形状。
+
+**语音合成到文件，或直接进管道** 🔑
+
+```bash
+dashscope audio tts synthesize "你好，世界" --out hello.mp3
+dashscope audio tts synthesize @script.txt --voice longxiaochun | ffplay -i - -autoexit -nodisp
+```
+
+不给 `--out`，裸音频字节就写 stdout。给了 `--out`，音频进文件，`wrote N bytes to ...` 那行提示走 stderr——所以两种写法都不会污染重定向。
+
+**转写一段录音并阻塞等结果** 🔑
+
+```bash
+dashscope audio asr transcribe "https://example.com/meeting.mp3" --timeout 1800
+```
+
+**在实时 socket 上跑一轮** 🔑
+
+```bash
+dashscope audio realtime run -m qwen3.8-omni-flash-realtime \
+  --audio question.pcm --out reply.wav
+```
+
+答案文本走 stdout，输入转写和 `wrote N bytes` 那行提示走 stderr，语音回复进 `--out`。不给 `--out`，回复音频就被**丢掉**——这个命令不会只因为你忘了个参数就往终端里喷二进制。`-o json` 会把整轮变成一行一个事件的 NDJSON 轨迹，这一轮行为不对的时候你要的就是它。
+
+**先建热词表，再拿它去识别** 🔑
+
+```bash
+vid=$(dashscope -o json audio vocabularies create \
+        --prefix demo --target-model paraformer-realtime-v2 \
+        --vocabulary @hotwords.json \
+      | jq -r '.vocabulary_id')
+dashscope audio asr recognize meeting.pcm -m paraformer-realtime-v2 --vocabulary-id "$vid"
+```
+
+注意 `-o json` 的位置：在 `audio` 之前，因为它是全局选项。在这个命令组里面，短选项已经被占掉了——`tts synthesize` 和 `realtime run` 都用 `-o` 表示 `--out`。
+
+**调用百炼应用，并把会话续上** 🔑
+
+```bash
+dashscope -o json apps completions create --app-id "$APP_ID" --prompt "帮我查一下订单" \
+  | jq -r '.session_id' > session.txt
+dashscope apps completions create --app-id "$APP_ID" \
+  --prompt "那第二个呢" --session-id "$(cat session.txt)"
+```
+
+**用 shell 驱动一个托管 agent** 🔑
+
+```bash
+sid=$(dashscope -o json agentstudio sessions create --agent "$AGENT_ID" \
+      | jq -r '.id')
+dashscope agentstudio sessions events send "$sid" --message "帮我查一下订单"
+dashscope agentstudio sessions events stream "$sid" --deltas message
+```
+
+`events send` 投递这一轮，`events stream` 跟随这次运行直到落定。它们是两个命令而不是一个，因为流水线通常要投 N 轮再统一收——也因为一条中途断掉的流应该以非零退出，而不是把已经发出去的 send 一起吞掉。
+
+**针对一张工单回答带类型的问题** 🔑
+
+```bash
+dashscope decision create --state @ticket.txt --questions @questions.json
+```
+
+`--questions` 为每个 id 声明一个 `type`——`choice` 选出一个选项，`noul` 是「是」的概率，`score` 是加权后的档位下标。每个答案回一行并带上置信度，`-o json` 给你 `.answers.<id>.choice` 用来分支。模型不生成散文，所以没有需要从句子里抠出来的东西。`-m` 默认是 `decision-model-preview`，并且**不**读 `default_model`：这是一个决策模型，不是 chat 模型。
+
 **CI：破坏性命令需要 `--yes`** 🔑
 
 ```bash
@@ -305,10 +465,10 @@ dashscope config set api_key "$DASHSCOPE_API_KEY"
 dashscope chat create --prompt "hi"     # 不传 -m：来自 default_model
 ```
 
-**干净的日志**——不要颜色、不要废弃提示：
+**干净的日志**——不要颜色：
 
 ```bash
-export NO_COLOR=1 DASHSCOPE_CLI_NO_DEPRECATION=1
+export NO_COLOR=1
 ```
 
 `NO_COLOR=1` 和 `--no-color` 是一回事。Rich 本来就能识别管道，所以这一条主要是给那种「先分配伪终端再把它倒进日志」的 runner 用的。
@@ -320,18 +480,18 @@ export NO_COLOR=1 DASHSCOPE_CLI_NO_DEPRECATION=1
 两个都离线、确定性，都不需要密钥。在仓库根目录、且检出可导入的情况下：
 
 ```bash
-PYTHONPATH=. python3 examples/05_cli/cli_output_and_errors.py
-PYTHONPATH=. python3 examples/05_cli/cli_ci_harness.py
+PYTHONPATH=. python examples/05_cli/cli_output_and_errors.py
+PYTHONPATH=. python examples/05_cli/cli_ci_harness.py
 ```
 
-（只有包没被 pip 安装时才需要 `PYTHONPATH=.`。装了的话 `python3 examples/05_cli/cli_output_and_errors.py` 就够了。harness 会为自己的子进程设好这个变量，所以两种情况下都能跑。）
+（只有包没被 pip 安装时才需要 `PYTHONPATH=.`。装了的话 `python examples/05_cli/cli_output_and_errors.py` 就够了。harness 会为自己的子进程设好这个变量，所以两种情况下都能跑。）
 
 两个都会在最后打印一段小结，并且只有全部检查通过才 exit `0`——`cli_output_and_errors.py` 会断言它跑的每条命令的退出码，`cli_ci_harness.py` 会断言全部七个场景。两者都不读也不写你真实的 `~/.dashscope/config.toml`：harness 把 `DASHSCOPE_CONFIG` 指向一个临时目录，退出时删掉。
 
 要让 harness 的只读场景打真实网关：
 
 ```bash
-CLI_HARNESS_LIVE=1 DASHSCOPE_API_KEY=sk-xxx python3 examples/05_cli/cli_ci_harness.py
+CLI_HARNESS_LIVE=1 DASHSCOPE_API_KEY=sk-xxx python examples/05_cli/cli_ci_harness.py
 ```
 
 Live 模式跳过所有故障注入场景，并且**绝不**运行 `ft cancel` 或 `ft delete`。只有你同时把 `DASHSCOPE_JOB_ID` 设成一个你自己拥有的作业时，它才会跑 `ft stream`——对真实账户猜一个 id，正是「示例删掉了重要东西」的标准死法。
@@ -342,9 +502,17 @@ Live 模式跳过所有故障注入场景，并且**绝不**运行 `ft cancel` �
 
 1. **全局选项不能后置。**`dashscope chat create --prompt "hi" -o json` 得到的是 exit 2，不是格式化好的回答。顶层 `--help` 里的那些选项，位置是相对于 app 的。
 2. **`--stream -o yaml` 是 NDJSON，不是 YAML。**每行一个 JSON 对象，和 `-o json` 一样。YAML 解析器读不了它。
-3. **破坏性命令在 CI 里会拒绝执行。**没有终端 + 没有 `--yes` = exit 2。你的流水线需要在 `ft cancel` 和 `ft delete` 上加 `--yes`，而且必须是显式加——因为重点就在于这个命令不肯替你做决定。
-4. **`ft create -m` 永不回落到 `default_model`。**只有 `chat create` 会。源码注释写了原因：chat 的默认模型不是微调基座。
+3. **破坏性命令在 CI 里会拒绝执行。**没有终端 + 没有 `--yes` = exit 2。你的流水线需要在每一个 `cancel`、`delete`、`scale` 和 `archive` 上加 `--yes`——`ft`、`files`、`embeddings jobs`、`images jobs`、`videos jobs`、`deployments`、`rl`、`audio vocabularies`/`phrases`/`voices`/`voice-design`、`agentstudio agents`/`sessions`——而且必须是显式加，因为重点就在于这个命令不肯替你做决定。
+4. **`ft create -m` 永不回落到 `default_model`。**只有 `chat create` 和 `multimodal chat create` 会。源码注释写了原因：chat 的默认模型不是微调基座。
 5. **`config get` 和 `config list` 可能互相矛盾。**`get` 读文件，`list` 解析各层。两者不一致时，`list` 的 `source` 列在告诉你是哪一层赢了——通常是你忘了自己 export 过的环境变量。
 6. **table 模式下有用的元数据在 stderr 上。**`usage:`、推理文本和 `page x/y, total n` 是刻意不放 stdout 的，这样重定向才干净。想把它们当数据拿，就用 `-o json`，别去捕获 stderr。
+7. **`audio tts synthesize` 不带 `--out` 时，往 stdout 写的是裸字节。**这正是 `> hello.mp3` 能用的原因，也是忘了写 `--out` 时终端被二进制刷屏的原因。这条命令没有 table；`-o json` 不会改变音频写到哪里。
+8. **`apps completions create --stream` 会同时把服务端切成增量帧。**不切的话，每个事件都带着到目前为止的整段答案，终端上就是同一句话不断变长地重复。确实想要累积形式，就传 `--no-incremental-output`。
+9. **`chat create` 已经会自动路由媒体，`multimodal chat create` 依然存在。**当会话必须打到多模态端点、但里面并没有媒体分片时用它——两条命令收同样的参数，渲染方式也一样。
+10. **在 `audio` 里面，`-o` 是 `--out`，不是 `--output`。**`dashscope audio tts synthesize hi -o json` 会写一个叫 `json` 的文件然后 exit 0。格式选项是全局的，所以要放在命令组之前：`dashscope -o json audio ...`。这是整个 CLI 里唯一一处把同一个短选项用作另一个含义的地方，而且是有意为之——在这个命令组里，shell 配方真正要伸手去拿的就是 `--out`。
+11. **`audio` 下面那几个注册表的分页方式不一致。**`vocabularies`、`voices` 和 `voice-design` 收**从 0 开始**的 `--page-index` 加 `--page-size`；`phrases` 是微调那一套形状，收**从 1 开始**的 `--page` 加 `--size`。这不是 CLI 的疏漏——它们背后的两个服务端本身就不一致，而这几条命令选择按各自服务端的说法来写，而不是发明一个会悄悄吞掉一页的翻译层。
+12. **`agentstudio agents update` 不给 `--version` 就不会跑。**服务端在 agent 的当前版本上做乐观并发；漏了它，命令在发出任何调用之前就 exit 2。版本过期是一个 409，CLI 没有为它单独设一档，因此报成 exit 1 的 `Error [server]`——算可重试，但真管用的重试是「把 agent 重读一遍、取它新的 `version`、再 update」，而不是「睡一会儿然后把同样的东西再发一次」。
+13. **`agentstudio sessions events stream` 不主动要增量帧时，打印的是整条消息。**table 模式读的是流的 `text_stream`，也就是重连之后能够重建的那一路；`--deltas message`（可重复，还有 `reasoning`）选择接收增量帧，并把命令切到 `text_deltas`。`-o json` 不受影响——两种情况下都是一行一个原始事件。
+14. **`--timeout 0` 是错误，不是「查一次就返回」。**每一个 `wait` 命令和每一个 `--wait` 开关都会拒绝不是有限正秒数的超时值——退出码 2，且发生在任何 API 调用之前，所以即使流水线没有配 key，拿到的也是用法错误而不是鉴权错误。`0`、`-1`、`nan` 和 `inf` 全都被拒。其中真正危险的是 `nan`：它与任何值比较都为假，SDK 的截止时间判断永远不会触发，轮询会一直转下去而不是超时退出。想不阻塞地看当前状态，用 `get`。
 
 另见 [`../README_zh.md`](../README_zh.md) 了解这一层在整体中的位置，以及 [`../02_advanced_engineering/local_mock_debugging.py`](../02_advanced_engineering/local_mock_debugging.py)——那是这里的 mock 网关在 SDK 侧的对应物。

@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import typer
 
-from dashscope.cli2 import config_store
-from dashscope.cli2.config_store import API_KEY
+from dashscope.cli import config_store
+from dashscope.cli.config_store import API_KEY
 
 # `\[` is Rich markup escaping: unescaped, Rich reads the bracketed run as a
 # style tag and drops it from the rendered help.

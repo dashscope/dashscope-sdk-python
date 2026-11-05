@@ -35,7 +35,7 @@ in ``dashscope.errors`` and carries that class's ``status_code``, so
 catalog onto these tiers -- a row per status the catalog declares.
 Regenerating the catalog therefore re-points the table with no edit in
 this file; a *new status* is the one thing that needs a human decision,
-and ``tests/cli2/test_errors.py`` fails until someone makes it.
+and ``tests/cli/test_errors.py`` fails until someone makes it.
 
 SDK-side failures (``SdkError``) have no status in the catalog by
 design, so they are categorised by their catalog ``code`` instead. The
@@ -50,7 +50,7 @@ from __future__ import annotations
 import os
 import sys
 import traceback
-from typing import Any, Dict, NamedTuple, Optional, Tuple
+from typing import Any, Dict, NamedTuple, NoReturn, Optional, Tuple
 
 import typer
 from rich.console import Console
@@ -110,16 +110,13 @@ _SDK_CODE_CATEGORY: Dict[str, str] = {
     "sdk.IoError": USAGE,
 }
 
-# Environment kill switch for the deprecation notice the entry point
-# prints before delegating to the 1.x command tree.
-NO_DEPRECATION_ENV = "DASHSCOPE_CLI_NO_DEPRECATION"
-
 
 class CliError(Exception):
     """A failure the CLI itself detected, before or after the SDK ran.
 
     Carries the same category vocabulary as SDK errors so one handler
-    renders and codes both. ``exit_code`` overrides the category's
+    renders and codes both. ``solution`` is rendered on its own dim line,
+    exactly as the catalog's is. ``exit_code`` overrides the category's
     default tier when a command needs to say something more specific.
     """
 
@@ -128,6 +125,7 @@ class CliError(Exception):
         category: str,
         message: str,
         *,
+        solution: Optional[str] = None,
         exit_code: Optional[int] = None,
     ) -> None:
         super().__init__(message)
@@ -135,12 +133,17 @@ class CliError(Exception):
             raise ValueError(f"unknown error category {category!r}")
         self.category = category
         self.message = message
+        self.solution = solution
         self.exit_code = exit_code
 
 
-def usage_error(message: str) -> CliError:
+def usage_error(
+    message: str,
+    *,
+    solution: Optional[str] = None,
+) -> CliError:
     """Shorthand for the most common CLI-side failure."""
-    return CliError(USAGE, message)
+    return CliError(USAGE, message, solution=solution)
 
 
 def _sdk_error_module() -> Any:
@@ -281,7 +284,7 @@ def classify(exc: BaseException) -> Diagnosis:
     The message is the SDK/server text verbatim; nothing is re-worded.
     """
     if isinstance(exc, CliError):
-        return Diagnosis(exc.category, exc.message)
+        return Diagnosis(exc.category, exc.message, solution=exc.solution)
 
     sdk_errors = _sdk_error_module()
 
@@ -405,6 +408,28 @@ def _error_console() -> Console:
     )
 
 
+def fail(exc: BaseException, *, verbose: bool = False) -> NoReturn:
+    """Render *exc* exactly as ``ErrorHandlingGroup`` would, then exit.
+
+    For a failure the entry point detects *before* it builds the app --
+    there the group's ``invoke`` override never runs, so without this the
+    only way to keep one error format would be to build the app anyway.
+    """
+    diagnosis = classify(exc)
+    print_error(
+        diagnosis,
+        console=_error_console(),
+        verbose=verbose,
+        exc=exc,
+    )
+    override = getattr(exc, "exit_code", None)
+    sys.exit(
+        override
+        if override is not None
+        else exit_code_for(diagnosis.category),
+    )
+
+
 try:
     # ``typer.core.TyperGroup`` is an internal API and the dependency pin
     # is only ``typer>=0.9``, so fall back to a plain click group rather
@@ -435,27 +460,25 @@ class ErrorHandlingGroup(_GroupBase):
             # click already rendered a usage message and chose exit 2.
             raise
         except BaseException as exc:  # pylint: disable=broad-except
-            diagnosis = classify(exc)
-            print_error(
-                diagnosis,
-                console=_error_console(),
-                verbose=_verbose_from(ctx),
-                exc=exc,
-            )
-            obj = getattr(ctx, "obj", None)
-            if obj is not None:
-                close = getattr(obj, "close", None)
-                if callable(close):
-                    try:
-                        close()
-                    except Exception:  # pylint: disable=broad-except
-                        pass
-            override = getattr(exc, "exit_code", None)
-            sys.exit(
-                override
-                if override is not None
-                else exit_code_for(diagnosis.category),
-            )
+            _close_context(ctx)
+            fail(exc, verbose=_verbose_from(ctx))
+
+
+def _close_context(ctx: typer.Context) -> None:
+    """Release the SDK client a failing command may have opened.
+
+    Best-effort and silent: the caller is already reporting a failure,
+    and a second error from teardown would mask the first.
+    """
+    obj = getattr(ctx, "obj", None)
+    if obj is None:
+        return
+    close = getattr(obj, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:  # pylint: disable=broad-except
+            pass
 
 
 def _click_passthrough() -> Tuple[type[BaseException], ...]:
