@@ -33,7 +33,16 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Union,
+)
 
 from pydantic import BaseModel, ConfigDict
 
@@ -62,6 +71,8 @@ from dashscope.resources.fine_tunes import (
     _parse_logs,
     _parse_status,
 )
+from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import JobStatus, with_headers
 
 __all__ = [
@@ -132,12 +143,17 @@ def _new_agentic_rl(
     return rl
 
 
-def _to_job(result: Any) -> FineTune:
+def _to_job(result: Any, *, strict: bool = False) -> FineTune:
     """Adapt the RL submit result into the v2 job model.
 
     The submit returns ``output`` as a nested object and spells the
     timestamps ``create_time`` / ``end_time``; the v2 model's aliases
     absorb both once the envelope is flattened by hand here.
+
+    Takes ``strict`` but deliberately no ``response``: the workflow core
+    hands back a result object, not an ``httpx.Response``, so there is
+    nothing to attach. Strictness is a client contract rather than a
+    transport artifact, which is why it still travels.
     """
     body: Dict[str, Any] = {
         "request_id": getattr(result, "request_id", None),
@@ -148,7 +164,7 @@ def _to_job(result: Any) -> FineTune:
     output = getattr(result, "output", None)
     if output is not None:
         body.update(vars(output))
-    return FineTune(**body)
+    return parse_model(FineTune, body, strict=strict)
 
 
 def _check_terminal(client, job: FineTune, job_id: str) -> FineTune:
@@ -246,7 +262,10 @@ class RlJobs:
             kwargs["job_name"] = job_name
         rl.init(config_path=config_path, **kwargs)
         result = asyncio.run(rl.run())
-        return _to_job(result)
+        return _to_job(
+            result,
+            strict=self._client.config.strict_validation,
+        )
 
     def fetch(
         self,
@@ -255,6 +274,10 @@ class RlJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> FineTune:
         response = self._client.transport.request(
             "GET",
@@ -263,9 +286,22 @@ class RlJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response_json(response)), response)
+        return with_headers(
+            _parse_job(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     def wait(
         self,
@@ -276,6 +312,10 @@ class RlJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Any]] = None,
     ) -> FineTune:
         """Poll until the job reaches a terminal status.
@@ -291,7 +331,15 @@ class RlJobs:
         current = (
             job
             if isinstance(job, FineTune)
-            else self.fetch(job_id, api_key=api_key, workspace=workspace)
+            else self.fetch(
+                job_id,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            )
         )
         interval = poll_interval
         while not current.finished:
@@ -308,7 +356,15 @@ class RlJobs:
                 )
             sleep_fn(min(interval, remaining))
             interval = min(interval * 2, max_interval)
-            current = self.fetch(job_id, api_key=api_key, workspace=workspace)
+            current = self.fetch(
+                job_id,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            )
         return _check_terminal(self._client, current, job_id)
 
     def list(
@@ -319,6 +375,10 @@ class RlJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> FineTuneList:
         response = self._client.transport.request(
             "GET",
@@ -328,9 +388,22 @@ class RlJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response_json(response)), response)
+        return with_headers(
+            _parse_list(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     def cancel(
         self,
@@ -339,6 +412,10 @@ class RlJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> JobStatus:
         response = self._client.transport.request(
             "POST",
@@ -347,9 +424,22 @@ class RlJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response_json(response)), response)
+        return with_headers(
+            _parse_status(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     def delete(
         self,
@@ -358,6 +448,10 @@ class RlJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> JobStatus:
         response = self._client.transport.request(
             "DELETE",
@@ -366,9 +460,22 @@ class RlJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response_json(response)), response)
+        return with_headers(
+            _parse_status(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     def logs(
         self,
@@ -379,6 +486,10 @@ class RlJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> JobLogs:
         response = self._client.transport.request(
             "GET",
@@ -389,10 +500,21 @@ class RlJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            _parse_logs(job_id, response_json(response)),
+            _parse_logs(
+                job_id,
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
             response,
         )
 
@@ -580,7 +702,10 @@ class AsyncRlJobs:
             kwargs["job_name"] = job_name
         rl.init(config_path=config_path, **kwargs)
         result = await rl.run()
-        return _to_job(result)
+        return _to_job(
+            result,
+            strict=self._client.config.strict_validation,
+        )
 
     async def fetch(
         self,
@@ -589,6 +714,10 @@ class AsyncRlJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> FineTune:
         response = await self._client.transport.request(
             "GET",
@@ -597,9 +726,22 @@ class AsyncRlJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response_json(response)), response)
+        return with_headers(
+            _parse_job(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     async def wait(
         self,
@@ -610,6 +752,10 @@ class AsyncRlJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
     ) -> FineTune:
         """Poll until the job reaches a terminal status.
@@ -625,7 +771,15 @@ class AsyncRlJobs:
         current = (
             job
             if isinstance(job, FineTune)
-            else await self.fetch(job_id, api_key=api_key, workspace=workspace)
+            else await self.fetch(
+                job_id,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            )
         )
         interval = poll_interval
         while not current.finished:
@@ -646,6 +800,10 @@ class AsyncRlJobs:
                 job_id,
                 api_key=api_key,
                 workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
             )
         return _check_terminal(self._client, current, job_id)
 
@@ -657,6 +815,10 @@ class AsyncRlJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> FineTuneList:
         response = await self._client.transport.request(
             "GET",
@@ -666,9 +828,22 @@ class AsyncRlJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response_json(response)), response)
+        return with_headers(
+            _parse_list(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     async def cancel(
         self,
@@ -677,6 +852,10 @@ class AsyncRlJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> JobStatus:
         response = await self._client.transport.request(
             "POST",
@@ -685,9 +864,22 @@ class AsyncRlJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response_json(response)), response)
+        return with_headers(
+            _parse_status(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     async def delete(
         self,
@@ -696,6 +888,10 @@ class AsyncRlJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> JobStatus:
         response = await self._client.transport.request(
             "DELETE",
@@ -704,9 +900,22 @@ class AsyncRlJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response_json(response)), response)
+        return with_headers(
+            _parse_status(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
 
     async def logs(
         self,
@@ -717,6 +926,10 @@ class AsyncRlJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> JobLogs:
         response = await self._client.transport.request(
             "GET",
@@ -727,10 +940,21 @@ class AsyncRlJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            _parse_logs(job_id, response_json(response)),
+            _parse_logs(
+                job_id,
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
             response,
         )
 

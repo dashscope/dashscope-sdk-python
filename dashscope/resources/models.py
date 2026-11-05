@@ -160,6 +160,7 @@ class Models:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: Literal[False] = False,
     ) -> ModelList:
         ...
@@ -177,6 +178,7 @@ class Models:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: Literal[True],
     ) -> "APIResponse":
         ...
@@ -193,6 +195,7 @@ class Models:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: bool = False,
     ) -> Union[ModelList, "APIResponse"]:
         """List models; ``provider`` filters client-side per page.
@@ -224,6 +227,7 @@ class Models:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
             client=self._client,
         )
@@ -250,7 +254,10 @@ class Models:
                 extra_headers=extra_headers,
                 extra_query=extra_query,
                 extra_body=extra_body,
+                max_retries=max_retries,
             ),
+            requested_page_no=page_no,
+            requested_page_size=page_size,
         )
         return with_headers(result, resp.http_response)
 
@@ -265,6 +272,7 @@ class Models:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: Literal[False] = False,
     ) -> Model:
         ...
@@ -280,6 +288,7 @@ class Models:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: Literal[True],
     ) -> "APIResponse":
         ...
@@ -294,6 +303,7 @@ class Models:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: bool = False,
     ) -> Union[Model, "APIResponse"]:
         # Server filters by model name via query params.
@@ -309,6 +319,7 @@ class Models:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
             client=self._client,
         )
@@ -365,6 +376,7 @@ class AsyncModels:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: Literal[False] = False,
     ) -> ModelList:
         ...
@@ -382,6 +394,7 @@ class AsyncModels:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: Literal[True],
     ) -> "APIResponse":
         ...
@@ -398,6 +411,7 @@ class AsyncModels:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: bool = False,
     ) -> Union[ModelList, "APIResponse"]:
         resp = await self._client.transport.request_api(
@@ -412,6 +426,7 @@ class AsyncModels:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
             client=self._client,
         )
@@ -438,7 +453,10 @@ class AsyncModels:
                 extra_headers=extra_headers,
                 extra_query=extra_query,
                 extra_body=extra_body,
+                max_retries=max_retries,
             ),
+            requested_page_no=page_no,
+            requested_page_size=page_size,
         )
         return with_headers(result, resp.http_response)
 
@@ -453,6 +471,7 @@ class AsyncModels:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: Literal[False] = False,
     ) -> Model:
         ...
@@ -468,6 +487,7 @@ class AsyncModels:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: Literal[True],
     ) -> "APIResponse":
         ...
@@ -482,6 +502,7 @@ class AsyncModels:
         extra_headers: Optional[Mapping[str, str]] = None,
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         raw: bool = False,
     ) -> Union[Model, "APIResponse"]:
         # Server filters by model name via query params.
@@ -497,6 +518,7 @@ class AsyncModels:
                 extra_headers,
                 extra_query,
                 extra_body,
+                max_retries=max_retries,
             ),
             client=self._client,
         )

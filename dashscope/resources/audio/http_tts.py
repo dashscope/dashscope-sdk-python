@@ -19,15 +19,19 @@ from __future__ import annotations
 import base64
 import json
 from typing import (
+    TYPE_CHECKING,
     Any,
     AsyncIterator,
     Dict,
     Generator,
     Iterator,
     List,
+    Literal,
     Mapping,
     Optional,
     Tuple,
+    Union,
+    overload,
 )
 
 from dashscope.errors import (
@@ -37,7 +41,14 @@ from dashscope.errors import (
     error_from_status,
 )
 from dashscope.resources._sse import _try_json
+from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import ResponseBase, response_body, with_headers
+
+if TYPE_CHECKING:
+    import httpx
+
+    from dashscope.transport._response import APIResponse
 
 __all__ = [
     "HttpSynthesis",
@@ -260,21 +271,30 @@ class HttpSynthesisChunk(ResponseBase):
 def _synthesis_from_body(
     body: Dict[str, Any],
     header_request_id: str,
+    *,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
 ) -> HttpSynthesis:
     output = body.get("output")
-    return HttpSynthesis(
-        **{
+    return parse_model(
+        HttpSynthesis,
+        {
             **body,
             "output": output if isinstance(output, dict) else {},
             "usage": _usage_dict(body),
             "request_id": body.get("request_id") or header_request_id,
         },
+        strict=strict,
+        response=response,
     )
 
 
 def _chunk_from_data(
     data: str,
     header_request_id: str,
+    *,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
 ) -> HttpSynthesisChunk:
     try:
         body = json.loads(data)
@@ -287,8 +307,9 @@ def _chunk_from_data(
     output = body.get("output")
     output = output if isinstance(output, dict) else {}
     payload = _audio_dict(output).get("data")
-    chunk = HttpSynthesisChunk(
-        **{
+    chunk = parse_model(
+        HttpSynthesisChunk,
+        {
             **body,
             "output": output,
             "audio": base64.b64decode(payload, validate=True)
@@ -297,6 +318,8 @@ def _chunk_from_data(
             "usage": _usage_dict(body),
             "request_id": body.get("request_id") or header_request_id,
         },
+        strict=strict,
+        response=response,
     )
     if chunk.status_code is not None and not 200 <= chunk.status_code < 300:
         chunk.is_error = True
@@ -360,10 +383,16 @@ class AsyncHttpTts:
     def __init__(self, client) -> None:
         self._client = client
 
-    async def synthesize(self, text: str, **kwargs) -> HttpSynthesis:
+    async def synthesize(
+        self,
+        text: str,
+        **kwargs,
+    ) -> Union[HttpSynthesis, "APIResponse"]:
+        """Async twin of :meth:`HttpTts.synthesize`, ``raw`` included."""
         model = kwargs.pop("model")
         voice = kwargs.pop("voice")
-        response = await self._client.transport.request(
+        raw = kwargs.pop("raw", False)
+        resp = await self._client.transport.request_api(
             "POST",
             _path_for(model),
             json=_build_body(
@@ -386,7 +415,17 @@ class AsyncHttpTts:
             sdk_module=MODULE,
             api_key=kwargs.pop("api_key", None),
             workspace=kwargs.pop("workspace", None),
+            options=request_options(
+                kwargs.pop("extra_headers", None),
+                kwargs.pop("extra_query", None),
+                kwargs.pop("extra_body", None),
+                max_retries=kwargs.pop("max_retries", None),
+            ),
+            client=self._client,
         )
+        if raw:
+            return resp
+        response = resp.http_response
         return with_headers(
             _synthesis_from_body(
                 response_body(
@@ -394,6 +433,8 @@ class AsyncHttpTts:
                     raise_on_error=self._client.raise_on_error,
                 ),
                 response.headers.get("x-request-id", ""),
+                strict=self._client.config.strict_validation,
+                response=response,
             ),
             response,
         )
@@ -426,6 +467,12 @@ class AsyncHttpTts:
             sdk_module=MODULE,
             api_key=kwargs.pop("api_key", None),
             workspace=kwargs.pop("workspace", None),
+            options=request_options(
+                kwargs.pop("extra_headers", None),
+                kwargs.pop("extra_query", None),
+                kwargs.pop("extra_body", None),
+                max_retries=kwargs.pop("max_retries", None),
+            ),
         )
 
         async def events():
@@ -454,7 +501,12 @@ class AsyncHttpTts:
                             data,
                             response.headers,
                         )
-                    yield _chunk_from_data(data, header_id)
+                    yield _chunk_from_data(
+                        data,
+                        header_id,
+                        strict=self._client.config.strict_validation,
+                        response=response,
+                    )
                 frame = decoder.feed("")
                 if frame is not None:
                     is_error, status, data = frame
@@ -464,7 +516,12 @@ class AsyncHttpTts:
                             data,
                             response.headers,
                         )
-                    yield _chunk_from_data(data, header_id)
+                    yield _chunk_from_data(
+                        data,
+                        header_id,
+                        strict=self._client.config.strict_validation,
+                        response=response,
+                    )
             finally:
                 await response.aclose()
 
@@ -476,6 +533,54 @@ class HttpTts:
 
     def __init__(self, client) -> None:
         self._client = client
+
+    @overload
+    def synthesize(
+        self,
+        text: str,
+        *,
+        model: str,
+        voice: str,
+        format: Optional[str] = None,  # pylint: disable=redefined-builtin
+        sample_rate: Optional[int] = None,
+        language_type: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> HttpSynthesis:
+        ...
+
+    @overload
+    def synthesize(
+        self,
+        text: str,
+        *,
+        model: str,
+        voice: str,
+        format: Optional[str] = None,  # pylint: disable=redefined-builtin
+        sample_rate: Optional[int] = None,
+        language_type: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def synthesize(
         self,
@@ -492,9 +597,23 @@ class HttpTts:
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> HttpSynthesis:
-        """Synthesize in one POST; the audio comes back as a URL."""
-        response = self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[HttpSynthesis, "APIResponse"]:
+        """Synthesize in one POST; the audio comes back as a URL.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        :meth:`stream` has no ``raw`` -- a streaming body is never
+        materialized.
+        """
+        resp = self._client.transport.request_api(
             "POST",
             _path_for(model),
             json=_build_body(
@@ -512,7 +631,17 @@ class HttpTts:
             sdk_module=MODULE,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
+        if raw:
+            return resp
+        response = resp.http_response
         return with_headers(
             _synthesis_from_body(
                 response_body(
@@ -520,6 +649,8 @@ class HttpTts:
                     raise_on_error=self._client.raise_on_error,
                 ),
                 response.headers.get("x-request-id", ""),
+                strict=self._client.config.strict_validation,
+                response=response,
             ),
             response,
         )
@@ -539,6 +670,10 @@ class HttpTts:
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> HttpSynthesisStream:
         """Stream the synthesis over SSE, one chunk per part.
 
@@ -569,6 +704,12 @@ class HttpTts:
                 sdk_module=MODULE,
                 api_key=api_key,
                 workspace=workspace,
+                options=request_options(
+                    extra_headers,
+                    extra_query,
+                    extra_body,
+                    max_retries=max_retries,
+                ),
             )
         except APIStatusError as error:
             # >=400 is raised (and closed) before open_stream returns a response.
@@ -582,6 +723,11 @@ class HttpTts:
             for is_error, status, data in _iter_audio_sse(response):
                 if is_error:
                     raise _audio_stream_error(status, data, response.headers)
-                yield _chunk_from_data(data, header_request_id)
+                yield _chunk_from_data(
+                    data,
+                    header_request_id,
+                    strict=self._client.config.strict_validation,
+                    response=response,
+                )
         finally:
             response.close()

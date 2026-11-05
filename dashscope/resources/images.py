@@ -30,9 +30,12 @@ from typing import (
     Callable,
     Dict,
     List,
+    Literal,
+    Mapping,
     Optional,
     Tuple,
     Union,
+    overload,
 )
 
 from dashscope.errors import check_response, response_json
@@ -51,10 +54,13 @@ from dashscope.resources._oss import (
     OSS_RESOLVE_HEADERS,
     upload_media_value,
 )
+from dashscope.transport._options import request_options
 from dashscope.types.common import with_headers
 
 if TYPE_CHECKING:
     import httpx
+
+    from dashscope.transport._response import APIResponse
 
 __all__ = [
     "AsyncImages",
@@ -311,6 +317,7 @@ class ImageJobs:
         self._synthesis = Jobs(client, SERVICE, MODULE)
         self._generation = Jobs(client, TASK_SERVICE, MODULE)
 
+    @overload
     def create(
         self,
         *,
@@ -330,7 +337,72 @@ class ImageJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> Job:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        prompt: Optional[str] = None,
+        negative_prompt: Optional[str] = None,
+        n: Optional[int] = None,
+        size: Optional[str] = None,
+        image_urls: Optional[List[str]] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+        function: Optional[str] = None,
+        seed: Optional[int] = None,
+        style: Optional[str] = None,
+        prompt_extend: Optional[bool] = None,
+        watermark: Optional[bool] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    def create(
+        self,
+        *,
+        model: str,
+        prompt: Optional[str] = None,
+        negative_prompt: Optional[str] = None,
+        n: Optional[int] = None,
+        size: Optional[str] = None,
+        image_urls: Optional[List[str]] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+        function: Optional[str] = None,
+        seed: Optional[int] = None,
+        style: Optional[str] = None,
+        prompt_extend: Optional[bool] = None,
+        watermark: Optional[bool] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Submit an image task; returns a PENDING/RUNNING Job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying submit call before any error check.
+        """
         image_urls, extra_input, has_upload = _upload_inputs(
             self._client,
             model,
@@ -363,6 +435,11 @@ class ImageJobs:
                 timeout=timeout,
                 api_key=api_key,
                 workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+                raw=raw,
             )
         return self._synthesis.create(
             model=model,
@@ -380,7 +457,44 @@ class ImageJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def fetch(
         self,
@@ -389,13 +503,60 @@ class ImageJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Fetch one image task snapshot.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying fetch call before any error check.
+        """
         return self._synthesis.fetch(
             task_id,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    def cancel(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    def cancel(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def cancel(
         self,
@@ -404,14 +565,74 @@ class ImageJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
-        """Cancel a PENDING task (``POST /tasks/{task_id}/cancel``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Cancel a PENDING task (``POST /tasks/{task_id}/cancel``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying cancel call before any error check.
+        """
         return self._synthesis.cancel(
             task_id,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        region: Optional[str] = None,
+        status: Optional[str] = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobList:
+        ...
+
+    @overload
+    def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        region: Optional[str] = None,
+        status: Optional[str] = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def list(  # pylint: disable=redefined-builtin
         self,
@@ -427,8 +648,17 @@ class ImageJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobList:
-        """List async tasks (``GET /tasks``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobList, "APIResponse"]:
+        """List async tasks (``GET /tasks``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying list call before any error check.
+        """
         return self._synthesis.list(
             start_time=start_time,
             end_time=end_time,
@@ -441,6 +671,11 @@ class ImageJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
 
     def wait(
@@ -452,6 +687,10 @@ class ImageJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Any]] = None,
     ) -> Job:
         return self._synthesis.wait(
@@ -461,6 +700,10 @@ class ImageJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
             _sleep=_sleep,
         )
 
@@ -494,6 +737,10 @@ class Images:
         max_interval: float = DEFAULT_MAX_INTERVAL,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> Job:
         """Submit and wait; returns the finished Job (``image_urls``).
 
@@ -505,6 +752,12 @@ class Images:
         ``submit_timeout`` and the polling knobs do not apply.
         ``image_urls`` carries reference images for wan2.6-image.
         """
+        options = request_options(
+            extra_headers,
+            extra_query,
+            extra_body,
+            max_retries=max_retries,
+        )
         if _uses_multimodal_protocol(model):
             image_urls, extra_input, has_upload = _upload_inputs(
                 self._client,
@@ -537,6 +790,7 @@ class Images:
                 sdk_module=MODULE,
                 api_key=api_key,
                 workspace=workspace,
+                options=options,
             )
             check_response(
                 response,
@@ -567,6 +821,10 @@ class Images:
             timeout=submit_timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
         return self.jobs.wait(
             job,
@@ -575,6 +833,10 @@ class Images:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
 
 
@@ -585,6 +847,62 @@ class AsyncImageJobs:
         self._client = client
         self._synthesis = AsyncJobs(client, SERVICE, MODULE)
         self._generation = AsyncJobs(client, TASK_SERVICE, MODULE)
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        prompt: Optional[str] = None,
+        negative_prompt: Optional[str] = None,
+        n: Optional[int] = None,
+        size: Optional[str] = None,
+        image_urls: Optional[List[str]] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+        function: Optional[str] = None,
+        seed: Optional[int] = None,
+        style: Optional[str] = None,
+        prompt_extend: Optional[bool] = None,
+        watermark: Optional[bool] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        prompt: Optional[str] = None,
+        negative_prompt: Optional[str] = None,
+        n: Optional[int] = None,
+        size: Optional[str] = None,
+        image_urls: Optional[List[str]] = None,
+        extra_input: Optional[Dict[str, Any]] = None,
+        function: Optional[str] = None,
+        seed: Optional[int] = None,
+        style: Optional[str] = None,
+        prompt_extend: Optional[bool] = None,
+        watermark: Optional[bool] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def create(
         self,
@@ -605,7 +923,17 @@ class AsyncImageJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Submit an image task; returns a PENDING/RUNNING Job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying submit call before any error check.
+        """
         # The upload path is blocking (file post + getPolicy), so it runs in
         # a worker thread -- over a transport bridged back to this loop,
         # which is what lets it serve the policy fetch.
@@ -642,6 +970,11 @@ class AsyncImageJobs:
                 timeout=timeout,
                 api_key=api_key,
                 workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+                raw=raw,
             )
         return await self._synthesis.create(
             model=model,
@@ -659,7 +992,44 @@ class AsyncImageJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    async def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    async def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def fetch(
         self,
@@ -668,13 +1038,60 @@ class AsyncImageJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Fetch one image task snapshot.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying fetch call before any error check.
+        """
         return await self._synthesis.fetch(
             task_id,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    async def cancel(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    async def cancel(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def cancel(
         self,
@@ -683,14 +1100,74 @@ class AsyncImageJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
-        """Cancel a PENDING task (``POST /tasks/{task_id}/cancel``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Cancel a PENDING task (``POST /tasks/{task_id}/cancel``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying cancel call before any error check.
+        """
         return await self._synthesis.cancel(
             task_id,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    async def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        region: Optional[str] = None,
+        status: Optional[str] = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobList:
+        ...
+
+    @overload
+    async def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        region: Optional[str] = None,
+        status: Optional[str] = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def list(  # pylint: disable=redefined-builtin
         self,
@@ -706,8 +1183,17 @@ class AsyncImageJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobList:
-        """List async tasks (``GET /tasks``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobList, "APIResponse"]:
+        """List async tasks (``GET /tasks``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying list call before any error check.
+        """
         return await self._synthesis.list(
             start_time=start_time,
             end_time=end_time,
@@ -720,6 +1206,11 @@ class AsyncImageJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
 
     async def wait(
@@ -731,6 +1222,10 @@ class AsyncImageJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
     ) -> Job:
         return await self._synthesis.wait(
@@ -740,6 +1235,10 @@ class AsyncImageJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
             _sleep=_sleep,
         )
 
@@ -773,8 +1272,18 @@ class AsyncImages:
         max_interval: float = DEFAULT_MAX_INTERVAL,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> Job:
         """See :meth:`Images.generate`."""
+        options = request_options(
+            extra_headers,
+            extra_query,
+            extra_body,
+            max_retries=max_retries,
+        )
         if _uses_multimodal_protocol(model):
             # The upload path is blocking (file post + getPolicy), so it runs
             # in a worker thread -- over a transport bridged back to this
@@ -811,6 +1320,7 @@ class AsyncImages:
                 sdk_module=MODULE,
                 api_key=api_key,
                 workspace=workspace,
+                options=options,
             )
             check_response(
                 response,
@@ -841,6 +1351,10 @@ class AsyncImages:
             timeout=submit_timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
         return await self.jobs.wait(
             job,
@@ -849,4 +1363,8 @@ class AsyncImages:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )

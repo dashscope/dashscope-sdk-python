@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import (
+    TYPE_CHECKING,
     Any,
     AsyncIterator,
     Awaitable,
@@ -23,8 +24,11 @@ from typing import (
     Dict,
     Iterator,
     List,
+    Literal,
+    Mapping,
     Optional,
     Union,
+    overload,
 )
 
 from pydantic import (
@@ -37,9 +41,7 @@ from pydantic import (
 
 from dashscope.errors import (
     DashScopeError,
-    check_response,
     error_from_business_code,
-    response_json,
 )
 from dashscope.resources._jobs import (
     CANCELED,
@@ -55,6 +57,8 @@ from dashscope.resources._sse import (
     _stream_error,
     _try_json,
 )
+from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     JobStatus,
     ResponseBase,
@@ -63,6 +67,11 @@ from dashscope.types.common import (
     response_envelope,
     with_headers,
 )
+
+if TYPE_CHECKING:
+    import httpx
+
+    from dashscope.transport._response import APIResponse
 
 _BASE_PATH = "/fine-tunes"
 
@@ -174,32 +183,100 @@ class FineTuneEvent(BaseModel):
     is_error: bool = False
 
 
-def _parse_job(body: Dict[str, Any]) -> FineTune:
-    return FineTune(**flatten_envelope(body))
-
-
-def _parse_list(body: Dict[str, Any]) -> FineTuneList:
-    data = flatten_envelope(body)
-    jobs = data.get("jobs") or []
-    return FineTuneList(
-        page_no=data.get("page_no", 1),
-        page_size=data.get("page_size", 10),
-        total_count=data.get("total", len(jobs)),
-        jobs=jobs,
-        **response_envelope(data),
+def _parse_job(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
+) -> FineTune:
+    return parse_model(
+        FineTune,
+        flatten_envelope(body),
+        strict=strict,
+        response=response,
     )
 
 
-def _parse_status(body: Dict[str, Any]) -> JobStatus:
-    return JobStatus(**flatten_envelope(body))
-
-
-def _parse_logs(job_id: str, body: Dict[str, Any]) -> JobLogs:
+def _parse_list(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
+) -> FineTuneList:
     data = flatten_envelope(body)
-    return JobLogs(
-        job_id=job_id,
-        content=data.get("logs") or "",
-        **response_envelope(data),
+    jobs = data.get("jobs")
+    if not isinstance(jobs, list):
+        # A retyped ``jobs`` would poison the ``len()`` below (a string's
+        # length is not a page total). Empty is the honest reading of
+        # "not a list", matching ``models._parse_list``.
+        jobs = []
+    return parse_model(
+        FineTuneList,
+        {
+            "page_no": data.get("page_no", 1),
+            "page_size": data.get("page_size", 10),
+            "total_count": data.get("total", len(jobs)),
+            "jobs": jobs,
+            **response_envelope(data),
+        },
+        strict=strict,
+        response=response,
+    )
+
+
+def _parse_status(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
+) -> JobStatus:
+    return parse_model(
+        JobStatus,
+        flatten_envelope(body),
+        strict=strict,
+        response=response,
+    )
+
+
+def _parse_logs(
+    job_id: str,
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
+) -> JobLogs:
+    data = flatten_envelope(body)
+    return parse_model(
+        JobLogs,
+        {
+            "job_id": job_id,
+            "content": data.get("logs") or "",
+            **response_envelope(data),
+        },
+        strict=strict,
+        response=response,
+    )
+
+
+def _parse_event(
+    data: Any,
+    *,
+    is_error: bool = False,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
+) -> FineTuneEvent:
+    """One SSE frame, degrading rather than breaking the iteration.
+
+    A drifted frame used to raise a bare ``ValidationError`` partway
+    through the generator -- earlier frames were already consumed and
+    ``except DashScopeError`` could not catch it. ``response`` is the
+    stream itself, which is the only response a frame belongs to.
+    """
+    return parse_model(
+        FineTuneEvent,
+        {"output": _try_json(data), "is_error": is_error},
+        strict=strict,
+        response=response,
     )
 
 
@@ -241,6 +318,7 @@ class FineTunes:
     def __init__(self, client) -> None:
         self._client = client
 
+    @overload
     def create(
         self,
         *,
@@ -253,7 +331,59 @@ class FineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> FineTune:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        training_file_ids: Union[List[str], str],
+        validation_file_ids: Union[List[str], str, None] = None,
+        mode: Optional[str] = None,
+        hyper_parameters: Optional[Dict[str, Any]] = None,
+        finetuned_model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    def create(
+        self,
+        *,
+        model: str,
+        training_file_ids: Union[List[str], str],
+        validation_file_ids: Union[List[str], str, None] = None,
+        mode: Optional[str] = None,
+        hyper_parameters: Optional[Dict[str, Any]] = None,
+        finetuned_model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[FineTune, "APIResponse"]:
+        """Create a fine-tune job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
         body = _build_create_body(
             model,
             training_file_ids,
@@ -262,7 +392,7 @@ class FineTunes:
             hyper_parameters,
             finetuned_model,
         )
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "POST",
             _BASE_PATH,
             json=body,
@@ -270,9 +400,57 @@ class FineTunes:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_job(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
+
+    @overload
+    def get(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> FineTune:
+        ...
+
+    @overload
+    def get(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def get(
         self,
@@ -281,17 +459,78 @@ class FineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> FineTune:
-        response = self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[FineTune, "APIResponse"]:
+        """Fetch one fine-tune job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{job_id}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_job(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
+
+    @overload
+    def list(
+        self,
+        *,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> FineTuneList:
+        ...
+
+    @overload
+    def list(
+        self,
+        *,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def list(
         self,
@@ -301,8 +540,19 @@ class FineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> FineTuneList:
-        response = self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[FineTuneList, "APIResponse"]:
+        """List fine-tune jobs, one page at a time.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = self._client.transport.request_api(
             "GET",
             _BASE_PATH,
             params={"page_no": page_no, "page_size": page_size},
@@ -310,9 +560,57 @@ class FineTunes:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_list(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
+
+    @overload
+    def cancel(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobStatus:
+        ...
+
+    @overload
+    def cancel(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def cancel(
         self,
@@ -321,17 +619,76 @@ class FineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobStatus:
-        response = self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobStatus, "APIResponse"]:
+        """Cancel a running fine-tune job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = self._client.transport.request_api(
             "POST",
             f"{_BASE_PATH}/{job_id}/cancel",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_status(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
+
+    @overload
+    def delete(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobStatus:
+        ...
+
+    @overload
+    def delete(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def delete(
         self,
@@ -340,17 +697,80 @@ class FineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobStatus:
-        response = self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobStatus, "APIResponse"]:
+        """Delete a fine-tune job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = self._client.transport.request_api(
             "DELETE",
             f"{_BASE_PATH}/{job_id}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_status(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
+
+    @overload
+    def logs(
+        self,
+        job_id: str,
+        *,
+        offset: int = 1,
+        lines: int = 1000,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobLogs:
+        ...
+
+    @overload
+    def logs(
+        self,
+        job_id: str,
+        *,
+        offset: int = 1,
+        lines: int = 1000,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def logs(
         self,
@@ -361,8 +781,19 @@ class FineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobLogs:
-        response = self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobLogs, "APIResponse"]:
+        """Fetch training logs of one fine-tune job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{job_id}/logs",
             # The wire parameter is singular "line".
@@ -371,11 +802,25 @@ class FineTunes:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
+        if raw:
+            return resp
+        resp.raise_for_status()
         return with_headers(
-            _parse_logs(job_id, response_json(response)),
-            response,
+            _parse_logs(
+                job_id,
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
         )
 
     def stream_events(
@@ -385,6 +830,10 @@ class FineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> Iterator[FineTuneEvent]:
         response = self._client.transport.open_stream(
             "GET",
@@ -393,15 +842,30 @@ class FineTunes:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         try:
             for is_error, status_code, data in _iter_sse(response):
                 if is_error:
                     if self._client.raise_on_error:
                         raise _stream_error(status_code, data)
-                    yield FineTuneEvent(output=_try_json(data), is_error=True)
+                    yield _parse_event(
+                        data,
+                        is_error=True,
+                        strict=self._client.config.strict_validation,
+                        response=response,
+                    )
                     return
-                yield FineTuneEvent(output=_try_json(data))
+                yield _parse_event(
+                    data,
+                    strict=self._client.config.strict_validation,
+                    response=response,
+                )
         finally:
             response.close()
 
@@ -414,6 +878,10 @@ class FineTunes:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Any]] = None,
     ) -> FineTune:
         """Poll until the job reaches a terminal status.
@@ -428,7 +896,15 @@ class FineTunes:
         current = (
             job
             if isinstance(job, FineTune)
-            else self.get(job_id, api_key=api_key, workspace=workspace)
+            else self.get(
+                job_id,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            )
         )
         interval = poll_interval
         while not current.finished:
@@ -445,7 +921,15 @@ class FineTunes:
                 )
             sleep_fn(min(interval, remaining))
             interval = min(interval * 2, max_interval)
-            current = self.get(job_id, api_key=api_key, workspace=workspace)
+            current = self.get(
+                job_id,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            )
         return self._check_terminal(current, job_id)
 
     def _check_terminal(self, job: FineTune, job_id: str) -> FineTune:
@@ -469,6 +953,7 @@ class AsyncFineTunes:
     def __init__(self, client) -> None:
         self._client = client
 
+    @overload
     async def create(
         self,
         *,
@@ -481,7 +966,59 @@ class AsyncFineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> FineTune:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        training_file_ids: Union[List[str], str],
+        validation_file_ids: Union[List[str], str, None] = None,
+        mode: Optional[str] = None,
+        hyper_parameters: Optional[Dict[str, Any]] = None,
+        finetuned_model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    async def create(
+        self,
+        *,
+        model: str,
+        training_file_ids: Union[List[str], str],
+        validation_file_ids: Union[List[str], str, None] = None,
+        mode: Optional[str] = None,
+        hyper_parameters: Optional[Dict[str, Any]] = None,
+        finetuned_model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[FineTune, "APIResponse"]:
+        """Create a fine-tune job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
         body = _build_create_body(
             model,
             training_file_ids,
@@ -490,7 +1027,7 @@ class AsyncFineTunes:
             hyper_parameters,
             finetuned_model,
         )
-        response = await self._client.transport.request(
+        resp = await self._client.transport.request_api(
             "POST",
             _BASE_PATH,
             json=body,
@@ -498,9 +1035,57 @@ class AsyncFineTunes:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_job(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
+
+    @overload
+    async def get(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> FineTune:
+        ...
+
+    @overload
+    async def get(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def get(
         self,
@@ -509,17 +1094,78 @@ class AsyncFineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> FineTune:
-        response = await self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[FineTune, "APIResponse"]:
+        """Fetch one fine-tune job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{job_id}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_job(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_job(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
+
+    @overload
+    async def list(
+        self,
+        *,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> FineTuneList:
+        ...
+
+    @overload
+    async def list(
+        self,
+        *,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def list(
         self,
@@ -529,8 +1175,19 @@ class AsyncFineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> FineTuneList:
-        response = await self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[FineTuneList, "APIResponse"]:
+        """List fine-tune jobs, one page at a time.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = await self._client.transport.request_api(
             "GET",
             _BASE_PATH,
             params={"page_no": page_no, "page_size": page_size},
@@ -538,9 +1195,57 @@ class AsyncFineTunes:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_list(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_list(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
+
+    @overload
+    async def cancel(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobStatus:
+        ...
+
+    @overload
+    async def cancel(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def cancel(
         self,
@@ -549,17 +1254,76 @@ class AsyncFineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobStatus:
-        response = await self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobStatus, "APIResponse"]:
+        """Cancel a running fine-tune job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = await self._client.transport.request_api(
             "POST",
             f"{_BASE_PATH}/{job_id}/cancel",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_status(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
+
+    @overload
+    async def delete(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobStatus:
+        ...
+
+    @overload
+    async def delete(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def delete(
         self,
@@ -568,17 +1332,80 @@ class AsyncFineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobStatus:
-        response = await self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobStatus, "APIResponse"]:
+        """Delete a fine-tune job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = await self._client.transport.request_api(
             "DELETE",
             f"{_BASE_PATH}/{job_id}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(_parse_status(response_json(response)), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_status(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
+
+    @overload
+    async def logs(
+        self,
+        job_id: str,
+        *,
+        offset: int = 1,
+        lines: int = 1000,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobLogs:
+        ...
+
+    @overload
+    async def logs(
+        self,
+        job_id: str,
+        *,
+        offset: int = 1,
+        lines: int = 1000,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def logs(
         self,
@@ -589,8 +1416,19 @@ class AsyncFineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobLogs:
-        response = await self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobLogs, "APIResponse"]:
+        """Fetch training logs of one fine-tune job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{job_id}/logs",
             # The wire parameter is singular "line".
@@ -599,11 +1437,25 @@ class AsyncFineTunes:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
+        if raw:
+            return resp
+        resp.raise_for_status()
         return with_headers(
-            _parse_logs(job_id, response_json(response)),
-            response,
+            _parse_logs(
+                job_id,
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
         )
 
     async def stream_events(
@@ -613,6 +1465,10 @@ class AsyncFineTunes:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> AsyncIterator[FineTuneEvent]:
         response = await self._client.transport.open_stream(
             "GET",
@@ -621,18 +1477,30 @@ class AsyncFineTunes:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         try:
             async for is_error, status_code, data in _aiter_sse(response):
                 if is_error:
                     if self._client.raise_on_error:
                         raise _stream_error(status_code, data)
-                    yield FineTuneEvent(
-                        output=_try_json(data),
+                    yield _parse_event(
+                        data,
                         is_error=True,
+                        strict=self._client.config.strict_validation,
+                        response=response,
                     )
                     return
-                yield FineTuneEvent(output=_try_json(data))
+                yield _parse_event(
+                    data,
+                    strict=self._client.config.strict_validation,
+                    response=response,
+                )
         finally:
             await response.aclose()
 
@@ -645,6 +1513,10 @@ class AsyncFineTunes:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
     ) -> FineTune:
         job_id = _job_id(job)
@@ -657,6 +1529,10 @@ class AsyncFineTunes:
                 job_id,
                 api_key=api_key,
                 workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
             )
         )
         interval = poll_interval
@@ -678,6 +1554,10 @@ class AsyncFineTunes:
                 job_id,
                 api_key=api_key,
                 workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
             )
         return self._check_terminal(current, job_id)
 

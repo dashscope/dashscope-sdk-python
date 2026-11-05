@@ -204,6 +204,81 @@ def test_base_page_accepts_the_wire_total_alias():
         assert cls.model_validate({"total": 7}).total_count == 7
 
 
+def _models_handler_no_echo(catalog, seen):
+    """A gateway that reports ``total`` but echoes neither offset field."""
+
+    def handler(request):
+        params = dict(request.url.params)
+        page_no = int(params.get("page_no", 1))
+        page_size = int(params.get("page_size", 10))
+        seen.append((page_no, page_size))
+        # Turn a cursor regression into a failure instead of a hang.
+        assert len(seen) <= 20, f"traversal did not terminate: {seen}"
+        start = (page_no - 1) * page_size
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "req-page",
+                "output": {
+                    "models": catalog[start : start + page_size],
+                    "total": len(catalog),
+                },
+            },
+        )
+
+    return handler
+
+
+def test_traversal_advances_when_the_gateway_omits_the_offset_echo():
+    # With no echo every page parses at the ``page_no`` / ``page_size``
+    # defaults, so advancing from the parsed fields would re-request page 2
+    # forever. The resource binds the offsets it actually sent, and those
+    # drive the cursor.
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    seen: List[Any] = []
+    client = _make_client(_models_handler_no_echo(catalog, seen))
+
+    page = client.models.list(page_no=1, page_size=2)
+    collected = [m.model for p in page.iter_pages() for m in p]
+
+    assert collected == ["m0", "m1", "m2", "m3", "m4"]
+    assert seen == [(1, 2), (2, 2), (3, 2)]
+
+
+def test_bound_offsets_override_the_parsed_echo():
+    page = ModelList.model_validate(
+        {"page_no": 1, "page_size": 10, "total": 200},
+    )
+    calls: List[Any] = []
+    page.bind_pagination(
+        lambda no, size: calls.append((no, size)),
+        requested_page_no=4,
+        requested_page_size=25,
+    )
+
+    page.next_page()
+
+    assert calls == [(5, 25)]
+
+
+def test_bound_offsets_decide_when_the_list_is_exhausted():
+    # 4 * 25 == 100 == total, so the bound offsets read as the last page
+    # even though the parsed defaults (1 * 10) would not.
+    page = ModelList.model_validate(
+        {"page_no": 1, "page_size": 10, "total": 100},
+    )
+    calls: List[Any] = []
+    page.bind_pagination(
+        lambda no, size: calls.append((no, size)),
+        requested_page_no=4,
+        requested_page_size=25,
+    )
+
+    assert page.has_next_page() is False
+    assert page.next_page() is None
+    assert calls == []
+
+
 # --- models.list (async) --------------------------------------------------
 
 
@@ -218,6 +293,19 @@ async def test_models_async_iter_pages():
 
     assert collected == ["m0", "m1", "m2", "m3", "m4"]
     assert seen == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_models_async_traversal_advances_without_the_offset_echo():
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    seen: List[Any] = []
+    client = _make_async_client(_models_handler_no_echo(catalog, seen))
+
+    page = await client.models.list(page_no=1, page_size=2)
+    collected = [m.model async for p in page.iter_pages_async() for m in p]
+
+    assert collected == ["m0", "m1", "m2", "m3", "m4"]
+    assert seen == [(1, 2), (2, 2), (3, 2)]
 
 
 @pytest.mark.asyncio

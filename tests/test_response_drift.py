@@ -718,3 +718,475 @@ def test_strict_validation_reaches_the_image_sync_path():
     )
     assert degraded.succeeded
     assert degraded.submitted_at is None
+
+
+# ---------------------------------------------------------------------------
+# the whole resource layer, one drifted body each
+# ---------------------------------------------------------------------------
+
+
+def _resolve(obj, path):
+    """Read ``"deployments[0].capacity"`` off a parsed model."""
+    current = obj
+    for part in path.replace("[", ".[").split("."):
+        if not part:
+            continue
+        if part.startswith("["):
+            current = current[int(part[1:-1])]
+        else:
+            current = getattr(current, part)
+    return current
+
+
+# Every resource that parses a wire body gets one row: the field named by
+# ``path`` arrives with the wrong type, so ``parse_model`` has to replace it
+# with the model's declared default. A bare ``pydantic.ValidationError``
+# escaping here is the failure mode -- it is not a ``DashScopeError``, so no
+# caller's ``except`` clause would catch it.
+_RESOURCE_DRIFT_CASES = [
+    (
+        "deployments.get",
+        lambda client: client.deployments.get("dep-1"),
+        {
+            "request_id": "req-1",
+            "output": {
+                "deployed_model": "dep-1",
+                "model_name": "ft-model",
+                "status": "RUNNING",
+                "capacity": "lots",
+            },
+        },
+        "capacity",
+        None,
+    ),
+    (
+        "deployments.list",
+        lambda client: client.deployments.list(),
+        {
+            "request_id": "req-2",
+            "output": {
+                "page_no": 1,
+                "page_size": 10,
+                "total": "many",
+                "deployments": [
+                    {
+                        "deployed_model": "dep-1",
+                        "model_name": "ft-model",
+                        "status": "RUNNING",
+                    },
+                ],
+            },
+        },
+        "total_count",
+        0,
+    ),
+    (
+        "fine_tunes.get",
+        lambda client: client.fine_tunes.get("ft-1"),
+        {
+            "request_id": "req-1",
+            "output": {"job_id": "ft-1", "status": "RUNNING"},
+            "usage": "unlimited",
+        },
+        "usage",
+        None,
+    ),
+    (
+        "fine_tunes.logs",
+        lambda client: client.fine_tunes.logs("ft-1"),
+        {"request_id": "req-logs", "output": {"logs": 123}},
+        "content",
+        "",
+    ),
+    (
+        "rl.jobs.fetch",
+        lambda client: client.rl.jobs.fetch("ft-1"),
+        {
+            "request_id": "req-3",
+            "output": {"job_id": "ft-1", "status": "RUNNING"},
+            "usage": "unlimited",
+        },
+        "usage",
+        None,
+    ),
+    (
+        "rerank.create",
+        lambda client: client.rerank.create(
+            model="gte-rerank-v2",
+            query="q",
+            documents=["a", "b"],
+        ),
+        {
+            "request_id": "req-r",
+            "output": {
+                "results": [
+                    {"index": 1, "relevance_score": 0.9},
+                    {"index": 0, "relevance_score": 0.2},
+                ],
+            },
+            "usage": "unlimited",
+        },
+        "usage",
+        None,
+    ),
+    (
+        "tokenization.count",
+        lambda client: client.tokenization.count(
+            model="qwen-plus",
+            prompt="hello world",
+        ),
+        {
+            "request_id": "req-t",
+            "usage": {"input_tokens": 7},
+            "output": {"token_ids": 5},
+        },
+        "token_ids",
+        None,
+    ),
+    (
+        "tingwu.call",
+        lambda client: client.tingwu.call(
+            model="tingwu-turbo",
+            input={"source_language": "cn", "task": "summarization"},
+        ),
+        {
+            "request_id": "req-1",
+            "output": {"TaskId": "t-1", "Result": {"summary": "ok"}},
+            "usage": "unlimited",
+        },
+        "usage",
+        None,
+    ),
+    (
+        "apps.completions.create",
+        lambda client: client.apps.completions.create(
+            app_id="app-1",
+            prompt="hi",
+        ),
+        {
+            "request_id": "req-1",
+            "output": {"text": "Hello from app", "finish_reason": "stop"},
+            "usage": "unlimited",
+        },
+        "usage",
+        None,
+    ),
+    (
+        "decision.create",
+        lambda client: client.decision.create(
+            model="decision-model-preview",
+            state="text",
+            questions={
+                "escalate": {"type": "noul", "instructions": "?"},
+            },
+        ),
+        {
+            "model": "decision-model-preview",
+            "request_id": "r-1",
+            "answers": {"escalate": {"type": "noul", "noul": 0.99}},
+            "latency_ms": "fast",
+        },
+        "latency_ms",
+        None,
+    ),
+    (
+        "audio.phrases.list",
+        lambda client: client.audio.phrases.list(),
+        {
+            "request_id": "r-1",
+            "output": {
+                "jobs": [{"job_id": "p-1", "status": "SUCCEEDED"}],
+                "total": "many",
+            },
+        },
+        "total_count",
+        0,
+    ),
+    (
+        "audio.vocabularies.create",
+        lambda client: client.audio.vocabularies.create(
+            target_model="paraformer-v2",
+            prefix="med",
+            vocabulary=[{"text": "x", "weight": 4}],
+        ),
+        {
+            "request_id": "req-v1",
+            "output": {"vocabulary_id": "vocab-1", "vocabulary": "hot"},
+        },
+        "vocabulary",
+        None,
+    ),
+    (
+        "audio.tts.http.synthesize",
+        lambda client: client.audio.tts.http.synthesize(
+            "你好",
+            model="qwen-audio-3.1-tts-flash",
+            voice="longanfengyue_v3.1",
+        ),
+        {
+            "request_id": "req-body-1",
+            "output": {
+                "audio": {
+                    "url": "https://cdn.test/a.wav",
+                    "id": "audio-1",
+                    "expires_at": 1720000000,
+                },
+            },
+            "message": 123,
+        },
+        "message",
+        None,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "call, body, path, expected",
+    [case[1:] for case in _RESOURCE_DRIFT_CASES],
+    ids=[case[0] for case in _RESOURCE_DRIFT_CASES],
+)
+def test_every_resource_degrades_a_drifted_field(
+    call,
+    body,
+    path,
+    expected,
+    caplog,
+):
+    client = _make_client(lambda request: _json_response(body))
+    with caplog.at_level(logging.DEBUG, logger="dashscope._logging"):
+        result = call(client)
+    assert _resolve(result, path) == expected
+    assert _drift_records(caplog), "degradation must be logged"
+
+
+@pytest.mark.parametrize(
+    "call, body, path, expected",
+    [case[1:] for case in _RESOURCE_DRIFT_CASES],
+    ids=[case[0] for case in _RESOURCE_DRIFT_CASES],
+)
+def test_every_resource_raises_in_strict_mode(call, body, path, expected):
+    # The point of the flag: a contract test wants the drift surfaced, not
+    # papered over -- and it must surface as something catchable.
+    client = _make_client(
+        lambda request: _json_response(body),
+        strict_validation=True,
+    )
+    with pytest.raises(APIResponseValidationError) as caught:
+        call(client)
+    assert caught.value.response is not None
+    assert caught.value.response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    "call, body, path, expected",
+    [case[1:] for case in _RESOURCE_DRIFT_CASES],
+    ids=[case[0] for case in _RESOURCE_DRIFT_CASES],
+)
+def test_drift_still_degrades_under_raise_on_error_false(
+    call,
+    body,
+    path,
+    expected,
+    caplog,
+):
+    # Compat mode is about *service* errors; a 200 body with a drifted field
+    # must degrade the same way either way. This is also the only test that
+    # notices a resource dropping ``client=`` when it calls ``request_api``,
+    # which would silently reset ``raise_on_error`` to its default.
+    client = _make_client(
+        lambda request: _json_response(body),
+        raise_on_error=False,
+    )
+    with caplog.at_level(logging.DEBUG, logger="dashscope._logging"):
+        result = call(client)
+    assert not result.is_error
+    assert _resolve(result, path) == expected
+    assert _drift_records(caplog)
+
+
+# ---------------------------------------------------------------------------
+# streamed frames: a drift partway through must not end the iteration
+# ---------------------------------------------------------------------------
+
+
+def test_a_drifted_sse_frame_degrades_instead_of_breaking_the_stream(caplog):
+    # ``stream_events`` parses each frame after the earlier ones were already
+    # handed to the caller, so a bare ValidationError used to land
+    # mid-iteration with nothing the caller could have caught up front.
+    sse = (
+        'id: 1\ndata: {"status": "RUNNING"}\n\n'
+        # ``output`` is declared ``Union[Dict, str, None]``; a bare number
+        # matches none of the three.
+        "id: 2\ndata: 123\n\n"
+        'id: 3\ndata: {"status": "SUCCEEDED"}\n\n'
+    )
+
+    def handler(request):
+        return httpx.Response(
+            200,
+            content=sse,
+            headers={"content-type": "text/event-stream"},
+        )
+
+    client = _make_client(handler)
+    with caplog.at_level(logging.DEBUG, logger="dashscope._logging"):
+        events = list(client.fine_tunes.stream_events("ft-1"))
+    assert [event.output for event in events] == [
+        {"status": "RUNNING"},
+        None,
+        {"status": "SUCCEEDED"},
+    ]
+    assert _drift_records(caplog)
+
+
+def test_a_drifted_sse_frame_raises_in_strict_mode():
+    sse = 'id: 1\ndata: {"status": "RUNNING"}\n\nid: 2\ndata: 123\n\n'
+
+    def handler(request):
+        return httpx.Response(
+            200,
+            content=sse,
+            headers={"content-type": "text/event-stream"},
+        )
+
+    client = _make_client(handler, strict_validation=True)
+    events = client.fine_tunes.stream_events("ft-1")
+    assert next(events).output == {"status": "RUNNING"}
+    # The first frame was already consumed, so this is exactly the case where
+    # an uncatchable exception would have been worst.
+    with pytest.raises(APIResponseValidationError) as caught:
+        next(events)
+    # The frame's response is the stream itself, which is still open.
+    assert caught.value.response is not None
+
+
+class _ScriptedSocket:
+    """Websocket stub replaying a queued inbox; the task id is echoed back."""
+
+    def __init__(self, inbox):
+        self.sent = []
+        self._inbox = list(inbox)
+        self.closed = False
+
+    def send(self, payload, opcode=1):
+        self.sent.append(payload)
+
+    def recv(self):
+        if not self._inbox:
+            return None
+        raw = self._inbox.pop(0)
+        if isinstance(raw, str):
+            event = json.loads(raw)
+            header = event.get("header") if isinstance(event, dict) else None
+            if isinstance(header, dict) and header.get("task_id") == "t":
+                sent = json.loads(self.sent[0])
+                header["task_id"] = sent["header"]["task_id"]
+                return json.dumps(event)
+        return raw
+
+    def close(self):
+        self.closed = True
+
+    def settimeout(self, seconds):
+        pass
+
+
+def _ws_event(name, payload=None):
+    return json.dumps(
+        {
+            "header": {"event": name, "task_id": "t", "request_id": "r"},
+            "payload": payload or {},
+        },
+    )
+
+
+def _recognition(client, inbox):
+    socket = _ScriptedSocket(inbox)
+    return client.audio.asr.recognize(
+        model="paraformer-realtime-v2",
+        connector=lambda url, headers: socket,
+    )
+
+
+def _ws_client(**kwargs):
+    # ``WsSession`` derives the websocket endpoint from the workspace, so the
+    # WS tests need one even though no HTTP request is ever made.
+    kwargs.setdefault("workspace", "ws-test")
+    return _make_client(lambda request: _json_response({}), **kwargs)
+
+
+def test_a_drifted_websocket_frame_degrades(caplog):
+    # ``Recognition`` keeps the live config rather than a snapshot of the
+    # flag, so a session opened before ``strict_validation`` changed still
+    # reads the current setting at parse time.
+    client = _ws_client()
+    with _recognition(
+        client,
+        [
+            _ws_event("task-started"),
+            _ws_event("result-generated", {"output": "oops"}),
+            _ws_event(
+                "result-generated",
+                {"output": {"sentence": {"text": "你好", "end_time": 9}}},
+            ),
+            _ws_event("task-finished"),
+        ],
+    ) as recognition:
+        recognition.stop()
+        with caplog.at_level(logging.DEBUG, logger="dashscope._logging"):
+            results = list(recognition.results())
+    assert results[0].output == {}
+    assert results[1].get_sentence()["text"] == "你好"
+    assert _drift_records(caplog)
+
+
+def test_a_drifted_websocket_frame_raises_in_strict_mode():
+    client = _ws_client(strict_validation=True)
+    with _recognition(
+        client,
+        [
+            _ws_event("task-started"),
+            _ws_event("result-generated", {"output": "oops"}),
+            _ws_event("task-finished"),
+        ],
+    ) as recognition:
+        recognition.stop()
+        with pytest.raises(APIResponseValidationError) as caught:
+            list(recognition.results())
+    # Deliberate: a websocket frame has no httpx.Response to carry, and
+    # ``APIResponseValidationError.response=None`` is a supported shape.
+    assert caught.value.response is None
+
+
+def test_a_non_dict_websocket_payload_does_not_crash_the_session():
+    # ``events()`` timed the first package off
+    # ``payload["output"]["sentence"]`` and ``results()`` did
+    # ``dict(payload)`` -- a payload that drifted to a bare string raised
+    # AttributeError / ValueError before ``parse_model`` ever ran, and no
+    # ``except DashScopeError`` catches either.
+    client = _ws_client()
+    with _recognition(
+        client,
+        [
+            _ws_event("task-started"),
+            json.dumps(
+                {
+                    "header": {
+                        "event": "result-generated",
+                        "task_id": "t",
+                        "request_id": "r",
+                    },
+                    "payload": "oops",
+                },
+            ),
+            _ws_event(
+                "result-generated",
+                {"output": {"sentence": {"text": "你好", "end_time": 9}}},
+            ),
+            _ws_event("task-finished"),
+        ],
+    ) as recognition:
+        recognition.stop()
+        results = list(recognition.results())
+    assert results[0].output == {}
+    assert results[1].get_sentence()["text"] == "你好"
