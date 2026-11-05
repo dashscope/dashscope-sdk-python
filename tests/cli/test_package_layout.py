@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests.cli.conftest import strip_ansi_codes
+
 PACKAGE_ROOT = Path(__file__).resolve().parents[2] / "dashscope" / "cli"
 COMMANDS_ROOT = PACKAGE_ROOT / "commands"
 
@@ -69,7 +71,7 @@ def test_legacy_argv_routes_to_the_legacy_cli():
         "assert 'dashscope.legacy_1x.cli' in sys.modules\n",
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Usage: dashscope generation call" in result.stdout
+    assert "Usage: dashscope generation call" in strip_ansi_codes(result.stdout)
 
 
 def _module_level_imports(path: Path):
