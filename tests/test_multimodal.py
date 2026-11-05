@@ -92,6 +92,187 @@ def _openai_response(text="A cat on a mat."):
     )
 
 
+def _media_response(content):
+    """A multimodal answer whose content carries generated media."""
+    return httpx.Response(
+        200,
+        json={
+            "output": {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": content},
+                    },
+                ],
+            },
+            "request_id": "req-media",
+        },
+    )
+
+
+def test_create_preserves_generated_image_parts():
+    image_part = {
+        "type": "image",
+        "image": "https://cdn.example.com/wan27.png",
+    }
+
+    def handler(request):
+        return _media_response([image_part])
+
+    client = _make_client(handler)
+    resp = client.multimodal.chat.create(
+        model="wan2.7-image",
+        messages=[{"role": "user", "content": [{"text": "a cat"}]}],
+    )
+    message = resp.choices[0].message
+    assert message.content is None
+    assert message.content_parts == [image_part]
+    assert resp.output_text == ""
+    assert message.model_dump()["content_parts"] == [image_part]
+
+
+def test_create_keeps_text_and_media_parts_separate():
+    image_part = {"image": "https://cdn.example.com/wan27.png"}
+
+    def handler(request):
+        return _media_response([{"text": "done"}, image_part])
+
+    client = _make_client(handler)
+    resp = client.multimodal.chat.create(
+        model="wan2.7-image",
+        messages=[{"role": "user", "content": [{"text": "a cat"}]}],
+    )
+    message = resp.choices[0].message
+    assert message.content == "done"
+    assert message.content_parts == [image_part]
+    assert resp.output_text == "done"
+
+
+def test_text_only_content_does_not_gain_media_parts():
+    def handler(request):
+        return _vl_response()
+
+    client = _make_client(handler)
+    resp = client.multimodal.chat.create(
+        model="qwen-vl-max",
+        messages=[{"role": "user", "content": [{"text": "describe"}]}],
+    )
+    message = resp.choices[0].message
+    assert message.content == "A cat on a mat."
+    assert message.content_parts is None
+    assert "content_parts" not in message.model_dump(exclude_none=True)
+
+
+def test_strict_validation_accepts_media_parts():
+    image_part = {"image": "https://cdn.example.com/wan27.png"}
+
+    def handler(request):
+        return _media_response([image_part])
+
+    client = _make_client(handler, strict_validation=True)
+    resp = client.multimodal.chat.create(
+        model="wan2.7-image",
+        messages=[{"role": "user", "content": [{"text": "a cat"}]}],
+    )
+    assert resp.choices[0].message.content_parts == [image_part]
+
+
+def test_streaming_preserves_image_parts():
+    image_part = {"image": "https://cdn.example.com/wan27.png"}
+
+    def handler(request):
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            content=_sse(
+                [
+                    {
+                        "output": {
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "message": {
+                                        "role": "assistant",
+                                        "content": [image_part],
+                                    },
+                                },
+                            ],
+                        },
+                        "request_id": "r",
+                    },
+                ],
+            ),
+        )
+
+    client = _make_client(handler)
+    stream = client.multimodal.chat.create(
+        model="wan2.7-image",
+        messages=[{"role": "user", "content": [{"text": "a cat"}]}],
+        stream=True,
+    )
+    chunks = list(stream)
+    assert chunks[0].choices[0].delta.content is None
+    assert chunks[0].choices[0].delta.content_parts == [image_part]
+
+
+def test_create_accepts_directive_input_without_messages():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return _vl_response()
+
+    client = _make_client(handler)
+    client.multimodal.chat.create(
+        model="image-agent",
+        extra_input={"directive": "generate", "app_id": "app-1"},
+    )
+    assert captured["body"]["input"] == {
+        "directive": "generate",
+        "app_id": "app-1",
+    }
+
+
+def test_create_allows_empty_messages_with_audio_address():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return _vl_response()
+
+    client = _make_client(handler)
+    client.multimodal.chat.create(
+        model="fun-asr",
+        messages=[],
+        parameters={"audio_address": "wss://example.com/audio"},
+    )
+    assert captured["body"]["input"] == {"messages": []}
+    assert captured["body"]["parameters"]["audio_address"] == (
+        "wss://example.com/audio"
+    )
+
+
+def test_create_accepts_translation_input_fields():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return _vl_response()
+
+    client = _make_client(handler)
+    client.multimodal.chat.create(
+        model="qwen-mt-uni",
+        extra_input={
+            "target_lang": "en",
+            "fileUrl": "https://example.com/source.txt",
+        },
+    )
+    assert captured["body"]["input"] == {
+        "target_lang": "en",
+        "fileUrl": "https://example.com/source.txt",
+    }
+
+
 def test_create_non_streaming_native():
     captured = {}
 
@@ -513,6 +694,25 @@ def test_openai_protocol_translates_omni_content_items():
         "total_pixels": 4096,
     }
     assert resp.output_text == "OK"
+
+
+@pytest.mark.asyncio
+async def test_async_create_accepts_extra_input_without_messages():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return _vl_response()
+
+    client = _make_async_client(handler)
+    await client.multimodal.chat.create(
+        model="qwen-mt-uni",
+        extra_input={"target_lang": "en", "fileUrl": "file-1"},
+    )
+    assert captured["body"]["input"] == {
+        "target_lang": "en",
+        "fileUrl": "file-1",
+    }
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from dashscope import AsyncClient, Client
+from dashscope.errors import APIResponseValidationError
 from dashscope.resources.embeddings import parse_embedding_response
 
 BASE_URL = "https://api.test.local/api/v1"
@@ -193,6 +194,94 @@ def test_embedding_response_plural_wins_over_singular():
     resp = parse_embedding_response(body)
     assert len(resp.embeddings) == 1
     assert resp.embeddings[0].embedding == [0.5]
+
+
+def test_embedding_response_drift_degrades_instead_of_raising():
+    # embeddings builds its model through parse_model like every other
+    # migrated resource, so a drifted field degrades rather than escaping
+    # as a bare pydantic ValidationError.
+    resp = parse_embedding_response(
+        {
+            "request_id": "req-drift",
+            "output": {"embeddings": [{"index": 0, "embedding": [0.1]}]},
+            "usage": {"total_tokens": "not-an-int"},
+        },
+    )
+    assert resp.request_id == "req-drift"
+    assert resp.embeddings[0].embedding == [0.1]
+
+
+def test_embedding_response_strict_raises():
+    # The global strict_validation contract has to reach this parser too,
+    # or turning it on in CI silently skips a whole resource.
+    body = {
+        "request_id": "req-strict",
+        "output": {"embeddings": [{"index": 0, "embedding": [0.1]}]},
+        "usage": {"total_tokens": "not-an-int"},
+    }
+    with pytest.raises(APIResponseValidationError):
+        parse_embedding_response(body, strict=True)
+
+
+def test_embedding_response_tolerates_a_non_dict_output():
+    # ``output.get`` used to assume a dict; a malformed envelope now parses
+    # as an empty page instead of raising AttributeError.
+    resp = parse_embedding_response({"request_id": "r", "output": [1, 2]})
+    assert resp.embeddings == []
+
+
+def test_embeddings_create_honours_client_strict_validation():
+    # End to end: the flag on the Client has to arrive at the parser.
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "req-e2e",
+                "output": {"embeddings": [{"index": 0, "embedding": [0.1]}]},
+                "usage": {"total_tokens": "not-an-int"},
+            },
+        )
+
+    lenient = _make_client(handler)
+    assert lenient.embeddings.create(model="m", input="hi").request_id == (
+        "req-e2e"
+    )
+
+    strict = _make_client(handler, strict_validation=True)
+    with pytest.raises(APIResponseValidationError):
+        strict.embeddings.create(model="m", input="hi")
+
+
+def test_multimodal_embeddings_create_honours_client_strict_validation():
+    # The multimodal endpoint rides the pre-request_api transport path, but
+    # its ``request`` returns the same httpx.Response, so the flag has to
+    # arrive here exactly as it does on ``embeddings.create`` and on
+    # ``images.generate`` -- otherwise one embedding surface silently stays
+    # lenient while its sibling fails loudly on the same drift.
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "req-mm-e2e",
+                "output": {"embeddings": [{"index": 0, "embedding": [0.1]}]},
+                "usage": {"total_tokens": "not-an-int"},
+            },
+        )
+
+    lenient = _make_client(handler)
+    resp = lenient.multimodal.embeddings.create(
+        model="multimodal-embedding-v1",
+        input=[{"text": "hi"}],
+    )
+    assert resp.request_id == "req-mm-e2e"
+    assert resp.embeddings[0].embedding == [0.1]
+
+    strict = _make_client(handler, strict_validation=True)
+    with pytest.raises(APIResponseValidationError):
+        strict.multimodal.embeddings.create(
+            model="multimodal-embedding-v1",
+            input=[{"text": "hi"}],
+        )
 
 
 def test_multimodal_embeddings_validation():
@@ -536,6 +625,36 @@ async def test_async_embeddings_multimodal_and_batch():
     assert done.succeeded
     assert delays == [0.01]
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_async_multimodal_embeddings_honours_strict_validation():
+    # The async call site forwards the flag independently of the sync one.
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "req-mm-async",
+                "output": {"embeddings": [{"index": 0, "embedding": [0.1]}]},
+                "usage": {"total_tokens": "not-an-int"},
+            },
+        )
+
+    lenient = _make_async_client(handler)
+    resp = await lenient.multimodal.embeddings.create(
+        model="multimodal-embedding-v1",
+        input=[{"text": "hi"}],
+    )
+    assert resp.request_id == "req-mm-async"
+    await lenient.aclose()
+
+    strict = _make_async_client(handler, strict_validation=True)
+    with pytest.raises(APIResponseValidationError):
+        await strict.multimodal.embeddings.create(
+            model="multimodal-embedding-v1",
+            input=[{"text": "hi"}],
+        )
+    await strict.aclose()
 
 
 def test_business_code_reaches_tool_responses():

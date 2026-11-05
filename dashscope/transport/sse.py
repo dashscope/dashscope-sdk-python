@@ -31,8 +31,13 @@ from typing import (
 
 import httpx
 from httpx_sse import EventSource
+from pydantic import ValidationError
 
-from dashscope.errors import DashScopeError, error_from_business_code
+from dashscope.errors import (
+    APIResponseValidationError,
+    DashScopeError,
+    error_from_business_code,
+)
 
 T = TypeVar("T")
 
@@ -91,6 +96,31 @@ def _next_event(
     return body
 
 
+def _parse_event(
+    parse: Callable[[Dict[str, Any]], Any],
+    body: Dict[str, Any],
+    response: httpx.Response,
+) -> Any:
+    """Run one event's parser, converting a bare ValidationError.
+
+    Chat parsers go through ``parse_model``, which degrades a drifted
+    body instead of raising, so this only fires for a parser that
+    validates on its own. It is still worth catching: a raw pydantic
+    error is not a ``DashScopeError``, so a caller's handler would miss
+    it -- mid-iteration, after earlier chunks were already consumed.
+    The stream cannot degrade here because it does not know the model
+    class, so converting is the floor rather than a fallback.
+    """
+    try:
+        return parse(body)
+    except ValidationError as exc:
+        raise APIResponseValidationError(
+            response=response,
+            body=body,
+            cause=exc,
+        ) from exc
+
+
 class Stream(Generic[T]):
     """Typed iterator over SSE chunks; in-stream errors raise."""
 
@@ -108,7 +138,7 @@ class Stream(Generic[T]):
                 body = _next_event(sse.data, self._response.headers)
                 if body is None:
                     continue
-                chunk = self._parse(body)
+                chunk = _parse_event(self._parse, body, self._response)
                 if chunk is not None:
                     yield chunk
         finally:
@@ -141,7 +171,7 @@ class AsyncStream(Generic[T]):
                 body = _next_event(sse.data, self._response.headers)
                 if body is None:
                     continue
-                chunk = self._parse(body)
+                chunk = _parse_event(self._parse, body, self._response)
                 if chunk is not None:
                     yield chunk
         finally:

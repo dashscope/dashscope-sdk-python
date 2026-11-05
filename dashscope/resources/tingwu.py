@@ -13,23 +13,36 @@ session used as a context manager). Mirrors the 1.x
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterator, Optional, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterator,
+    Literal,
+    Mapping,
+    Optional,
+    Union,
+    overload,
+)
 
 from pydantic import ConfigDict, Field
 
-from dashscope.errors import (
-    check_response,
-    error_from_business_code,
-    response_json,
-)
+from dashscope.errors import error_from_business_code
+from dashscope.transport._options import request_options
 from dashscope.transport.ws import Connector, WsSession
 from dashscope.transport.ws_connection import WsConnection, WsTask
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     ResponseBase,
     Usage,
     response_envelope,
     with_headers,
 )
+
+if TYPE_CHECKING:
+    import httpx
+
+    from dashscope.transport._response import APIResponse
 
 __all__ = [
     "AsyncTingWu",
@@ -54,6 +67,30 @@ class TingWuResult(ResponseBase):
 
     output: Dict[str, Any] = Field(default_factory=dict)
     usage: Optional[Usage] = None
+
+
+def _parse_result(
+    envelope: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
+) -> TingWuResult:
+    """Build a ``TingWuResult`` from the raw wire envelope.
+
+    Shared by the sync and async ``call`` so the two cannot drift apart
+    in how they read ``output`` / ``usage``.
+    """
+    data = response_envelope(envelope)
+    output = envelope.get("output")
+    data["output"] = output if isinstance(output, dict) else {}
+    if envelope.get("usage") is not None:
+        data["usage"] = envelope["usage"]
+    return parse_model(
+        TingWuResult,
+        data,
+        strict=strict,
+        response=response,
+    )
 
 
 def _realtime_start_input(
@@ -225,6 +262,7 @@ class TingWu:
     def __init__(self, client) -> None:
         self._client = client
 
+    @overload
     def call(
         self,
         *,
@@ -234,12 +272,57 @@ class TingWu:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> TingWuResult:
-        """Run one offline TingWu request (1.x ``TingWu.call``)."""
+        ...
+
+    @overload
+    def call(
+        self,
+        *,
+        model: str,
+        input: Dict[str, Any],
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    def call(
+        self,
+        *,
+        model: str,
+        input: Dict[str, Any],
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[TingWuResult, "APIResponse"]:
+        """Run one offline TingWu request (1.x ``TingWu.call``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
         body: Dict[str, Any] = {"model": model, "input": dict(input)}
         if parameters:
             body["parameters"] = dict(parameters)
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "POST",
             f"/services/{SERVICE}",
             json=body,
@@ -247,15 +330,25 @@ class TingWu:
             api_key=api_key,
             workspace=workspace,
             sdk_module=MODULE,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        envelope = response_json(response)
-        data = response_envelope(envelope)
-        output = envelope.get("output")
-        data["output"] = output if isinstance(output, dict) else {}
-        if envelope.get("usage") is not None:
-            data["usage"] = envelope["usage"]
-        return with_headers(TingWuResult.model_validate(data), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_result(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )
 
     def realtime(
         self,
@@ -311,6 +404,7 @@ class AsyncTingWu:
     def __init__(self, client) -> None:
         self._client = client
 
+    @overload
     async def call(
         self,
         *,
@@ -320,12 +414,57 @@ class AsyncTingWu:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> TingWuResult:
-        """Run one offline TingWu request (1.x ``TingWu.async_call``)."""
+        ...
+
+    @overload
+    async def call(
+        self,
+        *,
+        model: str,
+        input: Dict[str, Any],
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    async def call(
+        self,
+        *,
+        model: str,
+        input: Dict[str, Any],
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[TingWuResult, "APIResponse"]:
+        """Run one offline TingWu request (1.x ``TingWu.async_call``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
         body: Dict[str, Any] = {"model": model, "input": dict(input)}
         if parameters:
             body["parameters"] = dict(parameters)
-        response = await self._client.transport.request(
+        resp = await self._client.transport.request_api(
             "POST",
             f"/services/{SERVICE}",
             json=body,
@@ -333,12 +472,22 @@ class AsyncTingWu:
             api_key=api_key,
             workspace=workspace,
             sdk_module=MODULE,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        envelope = response_json(response)
-        data = response_envelope(envelope)
-        output = envelope.get("output")
-        data["output"] = output if isinstance(output, dict) else {}
-        if envelope.get("usage") is not None:
-            data["usage"] = envelope["usage"]
-        return with_headers(TingWuResult.model_validate(data), response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return with_headers(
+            _parse_result(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
+        )

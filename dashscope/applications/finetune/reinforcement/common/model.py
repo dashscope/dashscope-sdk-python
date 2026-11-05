@@ -24,7 +24,6 @@ import yaml
 
 # Local Application
 from .constants import (
-    FC_API_KEY,
     FC_DELETE_API,
     FC_LOAD_API,
     FC_QUERY_API,
@@ -41,6 +40,7 @@ from .constants import (
     FC_LAYER_STATUS_TIMEOUT,
     FC_LAYER_STATUS_INTERVAL,
     LOG_LEVEL,
+    resolve_fc_api_key,
 )
 from .model_types import (
     FileSpec,
@@ -77,6 +77,7 @@ from .utils import (
 )
 from .log import logger
 from .errors import (
+    AgenticRLError,
     InputError,
     OutputError,
     OSSConnectionError,
@@ -139,7 +140,10 @@ class Dataset(BaseModel):
     download_url: Optional[str] = None
     mount_storage: Optional[MountStorage] = None
 
-    async def upload_dataset(self) -> Optional[str]:
+    async def upload_dataset(
+        self,
+        api_key: Optional[str] = None,
+    ) -> Optional[str]:
         if (
             self.data_source_type == DataSourceType.FILE_ID
             and self.file_name is not None
@@ -147,10 +151,14 @@ class Dataset(BaseModel):
             try:
                 file_id = await to_bailian_data(
                     [FileSpec(path=self.file_name)],
+                    api_key=api_key,
                 )
-                if file_id and isinstance(file_id, List) and len(file_id) > 0:
+                if file_id and isinstance(file_id, list) and len(file_id) > 0:
                     self.file_id = file_id[0]
 
+            except AgenticRLError:
+                # Keep the specific classification (code/solution/allow_retry)
+                raise
             except Exception as e:
                 raise OSSUploadError(
                     "Failed to upload datasets",
@@ -158,6 +166,23 @@ class Dataset(BaseModel):
                 ) from e
 
         return self.file_id
+
+
+def _normalize_file_param(
+    value: Optional[Union[List[str], str]],
+) -> List[str]:
+    """Normalize a dataset file parameter to a list of paths.
+
+    ``None`` (the default) becomes an empty list instead of ``[None]``,
+    a single string becomes a one-element list, and any other iterable
+    is converted to a list. Runtime type checks use builtin types --
+    ``typing`` aliases are annotations, not classes to test against.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return list(value)
 
 
 class Datasets(BaseModel):
@@ -169,17 +194,10 @@ class Datasets(BaseModel):
         cls,
         training_files: Union[List[str], str] = None,
         validation_files: Union[List[str], str] = None,
+        api_key: Optional[str] = None,
     ) -> Tuple[Optional[List[str]], Optional[List[str]]]:
-        training_files = (
-            training_files
-            if isinstance(training_files, List)
-            else [training_files]
-        )
-        validation_files = (
-            validation_files
-            if isinstance(validation_files, List)
-            else [validation_files]
-        )
+        training_files = _normalize_file_param(training_files)
+        validation_files = _normalize_file_param(validation_files)
 
         training_filespecs = [FileSpec(path=f) for f in training_files]
         validation_filespecs = [FileSpec(path=f) for f in validation_files]
@@ -190,12 +208,17 @@ class Datasets(BaseModel):
             if training_files:
                 uploaded_training_ids = await to_bailian_data(
                     training_filespecs,
+                    api_key=api_key,
                 )
             if validation_files:
                 uploaded_validation_ids = await to_bailian_data(
                     validation_filespecs,
+                    api_key=api_key,
                 )
 
+        except AgenticRLError:
+            # Keep the specific classification (code/solution/allow_retry)
+            raise
         except Exception as e:
             raise OSSUploadError(
                 "Failed to upload datasets",
@@ -357,14 +380,18 @@ class FunctionComponentModel(BaseModel):
         )
         return oss_id
 
-    async def get_oss(self, oss_id: Optional[str] = None) -> str:
+    async def get_oss(
+        self,
+        oss_id: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ) -> str:
         """Retrieve OSS signed URL for deployment package."""
         try:
             if oss_id:
                 self.oss_id = oss_id
 
             result = await client_fc(
-                FC_API_KEY,
+                resolve_fc_api_key(api_key),
                 FC_UPLOAD_OSS_API,
                 {"unique_key": self.oss_id},
             )
@@ -393,6 +420,7 @@ class FunctionComponentModel(BaseModel):
         self,
         name: str = FC_LAYER_NAME,
         requirements_file: str = FC_REQUIREMENTS_FILE,
+        api_key: Optional[str] = None,
         # oss_signed_url: str = None,
     ) -> str:
         """Retrieve OSS signed URL for deployment package."""
@@ -411,7 +439,7 @@ class FunctionComponentModel(BaseModel):
             # oss_signed_url = oss_signed_url or self.oss_signed_url
 
             result = await client_fc(
-                FC_API_KEY,
+                resolve_fc_api_key(api_key),
                 FC_LAYER_CREATE_API,
                 {
                     "layer_name": layer_name,
@@ -500,7 +528,11 @@ class FunctionComponentModel(BaseModel):
 
         return
 
-    async def get_layer(self, layer_code: str) -> str:
+    async def get_layer(
+        self,
+        layer_code: str,
+        api_key: Optional[str] = None,
+    ) -> str:
         """Wait for an FC layer build to finish and return its final status.
 
         Raises FunctionLayerError when the layer fails to build, when the
@@ -516,7 +548,7 @@ class FunctionComponentModel(BaseModel):
             attempt += 1
             try:
                 result = await client_fc(
-                    FC_API_KEY,
+                    resolve_fc_api_key(api_key),
                     FC_LAYER_QUERY_API,
                     {
                         "layer_code": layer_code,
@@ -734,6 +766,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         self,
         oss_id: Optional[str] = None,
         oss_url: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> ResponseFC:
         """Register function in the deployment system."""
         try:
@@ -743,7 +776,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 self.fcmodel.oss_signed_url = oss_url
             else:
                 self.fcmodel.generate_id(self.type)
-                await self.fcmodel.get_oss()
+                await self.fcmodel.get_oss(api_key=api_key)
 
             # Split: classpath to filepath & classname
             if self.fcmodel.classpath:
@@ -759,7 +792,9 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             if FC_LAYER_USED:
                 if self.runtime is None:
                     self.runtime = FunctionComponentRuntime()
-                self.runtime.layer_code = await self.fcmodel.create_layer()
+                self.runtime.layer_code = await self.fcmodel.create_layer(
+                    api_key=api_key,
+                )
 
         except FunctionLayerError as e:
             root = e
@@ -810,7 +845,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 )
 
             result = await client_fc(
-                FC_API_KEY,
+                resolve_fc_api_key(api_key),
                 endpoint,
                 request.model_dump(),
             )
@@ -858,6 +893,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         entity_id: Optional[str] = None,
         runtime: Optional[FunctionComponentRuntime] = None,
         warmup: bool = False,
+        api_key: Optional[str] = None,
     ) -> ResponseFC:
         """Load and initialize a registered function instance."""
         runtime_obj = runtime or self.runtime
@@ -881,6 +917,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     )
                 await self.fcmodel.get_layer(
                     layer_code=layer_code,
+                    api_key=api_key,
                 )
 
             # Load function instance
@@ -892,7 +929,11 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             job_id = generate_random_id()
             url = f"{FC_LOAD_API}/jobId-{job_id}/{target_entity_id}"
 
-            result = await client_fc(FC_API_KEY, url, runtime_dict)
+            result = await client_fc(
+                resolve_fc_api_key(api_key),
+                url,
+                runtime_dict,
+            )
             self.instance_id = result.get("output", {}).get("instanceId", "")
             if not self.instance_id:
                 raise FunctionLoadError(
@@ -1018,7 +1059,11 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         )
 
     @classmethod
-    async def query(cls, instance_id: str) -> ResponseFC:
+    async def query(
+        cls,
+        instance_id: str,
+        api_key: Optional[str] = None,
+    ) -> ResponseFC:
         """Retrieve current status of a function instance."""
         try:
             if not instance_id:
@@ -1028,7 +1073,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 )
 
             url = f"{FC_QUERY_API}/{instance_id}"
-            result = await client_fc(FC_API_KEY, url, {})
+            result = await client_fc(resolve_fc_api_key(api_key), url, {})
             status = result.get("output", {}).get("status", -1)
             if status == -1:
                 raise InstanceQueryError(
@@ -1073,6 +1118,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         instance_id: Optional[str] = None,
         instance_url: Optional[str] = None,
         instance_token: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> Dict:
         """Validate deployed function functionality."""
         try:
@@ -1082,7 +1128,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     "instance_id is required for verification",
                     error_code=2041,
                 )
-            result = await cls.query(instance_id)
+            result = await cls.query(instance_id, api_key=api_key)
             if result.status.task != StatusType.SUCCEEDED:
                 raise InstanceQueryError(
                     "Status query failed",
@@ -1244,6 +1290,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         keywords: Optional[List[str]] = None,
+        api_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Query logs of a function (faas) instance (single page).
 
@@ -1276,7 +1323,11 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         if keywords:
             request_data["keywords"] = keywords
 
-        result = await client_fc(FC_API_KEY, url, request_data)
+        result = await client_fc(
+            resolve_fc_api_key(api_key),
+            url,
+            request_data,
+        )
         status = result.get("status", {})
         if isinstance(status, Dict) and status.get("code", 200) != 200:
             raise InstanceQueryError(
@@ -1307,6 +1358,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
         end_time: Optional[int] = None,
         keywords: Optional[List[str]] = None,
         max_pages: int = 100,
+        api_key: Optional[str] = None,
     ) -> List[str]:
         """Fetch all logs of a function (faas) instance with pagination.
 
@@ -1335,6 +1387,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 start_time=start_time,
                 end_time=end_time,
                 keywords=keywords,
+                api_key=api_key,
             )
             logs, total = cls._extract_log_page(result)
             all_logs.extend(logs)
@@ -1356,6 +1409,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
     async def delete_function_instance(
         cls,
         function_instance_id: str,
+        api_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Delete a function (faas) runtime instance.
 
@@ -1381,7 +1435,7 @@ class AgenticRLFunctionComponent(Models, BaseModel):
             )
 
         url = f"{FC_DELETE_API}/{function_instance_id}"
-        result = await client_fc(FC_API_KEY, url, {})
+        result = await client_fc(resolve_fc_api_key(api_key), url, {})
         status = result.get("status", {})
         if isinstance(status, Dict) and status.get("code", 200) != 200:
             raise InstanceQueryError(
@@ -1450,10 +1504,15 @@ class RewardFunctionComponent(AgenticRLFunctionComponent):
         self,
         oss_id: Optional[str] = None,
         oss_url: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> ResponseFC:
         if not self.reward_metric_weight:
             self.reward_metric_weight = self.fcmodel.get_sub_function_weights()
-        result = await super().register(oss_id=oss_id, oss_url=oss_url)
+        result = await super().register(
+            oss_id=oss_id,
+            oss_url=oss_url,
+            api_key=api_key,
+        )
         return result
 
 
@@ -1477,10 +1536,15 @@ class GroupRewardFunctionComponent(AgenticRLFunctionComponent):
         self,
         oss_id: Optional[str] = None,
         oss_url: Optional[str] = None,
+        api_key: Optional[str] = None,
     ) -> ResponseFC:
         if not self.reward_metric_weight:
             self.reward_metric_weight = self.fcmodel.get_sub_function_weights()
-        result = await super().register(oss_id=oss_id, oss_url=oss_url)
+        result = await super().register(
+            oss_id=oss_id,
+            oss_url=oss_url,
+            api_key=api_key,
+        )
         return result
 
 
@@ -1524,6 +1588,7 @@ class TuningModel(Models, BaseModel):
     async def register_functions(
         self,
         lazy_load: Optional[bool] = True,
+        api_key: Optional[str] = None,
     ) -> tuple[
         List[str],
         List[str],
@@ -1546,7 +1611,7 @@ class TuningModel(Models, BaseModel):
                 if fc.entity_id:
                     entity_id = fc.entity_id
                 else:
-                    reg_result = await fc.register()
+                    reg_result = await fc.register(api_key=api_key)
                     if reg_result.status.success:
                         entity_id = reg_result.output.get("entity_id", "")
                         if not entity_id:
@@ -1572,7 +1637,10 @@ class TuningModel(Models, BaseModel):
                     entity_group_reward_ids.append(entity_id)
 
                 if not lazy_load:
-                    load_result = await fc.load(entity_id=entity_id)
+                    load_result = await fc.load(
+                        entity_id=entity_id,
+                        api_key=api_key,
+                    )
                     if load_result.status.success:
                         instance_id = load_result.output.get("instance_id", "")
                         if not instance_id:
@@ -1618,10 +1686,15 @@ class TuningModel(Models, BaseModel):
         self,
         training_files: Union[List[str], str] = None,
         validation_files: Union[List[str], str] = None,
+        api_key: Optional[str] = None,
     ) -> tuple[List[str], List[str]]:
         """Register and validate training/validation datasets."""
         uploaded_training_ids = []
         uploaded_validation_ids = []
+        # Normalize so that a single string path is not iterated
+        # character by character and defaults do not produce [None].
+        training_files = _normalize_file_param(training_files)
+        validation_files = _normalize_file_param(validation_files)
         try:
             if training_files:
                 self.datasets = []
@@ -1643,8 +1716,8 @@ class TuningModel(Models, BaseModel):
                         self.datasets.append(ds)
 
             # Perform dataset validation and upload
-            for ds in self.datasets:
-                ds_id = await ds.upload_dataset()
+            for ds in self.datasets or []:
+                ds_id = await ds.upload_dataset(api_key=api_key)
                 if ds.type == DatasetsType.TRAINING and ds_id is not None:
                     uploaded_training_ids.append(ds_id)
                 elif ds.type == DatasetsType.VALIDATION and ds_id is not None:
@@ -1656,6 +1729,9 @@ class TuningModel(Models, BaseModel):
                 f"{len(uploaded_validation_ids)} validation",
             )
 
+        except AgenticRLError:
+            # Keep the specific classification (code/solution/allow_retry)
+            raise
         except Exception as e:
             raise OSSUploadError(
                 "Dataset registration failed",

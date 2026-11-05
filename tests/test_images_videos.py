@@ -139,6 +139,96 @@ def test_images_generate_wan26_uses_multimodal_endpoint():
     assert job.usage.image_count == 1
 
 
+@pytest.mark.parametrize(
+    "model",
+    [
+        "wan2.7-image",
+        "wan2.7-image-pro",
+        "kling-image",
+        "vidu-image",
+        "z-image",
+    ],
+)
+def test_images_generate_multimodal_model_prefixes(model):
+    captured = {}
+
+    def handler(request):
+        captured["path"] = request.url.path
+        captured["header"] = request.headers.get("x-dashscope-async")
+        return httpx.Response(200, json=_multimodal_image_body())
+
+    client = _make_client(handler)
+    job = client.images.generate(model=model, prompt="a cat", n=1)
+    assert captured["path"] == MULTIMODAL_IMAGE_PATH
+    # One-shot sync call: no async header, no polling.
+    assert captured["header"] is None
+    assert job.succeeded is True
+    assert job.image_urls == ["https://cdn.example.com/1.png"]
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["wan2.7-image", "kling-image", "vidu-image", "z-image"],
+)
+def test_images_jobs_multimodal_models_use_task_endpoint(model):
+    captured = {}
+
+    def handler(request):
+        captured["path"] = request.url.path
+        captured["header"] = request.headers.get("x-dashscope-async")
+        return httpx.Response(200, json=_task_body("PENDING"))
+
+    client = _make_client(handler)
+    client.images.jobs.create(model=model, prompt="a cat")
+    assert captured["path"] == TASK_IMAGE_PATH
+    assert captured["header"] == "enable"
+
+
+def test_images_jobs_create_allows_template_without_prompt():
+    captured = {}
+
+    def handler(request):
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_task_body("PENDING"))
+
+    client = _make_client(handler)
+    client.images.jobs.create(
+        model="wanx-poster-generation-v1",
+        extra_input={
+            "template_id": "poster-template",
+            "params": {"title": "Spring sale"},
+        },
+    )
+    assert captured["path"] == IMAGE_PATH
+    assert captured["body"]["input"] == {
+        "template_id": "poster-template",
+        "params": {"title": "Spring sale"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_images_jobs_create_allows_template_without_prompt():
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_task_body("PENDING"))
+
+    client = _make_async_client(handler)
+    await client.images.jobs.create(
+        model="wanx-poster-generation-v1",
+        extra_input={
+            "template_id": "poster-template",
+            "params": {"title": "Spring sale"},
+        },
+    )
+    assert captured["body"]["input"] == {
+        "template_id": "poster-template",
+        "params": {"title": "Spring sale"},
+    }
+
+
 def test_images_generate_wan26_image_reference_urls():
     captured = {}
 

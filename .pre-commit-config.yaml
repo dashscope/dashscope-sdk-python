@@ -187,6 +187,12 @@ repos:
           --disable=R1732,
           --disable=W0108,
           --disable=R1711,
+          # astroid resolves an @overload set to its first stub body, so a
+          # resource method typed with overloads (``raw=False`` -> ModelList,
+          # ``raw=True`` -> APIResponse) infers as None at the call site and
+          # iterating the result reads as non-iterable. dashscope/ keeps
+          # E1133 enabled.
+          --disable=E1133,
         ]
   - repo: https://github.com/pre-commit/mirrors-eslint
     rev: v7.32.0

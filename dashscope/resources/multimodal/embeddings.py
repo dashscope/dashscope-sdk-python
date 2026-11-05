@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Union
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,6 +18,7 @@ from dashscope.resources.embeddings import (
     EmbeddingResponse,
     parse_embedding_response,
 )
+from dashscope.transport._options import request_options
 from dashscope.types.common import with_headers
 
 __all__ = [
@@ -135,6 +136,10 @@ class MultimodalEmbeddings:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> EmbeddingResponse:
         """Embed one item, or a list of them, into one vector space.
 
@@ -175,10 +180,20 @@ class MultimodalEmbeddings:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            parse_embedding_response(response_json(response)),
+            parse_embedding_response(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
             response,
         )
 
@@ -203,6 +218,10 @@ class AsyncMultimodalEmbeddings:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> EmbeddingResponse:
         contents = _contents(input)
         # The upload path is blocking (file post + getPolicy), so it runs in
@@ -237,9 +256,19 @@ class AsyncMultimodalEmbeddings:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
         )
         check_response(response, raise_on_error=self._client.raise_on_error)
         return with_headers(
-            parse_embedding_response(response_json(response)),
+            parse_embedding_response(
+                response_json(response),
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
             response,
         )

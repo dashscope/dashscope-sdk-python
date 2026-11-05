@@ -14,7 +14,7 @@ import ast
 import importlib
 import pathlib
 
-_REPO = pathlib.Path(__file__).resolve().parents[3]
+_REPO = pathlib.Path(__file__).resolve().parents[1]
 _DASHSCOPE = _REPO / "dashscope"
 _SHARED = _DASHSCOPE / "_shared"
 _CURRENT = (
@@ -30,6 +30,7 @@ _CURRENT = (
     _DASHSCOPE / "resources",
     _DASHSCOPE / "transport",
     _DASHSCOPE / "types",
+    _DASHSCOPE / "devkit",
     _DASHSCOPE / "applications" / "agentstudio",
     _DASHSCOPE / "applications" / "finetune" / "reinforcement",
 )
@@ -42,6 +43,7 @@ _NEUTRAL_PACKAGES = frozenset(
         "acli",
         "agentstudio",
         "applications",
+        "devkit",
         "finetune",
         "protocols",
         "resources",

@@ -22,6 +22,6 @@ langchain-core #1.3.0
 langchain-mcp-adapters #0.2.2
 langchain-openai #1.2.0
 langgraph #1.1.9
-fastmcp==3.1.1 #3.1.1
+fastmcp==3.2.0
 sympy #1.14.0
 anyio #4.13.0

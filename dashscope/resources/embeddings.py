@@ -10,11 +10,22 @@ Multimodal embedding lives at ``client.multimodal.embeddings``.
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Union,
+    overload,
+)
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from dashscope.errors import check_response, response_json
 from dashscope.resources._jobs import (
     DEFAULT_MAX_INTERVAL,
     DEFAULT_POLL_INTERVAL,
@@ -24,12 +35,19 @@ from dashscope.resources._jobs import (
     JobList,
     Jobs,
 )
+from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     ResponseBase,
     Usage,
     response_envelope,
     with_headers,
 )
+
+if TYPE_CHECKING:
+    import httpx
+
+    from dashscope.transport._response import APIResponse
 
 _PATH = "/services/embeddings/text-embedding/text-embedding"
 _BATCH_SERVICE = "embeddings/text-embedding/text-embedding"
@@ -61,9 +79,26 @@ class EmbeddingResponse(ResponseBase):
     usage: Optional[Usage] = None
 
 
-def parse_embedding_response(body: Dict[str, Any]) -> EmbeddingResponse:
-    """Shared by the text and multimodal endpoints: one response shape."""
-    output = body.get("output") or {}
+def parse_embedding_response(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional[httpx.Response] = None,
+) -> EmbeddingResponse:
+    """Shared by the text and multimodal endpoints: one response shape.
+
+    Built through :func:`~dashscope.types._parse.parse_model` like every
+    other v2 response parser, so a drifted field degrades instead of
+    raising a bare ``ValidationError`` -- and ``strict`` reaches it, which
+    is what makes ``strict_validation`` mean the same thing here as on
+    ``models`` / ``files`` / ``jobs``. Both endpoints forward the
+    client's setting, including ``multimodal.embeddings`` on the
+    pre-``request_api`` transport path, whose ``request`` returns the
+    same ``httpx.Response``.
+    """
+    output = body.get("output")
+    if not isinstance(output, dict):
+        output = {}
     embeddings = output.get("embeddings") or []
     if not embeddings and output.get("embedding"):
         # multimodal-embedding-one-peace-v1 predates the plural list: it
@@ -72,10 +107,15 @@ def parse_embedding_response(body: Dict[str, Any]) -> EmbeddingResponse:
         # shape regardless of model generation. 1.x exposed the raw key via
         # response.output["embedding"]; v2 normalizes instead.
         embeddings = [{"index": 0, "embedding": output["embedding"]}]
-    return EmbeddingResponse(
-        embeddings=embeddings,
-        usage=body.get("usage"),
-        **response_envelope(body),
+    return parse_model(
+        EmbeddingResponse,
+        {
+            "embeddings": embeddings,
+            "usage": body.get("usage"),
+            **response_envelope(body),
+        },
+        strict=strict,
+        response=response,
     )
 
 
@@ -116,6 +156,7 @@ class EmbeddingJobs:
     def __init__(self, client) -> None:
         self._jobs = Jobs(client, _BATCH_SERVICE, MODULE)
 
+    @overload
     def create(
         self,
         *,
@@ -126,11 +167,56 @@ class EmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> Job:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        file_url: str,
+        text_type: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    def create(
+        self,
+        *,
+        model: str,
+        file_url: str,
+        text_type: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
         """Submit a batch task over one file whose lines are the texts.
 
         Singular, unlike ``asr.transcribe(file_urls=)``: this endpoint
         accepts exactly one file.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
         """
         if not file_url:
             raise ValueError("file_url must not be empty")
@@ -144,7 +230,44 @@ class EmbeddingJobs:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def fetch(
         self,
@@ -153,13 +276,60 @@ class EmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Fetch one task snapshot.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         return self._jobs.fetch(
             task_id,
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    def cancel(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    def cancel(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def cancel(
         self,
@@ -168,14 +338,74 @@ class EmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
-        """Cancel a PENDING task (``POST /tasks/{task_id}/cancel``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Cancel a PENDING task (``POST /tasks/{task_id}/cancel``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         return self._jobs.cancel(
             task_id,
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        region: Optional[str] = None,
+        status: Optional[str] = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobList:
+        ...
+
+    @overload
+    def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        region: Optional[str] = None,
+        status: Optional[str] = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def list(  # pylint: disable=redefined-builtin
         self,
@@ -191,8 +421,17 @@ class EmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobList:
-        """List async tasks (``GET /tasks``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobList, "APIResponse"]:
+        """List async tasks (``GET /tasks``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         return self._jobs.list(
             start_time=start_time,
             end_time=end_time,
@@ -205,6 +444,11 @@ class EmbeddingJobs:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
 
     def wait(
@@ -216,6 +460,10 @@ class EmbeddingJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Any]] = None,
     ) -> Job:
         return self._jobs.wait(
@@ -225,6 +473,10 @@ class EmbeddingJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
             _sleep=_sleep,
         )
 
@@ -232,6 +484,44 @@ class EmbeddingJobs:
 class AsyncEmbeddingJobs:
     def __init__(self, client) -> None:
         self._jobs = AsyncJobs(client, _BATCH_SERVICE, MODULE)
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        file_url: str,
+        text_type: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        file_url: str,
+        text_type: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def create(
         self,
@@ -243,7 +533,20 @@ class AsyncEmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Submit a batch task over one file whose lines are the texts.
+
+        Singular, unlike ``asr.transcribe(file_urls=)``: this endpoint
+        accepts exactly one file.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         if not file_url:
             raise ValueError("file_url must not be empty")
         merged = dict(parameters or {})
@@ -256,7 +559,44 @@ class AsyncEmbeddingJobs:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    async def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    async def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def fetch(
         self,
@@ -265,13 +605,60 @@ class AsyncEmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Fetch one task snapshot.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         return await self._jobs.fetch(
             task_id,
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    async def cancel(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    async def cancel(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def cancel(
         self,
@@ -280,14 +667,74 @@ class AsyncEmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
-        """Cancel a PENDING task (``POST /tasks/{task_id}/cancel``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Cancel a PENDING task (``POST /tasks/{task_id}/cancel``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         return await self._jobs.cancel(
             task_id,
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    async def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        region: Optional[str] = None,
+        status: Optional[str] = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobList:
+        ...
+
+    @overload
+    async def list(  # pylint: disable=redefined-builtin
+        self,
+        *,
+        start_time: Optional[str] = None,
+        end_time: Optional[str] = None,
+        model_name: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        region: Optional[str] = None,
+        status: Optional[str] = None,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def list(  # pylint: disable=redefined-builtin
         self,
@@ -303,8 +750,17 @@ class AsyncEmbeddingJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobList:
-        """List async tasks (``GET /tasks``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobList, "APIResponse"]:
+        """List async tasks (``GET /tasks``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         return await self._jobs.list(
             start_time=start_time,
             end_time=end_time,
@@ -317,6 +773,11 @@ class AsyncEmbeddingJobs:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
 
     async def wait(
@@ -328,6 +789,10 @@ class AsyncEmbeddingJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
     ) -> Job:
         return await self._jobs.wait(
@@ -337,6 +802,10 @@ class AsyncEmbeddingJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
             _sleep=_sleep,
         )
 
@@ -345,6 +814,50 @@ class Embeddings:
     def __init__(self, client) -> None:
         self._client = client
         self.jobs = EmbeddingJobs(client)
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        input: Union[str, List[str]],
+        text_type: Optional[str] = None,
+        dimension: Optional[int] = None,
+        output_type: Optional[str] = None,
+        instruct: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> EmbeddingResponse:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        input: Union[str, List[str]],
+        text_type: Optional[str] = None,
+        dimension: Optional[int] = None,
+        output_type: Optional[str] = None,
+        instruct: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def create(
         self,
@@ -359,7 +872,12 @@ class Embeddings:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> EmbeddingResponse:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[EmbeddingResponse, "APIResponse"]:
         body = _build_body(
             model=model,
             input=input,
@@ -369,7 +887,7 @@ class Embeddings:
             instruct=instruct,
             parameters=parameters,
         )
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "POST",
             _PATH,
             json=body,
@@ -377,11 +895,24 @@ class Embeddings:
             api_key=api_key,
             workspace=workspace,
             sdk_module=MODULE,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
+        if raw:
+            return resp
+        resp.raise_for_status()
         return with_headers(
-            parse_embedding_response(response_json(response)),
-            response,
+            parse_embedding_response(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
         )
 
 
@@ -389,6 +920,50 @@ class AsyncEmbeddings:
     def __init__(self, client) -> None:
         self._client = client
         self.jobs = AsyncEmbeddingJobs(client)
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        input: Union[str, List[str]],
+        text_type: Optional[str] = None,
+        dimension: Optional[int] = None,
+        output_type: Optional[str] = None,
+        instruct: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> EmbeddingResponse:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        input: Union[str, List[str]],
+        text_type: Optional[str] = None,
+        dimension: Optional[int] = None,
+        output_type: Optional[str] = None,
+        instruct: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def create(
         self,
@@ -403,7 +978,12 @@ class AsyncEmbeddings:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> EmbeddingResponse:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[EmbeddingResponse, "APIResponse"]:
         body = _build_body(
             model=model,
             input=input,
@@ -413,7 +993,7 @@ class AsyncEmbeddings:
             instruct=instruct,
             parameters=parameters,
         )
-        response = await self._client.transport.request(
+        resp = await self._client.transport.request_api(
             "POST",
             _PATH,
             json=body,
@@ -421,9 +1001,22 @@ class AsyncEmbeddings:
             api_key=api_key,
             workspace=workspace,
             sdk_module=MODULE,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
+        if raw:
+            return resp
+        resp.raise_for_status()
         return with_headers(
-            parse_embedding_response(response_json(response)),
-            response,
+            parse_embedding_response(
+                resp.json(),
+                strict=self._client.config.strict_validation,
+                response=resp.http_response,
+            ),
+            resp.http_response,
         )
