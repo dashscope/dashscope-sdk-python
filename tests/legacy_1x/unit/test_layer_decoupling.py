@@ -30,6 +30,7 @@ _CURRENT = (
     _DASHSCOPE / "resources",
     _DASHSCOPE / "transport",
     _DASHSCOPE / "types",
+    _DASHSCOPE / "devkit",
     _DASHSCOPE / "applications" / "agentstudio",
     _DASHSCOPE / "applications" / "finetune" / "reinforcement",
 )
@@ -42,6 +43,7 @@ _NEUTRAL_PACKAGES = frozenset(
         "acli",
         "agentstudio",
         "applications",
+        "devkit",
         "finetune",
         "protocols",
         "resources",
