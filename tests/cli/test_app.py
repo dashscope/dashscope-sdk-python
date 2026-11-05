@@ -45,7 +45,8 @@ class TestRootApp:
         assert "--show-completion" in opts
 
     def test_help_lists_the_v2_commands_and_names_the_removed_1x_ones(
-        self, app
+        self,
+        app,
     ):
         result = _invoke(app, ["--help"])
         assert result.exit_code == 0

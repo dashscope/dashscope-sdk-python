@@ -193,7 +193,7 @@ def build_app() -> typer.Typer:
         confirm_or_die(f"delete deployment {deployed_model}?", yes=yes)
         obj = ctx.obj
         obj.renderer.print_object(
-            obj.client.deployments.delete(deployed_model)
+            obj.client.deployments.delete(deployed_model),
         )
 
     @app.command("stream")

@@ -45,7 +45,7 @@ def _parse_documents(
             value = parse_json_arg(raw, option_name="--documents")
             if not isinstance(value, list):
                 raise usage_error(
-                    "--documents: expected a JSON array of strings"
+                    "--documents: expected a JSON array of strings",
                 )
             docs.extend(str(item) for item in value)
     if repeatable:

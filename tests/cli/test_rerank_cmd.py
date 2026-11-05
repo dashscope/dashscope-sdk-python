@@ -147,7 +147,7 @@ class TestCreate:
     def test_create_requires_documents(self, invoke, rerank):
         rerank(create=_rerank_response())
         result = invoke(
-            ["rerank", "create", "-m", "gte-rerank", "-q", "query"]
+            ["rerank", "create", "-m", "gte-rerank", "-q", "query"],
         )
         assert result.exit_code == 2
         assert "no documents" in result.stderr

@@ -142,7 +142,9 @@ class TestCreate:
         assert kwargs["billing_method"] == "monthly"
 
     def test_create_rejects_a_non_object_deploy_spec(
-        self, invoke, deployments
+        self,
+        invoke,
+        deployments,
     ):
         deployments(create=_deployment())
         result = invoke(

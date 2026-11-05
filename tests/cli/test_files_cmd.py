@@ -84,7 +84,10 @@ def _as_terminal_tty(monkeypatch, answer: bool):
 
 class TestUpload:
     def test_upload_calls_sdk_with_path_and_purpose(
-        self, invoke, files, tmp_path
+        self,
+        invoke,
+        files,
+        tmp_path,
     ):
         payload = tmp_path / "train.jsonl"
         payload.write_text('{"messages": []}\n', encoding="utf-8")
@@ -165,7 +168,8 @@ class TestGet:
     def test_get_json_output(self, invoke, files):
         files(get=_file())
         result = invoke(
-            ["files", "get", "file-abc123"], global_args=["-o", "json"]
+            ["files", "get", "file-abc123"],
+            global_args=["-o", "json"],
         )
         assert result.exit_code == 0
         import json
