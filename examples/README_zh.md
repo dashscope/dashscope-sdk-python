@@ -190,6 +190,7 @@ dashscope chat create -m qwen-plus --prompt "hi" --output json             # exi
 | 命令 | 用途 |
 | --- | --- |
 | `dashscope version` | 打印已安装的 SDK 版本。什么都不碰，所以是你手上最便宜的冒烟测试 |
+| `dashscope auth login` / `whoami` / `logout` | 保存、验证或删除 `~/.dashscope/api_key` 中的 API Key。顶层 `dashscope login` / `whoami` / `logout` 是等价简写 |
 | `dashscope chat create` | 一次 chat 补全：`--prompt` / `--messages`、`--stream`、`--tools`、采样参数，其余走 `--parameters` |
 | `dashscope ft create` | 起一个微调作业；`--wait` 带 spinner 阻塞到终态，`--timeout` 限定等待时长 |
 | `dashscope ft get` | 查看单个作业 |

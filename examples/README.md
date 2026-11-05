@@ -190,6 +190,7 @@ That last one is not a quirk — it is the single most common way to get a confu
 | Command | Purpose |
 | --- | --- |
 | `dashscope version` | Print the installed SDK version. Touches nothing, so it is the cheapest smoke test you have |
+| `dashscope auth login` / `whoami` / `logout` | Save, verify, or remove the API key in `~/.dashscope/api_key`. Top-level `dashscope login` / `whoami` / `logout` are shortcuts |
 | `dashscope chat create` | One chat completion: `--prompt` / `--messages`, `--stream`, `--tools`, sampling flags, `--parameters` for anything else |
 | `dashscope ft create` | Start a fine-tune job; `--wait` blocks with a spinner until a terminal status, `--timeout` bounds the wait |
 | `dashscope ft get` | Show one job |

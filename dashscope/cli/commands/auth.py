@@ -18,7 +18,7 @@ _HELP = r"""Manage the DashScope API key.
 `auth login` writes the same ~/.dashscope/api_key file as 1.x. `auth whoami`
 validates the resolved key with a one-item models request. `auth logout`
 removes only the default saved-key file; environment and config.toml values
-are left untouched.
+are left untouched. Top-level `login`, `whoami`, and `logout` are shortcuts.
 """
 
 

@@ -36,6 +36,8 @@ _DOTTED_COMMANDS = {
     "oss.upload": ("oss", "upload"),
 }
 
+_TOP_LEVEL_AUTH_COMMANDS = {"login", "whoami", "logout"}
+
 _GROUPS = {
     "auth",
     "generation",
@@ -527,7 +529,9 @@ def _normalize_multimodal_conversation(parsed: _Parsed) -> None:
 def _normalize_image_generation(parsed: _Parsed, subcommand: str) -> None:
     if subcommand != "create":
         return
-    parsed.rename({"-t": "--prompt", "--text": "--prompt", "--image": "--image-url"})
+    parsed.rename(
+        {"-t": "--prompt", "--text": "--prompt", "--image": "--image-url"},
+    )
     max_images = _one(parsed.values("--max-images"))
     if max_images is not None:
         _merge_json_option(
@@ -556,12 +560,12 @@ def _normalize_video(parsed: _Parsed, subcommand: str) -> None:
 def _normalize_transcription(parsed: _Parsed, subcommand: str) -> None:
     if subcommand != "create":
         return
-    urls = [value for value in parsed.values("--file-url") if value is not None]
+    urls = [
+        value for value in parsed.values("--file-url") if value is not None
+    ]
     parsed.positionals = urls + parsed.positionals
     parsed.add_flag("--no-wait")
-    channels = [
-        _json_scalar(value) for value in parsed.values("--channel-id")
-    ]
+    channels = [_json_scalar(value) for value in parsed.values("--channel-id")]
     parameters: Dict[str, object] = {}
     if channels:
         parameters["channel_id"] = channels
@@ -724,6 +728,7 @@ def _flags_for(group: str, subcommand: str) -> frozenset:
     return frozenset(flags)
 
 
+# pylint: disable-next=too-many-return-statements
 def _target(group: str, subcommand: str) -> Tuple[str, List[str], str]:
     if group == "generation":
         return "chat", ["create"], "create"
@@ -765,6 +770,7 @@ def _target(group: str, subcommand: str) -> Tuple[str, List[str], str]:
     return _GROUP_ALIASES.get(group, group), [verb], verb
 
 
+# pylint: disable-next=too-many-branches,too-many-statements
 def normalize_argv(argv: Sequence[str]) -> List[str]:
     """Return *argv* in v2 form, accepting every registered 1.x command."""
     args = list(argv)
@@ -773,9 +779,16 @@ def normalize_argv(argv: Sequence[str]) -> List[str]:
         return [_normalise_token(arg) for arg in args]
     prefix = [_normalise_token(arg) for arg in args[:index]]
     token = args[index]
-    if token == "expert" or (token not in _GROUPS and token not in _DOTTED_COMMANDS):
+    if token == "expert" or (
+        token not in _GROUPS
+        and token not in _DOTTED_COMMANDS
+        and token not in _TOP_LEVEL_AUTH_COMMANDS
+    ):
         return prefix + args[index:]
-    if token in _DOTTED_COMMANDS:
+    if token in _TOP_LEVEL_AUTH_COMMANDS:
+        group, subcommand = "auth", token
+        rest = args[index + 1 :]
+    elif token in _DOTTED_COMMANDS:
         group, subcommand = _DOTTED_COMMANDS[token]
         rest = args[index + 1 :]
     else:

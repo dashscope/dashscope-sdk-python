@@ -31,6 +31,9 @@ class TestClassify:
             ["auth", "login", "--key", "sk-1"],
             ["auth", "whoami"],
             ["auth", "logout"],
+            ["login", "--key", "sk-1"],
+            ["whoami"],
+            ["logout"],
             ["oss", "upload", "-f", "input.png", "-m", "qwen-vl-max"],
             ["chat", "create", "-m", "qwen-plus"],
             ["ft", "list"],
@@ -253,6 +256,28 @@ class TestMainDispatch:
                 "--wait",
             ],
         ]
+
+    @pytest.mark.parametrize(
+        ("argv", "expected"),
+        [
+            (["whoami"], ["auth", "whoami"]),
+            (["logout"], ["auth", "logout"]),
+            (
+                ["login", "-k", "sk-secret"],
+                ["auth", "login", "-k", "sk-secret"],
+            ),
+        ],
+    )
+    def test_top_level_auth_shortcuts_use_v2(
+        self,
+        argv,
+        expected,
+        new_app,
+        legacy_app,
+    ):
+        main(argv)
+        assert new_app == [expected]
+        assert legacy_app == []
 
     def test_shared_rl_run_uses_the_v2_job_resource(self, new_app, legacy_app):
         main(["agentic-rl", "run", "-c", "rl.toml", "-o", "json", "-v"])
