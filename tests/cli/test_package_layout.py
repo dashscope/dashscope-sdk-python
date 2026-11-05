@@ -71,7 +71,9 @@ def test_legacy_argv_routes_to_the_legacy_cli():
         "assert 'dashscope.legacy_1x.cli' in sys.modules\n",
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Usage: dashscope generation call" in strip_ansi_codes(result.stdout)
+    assert "Usage: dashscope generation call" in strip_ansi_codes(
+        result.stdout,
+    )
 
 
 def _module_level_imports(path: Path):
