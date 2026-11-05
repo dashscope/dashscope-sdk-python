@@ -14,7 +14,7 @@ import ast
 import importlib
 import pathlib
 
-_REPO = pathlib.Path(__file__).resolve().parents[3]
+_REPO = pathlib.Path(__file__).resolve().parents[1]
 _DASHSCOPE = _REPO / "dashscope"
 _SHARED = _DASHSCOPE / "_shared"
 _CURRENT = (
