@@ -62,6 +62,26 @@ class ResponseBase(BaseModel):
             self.is_error = True
         return self
 
+    @property
+    def diagnosis(self):
+        """Structured local fix guidance for a non-raising error envelope.
+
+        The ``raise_on_error=False`` counterpart of ``DashScopeError.diagnosis``:
+        when the SDK filled ``code``/``message`` instead of raising, this
+        matches the same offline rule table and returns the guidance (or
+        ``None`` for a success, or when no rule matched). Imported lazily so
+        successful responses pay nothing and never load the devkit package.
+        """
+        if not self.is_error:
+            return None
+        from dashscope.devkit.diagnosis import diagnose
+
+        return diagnose(
+            status_code=self.status_code,
+            code=self.code,
+            message=self.message,
+        )
+
 
 class JobStatus(ResponseBase):
     """Result of a state transition that reports nothing but the new state.

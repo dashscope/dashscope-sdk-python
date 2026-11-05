@@ -104,6 +104,25 @@ class DashScopeError(DashScopeException):
             parts.append(f"request_id={self.request_id}")
         return " | ".join(parts)
 
+    @property
+    def diagnosis(self):
+        """Structured local fix guidance, or ``None`` if no rule matched.
+
+        Matched offline from ``(status_code, code, message)`` by the devkit
+        rule table -- no network, no model call. Advisory data only: the
+        SDK never prints it. The CLI renders it, and
+        ``dashscope.devkit.install_excepthook()`` appends it to uncaught
+        tracebacks. Imported lazily so the error path stays dependency-free
+        and the devkit package is never loaded on the success path.
+        """
+        from dashscope.devkit.diagnosis import diagnose
+
+        return diagnose(
+            status_code=self.status_code,
+            code=self.code,
+            message=self.message,
+        )
+
 
 _SDK_ERRORS: Dict[str, SdkErrorDef] = {
     entry.name: entry for entry in _registry.SDK_ERRORS
