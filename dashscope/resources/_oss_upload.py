@@ -25,7 +25,7 @@ from urllib.parse import unquote_plus, urlparse
 
 import httpx
 
-from dashscope._logging import get_logger
+from dashscope._logging import get_logger, request_id_from_headers
 from dashscope.errors import (
     check_response,
     error_from_status,
@@ -186,9 +186,12 @@ def upload_local_file(
     )
     if not response.is_success:
         logger.error(
-            "uploading file %s to oss failed, status %s",
+            "uploading file %s to oss failed, status %s, request_id=%s",
             file_path,
             response.status_code,
+            request_id_from_headers(response.headers)
+            or response.headers.get("x-oss-request-id")
+            or "unknown",
         )
         # OSS answers with XML, so there is no business code to read and the
         # error is mapped from the status code alone.

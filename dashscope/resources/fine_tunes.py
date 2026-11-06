@@ -52,6 +52,7 @@ from dashscope.resources._jobs import (
 from dashscope.resources._sse import (
     _aiter_sse,
     _iter_sse,
+    _log_stream_error,
     _stream_error,
     _try_json,
 )
@@ -398,7 +399,12 @@ class FineTunes:
             for is_error, status_code, data in _iter_sse(response):
                 if is_error:
                     if self._client.raise_on_error:
-                        raise _stream_error(status_code, data)
+                        raise _stream_error(
+                            status_code,
+                            data,
+                            response.headers,
+                        )
+                    _log_stream_error(data, response.headers)
                     yield FineTuneEvent(output=_try_json(data), is_error=True)
                     return
                 yield FineTuneEvent(output=_try_json(data))
@@ -626,7 +632,12 @@ class AsyncFineTunes:
             async for is_error, status_code, data in _aiter_sse(response):
                 if is_error:
                     if self._client.raise_on_error:
-                        raise _stream_error(status_code, data)
+                        raise _stream_error(
+                            status_code,
+                            data,
+                            response.headers,
+                        )
+                    _log_stream_error(data, response.headers)
                     yield FineTuneEvent(
                         output=_try_json(data),
                         is_error=True,

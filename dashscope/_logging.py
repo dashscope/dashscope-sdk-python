@@ -41,6 +41,29 @@ _API_KEY_RE = re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")
 REDACTED = "[REDACTED]"
 
 
+def request_id_from_headers(
+    headers: Optional[Mapping[str, Any]],
+) -> Optional[str]:
+    """Find a gateway request ID without assuming header casing."""
+    names = {"x-request-id", "x-dashscope-requestid", "x-dashscope-request-id"}
+    for name, value in (headers or {}).items():
+        if not isinstance(name, str) or name.lower() not in names:
+            continue
+        values = value if isinstance(value, (list, tuple)) else (value,)
+        for item in values:
+            if isinstance(item, str) and item.strip():
+                return item
+    return None
+
+
+def request_id_for_log(*request_ids: Any) -> str:
+    """Use real ID strings only; never stringify arbitrary response objects."""
+    for request_id in request_ids:
+        if isinstance(request_id, str) and request_id.strip():
+            return request_id
+    return "unknown"
+
+
 def redact_headers(
     headers: Optional[Mapping[str, Any]],
 ) -> Optional[dict]:
