@@ -439,23 +439,23 @@ SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供�
 
 ## 命令行
 
-`pip install -U dashscope` 只安装一个 `dashscope` 命令。它同时提供按 SDK 资源树设计的 **2.0** 命令和现有 **1.x** 命令形式，现有 1.x 调用无需迁移：
+`pip install -U dashscope` 会安装两个相互独立的命令。`dashscope` 提供按 SDK 资源树设计的 **2.0** 命令；`dashscope1` 提供冻结的 **1.x** 实现：
 
-| 形式 | 示例 |
-|------|------|
-| **2.0**，对齐 SDK 资源树 | `chat create`、`apps completions create`、`multimodal chat create`、`rl jobs create`、`rl functions register`、`images jobs create`、`audio asr transcribe`、`agentstudio sessions events send` |
-| **1.x**，保持兼容 | `generation call`、`application call`、`image-synthesis create`、`multimodal-conversation call`、`fine-tunes call`、`agentic-rl run`、`auth login`、`oss upload` |
+| 入口 | 实现 | 示例 |
+|------|------|------|
+| `dashscope` | 2.0，对齐 SDK 资源树 | `chat create`、`apps completions create`、`multimodal chat create`、`rl jobs create`、`rl functions register`、`images jobs create`、`audio asr transcribe`、`agentstudio sessions events send` |
+| `dashscope1` | 1.x，调用 1.x SDK | `generation call`、`application call`、`image-synthesis create`、`multimodal-conversation call`、`fine-tunes call`、`agentic-rl run`、`auth login`、`oss upload` |
 
-1.x 专有名称和点式命令仍由冻结的 1.x 实现执行；共享名称由 2.0 执行，并兼容 1.x 参数拼写和默认值。模块入口使用同一个路由器：
+两套 CLI 不会相互分发命令或转换参数。通过 `dashscope` 运行 1.x 专有命令会返回用法错误，并提示改用 `dashscope1`。两者的模块入口也相互独立：
 
 ```bash
-python -m dashscope.cli generation call ...
 python -m dashscope.cli apps completions create ...
+python -m dashscope.legacy_1x.cli generation call ...
 ```
 
 不带参数运行 `dashscope` 会启动 [AI 助手](#ai-助手dashscope-sdk-expert)，而不是 CLI。
 
-完整的 CLI 命令地图、1.x 兼容规则、输出格式、退出码、配置优先级和 CI 配方，见 [`examples/README_zh.md`](examples/README_zh.md) 的命令行章节。
+完整的 2.0 CLI 命令地图、输出格式、退出码、配置优先级和 CI 配方，见 [`examples/README_zh.md`](examples/README_zh.md) 的命令行章节。
 
 ## Shell 命令补全
 
@@ -473,7 +473,7 @@ python -m dashscope.cli apps completions create ...
 dashscope --show-completion bash
 ```
 
-命令补全通过唯一的 `dashscope` 入口安装。
+命令补全通过 2.0 的 `dashscope` 入口安装。
 
 ## 日志
 

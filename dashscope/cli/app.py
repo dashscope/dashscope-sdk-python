@@ -6,8 +6,8 @@ Global options follow click's convention and precede the subcommand::
 
     dashscope -k sk-xxx --output json chat create -m qwen-plus --prompt hi
 
-The console entry point also dispatches frozen 1.x-only commands and
-normalises compatible options on shared commands before invoking this app.
+The 1.x command tree is installed separately as ``dashscope1`` and is never
+imported or executed by this app.
 """
 
 from __future__ import annotations
@@ -35,9 +35,9 @@ line, 3 auth, 4 not found.
 
 def _epilog() -> str:
     return (
-        "Frozen 1.x commands such as `generation create`, `application create` "
-        "and dotted spellings remain available under this same entry point. "
-        "A bare `dashscope` opens the bundled `expert` agent interactively."
+        "CLI 1.x commands such as `generation create` and `application create` "
+        "have moved to `dashscope1`. A bare `dashscope` opens the bundled "
+        "`expert` agent interactively."
     )
 
 

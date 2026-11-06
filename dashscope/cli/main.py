@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-"""Route ``dashscope`` to the SDK-shaped v2 tree, frozen 1.x commands, or agent.
+"""Route ``dashscope`` to the SDK-shaped v2 tree or the bundled agent.
 
-Legacy-only command names and dotted spellings keep their original 1.x
-implementation. Shared names such as ``ft`` and ``files`` are served by v2
-with compatible option spellings. There is only one console entry point.
+The 1.x CLI has its own ``dashscope1`` entry point. Recognizing its command
+names here only produces a migration hint; no legacy implementation is
+imported or executed.
 """
 
 from __future__ import annotations
@@ -15,8 +15,7 @@ from typing import List, Optional, Sequence
 
 from rich.console import Console
 
-from dashscope.cli.compat_1x import normalize_argv
-from dashscope.cli.errors import CliError, fail
+from dashscope.cli.errors import fail, usage_error
 
 NEW = "new"
 AGENT = "agent"
@@ -58,10 +57,37 @@ LEGACY_DOTTED_COMMANDS = frozenset(
     },
 )
 
-# Names this entry point serves itself. ``fine-tunes`` and ``agentic-rl``
-# are the hidden aliases the 1.x tree already used for ``ft`` and ``rl``,
-# so muscle memory keeps working. Pinned to the groups ``app.py`` actually
-# registers by a test.
+LEGACY_TOP_LEVEL_COMMANDS = frozenset({"login", "whoami", "logout"})
+
+# Shared group names whose 1.x verbs have a different SDK-shaped v2 path.
+LEGACY_SUBCOMMANDS = {
+    "ft": frozenset({"call"}),
+    "fine-tunes": frozenset({"call"}),
+    "fine_tunes": frozenset(
+        {"call", "create", "get", "list", "stream", "cancel", "delete"},
+    ),
+    "deployments": frozenset({"call"}),
+    "tokenization": frozenset({"create"}),
+    "rl": frozenset(
+        {
+            "run",
+            "get",
+            "list",
+            "cancel",
+            "logs",
+            "register-functions",
+            "register_functions",
+            "test-functions",
+            "test_functions",
+            "upload-data",
+            "upload_data",
+        },
+    ),
+}
+LEGACY_SUBCOMMANDS["agentic-rl"] = LEGACY_SUBCOMMANDS["rl"]
+
+# Names this entry point serves itself, pinned to the groups ``app.py``
+# actually registers by a test.
 NEW_COMMANDS = frozenset(
     {
         "auth",
@@ -121,10 +147,8 @@ _VALUE_TAKING_OPTIONS = frozenset(
     {
         "-k",
         "--api-key",
-        "--api_key",
         "--protocol",
         "--base-url",
-        "--base_url",
         "--workspace",
         "--region",
         "--timeout",
@@ -137,11 +161,11 @@ _VALUE_TAKING_OPTIONS = frozenset(
 # The spellings that set the API key. Kept separate from the above because
 # only these drive the bare-``dashscope`` decision, and because the agent
 # wants the value itself rather than merely needing to step over it.
-_VALUE_OPTIONS = ("-k", "--api-key", "--api_key")
+_VALUE_OPTIONS = ("-k", "--api-key")
 
 
-def _first_command_token(argv: Sequence[str]) -> Optional[str]:
-    """The first token that is not an option or an option's value."""
+def _command_index(argv: Sequence[str]) -> Optional[int]:
+    """Index of the first token that is not an option or an option's value."""
     index = 0
     while index < len(argv):
         arg = argv[index]
@@ -157,7 +181,7 @@ def _first_command_token(argv: Sequence[str]) -> Optional[str]:
             # the latter case click produces the usage error.
             index += 1
             continue
-        return arg
+        return index
     return None
 
 
@@ -186,9 +210,9 @@ def _without_api_key_options(argv: Sequence[str]) -> List[str]:
 def _api_key_from(argv: Sequence[str]) -> Optional[str]:
     """The key the invocation passed, if it passed one.
 
-    The agent reads ``dashscope.api_key`` -- the module global the 1.x
-    entry point populated before handing over. Nothing else in the v2 tree
-    consults it; commands resolve credentials through ``ctx.obj``.
+    The agent reads ``dashscope.api_key``. Nothing else in the v2 tree
+    consults that module global; commands resolve credentials through
+    ``ctx.obj``.
     """
     index = 0
     while index < len(argv):
@@ -219,27 +243,43 @@ def _classify_without_command(argv: Sequence[str]) -> str:
     return NEW
 
 
-def classify(argv: Sequence[str]) -> str:
-    """Route legacy-only names to 1.x and everything else to v2 or agent."""
-    token = _first_command_token(argv)
-    if token is None:
-        return _classify_without_command(argv)
-    if token == _AGENT_COMMAND:
-        return AGENT
+def _legacy_command(argv: Sequence[str]) -> Optional[str]:
+    """The 1.x command path to reject, or ``None`` for a v2 invocation."""
+    index = _command_index(argv)
+    if index is None:
+        return None
+    token = argv[index]
+    if token in LEGACY_TOP_LEVEL_COMMANDS:
+        return token
     if token in LEGACY_GROUPS or token in LEGACY_DOTTED_COMMANDS:
+        return token
+    if index + 1 < len(argv):
+        subcommand = argv[index + 1]
+        if subcommand in LEGACY_SUBCOMMANDS.get(token, ()):
+            return f"{token} {subcommand}"
+    return None
+
+
+def classify(argv: Sequence[str]) -> str:
+    """Route moved 1.x names to a hint and everything else to v2 or agent."""
+    index = _command_index(argv)
+    if index is None:
+        return _classify_without_command(argv)
+    if argv[index] == _AGENT_COMMAND:
+        return AGENT
+    if _legacy_command(argv) is not None:
         return LEGACY
     return NEW
 
 
-def _run_legacy(argv: Sequence[str]) -> None:
-    previous = sys.argv
-    sys.argv = ["dashscope", *argv]
-    try:
-        from dashscope.legacy_1x.cli import main as legacy_main
-
-        legacy_main(prog_name="dashscope")
-    finally:
-        sys.argv = previous
+def _reject_legacy(argv: Sequence[str]) -> None:
+    command = _legacy_command(argv)
+    fail(
+        usage_error(
+            f"No such command {command!r}. CLI 1.x commands have moved to "
+            f"'dashscope1'. Run 'dashscope1 {command} ...' instead.",
+        ),
+    )
 
 
 def _run_agent(argv: Sequence[str]) -> None:
@@ -277,14 +317,8 @@ def main(args: Optional[Sequence[str]] = None) -> None:
     """Entry point for the ``dashscope`` console script."""
     argv: List[str] = list(sys.argv[1:] if args is None else args)
 
-    # Shell completion bypasses the agent and follows the same CLI routing.
-    # Click signals a completion run through this env var, and a completion call
-    # often names no command, which would otherwise classify as a bare
-    # ``dashscope`` and open the agent instead of listing completions.
+    # Shell completion bypasses the agent and always uses the v2 command tree.
     if os.environ.get("_DASHSCOPE_COMPLETE"):
-        if classify(argv) is LEGACY:
-            _run_legacy(argv)
-            return
         from dashscope.cli.app import build_app
 
         build_app()(argv)
@@ -292,14 +326,7 @@ def main(args: Optional[Sequence[str]] = None) -> None:
 
     target = classify(argv)
     if target is LEGACY:
-        _run_legacy(argv)
-        return
-
-    try:
-        argv = normalize_argv(argv)
-    except CliError as exc:
-        fail(exc)
-
+        _reject_legacy(argv)
     if target is AGENT:
         _run_agent(argv)
         return

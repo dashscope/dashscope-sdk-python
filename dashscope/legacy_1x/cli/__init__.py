@@ -124,16 +124,16 @@ _EXPERT_COMMAND = "expert"
 _EXPERT_USAGE = """[bold]DashScope SDK Expert[/bold] — the built-in AI assistant.
 
 [bold]Usage:[/bold]
-  dashscope                     interactive assistant (TUI by default)
-  dashscope expert              the same, spelled explicitly
-  dashscope expert --cli        interactive, plain REPL instead of the TUI
-  dashscope expert --tui        interactive, force the TUI
-  dashscope expert "question"   ask once and exit
+  dashscope1                     interactive assistant (TUI by default)
+  dashscope1 expert              the same, spelled explicitly
+  dashscope1 expert --cli        interactive, plain REPL instead of the TUI
+  dashscope1 expert --tui        interactive, force the TUI
+  dashscope1 expert "question"   ask once and exit
 
 With no argument, piped stdin is read as a one-shot prompt.
 SDK subcommands (generation, ft, files, models, ...) dispatch as usual; an
 unrecognized command is reported as an error rather than treated as a
-question, so ask one with [bold]dashscope expert "question"[/bold].
+question, so ask one with [bold]dashscope1 expert "question"[/bold].
 
 Requires [bold]pip install dashscope[acli][/bold]."""
 
@@ -278,8 +278,8 @@ def _route_to_expert(command, tui=None):
 # ---------------------------------------------------------------------------
 
 app = typer.Typer(
-    name="dashscope",
-    help="DashScope command line tools.",
+    name="dashscope1",
+    help="DashScope 1.x command line tools.",
     add_completion=True,
     no_args_is_help=True,
     rich_markup_mode="rich",
@@ -390,7 +390,7 @@ def _first_non_option(argv):
 
 
 def main(prog_name: Optional[str] = None):
-    """Entry point for the ``dashscope`` console script."""
+    """Entry point for the ``dashscope1`` console script."""
     # Translate legacy command format first so legacy --api_key can be treated
     # as the global --api-key option.
     argv = _translate_legacy_args(sys.argv)

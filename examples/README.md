@@ -153,21 +153,23 @@ Read the two examples in table order. The first shows *what* comes out of each c
 
 ### Install and first call
 
-The package registers a console script, so after `pip install -U dashscope` there is a `dashscope` command on your `PATH`:
+The package registers two console scripts, so after `pip install -U dashscope` there are independent `dashscope` (2.0) and `dashscope1` (1.x) commands on your `PATH`:
 
 ```bash
 dashscope --help
 dashscope version
+dashscope1 --help
 ```
 
-From a source checkout where the script is not installed, the module entry point is identical:
+From a source checkout where the scripts are not installed, the module entry points are equivalent:
 
 ```bash
 python -m dashscope.cli --help
 python -m dashscope.cli version
+python -m dashscope.legacy_1x.cli --help
 ```
 
-> Existing 1.x command forms use this same `dashscope` entry point. Legacy-only names run against the frozen 1.x implementation; shared names accept their old option spellings through the 2.0 tree. See [`legacy_1x/`](./legacy_1x/) for the 1.x module-level API examples.
+> Existing 1.x command forms use `dashscope1`, which calls the frozen 1.x CLI and SDK. The 2.0 `dashscope` entry point neither dispatches to that implementation nor accepts its old option spellings; a 1.x-only command exits 2 with a migration hint. See [`legacy_1x/`](./legacy_1x/) for the 1.x module-level API examples.
 
 Set the key once, either way:
 
@@ -190,7 +192,7 @@ That last one is not a quirk — it is the single most common way to get a confu
 | Command | Purpose |
 | --- | --- |
 | `dashscope version` | Print the installed SDK version. Touches nothing, so it is the cheapest smoke test you have |
-| `dashscope auth login` / `whoami` / `logout` | Save, verify, or remove the API key in `~/.dashscope/api_key`. Top-level `dashscope login` / `whoami` / `logout` are shortcuts |
+| `dashscope auth login` / `whoami` / `logout` | Save, verify, or remove the API key in `~/.dashscope/api_key` |
 | `dashscope chat create` | One chat completion: `--prompt` / `--messages`, `--stream`, `--tools`, sampling flags, `--parameters` for anything else |
 | `dashscope ft create` | Start a fine-tune job; `--wait` blocks with a spinner until a terminal status, `--timeout` bounds the wait |
 | `dashscope ft get` | Show one job |
@@ -260,7 +262,7 @@ That last one is not a quirk — it is the single most common way to get a confu
 | `dashscope config get` | Read one key back (api_key masked unless `--reveal`) |
 | `dashscope config list` | Every key, its effective value, and the layer that supplied it |
 
-One `dashscope` entry point serves both generations. Legacy-only groups (`generation`, `application`, `image-synthesis`, `multimodal-conversation`, `speech-synthesis`, `transcription`, `video-synthesis`, `image-generation`, `multimodal-embedding`) and pre-Typer dotted spellings keep their original argv and run against the frozen 1.x implementation. Shared groups such as `ft`/`fine-tunes`, `files`, `deployments`, `models`, `rl`/`agentic-rl`, `auth`, and `oss` run through 2.0; the compatibility layer accepts the old option spellings and preserves old defaults where they differ. New 2.0 commands follow the SDK resource tree, so application invocation is `apps completions create`, not a shortened `apps call`. A bare `dashscope` with no subcommand opens the bundled `expert` agent interactively.
+The two generations have independent entry points and implementations. Use `dashscope1` for every 1.x command, including legacy-only groups (`generation`, `application`, `image-synthesis`, `multimodal-conversation`, `speech-synthesis`, `transcription`, `video-synthesis`, `image-generation`, `multimodal-embedding`), pre-Typer dotted spellings, and shared group names with 1.x arguments. Use `dashscope` for the 2.0 commands above, which follow the SDK resource tree; application invocation is `apps completions create`, not a shortened `apps call`. A 1.x-only command under `dashscope` is rejected as an unknown command with a `dashscope1` migration hint. A bare `dashscope` with no subcommand opens the bundled `expert` agent interactively.
 
 What is *not* here is a decision rather than a backlog, and the gaps all have the same shape: a long-lived bidirectional socket, or a long tail of CRUD that a shell adds nothing to. `audio realtime run` drives **one turn** of the duplex Omni socket and hangs up; a live microphone — which stays open across turns and expects audio at realtime pace — is `client.audio.realtime.connect()` in Python, and `tingwu realtime` is the same story. `agentstudio` covers the loop you actually script (agents, sessions, session events); its other nine top-level resources (deployments and their runs, environments, files, skills, vaults, memory stores, webhook endpoints, security) plus session threads and session resources stay SDK-only. Everything else the SDK exposes has a command.
 

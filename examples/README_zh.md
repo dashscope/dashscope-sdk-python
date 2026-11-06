@@ -153,11 +153,12 @@ examples/
 
 ### 安装与第一次调用
 
-包里注册了 console script，所以 `pip install -U dashscope` 之后 `PATH` 上就有一个 `dashscope` 命令：
+包里注册了两个 console script，所以 `pip install -U dashscope` 之后 `PATH` 上会有相互独立的 `dashscope`（2.0）和 `dashscope1`（1.x）命令：
 
 ```bash
 dashscope --help
 dashscope version
+dashscope1 --help
 ```
 
 在没装 console script 的源码检出里，模块入口完全等价：
@@ -165,9 +166,10 @@ dashscope version
 ```bash
 python -m dashscope.cli --help
 python -m dashscope.cli version
+python -m dashscope.legacy_1x.cli --help
 ```
 
-> 现有 1.x 命令形式同样使用 `dashscope` 入口。1.x 专有名称仍由冻结的 1.x 实现执行，共享名称则通过 2.0 命令树兼容旧参数拼写。1.x 模块级 API 示例见 [`legacy_1x/`](./legacy_1x/)。
+> 现有 1.x 命令形式使用 `dashscope1`，由冻结的 1.x CLI 调用 1.x SDK。2.0 的 `dashscope` 入口不会向该实现分发命令，也不接受旧参数拼写；1.x 专有命令会以退出码 2 返回迁移提示。1.x 模块级 API 示例见 [`legacy_1x/`](./legacy_1x/)。
 
 密钥配一次，两种方式都行：
 
@@ -190,7 +192,7 @@ dashscope chat create -m qwen-plus --prompt "hi" --output json             # exi
 | 命令 | 用途 |
 | --- | --- |
 | `dashscope version` | 打印已安装的 SDK 版本。什么都不碰，所以是你手上最便宜的冒烟测试 |
-| `dashscope auth login` / `whoami` / `logout` | 保存、验证或删除 `~/.dashscope/api_key` 中的 API Key。顶层 `dashscope login` / `whoami` / `logout` 是等价简写 |
+| `dashscope auth login` / `whoami` / `logout` | 保存、验证或删除 `~/.dashscope/api_key` 中的 API Key |
 | `dashscope chat create` | 一次 chat 补全：`--prompt` / `--messages`、`--stream`、`--tools`、采样参数，其余走 `--parameters` |
 | `dashscope ft create` | 起一个微调作业；`--wait` 带 spinner 阻塞到终态，`--timeout` 限定等待时长 |
 | `dashscope ft get` | 查看单个作业 |
@@ -260,7 +262,7 @@ dashscope chat create -m qwen-plus --prompt "hi" --output json             # exi
 | `dashscope config get` | 读回一个键（api_key 默认打码，除非 `--reveal`） |
 | `dashscope config list` | 每个键、它的生效值，以及这个值来自哪一层 |
 
-一个 `dashscope` 入口同时服务两代命令。1.x 专有命令组（`generation`、`application`、`image-synthesis`、`multimodal-conversation`、`speech-synthesis`、`transcription`、`video-synthesis`、`image-generation`、`multimodal-embedding`）和 Typer 之前的点式拼写保留原始 argv，由冻结的 1.x 实现执行。`ft`/`fine-tunes`、`files`、`deployments`、`models`、`rl`/`agentic-rl`、`auth`、`oss` 等共享命令组由 2.0 执行；兼容层接受旧参数拼写，并在默认值不同时保留旧默认。新的 2.0 命令按 SDK 资源树命名，因此应用调用是 `apps completions create`，不是简化的 `apps call`。不带子命令的裸 `dashscope` 会交互式打开内置的 `expert` agent。
+两代命令使用相互独立的入口和实现。所有 1.x 命令都使用 `dashscope1`，包括 1.x 专有命令组（`generation`、`application`、`image-synthesis`、`multimodal-conversation`、`speech-synthesis`、`transcription`、`video-synthesis`、`image-generation`、`multimodal-embedding`）、Typer 之前的点式拼写，以及采用 1.x 参数的共享命令组。上述 2.0 命令使用 `dashscope`，按 SDK 资源树命名，因此应用调用是 `apps completions create`，不是简化的 `apps call`。在 `dashscope` 下运行 1.x 专有命令会被作为未知命令拒绝，并给出改用 `dashscope1` 的提示。不带子命令的裸 `dashscope` 会交互式打开内置的 `expert` agent。
 
 这里*没有*的东西是一个决定，而不是一堆待办，而且这些空缺长得都一样：一条长连接的双向 socket，或者一长串 shell 加不出任何价值的 CRUD。`audio realtime run` 驱动双工 Omni socket 的**一轮**然后挂断；真正的实时麦克风——它跨多轮保持打开，并且要求音频以实时速率到达——是 Python 里的 `client.audio.realtime.connect()`，`tingwu realtime` 也是同一个故事。`agentstudio` 覆盖了你真会拿去写脚本的那个回路（agents、sessions、session events）；它另外九个顶层资源（deployments 及其 runs、environments、files、skills、vaults、memory stores、webhook endpoints、security），加上 session threads 和 session resources，仍然只有 SDK。SDK 暴露的其余东西都有命令了。
 

@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-"""Routing at the ``dashscope`` console-script entry point.
-
-The single entry point serves SDK-shaped v2 commands, frozen 1.x commands,
-and the bundled agent. Shared names use v2 with compatible option aliases.
-"""
+"""Routing at the independent ``dashscope`` console-script entry point."""
 
 import sys
 from types import ModuleType
@@ -31,9 +27,6 @@ class TestClassify:
             ["auth", "login", "--key", "sk-1"],
             ["auth", "whoami"],
             ["auth", "logout"],
-            ["login", "--key", "sk-1"],
-            ["whoami"],
-            ["logout"],
             ["oss", "upload", "-f", "input.png", "-m", "qwen-vl-max"],
             ["chat", "create", "-m", "qwen-plus"],
             ["ft", "list"],
@@ -48,7 +41,7 @@ class TestClassify:
             ["tokenization", "count"],
             ["apps", "completions", "create", "--app-id", "app-1"],
             ["deployments", "list"],
-            ["rl", "list"],
+            ["rl", "jobs", "list"],
             ["audio", "tts", "synthesize", "hi"],
             ["config", "list"],
             ["version"],
@@ -92,6 +85,25 @@ class TestClassify:
     def test_legacy_dotted_commands(self, command):
         assert classify([command]) == LEGACY
 
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["login"],
+            ["whoami"],
+            ["logout"],
+            ["ft", "call"],
+            ["fine-tunes", "call"],
+            ["fine_tunes", "list"],
+            ["deployments", "call"],
+            ["tokenization", "create"],
+            ["rl", "run"],
+            ["rl", "list"],
+            ["agentic-rl", "register-functions"],
+        ],
+    )
+    def test_legacy_verbs_on_shared_group_names(self, argv):
+        assert classify(argv) == LEGACY
+
     def test_global_options_do_not_hide_the_command(self):
         assert (
             classify(["-k", "sk-1", "--output", "json", "ft", "list"]) == NEW
@@ -104,7 +116,7 @@ class TestClassify:
             classify(["-c", "output=json", "generation", "create"]) == LEGACY
         )
         assert classify(["--timeout", "30", "application", "create"]) == LEGACY
-        assert classify(["--api_key", "sk-1", "generation.call"]) == LEGACY
+        assert classify(["--api-key", "sk-1", "generation.call"]) == LEGACY
 
 
 class TestCommandNameSets:
@@ -139,20 +151,6 @@ def new_app(monkeypatch):
         return app
 
     monkeypatch.setattr("dashscope.cli.app.build_app", fake_build_app)
-    return calls
-
-
-@pytest.fixture
-def legacy_app(monkeypatch):
-    calls = []
-    module = ModuleType("dashscope.legacy_1x.cli")
-
-    def run(prog_name=None):
-        assert prog_name == "dashscope"
-        calls.append(list(sys.argv))
-
-    module.main = run
-    monkeypatch.setitem(sys.modules, "dashscope.legacy_1x.cli", module)
     return calls
 
 
@@ -202,7 +200,7 @@ class TestMainDispatch:
         import dashscope
 
         monkeypatch.setattr(dashscope, "api_key", None, raising=False)
-        main(["--api_key=sk-agent", "expert", "hi"])
+        main(["--api-key=sk-agent", "expert", "hi"])
         assert expert == [("hi", True)]
         assert dashscope.api_key == "sk-agent"
 
@@ -216,103 +214,44 @@ class TestMainDispatch:
         assert expert == []
         assert "DashScope SDK Expert" in capsys.readouterr().out
 
-    def test_legacy_group_keeps_its_original_argv(
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["generation", "call", "-m", "qwen-plus", "-p", "hi"],
+            ["fine_tunes.list", "--page_size", "5"],
+            ["fine-tunes", "call", "-m", "base"],
+            ["agentic-rl", "run", "-c", "rl.toml"],
+            ["whoami"],
+        ],
+    )
+    def test_legacy_commands_exit_with_a_dashscope1_hint(
         self,
+        argv,
         new_app,
-        legacy_app,
         expert,
+        capsys,
     ):
-        argv = ["generation", "call", "-m", "qwen-plus", "-p", "hi", "-s"]
-        main(argv)
-        assert legacy_app == [["dashscope", *argv]]
+        with pytest.raises(SystemExit) as exc_info:
+            main(argv)
+        assert exc_info.value.code == 2
+        error = capsys.readouterr().err
+        assert "No such command" in error
+        assert "CLI 1.x commands have moved to 'dashscope1'" in error
         assert new_app == []
         assert expert == []
 
-    def test_dotted_command_keeps_its_original_argv(
-        self,
-        new_app,
-        legacy_app,
-        expert,
-    ):
-        argv = ["fine_tunes.list", "--page_size", "5", "-k", "sk-1"]
-        main(argv)
-        assert legacy_app == [["dashscope", *argv]]
-        assert new_app == []
-
-    def test_shared_ft_alias_uses_v2_with_legacy_options(
-        self,
-        new_app,
-        expert,
-    ):
-        main(["fine-tunes", "call", "-m", "base", "--training_file_ids", "f1"])
-        assert new_app == [
-            [
-                "ft",
-                "create",
-                "-m",
-                "base",
-                "--training-file-ids",
-                "f1",
-                "--wait",
-            ],
-        ]
-
     @pytest.mark.parametrize(
-        ("argv", "expected"),
+        "argv",
         [
-            (["whoami"], ["auth", "whoami"]),
-            (["logout"], ["auth", "logout"]),
-            (
-                ["login", "-k", "sk-secret"],
-                ["auth", "login", "-k", "sk-secret"],
-            ),
+            ["embeddings", "create", "-i", "hello"],
+            ["fine-tunes", "create", "--training_file_ids", "f1"],
+            ["deployments", "create", "--capacity", "2"],
         ],
     )
-    def test_top_level_auth_shortcuts_use_v2(
-        self,
-        argv,
-        expected,
-        new_app,
-        legacy_app,
-    ):
+    def test_v2_argv_is_not_rewritten(self, argv, new_app, expert):
         main(argv)
-        assert new_app == [expected]
-        assert legacy_app == []
-
-    def test_shared_rl_run_uses_the_v2_job_resource(self, new_app, legacy_app):
-        main(["agentic-rl", "run", "-c", "rl.toml", "-o", "json", "-v"])
-        assert new_app == [
-            [
-                "--output",
-                "json",
-                "--verbose",
-                "rl",
-                "jobs",
-                "create",
-                "--config",
-                "rl.toml",
-            ],
-        ]
-        assert legacy_app == []
-
-    def test_shared_deployment_call_preserves_waiting(
-        self,
-        new_app,
-        legacy_app,
-    ):
-        main(["deployments", "call", "-m", "model", "-c", "2"])
-        assert new_app == [
-            [
-                "deployments",
-                "create",
-                "-m",
-                "model",
-                "--capacity",
-                "2",
-                "--wait",
-            ],
-        ]
-        assert legacy_app == []
+        assert new_app == [argv]
+        assert expert == []
 
     @pytest.mark.parametrize(
         "argv",
@@ -322,7 +261,7 @@ class TestMainDispatch:
             ["rl", "functions", "register", "--rollout", "pkg.mod:Rollout"],
         ],
     )
-    def test_sdk_shaped_commands_use_v2(self, argv, new_app, legacy_app):
+    def test_sdk_shaped_commands_use_v2(self, argv, new_app, expert):
         main(argv)
         assert new_app == [argv]
-        assert legacy_app == []
+        assert expert == []

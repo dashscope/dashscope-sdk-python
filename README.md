@@ -439,23 +439,23 @@ The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built 
 
 ## Command line
 
-`pip install -U dashscope` puts one `dashscope` command on your `PATH`. It serves both the SDK-shaped **2.0** command tree and the existing **1.x** command forms, so current 1.x invocations need no migration:
+`pip install -U dashscope` puts two independent commands on your `PATH`. `dashscope` serves the SDK-shaped **2.0** command tree; `dashscope1` serves the frozen **1.x** implementation:
 
-| Form | Examples |
-|------|----------|
-| **2.0**, following the SDK resource tree | `chat create`, `apps completions create`, `multimodal chat create`, `rl jobs create`, `rl functions register`, `images jobs create`, `audio asr transcribe`, `agentstudio sessions events send` |
-| **1.x**, kept compatible | `generation call`, `application call`, `image-synthesis create`, `multimodal-conversation call`, `fine-tunes call`, `agentic-rl run`, `auth login`, `oss upload` |
+| Entry point | Implementation | Examples |
+|-------------|----------------|----------|
+| `dashscope` | 2.0, following the SDK resource tree | `chat create`, `apps completions create`, `multimodal chat create`, `rl jobs create`, `rl functions register`, `images jobs create`, `audio asr transcribe`, `agentstudio sessions events send` |
+| `dashscope1` | 1.x, using the 1.x SDK | `generation call`, `application call`, `image-synthesis create`, `multimodal-conversation call`, `fine-tunes call`, `agentic-rl run`, `auth login`, `oss upload` |
 
-Legacy-only names and dotted commands run against the frozen 1.x implementation. Shared names are served by 2.0 with compatible 1.x option spellings and defaults. The module entry point uses the same router:
+The two CLI trees do not dispatch to or normalize arguments for each other. Running a 1.x-only command through `dashscope` exits with a usage error and points to `dashscope1`. Their module entry points are likewise independent:
 
 ```bash
-python -m dashscope.cli generation call ...
 python -m dashscope.cli apps completions create ...
+python -m dashscope.legacy_1x.cli generation call ...
 ```
 
 Running `dashscope` with no arguments starts the [AI assistant](#ai-assistant-dashscope-sdk-expert) instead of the CLI.
 
-For the complete CLI command map, 1.x compatibility rules, output formats, exit codes, configuration precedence and CI recipes, see the CLI section in [`examples/README.md`](examples/README.md).
+For the complete 2.0 CLI command map, output formats, exit codes, configuration precedence and CI recipes, see the CLI section in [`examples/README.md`](examples/README.md).
 
 ## Shell completion
 
@@ -473,7 +473,7 @@ Preview the script without installing:
 dashscope --show-completion bash
 ```
 
-Completion is installed through the single `dashscope` entry point.
+Completion is installed through the 2.0 `dashscope` entry point.
 
 ## Logging
 

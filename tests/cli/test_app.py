@@ -100,8 +100,7 @@ class TestRootApp:
         # click's own help option is added by the framework, not by the
         # callback, and takes no value.
         actual -= {"--help", "-h"}
-        legacy_aliases = {"--api_key", "--base_url"}
-        assert actual | legacy_aliases == set(_VALUE_TAKING_OPTIONS)
+        assert actual == set(_VALUE_TAKING_OPTIONS)
 
 
 class TestVersionCommand:
