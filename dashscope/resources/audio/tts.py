@@ -29,7 +29,11 @@ from typing import (
 )
 
 from dashscope.resources.audio.http_tts import HttpTts
-from dashscope.transport.ws import Connector, WsSession
+from dashscope.transport.ws import (
+    Connector,
+    WsSession,
+    with_client_user_agent,
+)
 from dashscope.transport.ws_connection import WsConnection, WsTask
 
 __all__ = [
@@ -125,7 +129,7 @@ class SynthesisSession:
             "api_key": api_key or config.api_key,
             "workspace": workspace or config.workspace,
             "region": config.region,
-            "headers": dict(headers or {}),
+            "headers": with_client_user_agent(client, headers),
             "connector": connector,
             "module": MODULE,
             "timeout": config.timeout if timeout is None else timeout,

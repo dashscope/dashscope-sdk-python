@@ -141,12 +141,20 @@ def _abs_url(base_url: Optional[str], path: str) -> str:
     return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
 
 
-def default_user_agent() -> str:
+def default_user_agent(suffix: Optional[str] = None) -> str:
+    """Base User-Agent, optionally tagged with the calling surface.
+
+    ``suffix`` lets an embedder (the bundled CLI, a notebook kernel) mark
+    its traffic so the service can attribute requests to a surface without
+    a separate header. It is appended as a space-separated token, the
+    conventional place for a product comment in a User-Agent.
+    """
     try:
         from dashscope.version import __version__
     except Exception:
         __version__ = "0.0.0"
-    return f"dashscope-v2-python/{__version__}"
+    agent = f"dashscope-sdk-python/{__version__}"
+    return f"{agent} {suffix}" if suffix else agent
 
 
 class SyncTransport:
@@ -184,6 +192,15 @@ class SyncTransport:
     def http_client(self) -> httpx.Client:
         """The underlying httpx client (shared by ``with_options``)."""
         return self._client
+
+    @property
+    def user_agent(self) -> Optional[str]:
+        """This transport's User-Agent, for seeding non-HTTP channels.
+
+        Websocket sessions do not ride this transport, so ``Client``
+        reads the value back here to keep one identity across both.
+        """
+        return self._default_headers.get("User-Agent")
 
     def request(
         self,
@@ -421,6 +438,11 @@ class AsyncTransport:
     def http_client(self) -> httpx.AsyncClient:
         """The underlying httpx client (shared by ``with_options``)."""
         return self._client
+
+    @property
+    def user_agent(self) -> Optional[str]:
+        """This transport's User-Agent; see ``SyncTransport.user_agent``."""
+        return self._default_headers.get("User-Agent")
 
     async def request(
         self,

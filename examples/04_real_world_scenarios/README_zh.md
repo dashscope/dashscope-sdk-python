@@ -52,7 +52,7 @@ ConversationMemory ──(system + 最近若干轮)──► client.chat.complet
 
 ```bash
 export DASHSCOPE_API_KEY="sk-xxx"
-python3 examples/04_real_world_scenarios/customer_service_assistant.py
+python examples/04_real_world_scenarios/customer_service_assistant.py
 ```
 
 演示会跑一段三轮对话，其中第二轮——"这个订单现在能退款吗？"——不再重复订单号：它能被正确解答，完全是因为 `ConversationMemory` 把第一轮的 `SO2024001` 带进了上下文。这正是记忆层存在的意义。
@@ -89,10 +89,10 @@ python3 examples/04_real_world_scenarios/customer_service_assistant.py
 
 ```bash
 # 离线（默认，无需密钥，输出确定，依次演示场景 A/B/C/D）
-python3 examples/04_real_world_scenarios/production_ready_rag_harness.py
+python examples/04_real_world_scenarios/production_ready_rag_harness.py
 
 # 打真实网关（需要 DASHSCOPE_API_KEY；只跑场景 A，无故障注入）
-RAG_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/production_ready_rag_harness.py
+RAG_HARNESS_LIVE=1 python examples/04_real_world_scenarios/production_ready_rag_harness.py
 ```
 
 离线演示依次进行：
@@ -134,10 +134,10 @@ RAG_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/production_ready_rag
 
 ```bash
 # 离线（默认，无需密钥，输出确定，4 个房间并发 + 重连 + 单房间降级）
-python3 examples/04_real_world_scenarios/realtime_audio_meeting_harness.py
+python examples/04_real_world_scenarios/realtime_audio_meeting_harness.py
 
 # 打真实网关（需要 DASHSCOPE_API_KEY + DASHSCOPE_TINGWU_APP_ID，跑一个真实音频房间）
-MEETING_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/realtime_audio_meeting_harness.py
+MEETING_HARNESS_LIVE=1 python examples/04_real_world_scenarios/realtime_audio_meeting_harness.py
 ```
 
 离线演示并发跑 4 个房间，分别汇报 `completed` / `degraded`，展示每个房间的尝试次数 / 重连次数 / 句段数和转写预览——`room-delta` 被审核拦截降级，其余 3 个完成，直观地证明"一个房间的失败不外溢"。
@@ -176,10 +176,10 @@ MEETING_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/realtime_audio_m
 
 ```bash
 # 离线（默认，无需密钥，输出确定：5 张工单，一张低置信度，一次注入故障）
-python3 examples/04_real_world_scenarios/ticket_triage_harness.py
+python examples/04_real_world_scenarios/ticket_triage_harness.py
 
 # 打真实网关（需要 DASHSCOPE_API_KEY；同一个 harness，无故障注入）
-TRIAGE_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/ticket_triage_harness.py
+TRIAGE_HARNESS_LIVE=1 python examples/04_real_world_scenarios/ticket_triage_harness.py
 ```
 
 离线演示分诊 5 张工单：T-2001 / T-2002 路由到各自团队，T-2003（"你们这个系统到底怎么回事"）低于置信度下限进入人工复核，T-2004 作为 P1 呼叫值班工程师，T-2005 遭遇注入的后端故障并降级到人工队列——最后汇总打印状态分布和精确的 input-token 账本。

@@ -52,7 +52,7 @@ A tool-call turn must **read the complete `message.tool_calls`** before local ex
 
 ```bash
 export DASHSCOPE_API_KEY="sk-xxx"
-python3 examples/04_real_world_scenarios/customer_service_assistant.py
+python examples/04_real_world_scenarios/customer_service_assistant.py
 ```
 
 The demo runs a three-turn dialogue whose second turn — "can this order be refunded now?" — never repeats the order id: it only resolves because `ConversationMemory` carries turn one's `SO2024001` into the context. That is exactly what the memory layer is for.
@@ -89,10 +89,10 @@ Likewise, a stream is a **one-shot iterator**: consuming `text_stream` and then 
 
 ```bash
 # Offline (default, no key needed, deterministic output, demos scenarios A/B/C/D in turn)
-python3 examples/04_real_world_scenarios/production_ready_rag_harness.py
+python examples/04_real_world_scenarios/production_ready_rag_harness.py
 
 # Hit the real gateway (needs DASHSCOPE_API_KEY; runs scenario A only, no fault injection)
-RAG_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/production_ready_rag_harness.py
+RAG_HARNESS_LIVE=1 python examples/04_real_world_scenarios/production_ready_rag_harness.py
 ```
 
 The offline demo runs in order:
@@ -134,10 +134,10 @@ Likewise, when a socket drops mid-stream, `WsSession.recv` raises `APIConnection
 
 ```bash
 # Offline (default, no key needed, deterministic output, 4 rooms concurrent + reconnect + single-room degradation)
-python3 examples/04_real_world_scenarios/realtime_audio_meeting_harness.py
+python examples/04_real_world_scenarios/realtime_audio_meeting_harness.py
 
 # Hit the real gateway (needs DASHSCOPE_API_KEY + DASHSCOPE_TINGWU_APP_ID, runs one real-audio room)
-MEETING_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/realtime_audio_meeting_harness.py
+MEETING_HARNESS_LIVE=1 python examples/04_real_world_scenarios/realtime_audio_meeting_harness.py
 ```
 
 The offline demo runs 4 rooms concurrently, reports `completed` / `degraded` separately, and shows each room's attempts / reconnects / segments plus a transcript preview — `room-delta` is degraded by a moderation block while the other 3 complete, visibly proving "one room's failure does not spread".
@@ -176,10 +176,10 @@ And a routing note: the System One endpoint lives under the **compatible-mode pa
 
 ```bash
 # Offline (default, no key needed, deterministic: 5 tickets, one low-confidence, one injected outage)
-python3 examples/04_real_world_scenarios/ticket_triage_harness.py
+python examples/04_real_world_scenarios/ticket_triage_harness.py
 
 # Hit the real gateway (needs DASHSCOPE_API_KEY; the same harness, no fault injection)
-TRIAGE_HARNESS_LIVE=1 python3 examples/04_real_world_scenarios/ticket_triage_harness.py
+TRIAGE_HARNESS_LIVE=1 python examples/04_real_world_scenarios/ticket_triage_harness.py
 ```
 
 The offline demo triages 5 tickets: T-2001 / T-2002 route to their teams, T-2003 ("你们这个系统到底怎么回事") falls below the confidence floor and goes to human review, T-2004 pages the on-call engineer as P1, and T-2005 suffers an injected backend outage and degrades to the human queue — then the summary prints the state distribution and the exact input-token ledger.

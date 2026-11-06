@@ -22,7 +22,11 @@ from dashscope.errors import (
     error_from_business_code,
     response_json,
 )
-from dashscope.transport.ws import Connector, WsSession
+from dashscope.transport.ws import (
+    Connector,
+    WsSession,
+    with_client_user_agent,
+)
 from dashscope.transport.ws_connection import WsConnection, WsTask
 from dashscope.types.common import (
     ResponseBase,
@@ -138,6 +142,7 @@ class TingWuRealtime:
             "connector": connector,
             "module": MODULE,
             "timeout": timeout,
+            "headers": with_client_user_agent(client, None),
         }
         self._session: Optional[Union[WsSession, WsTask]] = None
 

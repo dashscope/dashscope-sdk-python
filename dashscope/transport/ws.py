@@ -33,6 +33,7 @@ __all__ = [
     "WsEventError",
     "WsSession",
     "WsStateError",
+    "with_client_user_agent",
 ]
 
 EVENT_STARTED = "task-started"
@@ -66,6 +67,25 @@ def _close_websocket(ws: Any) -> None:
                 ws.shutdown()
     except Exception:
         pass
+
+
+def with_client_user_agent(
+    client: Any,
+    headers: Optional[Mapping[str, str]],
+) -> Dict[str, str]:
+    """Carry the client's User-Agent onto a websocket session's headers.
+
+    Websocket sessions open their own connection instead of riding the
+    client's HTTP transport, so the agent (and any surface suffix on it)
+    has to be handed across explicitly. A caller-supplied user-agent wins
+    under whatever casing it used -- the check is case-insensitive so the
+    session never sends the header twice.
+    """
+    merged = dict(headers or {})
+    agent = getattr(getattr(client, "transport", None), "user_agent", None)
+    if agent and "user-agent" not in {k.lower() for k in merged}:
+        merged["user-agent"] = agent
+    return merged
 
 
 def _assemble_headers(

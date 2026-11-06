@@ -437,6 +437,26 @@ SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供�
 - 通过 `acli` extra 安装：`pip install "dashscope[acli]"`。需要语音/摄像头输入可加装 `acli-voice` / `acli-camera`，或直接用 `acli-all` 装齐 —— 详见[安装](#安装)一节的 extra 表格。
 - 完整使用指南：[DashScope SDK Expert 文档](https://help.aliyun.com/zh/model-studio/dashscope-sdk-expert)。
 
+## 命令行
+
+`pip install -U dashscope` 会安装两个相互独立的命令。`dashscope` 提供按 SDK 资源树设计的 **2.0** 命令；`dashscope1` 提供冻结的 **1.x** 实现：
+
+| 入口 | 实现 | 示例 |
+|------|------|------|
+| `dashscope` | 2.0，对齐 SDK 资源树 | `chat create`、`apps completions create`、`multimodal chat create`、`rl jobs create`、`rl functions register`、`images jobs create`、`audio asr transcribe`、`agentstudio sessions events send` |
+| `dashscope1` | 1.x，调用 1.x SDK | `generation call`、`application call`、`image-synthesis create`、`multimodal-conversation call`、`fine-tunes call`、`agentic-rl run`、`auth login`、`oss upload` |
+
+两套 CLI 不会相互分发命令或转换参数。通过 `dashscope` 运行 1.x 专有命令会返回用法错误，并提示改用 `dashscope1`。两者的模块入口也相互独立：
+
+```bash
+python -m dashscope.cli apps completions create ...
+python -m dashscope.legacy_1x.cli generation call ...
+```
+
+不带参数运行 `dashscope` 会启动 [AI 助手](#ai-助手dashscope-sdk-expert)，而不是 CLI。
+
+完整的 2.0 CLI 命令地图、输出格式、退出码、配置优先级和 CI 配方，见 [`examples/README_zh.md`](examples/README_zh.md) 的命令行章节。
+
 ## Shell 命令补全
 
 针对你的 Shell 运行一次对应命令，然后重启 Shell（或重新 source 配置文件）：
@@ -452,6 +472,8 @@ SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供�
 ```shell
 dashscope --show-completion bash
 ```
+
+命令补全通过 2.0 的 `dashscope` 入口安装。
 
 ## 日志
 
@@ -475,10 +497,11 @@ examples/
 ├── 02_advanced_engineering/  本地 mock 调试、语义缓存、熔断 + 多地域容灾
 ├── 03_agent_recipes/         工具调用循环、RAG、MCP server、AgentStudio
 ├── 04_real_world_scenarios/  端到端生产级 harness（RAG、实时会议、智能客服）
+├── 05_cli/                   离线 CLI 输出/错误契约与子进程 CI 示例
 └── legacy_1x/                1.x 模块级 API 示例，仅供参考
 ```
 
-详见 [`examples/README_zh.md`](examples/README_zh.md)。其中若干旗舰案例可完全离线运行（mock 传输），无需 API Key。
+完整指南见 [`examples/README_zh.md`](examples/README_zh.md)，其中包含 CLI 命令地图和 shell/CI 配方。若干旗舰案例与两个 CLI 示例都可完全离线运行，无需 API Key。
 
 ## 从 1.x 迁移
 
@@ -495,6 +518,8 @@ examples/
 | `dashscope.api_key = "sk-xxx"` | `dashscope.Client(api_key=...)` 或 `dashscope.settings.api_key = ...` |
 | `dashscope.set_region(region, workspace_id)` | `dashscope.Client(region=..., workspace=...)` |
 | OpenAI 兼容通过 `dashscope.aigc.chat_completion.Completions` | `dashscope.Client(protocol="openai")` |
+
+CLI 也遵循同样的拆分 —— 见上方[命令行](#命令行)一节。
 
 ### 包布局与兼容策略
 
