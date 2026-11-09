@@ -1654,3 +1654,27 @@ async def test_async_media_upload_reaches_the_gateway(tmp_path, monkeypatch):
     ]
     assert resp.output_text == "ok"
     await client.aclose()
+
+
+@pytest.mark.parametrize("merge", [False, True])
+@pytest.mark.parametrize("server_cumulative", [False, True])
+def test_async_stream_cumulative_matches_sync(merge, server_cumulative):
+    # ``cumulative`` drives terminal rendering on both stream types, so the
+    # async twin must report the same value the sync one does.
+    from dashscope.resources.chat.completions import (
+        AsyncChatStream,
+        ChatStream,
+    )
+
+    sync = ChatStream(
+        None,
+        merge_incremental=merge,
+        server_cumulative=server_cumulative,
+    )
+    async_stream = AsyncChatStream(
+        None,
+        merge_incremental=merge,
+        server_cumulative=server_cumulative,
+    )
+    assert async_stream.cumulative == sync.cumulative
+    assert async_stream.cumulative == (merge or server_cumulative)

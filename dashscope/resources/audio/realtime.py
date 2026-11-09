@@ -105,8 +105,20 @@ class RealtimeSession:
         if not any(key == "model" for key, _ in query):
             query.append(("model", model))
         url = urlunsplit(parts._replace(query=urlencode(query)))
+        # Inherit the client's agent (and any surface suffix on it) so the
+        # realtime socket reports the same identity as its HTTP calls; the
+        # dedup below still lets an explicit per-call header win. The
+        # lookup is defensive for the same reason as
+        # ``transport.ws.with_client_user_agent``.
         all_headers = {
-            "user-agent": default_user_agent(),
+            "user-agent": (
+                getattr(
+                    getattr(client, "transport", None),
+                    "user_agent",
+                    None,
+                )
+                or default_user_agent()
+            ),
             **sdk_headers(MODULE),
         }
         key = api_key or config.api_key

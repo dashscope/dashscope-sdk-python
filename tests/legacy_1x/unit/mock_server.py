@@ -4,6 +4,8 @@
 import asyncio
 import json
 import multiprocessing
+import socket
+import time
 from hashlib import md5
 from http import HTTPStatus
 from typing import Tuple
@@ -36,6 +38,11 @@ from tests.legacy_1x.unit.mock_sse import sse_response
 from tests.legacy_1x.unit.websocket_mock_server_task_handler import (
     WebSocketTaskProcessor,
 )
+
+# The ports the two mock servers bind. ``mock_request_base.py`` points the 1.x
+# SDK at the same numbers, so changing one means changing the other.
+MOCK_SERVER_PORT = 8089
+HTTP_SERVER_PORT = 8080
 
 
 def validate_data_inspection_parameter(request: aiohttp.request):
@@ -582,7 +589,7 @@ def run_server():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(runner.setup())
-    site = web.TCPSite(runner, "0.0.0.0", 8080)
+    site = web.TCPSite(runner, "0.0.0.0", HTTP_SERVER_PORT)
     loop.run_until_complete(site.start())
     loop.run_forever()
 
@@ -960,11 +967,48 @@ def run_mock_server(requests, responses):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(runner.setup())
-    site = web.TCPSite(runner, "0.0.0.0", 8089)
+    site = web.TCPSite(runner, "0.0.0.0", MOCK_SERVER_PORT)
     loop.run_until_complete(site.start())
     loop.run_forever()
 
     print("Server started!!!!!!!!!!!")
+
+
+def wait_for_port(port: int, timeout: float = 60.0) -> None:
+    """Block until something accepts a connection on *port*.
+
+    The servers run in a ``multiprocessing`` child, and on macOS that means
+    ``spawn``: the child re-imports the whole ``dashscope`` package before it
+    can bind. How long that takes varies with machine load, so the fixed
+    sleep this replaced raced it -- under a full test run the child sometimes
+    bound after the sleep had already elapsed, and every test in that class
+    failed with ConnectionRefused. Which class lost changed from run to run.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        with socket.socket() as probe:
+            probe.settimeout(0.25)
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                return
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                f"mock server on port {port} did not start within {timeout}s",
+            )
+        time.sleep(0.05)
+
+
+def stop_process(proc, timeout: float = 10.0) -> None:
+    """Terminate a mock-server child and wait for it to actually exit.
+
+    Joining is what makes the port reusable: every class-scoped server binds
+    the same one, so a child still shutting down would let the next class's
+    readiness poll succeed against a server that is on its way out.
+    """
+    proc.terminate()
+    proc.join(timeout)
+    if proc.is_alive():
+        proc.kill()
+        proc.join(timeout)
 
 
 def create_mock_server(request):
@@ -977,15 +1021,16 @@ def create_mock_server(request):
         ),
     )
     proc.start()
-    import time
-
-    time.sleep(2)
 
     def stop_server():
-        proc.terminate()
+        stop_process(proc)
         print("Mock server stopped")
 
+    # Registered before the readiness poll, not after: wait_for_port raises
+    # on timeout, and a finalizer that was never registered leaves a
+    # non-daemon child behind for multiprocessing's atexit join to hang on.
     request.addfinalizer(stop_server)
+    wait_for_port(MOCK_SERVER_PORT)
 
     return mock_web_server
 

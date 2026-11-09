@@ -26,7 +26,7 @@ see `dashscope/acli/platforms/bailian/mcp.py` (read-only reference).
 Drive the whole conversation automatically (recommended):
 
 ```bash
-python3 examples/03_agent_recipes/mcp_server_demo/client_demo.py
+python examples/03_agent_recipes/mcp_server_demo/client_demo.py
 ```
 
 Expected output:
@@ -47,7 +47,7 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
   '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"add","arguments":{"a":2,"b":3}}}' \
-  | python3 examples/03_agent_recipes/mcp_server_demo/server.py
+  | python examples/03_agent_recipes/mcp_server_demo/server.py
 ```
 
 ## Sample session
@@ -84,7 +84,7 @@ this server. Use the `command` + `args` form and an absolute path:
 {
   "mcpServers": {
     "dashscope-demo": {
-      "command": "python3",
+      "command": "python",
       "args": [
         "/ABSOLUTE/PATH/TO/examples/03_agent_recipes/mcp_server_demo/server.py"
       ]

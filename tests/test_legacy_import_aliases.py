@@ -43,7 +43,7 @@ import importlib
 import dashscope
 
 packages = (
-    'aigc', 'api_entities', 'app', 'assistants', 'audio', 'cli',
+    'aigc', 'api_entities', 'app', 'assistants', 'audio',
     'common', 'embeddings', 'io', 'multimodal', 'nlp', 'protocol',
     'rerank', 'threads', 'tokenizers', 'utils',
 )
@@ -209,4 +209,4 @@ assert not any(name in sys.modules for name in names)
 
 
 def test_historical_cli_module_entrypoint():
-    _run_python("-m", "dashscope.cli", "--help")
+    _run_python("-m", "dashscope.legacy_1x.cli", "--help")

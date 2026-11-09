@@ -15,8 +15,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-24.04 ]
-        python-version: [ '3.9', '3.10', '3.11', '3.12', '3.13' ]
+        # ubuntu-latest (26.04) ships no CPython 3.9 build, so pin the
+        # still-supported 3.9 leg to 24.04 and keep the rest on latest.
+        include:
+          - os: ubuntu-24.04
+            python-version: '3.9'
+          - os: ubuntu-latest
+            python-version: '3.10'
+          - os: ubuntu-latest
+            python-version: '3.11'
+          - os: ubuntu-latest
+            python-version: '3.12'
+          - os: ubuntu-latest
+            python-version: '3.13'
 
     steps:
       - name: Checkout repository
@@ -68,8 +79,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-24.04 ]
-        python-version: [ '3.9', '3.10', '3.11', '3.12', '3.13' ]
+        # ubuntu-latest (26.04) ships no CPython 3.9 build, so pin the
+        # still-supported 3.9 leg to 24.04 and keep the rest on latest.
+        include:
+          - os: ubuntu-24.04
+            python-version: '3.9'
+          - os: ubuntu-latest
+            python-version: '3.10'
+          - os: ubuntu-latest
+            python-version: '3.11'
+          - os: ubuntu-latest
+            python-version: '3.12'
+          - os: ubuntu-latest
+            python-version: '3.13'
 
     steps:
       - name: Checkout repository

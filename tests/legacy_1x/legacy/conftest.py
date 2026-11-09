@@ -2,13 +2,18 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 
 import multiprocessing
-import time
 
 import pytest
 
 import dashscope
 from dashscope.legacy_1x.common.constants import DASHSCOPE_DISABLE_DATA_INSPECTION_ENV
-from tests.legacy_1x.unit.mock_server import create_mock_server, run_server
+from tests.legacy_1x.unit.mock_server import (
+    HTTP_SERVER_PORT,
+    create_mock_server,
+    run_server,
+    stop_process,
+    wait_for_port,
+)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -40,13 +45,16 @@ def http_server(request):
     print("starting legacy server!!!!!!!!!")
     proc = multiprocessing.Process(target=run_server)
     proc.start()
-    time.sleep(2)
 
     def stop_server():
-        proc.terminate()
+        stop_process(proc)
         print("Stopping legacy server")
 
+    # Registered before the readiness poll: wait_for_port raises on
+    # timeout, and a finalizer that never got registered leaves a
+    # non-daemon child for multiprocessing's atexit join to hang on.
     request.addfinalizer(stop_server)
+    wait_for_port(HTTP_SERVER_PORT)
     return proc
 
 

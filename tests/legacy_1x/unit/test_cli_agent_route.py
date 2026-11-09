@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 import dashscope
+from dashscope.acli import expert
 from dashscope.legacy_1x import cli
 
 
@@ -75,7 +76,7 @@ def captured_err(monkeypatch):
         def print(self, *args, **kwargs):
             lines.append(" ".join(str(a) for a in args))
 
-    monkeypatch.setattr(cli, "err_console", Recorder())
+    monkeypatch.setattr(expert, "err_console", Recorder())
     return lines
 
 
@@ -85,20 +86,20 @@ class TestCleanupLegacyExpertSync:
         skills.mkdir()
         managed_skill = skills / "diagnose.md"
         managed_skill.write_text(
-            f"skill body\n\n{cli._MD_MARKER}\n",
+            f"skill body\n\n{expert._MD_MARKER}\n",
             encoding="utf-8",
         )
         refs = fake_config_dir / "references"
         refs.mkdir()
         managed_ref = refs / "python-sdk.md"
         managed_ref.write_text(
-            f"old index\n\n{cli._MD_MARKER}\n",
+            f"old index\n\n{expert._MD_MARKER}\n",
             encoding="utf-8",
         )
         build = fake_config_dir / "build_sdk_index.py"
-        build.write_text(f"# script\n{cli._PY_MARKER}\n", encoding="utf-8")
+        build.write_text(f"# script\n{expert._PY_MARKER}\n", encoding="utf-8")
 
-        cli._cleanup_legacy_expert_sync()
+        expert._cleanup_legacy_expert_sync()
 
         assert not managed_skill.exists()
         assert not managed_ref.exists()
@@ -116,17 +117,29 @@ class TestCleanupLegacyExpertSync:
         build = fake_config_dir / "build_sdk_index.py"
         build.write_text("# my own script\n", encoding="utf-8")
 
-        cli._cleanup_legacy_expert_sync()
+        expert._cleanup_legacy_expert_sync()
 
         assert user_skill.read_text(encoding="utf-8") == "my own skill"
         assert user_ref.read_text(encoding="utf-8") == "my own notes"
         assert build.read_text(encoding="utf-8") == "# my own script\n"
 
     def test_missing_dirs_are_noop(self, fake_config_dir):
-        cli._cleanup_legacy_expert_sync()  # no skills/references dirs at all
+        expert._cleanup_legacy_expert_sync()  # no skills/references dirs at all
 
 
 class TestRouteToExpert:
+    def test_legacy_entry_delegates_to_the_shared_route(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(
+            expert,
+            "_route_to_expert",
+            lambda command, tui=None: calls.append((command, tui)),
+        )
+
+        cli._route_to_expert("hello", tui=False)
+
+        assert calls == [("hello", False)]
+
     def test_interactive_run_offers_example_and_runs_agent(
         self,
         fake_config_dir,
@@ -138,13 +151,13 @@ class TestRouteToExpert:
         _make_tty(monkeypatch)
         offered: list = []
         monkeypatch.setattr(
-            cli,
+            expert,
             "_maybe_offer_example_download",
             lambda: offered.append(1),
         )
         monkeypatch.setattr(dashscope, "api_key", "sk-test")
 
-        cli._route_to_expert(None)
+        expert._route_to_expert(None)
 
         assert offered == [1]
         assert captured_run["app_name"] == "DashScope SDK Expert"
@@ -160,13 +173,13 @@ class TestRouteToExpert:
     ):
         called: list = []
         monkeypatch.setattr(
-            cli,
+            expert,
             "_maybe_offer_example_download",
             lambda: called.append(1),
         )
         monkeypatch.setattr(dashscope, "api_key", None)
 
-        cli._route_to_expert("Generation.call 怎么用？")
+        expert._route_to_expert("Generation.call 怎么用？")
 
         assert not called
         assert captured_run["command"] == "Generation.call 怎么用？"
@@ -178,13 +191,17 @@ class TestRouteToExpert:
         captured_run,
         monkeypatch,
     ):
-        monkeypatch.setattr(cli, "_maybe_offer_example_download", lambda: None)
+        monkeypatch.setattr(
+            expert,
+            "_maybe_offer_example_download",
+            lambda: None,
+        )
         skills = fake_config_dir / "skills"
         skills.mkdir()
         managed = skills / "diagnose.md"
-        managed.write_text(f"x\n\n{cli._MD_MARKER}\n", encoding="utf-8")
+        managed.write_text(f"x\n\n{expert._MD_MARKER}\n", encoding="utf-8")
 
-        cli._route_to_expert("hi")
+        expert._route_to_expert("hi")
 
         assert not managed.exists()
         assert captured_run["command"] == "hi"
@@ -195,10 +212,14 @@ class TestRouteToExpert:
         captured_run,
         monkeypatch,
     ):
-        monkeypatch.setattr(cli, "_maybe_offer_example_download", lambda: None)
+        monkeypatch.setattr(
+            expert,
+            "_maybe_offer_example_download",
+            lambda: None,
+        )
         monkeypatch.setattr(sys, "stdin", NonTtyStdin("  怎么用 Generation  \n"))
 
-        cli._route_to_expert(None)
+        expert._route_to_expert(None)
 
         assert captured_run["command"] == "怎么用 Generation"
 
@@ -218,7 +239,7 @@ class TestRouteToExpert:
         monkeypatch.setattr(sys, "stdin", NonTtyStdin("   \n"))
 
         with pytest.raises(SystemExit) as exc:
-            cli._route_to_expert(None)
+            expert._route_to_expert(None)
 
         assert exc.value.code == 2
         assert not captured_run
@@ -235,7 +256,7 @@ class TestRouteToExpert:
         monkeypatch.setattr(sys, "stdin", NonTtyStdin(None))
 
         with pytest.raises(SystemExit) as exc:
-            cli._route_to_expert(None)
+            expert._route_to_expert(None)
 
         assert exc.value.code == 2
         assert 'dashscope expert "your question"' in "\n".join(captured_err)
@@ -257,7 +278,7 @@ class TestOfferExampleDownload:
             calls.append,
         )
 
-        cli._maybe_offer_example_download()
+        expert._maybe_offer_example_download()
 
         assert calls == [["download", "dashscope-sdk-expert"]]
         assert not (
@@ -279,7 +300,7 @@ class TestOfferExampleDownload:
             calls.append,
         )
 
-        cli._maybe_offer_example_download()
+        expert._maybe_offer_example_download()
 
         assert not calls
         marker = tmp_path / ".acli" / ".dashscope-example-declined"
@@ -303,7 +324,7 @@ class TestOfferExampleDownload:
             raise AssertionError("should not prompt")
 
         monkeypatch.setattr("builtins.input", fail_input)
-        cli._maybe_offer_example_download()
+        expert._maybe_offer_example_download()
 
     def test_existing_workspace_acli_skips_offer(
         self,
@@ -319,7 +340,7 @@ class TestOfferExampleDownload:
             raise AssertionError("should not prompt")
 
         monkeypatch.setattr("builtins.input", fail_input)
-        cli._maybe_offer_example_download()
+        expert._maybe_offer_example_download()
 
     def test_non_tty_skips_offer(
         self,
@@ -334,7 +355,7 @@ class TestOfferExampleDownload:
             raise AssertionError("should not prompt")
 
         monkeypatch.setattr("builtins.input", fail_input)
-        cli._maybe_offer_example_download()
+        expert._maybe_offer_example_download()
 
 
 class TestMainRouting:
