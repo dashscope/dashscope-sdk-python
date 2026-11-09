@@ -319,7 +319,7 @@ class TestJobs:
         images(jobs={"list": JobList(tasks=[_job()], total=1)})
         result = invoke(["images", "jobs", "list"], global_args=["-o", "json"])
         doc = json.loads(result.stdout)
-        assert doc["total"] == 1
+        assert doc["total_count"] == 1
         assert len(doc["tasks"]) == 1
 
     def test_jobs_cancel_with_yes(self, invoke, images):
