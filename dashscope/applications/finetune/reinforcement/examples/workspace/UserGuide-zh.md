@@ -91,7 +91,7 @@ opentelemetry-api==1.41.1
 opentelemetry-sdk==1.41.1
 opentelemetry-exporter-otlp-proto-http==1.41.1
 opentelemetry-processor-baggage==0.62b1
-loongsuite-util-genai==0.4.0
+loongsuite-util-genai==0.5.0
 ```
 
 ### 2.6 日志配置
