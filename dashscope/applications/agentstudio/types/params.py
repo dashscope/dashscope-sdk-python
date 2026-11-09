@@ -21,6 +21,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Union
 from dashscope.applications.agentstudio.types.models import (
     BaseModel,
     ModelConfig,
+    ResourceInput,
 )
 
 _NOT_GIVEN = object()
@@ -288,7 +289,10 @@ class SessionCreateParams(BaseModel):
 
     ``environment_variables`` and ``mcp_configs`` are Session-level
     settings independent of the agent. ``resources`` is create-only — it
-    cannot be modified via ``updateSession``.
+    cannot be modified via ``updateSession``; each item is a mapping or
+    a :class:`~dashscope.applications.agentstudio.types.models.Mount`
+    (``file`` / ``memory_store`` — built-in or Bailian
+    ``provider="agentstudio_memory"`` — / ``oss``).
     """
 
     _fields = (
@@ -308,7 +312,7 @@ class SessionCreateParams(BaseModel):
         agent: Any,
         environment_id: Optional[str] = None,
         title: Optional[str] = None,
-        resources: Optional[Sequence[Mapping[str, Any]]] = None,
+        resources: Optional[Sequence[ResourceInput]] = None,
         vault_ids: Optional[Sequence[str]] = None,
         environment_variables: Optional[Mapping[str, str]] = None,
         mcp_configs: Optional[Sequence[Mapping[str, Any]]] = None,
@@ -319,7 +323,9 @@ class SessionCreateParams(BaseModel):
             environment_id=environment_id,
             title=title,
             resources=(
-                [dict(r) for r in resources] if resources is not None else None
+                [_to_mapping(r) for r in resources]
+                if resources is not None
+                else None
             ),
             vault_ids=(list(vault_ids) if vault_ids is not None else None),
             environment_variables=(

@@ -131,24 +131,49 @@ class Scope(BaseModel):
 class Mount(BaseModel):
     """Session resource mount descriptor (create-time input on POST /sessions)."""
 
-    _fields = ("type", "file_id", "skill_id", "mount_path")
+    _fields = (
+        "type",
+        "file_id",
+        "skill_id",
+        "mount_path",
+        "memory_store_id",
+        "provider",
+        "entity_id",
+        "project_ids",
+        "profile_schema",
+        "description",
+        "access",
+        "instructions",
+        "region",
+        "bucket",
+        "oss_path",
+    )
+
+
+# One resources[] entry on POST /sessions: a raw wire-format mapping
+# (dict) or a typed Mount object.
+ResourceInput = Union[Mapping[str, Any], Mount]
 
 
 class SessionResource(BaseModel):
-    """A resource mounted into a session at runtime.
+    """A resource mounted into a session (file / memory_store / oss).
 
-    The response ``file_id`` is the session-scoped copy id — **not** the
-    source file id passed at mount time. ``mount_path`` is the absolute
-    sandbox path (the server prepends a prefix; the user-supplied path is
-    preserved losslessly and must be under ``/uploads/``).
+    ``file``: ``file_id`` is the session-scoped copy id (not the source
+    file id); ``mount_path`` resolves under ``/uploads/``. Memory and
+    OSS mounts are create-only — ``sessions.resources.add`` accepts
+    files only.
 
-    For ``type="memory_store"`` resources the memory-specific fields
-    apply: ``memory_store_id`` (the attached store), ``access``
-    (``read_write`` default / ``read_only``), ``instructions``
-    (per-session guidance, <= 4096 chars) and the server-snapshotted
-    ``name``/``description`` of the store at attach time. Memory
-    stores can only be attached at session creation time —
-    ``sessions.resources.add`` accepts files only.
+    ``memory_store``: ``access`` (``read_write`` default) and
+    ``instructions``; ``name``/``description`` are server-snapshotted
+    for built-in (``provider="default"``) mounts, which also carry the
+    server-generated ``mount_path`` (``/mnt/memory/<name>``);
+    ``agentstudio_memory`` (Bailian) mounts echo ``entity_id`` and the
+    configured ``project_ids``/``profile_schema``/``description``, with
+    no ``mount_path``.
+
+    ``oss``: echoes ``region``/``bucket``/``oss_path`` and the
+    user-supplied logical ``mount_path`` (the sandbox resolves it under
+    ``/mnt/oss/``).
     """
 
     _fields = (
@@ -156,11 +181,18 @@ class SessionResource(BaseModel):
         "type",
         "file_id",
         "memory_store_id",
+        "provider",
+        "entity_id",
+        "project_ids",
+        "profile_schema",
         "access",
         "instructions",
         "name",
         "description",
         "mount_path",
+        "region",
+        "bucket",
+        "oss_path",
         "created_at",
         "updated_at",
         "request_id",

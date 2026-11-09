@@ -11,6 +11,7 @@ from dashscope.applications.agentstudio.types.models import (  # noqa: F401
     Scope,
     Mount,
     Networking,
+    ResourceInput,
     Packages,
     EnvironmentConfig,
     StopReason,
