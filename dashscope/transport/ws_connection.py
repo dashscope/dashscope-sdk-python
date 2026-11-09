@@ -57,6 +57,7 @@ from dashscope.transport.ws import (
     _close_websocket,
     _connect,
     _EventProcessor,
+    _log_error,
     _recv_frame,
 )
 
@@ -99,6 +100,8 @@ class WsTask(_EventProcessor):
         # Reader-side routing uses the connection lock, not the send lock.
         self._routing_active = False
         self._routing_finished = False
+        # Retain IDs even when events are still waiting for the consumer.
+        self._routing_request_id = task_id
         self._error: Optional[BaseException] = None
 
     @property
@@ -127,9 +130,12 @@ class WsTask(_EventProcessor):
                 # fail only this task and let its reader surface the error.
                 item = (
                     _ERROR,
-                    WsQueueCapacityExceededError(),
+                    WsQueueCapacityExceededError(
+                        request_id=self._routing_request_id,
+                    ),
                 )
                 self._error = item[1]
+                _log_error("receive queue", item[1], self._routing_request_id)
             # Preserve terminal visibility without allowing an unbounded
             # backlog to retain audio forever: evict the oldest frame.
             try:
@@ -178,7 +184,7 @@ class WsTask(_EventProcessor):
             if self._closed or self._run_sent:
                 raise WsStateError(detail="task already started or closed")
             self._run_sent = True
-            self._conn._send(frame)
+            self._conn._send(frame, task=self)
         try:
             event = self.recv_event()
             if event["header"].get("event") != EVENT_STARTED:
@@ -214,12 +220,15 @@ class WsTask(_EventProcessor):
         with self._lock:
             self._check_input()
             self._conn._claim_binary_uplink(self)
-            self._conn._send(bytes(data), opcode=2)
+            self._conn._send(bytes(data), opcode=2, task=self)
 
     def continue_task(self, input: Dict[str, Any]) -> None:
         with self._lock:
             self._check_input()
-            self._conn._send(self._frame("continue-task", {"input": input}))
+            self._conn._send(
+                self._frame("continue-task", {"input": input}),
+                task=self,
+            )
 
     def finish_task(self, input: Optional[Dict[str, Any]] = None) -> None:
         """End input, or cancel synthesis while output is still arriving."""
@@ -233,6 +242,7 @@ class WsTask(_EventProcessor):
                 return
             self._conn._send(
                 self._frame("finish-task", {"input": input or {}}),
+                task=self,
             )
             self._input_finished = True
             self._cancel_sent = cancel
@@ -253,9 +263,12 @@ class WsTask(_EventProcessor):
         try:
             kind, payload = self._queue.get(timeout=self._timeout)
         except queue.Empty:
-            raise APITimeoutError(
+            error = APITimeoutError(
                 detail="timed out waiting for a websocket event",
-            ) from None
+                request_id=self._routing_request_id,
+            )
+            _log_error("receive", error, self._routing_request_id)
+            raise error from None
         if kind == _ERROR:
             # Requeue the terminal marker so subsequent readers also fail.
             self._queue.put((kind, payload))
@@ -363,16 +376,31 @@ class WsConnection:
             self._tasks[task.task_id] = task
             return task
 
-    def _send(self, data: Any, *, opcode: int = 1) -> None:
+    def _send(
+        self,
+        data: Any,
+        *,
+        opcode: int = 1,
+        task: Optional[WsTask] = None,
+    ) -> None:
         with self._send_lock:
             if self._closed:
                 raise WsStateError(detail="connection is closed")
+            sending = opcode == 2
             try:
                 if opcode == 2:
                     self._ws.send(data, opcode=2)
                 else:
-                    self._ws.send(json.dumps(data))
-            except BaseException:
+                    encoded = json.dumps(data)
+                    sending = True
+                    self._ws.send(encoded)
+            except BaseException as exc:
+                if sending and not self._closed:
+                    _log_error(
+                        "send",
+                        exc,
+                        task._routing_request_id if task is not None else None,
+                    )
                 self.close()
                 raise
 
@@ -435,7 +463,7 @@ class WsConnection:
                         return
                     self._ws.ping()
             except BaseException as exc:
-                self._fail(APIConnectionError(str(exc)))
+                self._fail(APIConnectionError(str(exc)), operation="heartbeat")
                 return
 
     def _reader_main(self) -> None:
@@ -465,6 +493,9 @@ class WsConnection:
             if self._closed or task is None or task._routing_finished:
                 # Late events for detached or terminal tasks are harmless.
                 return
+            request_id = header.get("request_id")
+            if isinstance(request_id, str) and request_id.strip():
+                task._routing_request_id = request_id
             name = header.get("event")
             if name == EVENT_STARTED:
                 task._routing_active = True
@@ -497,7 +528,12 @@ class WsConnection:
                 self._binary_downlink_owner = owner
             owner._enqueue((_FRAME, data))
 
-    def _fail(self, exc: BaseException) -> None:
+    def _fail(
+        self,
+        exc: BaseException,
+        *,
+        operation: Optional[str] = "receive",
+    ) -> None:
         with self._lock:
             if self._closed:
                 # close() already broadcast; the reader's socket error is
@@ -507,6 +543,16 @@ class WsConnection:
             self._heartbeat_stop.set()
             self._binary_uplink_owner = None
             self._binary_downlink_owner = None
+            request_ids: List[Optional[str]] = [
+                task._routing_request_id
+                for task in self._tasks.values()
+                if not task._closed
+                and not task._routing_finished
+                and task._error is None
+            ]
+        if operation is not None:
+            for request_id in request_ids or [None]:
+                _log_error(operation, exc, request_id)
         _close_websocket(self._ws)
         self._broadcast(exc)
 
@@ -514,10 +560,14 @@ class WsConnection:
         with self._lock:
             for task in self._tasks.values():
                 task._routing_active = False
+                # This exception is shared: never stamp one task's ID on it.
                 task._enqueue((_ERROR, exc))
 
     def close(self) -> None:
-        self._fail(APIConnectionError("websocket connection closed"))
+        self._fail(
+            APIConnectionError("websocket connection closed"),
+            operation=None,
+        )
         # Initialization may fail before the reader is created or started.
         reader = getattr(self, "_reader", None)
         if (

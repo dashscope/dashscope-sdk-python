@@ -9,6 +9,11 @@ from typing import Any, Dict, Optional, Protocol, TypeVar
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from dashscope._logging import (
+    get_logger,
+    request_id_for_log,
+    request_id_from_headers,
+)
 from dashscope.errors import (
     error_from_business_code,
     error_from_status,
@@ -145,6 +150,10 @@ def with_headers(model: _M, response: Any) -> _M:
     models, which have no ``APIResponse``, still call it directly.
     """
     model.headers = dict(response.headers)
+    if hasattr(model, "request_id") and not model.request_id:
+        request_id = request_id_from_headers(response.headers)
+        if request_id is not None:
+            model.request_id = request_id
     return model
 
 
@@ -190,7 +199,7 @@ def response_body(
     request_id = (
         body.get("request_id")
         or output.get("request_id")
-        or response.headers.get("x-request-id")
+        or request_id_from_headers(response.headers)
     )
     error = None
     if not success:
@@ -206,9 +215,20 @@ def response_body(
             body=raw,
             headers=response.headers,
         )
-    if error is not None and raise_on_error:
+    if error is not None:
         error.request_id = request_id
-        raise error
+        get_logger("response").error(
+            "HTTP service error: status=%s, code=%s, request_id=%s",
+            response.status_code,
+            error.code,
+            request_id_for_log(
+                body.get("request_id"),
+                output.get("request_id"),
+                request_id_from_headers(response.headers),
+            ),
+        )
+        if raise_on_error:
+            raise error
     body = {**body, "status_code": response.status_code}
     if request_id is not None:
         body["request_id"] = request_id

@@ -5,6 +5,7 @@
 # pylint: disable=protected-access
 
 import json
+import logging
 import queue
 import threading
 
@@ -78,10 +79,12 @@ def _event(name, task_id, payload=None, request_id="r"):
     )
 
 
-def _started(conn, task, **run_kwargs):
+def _started(conn, task, request_id="r", **run_kwargs):
     """Feed task-started, then run the task (reader routes async)."""
     task_id = task.task_id
-    conn._ws.inbox.put(_event("task-started", task_id))
+    conn._ws.inbox.put(
+        _event("task-started", task_id, request_id=request_id),
+    )
     kwargs = {
         "task_group": "audio",
         "task": "asr",
@@ -227,7 +230,7 @@ def test_socket_error_broadcasts_to_all_tasks():
     assert conn.closed
 
 
-def test_slow_consumer_queue_full_fails_only_that_task():
+def test_slow_consumer_queue_full_fails_only_that_task(ws_error_logs):
     """One stalled task must not tear down the shared connection.
 
     Overflowing t1's bounded receive queue fails t1 alone; t2 keeps
@@ -259,6 +262,10 @@ def test_slow_consumer_queue_full_fails_only_that_task():
             t1.recv()
     assert not conn.closed
     conn.close()
+    assert _ws_errors(ws_error_logs) == [
+        "websocket receive queue failed request_id=r "
+        "error_type=WsQueueCapacityExceededError",
+    ]
 
 
 def test_peer_close_normalizes_to_api_connection_error():
@@ -348,7 +355,7 @@ def test_recv_timeout_raises():
     conn.close()
 
 
-def test_close_broadcasts_and_closes_socket():
+def test_close_broadcasts_and_closes_socket(ws_error_logs):
     conn, connects = _make_connection(timeout=5)
     task = conn.open_task()
     _started(conn, task)
@@ -358,6 +365,7 @@ def test_close_broadcasts_and_closes_socket():
     with pytest.raises(APIConnectionError, match="connection closed"):
         task.recv()
     conn.close()  # idempotent
+    assert _ws_errors(ws_error_logs) == []
 
 
 @pytest.fixture
@@ -916,7 +924,7 @@ def test_reader_start_failure_closes_connected_socket(
                 reader.join(timeout=1)
 
 
-def test_independent_session_close_wakes_blocked_receiver():
+def test_independent_session_close_wakes_blocked_receiver(ws_error_logs):
     entered = threading.Event()
 
     class ObservedSocket(QueueWebSocket):
@@ -956,3 +964,528 @@ def test_independent_session_close_wakes_blocked_receiver():
         ws.close()
         receiver.join(timeout=1)
         assert not receiver.is_alive()
+    assert _ws_errors(ws_error_logs) == []
+
+
+@pytest.fixture
+def ws_error_logs(caplog):
+    caplog.set_level(logging.ERROR, logger="dashscope._logging.transport.ws")
+    return caplog
+
+
+def _ws_errors(caplog):
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "dashscope._logging.transport.ws"
+        and record.levelno >= logging.ERROR
+    ]
+
+
+@pytest.mark.parametrize("transport", [WsSession, WsConnection])
+@pytest.mark.parametrize(
+    "headers, body, expected_id",
+    [
+        ({"X-ReQuEsT-Id": "header-id"}, None, "header-id"),
+        ({"X-DASHSCOPE-REQUESTID": "header-id"}, "{", "header-id"),
+        ({"x-DashScope-Request-Id": "header-id"}, "[]", "header-id"),
+        ({"x-request-id": "header-id"}, b"\xff", "header-id"),
+        ({"x-request-id": "header-id"}, "null", "header-id"),
+        ({"x-request-id": "header-id"}, {"request_id": "body-id"}, "body-id"),
+        (
+            {"x-request-id": "header-id"},
+            b'{"request_id": "body-id", "message": "private-body"}',
+            "body-id",
+        ),
+        ({"x-request-id": "header-id"}, '{"request_id": "  "}', "header-id"),
+        ({"x-request-id": "header-id"}, '{"request_id": 42}', "header-id"),
+        ({"x-request-id": "header-id"}, "[" * 2000, "header-id"),
+        (
+            {"X-Request-Id": "", "X-DashScope-RequestId": "alias-id"},
+            None,
+            "alias-id",
+        ),
+        ({"x-request-id": ["", "list-id"]}, None, "list-id"),
+        ({"x-request-id": "  "}, "private-non-json-body", "unknown"),
+        (None, '{"request_id": "body-only"}', "body-only"),
+        (None, None, "unknown"),
+    ],
+)
+def test_handshake_failure_logs_response_id_without_payload(
+    transport,
+    headers,
+    body,
+    expected_id,
+    ws_error_logs,
+):
+    from websocket import WebSocketBadStatusException
+
+    error = WebSocketBadStatusException(
+        "Bearer private-token Authorization Cookie private-body",
+        status_code=403,
+        resp_headers=headers,
+        resp_body=body,
+    )
+
+    def connector(url, actual_headers):
+        assert actual_headers["Authorization"] == "Bearer private-key"
+        raise error
+
+    with pytest.raises(WebSocketBadStatusException) as caught:
+        transport(url=URL, connector=connector, api_key="private-key")
+    assert caught.value is error
+    messages = _ws_errors(ws_error_logs)
+    assert messages == [
+        "websocket handshake failed request_id="
+        + expected_id
+        + " error_type=WebSocketBadStatusException",
+    ]
+    assert not any(
+        secret in " ".join(messages)
+        for secret in (
+            "private-token",
+            "private-key",
+            "private-body",
+            "Cookie",
+        )
+    )
+
+
+@pytest.mark.parametrize("transport", [WsSession, WsConnection])
+def test_handshake_timeout_keeps_conversion_and_logs_id(
+    transport,
+    ws_error_logs,
+):
+    from websocket import WebSocketTimeoutException
+
+    error = WebSocketTimeoutException("timed out")
+    error.resp_headers = {"X-DashScope-Request-ID": "timeout-id"}
+
+    def connector(url, headers):
+        raise error
+
+    with pytest.raises(APITimeoutError) as caught:
+        transport(url=URL, connector=connector)
+    assert caught.value.__cause__ is error
+    assert caught.value.request_id == "timeout-id"
+    assert _ws_errors(ws_error_logs) == [
+        "websocket handshake failed request_id=timeout-id "
+        "error_type=WebSocketTimeoutException",
+    ]
+
+
+@pytest.mark.parametrize("transport", [WsSession, WsConnection])
+@pytest.mark.parametrize(
+    "missing_id",
+    [None, "", "  ", {"audio": "private-audio"}],
+)
+def test_task_request_id_survives_events_without_server_id(
+    transport,
+    missing_id,
+    ws_error_logs,
+):
+    ws = QueueWebSocket()
+    conn = transport(url=URL, connector=lambda url, headers: ws, timeout=0.5)
+    task = conn.open_task() if transport is WsConnection else conn
+    try:
+        _started(conn, task, request_id="server-id")
+        for name in ("result-generated", "task-finished"):
+            event = json.loads(
+                _event(name, task.task_id, request_id=missing_id),
+            )
+            if missing_id is None:
+                event["header"].pop("request_id")
+            ws.inbox.put(json.dumps(event))
+            task.recv_event()
+            assert task.request_id == "server-id"
+        assert task.finished
+    finally:
+        conn.close()
+    assert _ws_errors(ws_error_logs) == []
+
+
+@pytest.mark.parametrize("transport", [WsSession, WsConnection])
+@pytest.mark.parametrize(
+    "server_id",
+    ["failed-id", None, "  ", {"audio": "private-audio"}],
+)
+@pytest.mark.parametrize("started", [False, True])
+def test_task_failed_logs_once_with_task_scoped_precedence(
+    transport,
+    server_id,
+    started,
+    ws_error_logs,
+):
+    ws = QueueWebSocket()
+    conn = transport(url=URL, connector=lambda url, headers: ws, timeout=0.5)
+    task = conn.open_task() if transport is WsConnection else conn
+    try:
+        other = None
+        if transport is WsConnection:
+            other = conn.open_task()
+            _started(conn, other, request_id="other-id")
+        if started:
+            _started(conn, task, request_id="known-id")
+        expected_id = "known-id" if started else task.task_id
+        if isinstance(server_id, str) and server_id.strip():
+            expected_id = server_id
+        ws.inbox.put(
+            json.dumps(
+                {
+                    "header": {
+                        "event": "task-failed",
+                        "task_id": task.task_id,
+                        "request_id": server_id,
+                        "error_code": "InvalidParameter",
+                        "error_message": (
+                            "private-error-message Bearer private-token"
+                        ),
+                    },
+                    "request_id": "wrong-body-id",
+                    "payload": {
+                        "text": "private-full-text",
+                        "audio": "private-audio",
+                    },
+                },
+            ),
+        )
+        with pytest.raises(DashScopeError) as caught:
+            task.recv()
+        assert caught.value.code == "InvalidParameter"
+        assert caught.value.request_id == expected_id
+        assert task.request_id == expected_id
+        assert task.finished and task.recv() is None
+        assert _ws_errors(ws_error_logs) == [
+            "websocket task-failed failed request_id="
+            + expected_id
+            + " error_type=BadRequestError",
+        ]
+        if other is not None:
+            assert not conn.closed
+            other.continue_task({})
+            ws.inbox.put(
+                _event("result-generated", other.task_id, request_id=None),
+            )
+            other.recv_event()
+            assert other.request_id == "other-id"
+    finally:
+        conn.close()
+    assert len(_ws_errors(ws_error_logs)) == 1
+
+
+@pytest.mark.parametrize(
+    "raw, error_type",
+    [
+        (None, APIConnectionError),
+        ("", APIConnectionError),
+        ('{"private-full-text":', json.JSONDecodeError),
+        ('{"payload": "private-full-text"}', WsEventError),
+        (OSError("private-error-message Bearer private-token"), OSError),
+    ],
+)
+def test_shared_receive_failure_logs_each_id_once_without_stamping_exception(
+    bounded_connection,
+    raw,
+    error_type,
+    ws_error_logs,
+):
+    conn = bounded_connection()
+    first, second = conn.open_task(), conn.open_task()
+    _started(conn, first, request_id="first-id")
+    _started(conn, second, request_id="second-id")
+    # The latest ID is still queued when the connection fails; failure
+    # logging must use reader-side bookkeeping, not consumer progress.
+    conn._ws.inbox.put(
+        _event("result-generated", first.task_id, request_id="latest-id"),
+    )
+    conn._ws.inbox.put(
+        _event("result-generated", first.task_id, request_id=None),
+    )
+    conn._ws.inbox.put(raw)
+    conn._reader.join(timeout=1)
+    assert not conn._reader.is_alive()
+    assert first.recv_event()["header"]["request_id"] == "latest-id"
+    first.recv_event()
+    assert first.request_id == "latest-id"
+    caught_errors = []
+    for task in (first, second):
+        for _ in range(2):
+            with pytest.raises(error_type) as caught:
+                task.recv()
+            caught_errors.append(caught.value)
+    assert all(error is caught_errors[0] for error in caught_errors)
+    assert getattr(caught_errors[0], "request_id", None) is None
+    if isinstance(raw, BaseException):
+        assert caught_errors[0] is raw
+    assert _ws_errors(ws_error_logs) == [
+        "websocket receive failed request_id=latest-id error_type="
+        + error_type.__name__,
+        "websocket receive failed request_id=second-id error_type="
+        + error_type.__name__,
+    ]
+    conn.close()
+    assert len(_ws_errors(ws_error_logs)) == 2
+
+
+@pytest.mark.parametrize(
+    "raw, error_type",
+    [
+        (None, APIConnectionError),
+        ("", APIConnectionError),
+        ('{"private-full-text":', json.JSONDecodeError),
+        ('{"payload": "private-full-text"}', WsEventError),
+        (OSError("private-error-message Bearer private-token"), OSError),
+    ],
+)
+def test_session_receive_failure_logs_known_id_and_preserves_error(
+    raw,
+    error_type,
+    ws_error_logs,
+):
+    ws = QueueWebSocket()
+    session = WsSession(
+        url=URL,
+        connector=lambda url, headers: ws,
+        timeout=0.5,
+    )
+    try:
+        _started(session, session, request_id="session-id")
+        ws.inbox.put(raw)
+        with pytest.raises(error_type) as caught:
+            session.recv()
+        if isinstance(raw, BaseException):
+            assert caught.value is raw
+        assert ws.closed
+        assert _ws_errors(ws_error_logs) == [
+            "websocket receive failed request_id=session-id error_type="
+            + error_type.__name__,
+        ]
+        with pytest.raises(WsStateError):
+            session.recv()
+    finally:
+        session.close()
+    assert len(_ws_errors(ws_error_logs)) == 1
+
+
+@pytest.mark.parametrize("transport", [WsSession, WsConnection])
+@pytest.mark.parametrize("action", ["run", "binary", "continue", "finish"])
+def test_socket_send_failure_logs_only_initiating_task(
+    transport,
+    action,
+    ws_error_logs,
+):
+    error = OSError("private-error-message Bearer private-token")
+
+    class BrokenSendSocket(QueueWebSocket):
+        fail_send = False
+
+        def send(self, payload, opcode=1):
+            if self.fail_send:
+                raise error
+            super().send(payload, opcode=opcode)
+
+    ws = BrokenSendSocket()
+    conn = transport(url=URL, connector=lambda url, headers: ws, timeout=0.5)
+    task = conn.open_task() if transport is WsConnection else conn
+    try:
+        other = None
+        if transport is WsConnection:
+            other = conn.open_task()
+            _started(conn, other, request_id="other-id")
+        if action != "run":
+            _started(conn, task, request_id="sender-id")
+        expected_id = task.task_id if action == "run" else "sender-id"
+        ws.fail_send = True
+        with pytest.raises(OSError) as caught:
+            if action == "run":
+                task.run_task(
+                    task_group="audio",
+                    task="asr",
+                    function="recognition",
+                    model="test",
+                )
+            elif action == "binary":
+                task.send_binary(b"private-audio")
+            elif action == "continue":
+                task.continue_task({"text": "private-full-text"})
+            else:
+                task.finish_task()
+        assert caught.value is error
+        assert ws.closed
+        if other is not None:
+            with pytest.raises(APIConnectionError):
+                other.recv()
+        assert _ws_errors(ws_error_logs) == [
+            "websocket send failed request_id="
+            + expected_id
+            + " error_type=OSError",
+        ]
+    finally:
+        conn.close()
+    assert len(_ws_errors(ws_error_logs)) == 1
+
+
+@pytest.mark.parametrize("transport", [WsSession, WsConnection])
+def test_receive_timeout_logs_task_id_without_changing_lifecycle(
+    transport,
+    ws_error_logs,
+):
+    from websocket import WebSocketTimeoutException
+
+    ws = QueueWebSocket()
+    conn = transport(url=URL, connector=lambda url, headers: ws, timeout=0.02)
+    task = conn.open_task() if transport is WsConnection else conn
+    try:
+        _started(conn, task, request_id="timeout-id")
+        if transport is WsSession:
+            ws.inbox.put(WebSocketTimeoutException("private-error-message"))
+        with pytest.raises(APITimeoutError):
+            task.recv()
+        assert _ws_errors(ws_error_logs) == [
+            "websocket receive failed request_id=timeout-id "
+            "error_type=APITimeoutError",
+        ]
+        assert ws.closed is (transport is WsSession)
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("transport", [WsSession, WsConnection])
+def test_invalid_arguments_states_and_explicit_close_do_not_log_errors(
+    transport,
+    ws_error_logs,
+):
+    ws = QueueWebSocket()
+    conn = transport(url=URL, connector=lambda url, headers: ws, timeout=0.5)
+    task = conn.open_task() if transport is WsConnection else conn
+    try:
+        with pytest.raises(TypeError):
+            task.send_binary("not-bytes")
+        with pytest.raises(WsStateError):
+            task.continue_task({})
+        _started(conn, task, request_id="normal-id")
+        with pytest.raises(TypeError):
+            task.continue_task({"not-json": object()})
+        assert ws.closed  # Retain preexisting serialization-error cleanup.
+        conn.close()
+        with pytest.raises(WsStateError):
+            task.send_binary(b"late")
+    finally:
+        conn.close()
+    assert _ws_errors(ws_error_logs) == []
+
+
+def test_shared_receive_failure_without_tasks_logs_unknown(
+    bounded_connection,
+    ws_error_logs,
+):
+    conn = bounded_connection()
+    conn._ws.inbox.put(OSError("private-error-message"))
+    conn._reader.join(timeout=1)
+    assert not conn._reader.is_alive()
+    assert _ws_errors(ws_error_logs) == [
+        "websocket receive failed request_id=unknown error_type=OSError",
+    ]
+
+
+@pytest.mark.parametrize("transport", [WsSession, WsConnection])
+@pytest.mark.parametrize("failure", ["peer-close", "socket-timeout"])
+def test_library_receive_errors_keep_normalization_and_request_id_logs(
+    transport,
+    failure,
+    ws_error_logs,
+):
+    from websocket import (
+        WebSocketConnectionClosedException,
+        WebSocketTimeoutException,
+    )
+
+    ws = QueueWebSocket()
+    conn = transport(url=URL, connector=lambda url, headers: ws, timeout=0.5)
+    task = conn.open_task() if transport is WsConnection else conn
+    try:
+        _started(conn, task, request_id="normalized-id")
+        error = (
+            WebSocketConnectionClosedException("private-error-message")
+            if failure == "peer-close"
+            else WebSocketTimeoutException("private-error-message")
+        )
+        ws.inbox.put(error)
+        expected_type = (
+            APIConnectionError if failure == "peer-close" else APITimeoutError
+        )
+        with pytest.raises(expected_type):
+            task.recv()
+        assert ws.closed
+        assert _ws_errors(ws_error_logs) == [
+            "websocket receive failed request_id=normalized-id error_type="
+            + expected_type.__name__,
+        ]
+    finally:
+        conn.close()
+    assert len(_ws_errors(ws_error_logs)) == 1
+
+
+def test_shared_heartbeat_failure_logs_each_task_without_reader_duplicate(
+    ws_error_logs,
+):
+    fail_ping = threading.Event()
+
+    class BrokenPingSocket(QueueWebSocket):
+        def ping(self):
+            if fail_ping.is_set():
+                raise OSError("private-error-message Bearer private-token")
+
+    ws = BrokenPingSocket()
+    conn = WsConnection(
+        url=URL,
+        connector=lambda url, headers: ws,
+        timeout=0.5,
+        ping_interval=0.01,
+    )
+    try:
+        first, second = conn.open_task(), conn.open_task()
+        _started(conn, first, request_id="first-id")
+        _started(conn, second, request_id="second-id")
+        fail_ping.set()
+        errors = []
+        for task in (first, second):
+            with pytest.raises(APIConnectionError) as caught:
+                task.recv()
+            errors.append(caught.value)
+        assert errors[0] is errors[1]
+        assert errors[0].request_id is None
+        assert conn.closed and ws.closed
+    finally:
+        conn.close()
+    assert _ws_errors(ws_error_logs) == [
+        "websocket heartbeat failed request_id=first-id "
+        "error_type=APIConnectionError",
+        "websocket heartbeat failed request_id=second-id "
+        "error_type=APIConnectionError",
+    ]
+
+
+@pytest.mark.parametrize(
+    "transport, failure_timeout",
+    [(WsSession, 0.5), (WsConnection, 0.5), (WsConnection, None)],
+)
+def test_local_socket_initialization_failure_does_not_log_request_id(
+    transport,
+    failure_timeout,
+    ws_error_logs,
+):
+    failure = OSError("local initialization failed")
+
+    class BrokenTimeoutSocket(QueueWebSocket):
+        def settimeout(self, seconds):
+            if seconds == failure_timeout:
+                raise failure
+            super().settimeout(seconds)
+
+    ws = BrokenTimeoutSocket()
+    with pytest.raises(OSError) as caught:
+        transport(url=URL, connector=lambda url, headers: ws, timeout=0.5)
+    assert caught.value is failure
+    assert ws.closed
+    assert _ws_errors(ws_error_logs) == []

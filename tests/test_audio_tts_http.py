@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 
 import httpx
 import pytest
@@ -16,6 +17,7 @@ import pytest
 from dashscope import AsyncClient, Client
 from dashscope.errors import (
     APIConnectionError,
+    APIResponseValidationError,
     APIStatusError,
     APITimeoutError,
     AuthenticationError,
@@ -1137,3 +1139,477 @@ def test_audio_chunk_keeps_wire_status_flag_local(raise_on_error, status):
         assert response.is_closed and wire.closed
     finally:
         client.transport.http_client.close()
+
+
+_HTTP_TTS_LOGGER = "dashscope._logging.audio.http_tts"
+
+
+def _http_tts_errors(caplog):
+    return [
+        record
+        for record in caplog.records
+        if record.name == _HTTP_TTS_LOGGER and record.levelno >= logging.ERROR
+    ]
+
+
+def _assert_http_tts_log(caplog, request_id):
+    (record,) = _http_tts_errors(caplog)
+    assert f"request_id={request_id}" in record.getMessage()
+    assert record.exc_info is None
+    assert "private-payload" not in record.getMessage()
+    assert "private-key" not in record.getMessage()
+
+
+class _AsyncTrackedStream(httpx.AsyncByteStream):
+    def __init__(self, *parts, error=None):
+        self.parts = parts
+        self.error = error
+        self.closed = False
+
+    async def __aiter__(self):
+        for part in self.parts:
+            yield part
+        if self.error is not None:
+            raise self.error
+
+    async def aclose(self):
+        self.closed = True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_mode", [False, True])
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "json",
+        "shape",
+        "status",
+        "base64",
+        "output",
+        "business",
+        "error-frame",
+        "error-status",
+        "json-envelope",
+        "http-status",
+    ],
+)
+@pytest.mark.parametrize(
+    "request_ids",
+    [
+        ("body-id", "output-id", "body-id"),
+        (None, "output-id", "output-id"),
+        (None, None, "header-id"),
+        ("", "", "header-id"),
+    ],
+)
+async def test_http_tts_stream_failure_logs_and_preserves_contract(
+    caplog,
+    async_mode,
+    fault,
+    request_ids,
+):
+    outer_id, inner_id, expected_id = request_ids
+    caplog.set_level(logging.ERROR, logger=_HTTP_TTS_LOGGER)
+    body = {
+        "request_id": outer_id,
+        "output": {"request_id": inner_id, "audio": {}},
+    }
+    if fault == "json":
+        data = b"data: private-payload not JSON\n\n"
+    elif fault == "shape":
+        data = b'data: ["private-payload"]\n\n'
+    elif fault == "status":
+        data = b"status: private-payload\n" + _frame(body)
+    elif fault == "base64":
+        body["output"]["audio"]["data"] = "private-payload%%%"
+        data = _frame(body)
+    elif fault == "output":
+        body["status_code"] = "private-payload"
+        data = _frame(body)
+    else:
+        body.update(
+            code="InvalidParameter",
+            message="private-payload Bearer private-key",
+        )
+        prefixes = {
+            "error-frame": b"event: error\n",
+            "error-status": b"event: error\nstatus: 400\n",
+        }
+        data = (
+            json.dumps(body).encode()
+            if fault in {"json-envelope", "http-status"}
+            else prefixes.get(fault, b"") + _frame(body)
+        )
+    media_type = (
+        "application/json"
+        if fault in {"json-envelope", "http-status"}
+        else "text/event-stream"
+    )
+    wire = (_AsyncTrackedStream if async_mode else _TrackedStream)(data)
+    response = httpx.Response(
+        400 if fault == "http-status" else 200,
+        stream=wire,
+        headers={"content-type": media_type, "X-Request-ID": "header-id"},
+    )
+    client = (_make_async_client if async_mode else _make_client)(
+        lambda request: response,
+        max_retries=0,
+        strict_validation=fault == "output",
+    )
+    if fault in {
+        "business",
+        "error-frame",
+        "error-status",
+        "json-envelope",
+        "http-status",
+    }:
+        error_type = BadRequestError
+    elif fault in {"json", "shape"}:
+        error_type = DashScopeError
+    elif fault == "output":
+        error_type = APIResponseValidationError
+    else:
+        error_type = ValueError
+    try:
+        with pytest.raises(error_type) as caught:
+            if async_mode:
+                stream = await client.audio.tts.http.stream(
+                    "private-payload",
+                    **_TTS_ARGS,
+                )
+                async for _ in stream:
+                    pass
+            else:
+                list(
+                    client.audio.tts.http.stream(
+                        "private-payload",
+                        **_TTS_ARGS,
+                    ),
+                )
+        if fault in {"json", "shape", "status"}:
+            expected_id = "header-id"
+        _assert_http_tts_log(caplog, expected_id)
+        if fault in {"json", "shape"}:
+            assert caught.value.request_id == "header-id"
+        elif error_type is APIResponseValidationError:
+            assert caught.value.response is response
+            assert caught.value.body["status_code"] == body["status_code"]
+        elif error_type is BadRequestError:
+            assert caught.value.request_id == expected_id
+            assert caught.value.body == body
+            assert caught.value.status_code == (
+                400 if fault in {"error-status", "http-status"} else 200
+            )
+        assert response.is_closed and wire.closed
+    finally:
+        if async_mode:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_mode", [False, True])
+async def test_http_tts_stream_degrades_invalid_status_without_error_log(
+    caplog,
+    async_mode,
+):
+    caplog.set_level(logging.ERROR, logger=_HTTP_TTS_LOGGER)
+    data = _frame(
+        {
+            "status_code": "invalid-status",
+            "request_id": "body-id",
+            "output": {"audio": {"data": _b64(b"first")}},
+        },
+    ) + _frame(
+        {
+            "request_id": "body-id",
+            "output": {"audio": {"data": _b64(b"last")}},
+        },
+    )
+    wire = (_AsyncTrackedStream if async_mode else _TrackedStream)(data)
+    response = httpx.Response(
+        200,
+        stream=wire,
+        headers={"content-type": "text/event-stream"},
+    )
+    client = (_make_async_client if async_mode else _make_client)(
+        lambda request: response,
+    )
+    try:
+        if async_mode:
+            stream = await client.audio.tts.http.stream("text", **_TTS_ARGS)
+            chunks = [chunk async for chunk in stream]
+        else:
+            chunks = list(client.audio.tts.http.stream("text", **_TTS_ARGS))
+        assert [chunk.audio for chunk in chunks] == [b"first", b"last"]
+        assert chunks[0].status_code is None
+        assert not chunks[0].is_error
+        assert response.is_closed and wire.closed
+        assert not [
+            record
+            for record in caplog.records
+            if record.name == _HTTP_TTS_LOGGER
+        ]
+    finally:
+        if async_mode:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_mode", [False, True])
+@pytest.mark.parametrize(
+    "headers, expected_id",
+    [
+        ({"X-Request-ID": "mixed-id"}, "mixed-id"),
+        ({"X-DashScope-RequestId": "alias-id"}, "alias-id"),
+        (
+            {"X-Request-ID": "", "X-DashScope-Request-ID": "fallback-id"},
+            "fallback-id",
+        ),
+        ({}, "unknown"),
+    ],
+)
+async def test_http_tts_malformed_stream_logs_header_alias_or_unknown(
+    caplog,
+    async_mode,
+    headers,
+    expected_id,
+):
+    caplog.set_level(logging.ERROR, logger=_HTTP_TTS_LOGGER)
+    wire = (_AsyncTrackedStream if async_mode else _TrackedStream)(
+        b"data: private-payload\n\n",
+    )
+    response = httpx.Response(200, stream=wire, headers=headers)
+    client = (_make_async_client if async_mode else _make_client)(
+        lambda request: response,
+    )
+    try:
+        with pytest.raises(DashScopeError) as caught:
+            if async_mode:
+                stream = await client.audio.tts.http.stream(
+                    "text",
+                    **_TTS_ARGS,
+                )
+                async for _ in stream:
+                    pass
+            else:
+                list(client.audio.tts.http.stream("text", **_TTS_ARGS))
+        # Header aliases enrich logs without changing per-chunk/public ID rules.
+        assert caught.value.request_id == (headers.get("X-Request-ID") or None)
+        assert response.is_closed and wire.closed
+        _assert_http_tts_log(caplog, expected_id)
+    finally:
+        if async_mode:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_mode", [False, True])
+@pytest.mark.parametrize("fault", ["json", "read"])
+async def test_http_tts_stream_retains_body_id_only_in_log_context(
+    caplog,
+    async_mode,
+    fault,
+):
+    caplog.set_level(logging.ERROR, logger=_HTTP_TTS_LOGGER)
+    parts = [
+        _frame({"request_id": "body-id", "output": {"audio": {}}}),
+        _frame({"output": {"request_id": "output-id", "audio": {}}}),
+    ]
+    if fault == "json":
+        parts.append(b"data: private-payload\n\n")
+    wire = (_AsyncTrackedStream if async_mode else _TrackedStream)(
+        *parts,
+        error=httpx.ReadError("private-payload") if fault == "read" else None,
+    )
+    response = httpx.Response(
+        200,
+        stream=wire,
+        headers={"x-request-id": "header-id"},
+    )
+    client = (_make_async_client if async_mode else _make_client)(
+        lambda request: response,
+    )
+    chunks = []
+    try:
+        with pytest.raises(
+            DashScopeError if fault == "json" else httpx.ReadError,
+        ):
+            if async_mode:
+                stream = await client.audio.tts.http.stream(
+                    "text",
+                    **_TTS_ARGS,
+                )
+                async for chunk in stream:
+                    chunks.append(chunk)
+            else:
+                stream = client.audio.tts.http.stream("text", **_TTS_ARGS)
+                chunks.append(next(stream))
+                chunks.append(next(stream))
+                next(stream)
+        assert [chunk.request_id for chunk in chunks] == [
+            "body-id",
+            "header-id",
+        ]
+        _assert_http_tts_log(caplog, "output-id")
+        assert response.is_closed and wire.closed
+    finally:
+        if async_mode:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_mode", [False, True])
+@pytest.mark.parametrize("raise_on_error", [False, True])
+@pytest.mark.parametrize("terminated", [False, True])
+@pytest.mark.parametrize(
+    "request_ids",
+    [
+        ("body-id", "output-id", "body-id"),
+        (None, "output-id", "output-id"),
+        (None, None, "header-id"),
+    ],
+)
+async def test_http_tts_error_chunk_logs_without_raising(
+    caplog,
+    async_mode,
+    raise_on_error,
+    terminated,
+    request_ids,
+):
+    outer_id, inner_id, expected_id = request_ids
+    caplog.set_level(logging.ERROR, logger=_HTTP_TTS_LOGGER)
+    body = {
+        "status_code": 503,
+        "request_id": outer_id,
+        "output": {"request_id": inner_id, "audio": {}},
+    }
+    data = _frame(body)
+    if not terminated:
+        data = data.rstrip(b"\n")
+    wire = (_AsyncTrackedStream if async_mode else _TrackedStream)(data)
+    response = httpx.Response(
+        200,
+        stream=wire,
+        headers={"x-request-id": "header-id"},
+    )
+    client = (_make_async_client if async_mode else _make_client)(
+        lambda request: response,
+        raise_on_error=raise_on_error,
+    )
+    try:
+        if async_mode:
+            stream = await client.audio.tts.http.stream("text", **_TTS_ARGS)
+            chunks = [chunk async for chunk in stream]
+        else:
+            chunks = list(client.audio.tts.http.stream("text", **_TTS_ARGS))
+        (chunk,) = chunks
+        assert chunk.is_error and chunk.status_code == 503
+        assert chunk.request_id == (outer_id or "header-id")
+        assert chunk.output == body["output"]
+        _assert_http_tts_log(caplog, expected_id)
+        assert response.is_closed and wire.closed
+    finally:
+        if async_mode:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_mode", [False, True])
+@pytest.mark.parametrize("raise_on_error", [False, True])
+@pytest.mark.parametrize("malformed", [False, True])
+async def test_http_tts_one_shot_failure_logs(
+    caplog,
+    async_mode,
+    raise_on_error,
+    malformed,
+):
+    caplog.set_level(logging.ERROR, logger=_HTTP_TTS_LOGGER)
+    body = {
+        "code": "InvalidParameter",
+        "message": "private-payload Bearer private-key",
+        "request_id": "body-id",
+        "output": {"request_id": "output-id"},
+    }
+    response = httpx.Response(
+        200,
+        content=b"private-payload" if malformed else json.dumps(body).encode(),
+        headers={"X-DashScope-RequestId": "header-id"},
+    )
+    client = (_make_async_client if async_mode else _make_client)(
+        lambda request: response,
+        raise_on_error=raise_on_error,
+    )
+    try:
+        if malformed or raise_on_error:
+            with pytest.raises(
+                InternalServerError if malformed else BadRequestError,
+            ):
+                if async_mode:
+                    await client.audio.tts.http.synthesize("text", **_TTS_ARGS)
+                else:
+                    client.audio.tts.http.synthesize("text", **_TTS_ARGS)
+        else:
+            if async_mode:
+                result = await client.audio.tts.http.synthesize(
+                    "text",
+                    **_TTS_ARGS,
+                )
+            else:
+                result = client.audio.tts.http.synthesize("text", **_TTS_ARGS)
+            assert result.is_error
+            assert result.request_id == "body-id"
+        _assert_http_tts_log(caplog, "header-id" if malformed else "body-id")
+    finally:
+        if async_mode:
+            await client.aclose()
+        else:
+            client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_mode", [False, True])
+async def test_http_tts_success_close_and_validation_do_not_log_errors(
+    caplog,
+    async_mode,
+):
+    caplog.set_level(logging.DEBUG, logger=_HTTP_TTS_LOGGER)
+    wire = (_AsyncTrackedStream if async_mode else _TrackedStream)(
+        _frame({"output": {}}),
+    )
+    response = httpx.Response(200, stream=wire)
+    client = (_make_async_client if async_mode else _make_client)(
+        lambda request: response,
+    )
+    try:
+        with pytest.raises(KeyError if async_mode else TypeError):
+            if async_mode:
+                await client.audio.tts.http.stream("text")
+            else:
+                client.audio.tts.http.stream("text")
+        if async_mode:
+            stream = await client.audio.tts.http.stream("text", **_TTS_ARGS)
+            async for chunk in stream:
+                assert chunk.request_id == ""
+            await stream.aclose()
+        else:
+            stream = client.audio.tts.http.stream("text", **_TTS_ARGS)
+            (chunk,) = list(stream)
+            assert chunk.request_id == ""
+            stream.close()
+        assert response.is_closed and wire.closed
+        assert not _http_tts_errors(caplog)
+    finally:
+        if async_mode:
+            await client.aclose()
+        else:
+            client.close()
