@@ -142,6 +142,9 @@ setuptools.setup(
     zip_safe=False,
     cmdclass=cmdclass,
     entry_points={
-        "console_scripts": ["dashscope = dashscope.legacy_1x.cli:main"],
+        "console_scripts": [
+            "dashscope = dashscope.cli.main:main",
+            "dashscope1 = dashscope.legacy_1x.cli:main",
+        ],
     },
 )

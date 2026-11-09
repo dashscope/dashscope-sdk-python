@@ -36,7 +36,7 @@ from dashscope.transport import (
     SyncTransport,
     default_user_agent,
 )
-from dashscope.transport.ws import Connector
+from dashscope.transport.ws import Connector, with_client_user_agent
 from dashscope.transport.ws_connection import WsConnection
 
 # Historical dashscope.client.* children resolve through the 1.x alias finder.
@@ -96,6 +96,7 @@ class Client:
         http_client: Optional[httpx.Client] = None,
         raise_on_error: bool = True,
         protocol_options: Optional[Dict[str, Any]] = None,
+        user_agent_suffix: Optional[str] = None,
     ) -> None:
         self._config = resolve_config(
             api_key=api_key,
@@ -110,6 +111,7 @@ class Client:
         )
         self._raise_on_error = raise_on_error
         self._protocol_options = protocol_options
+        self._user_agent_suffix = user_agent_suffix
         self._protocol = get_protocol(
             self._config.protocol,
             protocol_options=protocol_options,
@@ -118,7 +120,7 @@ class Client:
             base_url=self._config.base_url,
             api_key=self._config.api_key,
             workspace=self._config.workspace,
-            user_agent=default_user_agent(),
+            user_agent=default_user_agent(user_agent_suffix),
             timeout=self._config.timeout,
             max_retries=self._config.max_retries,
             http_client=http_client,
@@ -204,6 +206,11 @@ class Client:
     def raise_on_error(self) -> bool:
         return self._raise_on_error
 
+    @property
+    def user_agent_suffix(self) -> Optional[str]:
+        """The surface tag appended to this client's User-Agent, if any."""
+        return self._user_agent_suffix
+
     def with_options(
         self,
         *,
@@ -216,6 +223,7 @@ class Client:
         max_retries: Optional[int] = None,
         strict_validation: Optional[bool] = None,
         raise_on_error: Optional[bool] = None,
+        user_agent_suffix: Optional[str] = None,
     ) -> "Client":
         """Derive a client with the given options overridden.
 
@@ -226,6 +234,12 @@ class Client:
         own pool.
         """
         config = self._config
+        # ``user_agent_suffix`` deliberately does not participate in the
+        # pool-sharing decision. The User-Agent is re-applied per request
+        # from the transport's own defaults (see ``_request_headers``),
+        # so a derived client sharing this one's httpx pool still sends
+        # its own agent on the wire. Adding it here would split pools for
+        # no behavioural gain.
         share_pool = (
             api_key is None
             and base_url is None
@@ -257,6 +271,11 @@ class Client:
                 else raise_on_error
             ),
             protocol_options=self._protocol_options,
+            user_agent_suffix=(
+                self._user_agent_suffix
+                if user_agent_suffix is None
+                else user_agent_suffix
+            ),
         )
 
     def close(self) -> None:
@@ -293,7 +312,9 @@ class Client:
             api_key=config.api_key,
             workspace=config.workspace,
             region=config.region,
-            headers=headers,
+            # Websocket sessions bypass this client's HTTP transport, so the
+            # agent (and its surface suffix) is carried across explicitly.
+            headers=with_client_user_agent(self, headers),
             connector=connector,
             timeout=config.timeout if timeout is None else timeout,
             module=module,
@@ -337,6 +358,7 @@ class AsyncClient:
         http_client: Optional[httpx.AsyncClient] = None,
         raise_on_error: bool = True,
         protocol_options: Optional[Dict[str, Any]] = None,
+        user_agent_suffix: Optional[str] = None,
     ) -> None:
         self._config = resolve_config(
             api_key=api_key,
@@ -351,6 +373,7 @@ class AsyncClient:
         )
         self._raise_on_error = raise_on_error
         self._protocol_options = protocol_options
+        self._user_agent_suffix = user_agent_suffix
         self._protocol = get_protocol(
             self._config.protocol,
             protocol_options=protocol_options,
@@ -359,7 +382,7 @@ class AsyncClient:
             base_url=self._config.base_url,
             api_key=self._config.api_key,
             workspace=self._config.workspace,
-            user_agent=default_user_agent(),
+            user_agent=default_user_agent(user_agent_suffix),
             timeout=self._config.timeout,
             max_retries=self._config.max_retries,
             http_client=http_client,
@@ -441,6 +464,11 @@ class AsyncClient:
     def raise_on_error(self) -> bool:
         return self._raise_on_error
 
+    @property
+    def user_agent_suffix(self) -> Optional[str]:
+        """The surface tag appended to this client's User-Agent, if any."""
+        return self._user_agent_suffix
+
     def with_options(
         self,
         *,
@@ -453,6 +481,7 @@ class AsyncClient:
         max_retries: Optional[int] = None,
         strict_validation: Optional[bool] = None,
         raise_on_error: Optional[bool] = None,
+        user_agent_suffix: Optional[str] = None,
     ) -> "AsyncClient":
         """Derive a client with the given options overridden.
 
@@ -463,6 +492,8 @@ class AsyncClient:
         own pool.
         """
         config = self._config
+        # See Client.with_options: the User-Agent is applied per request,
+        # so the suffix must not force a separate pool.
         share_pool = (
             api_key is None
             and base_url is None
@@ -494,6 +525,11 @@ class AsyncClient:
                 else raise_on_error
             ),
             protocol_options=self._protocol_options,
+            user_agent_suffix=(
+                self._user_agent_suffix
+                if user_agent_suffix is None
+                else user_agent_suffix
+            ),
         )
 
     async def aclose(self) -> None:

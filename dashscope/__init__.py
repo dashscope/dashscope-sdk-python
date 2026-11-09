@@ -196,7 +196,6 @@ _LEGACY_LAZY_MODULES = frozenset(
         "applications",
         "assistants",
         "audio",
-        "cli",
         "common",
         "embeddings",
         "files",

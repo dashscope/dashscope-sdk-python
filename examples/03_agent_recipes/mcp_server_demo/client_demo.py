@@ -12,7 +12,7 @@ to it, doing the standard handshake and then listing and calling tools::
 That makes the MCP demo runnable and testable on its own -- no external
 agent, no API key, no network. Run it from anywhere::
 
-    python3 .../mcp_server_demo/client_demo.py
+    python .../mcp_server_demo/client_demo.py
 """
 
 import json

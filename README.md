@@ -518,6 +518,26 @@ The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built 
 - Install with the `acli` extra: `pip install "dashscope[acli]"`. Add `acli-voice` / `acli-camera` for voice and camera input, or `acli-all` for everything — see the [extras table](#installation).
 - Full walkthrough: [DashScope SDK Expert guide](https://help.aliyun.com/en/model-studio/dashscope-sdk-expert).
 
+## Command line
+
+`pip install -U dashscope` puts two independent commands on your `PATH`. `dashscope` serves the SDK-shaped **2.0** command tree; `dashscope1` serves the frozen **1.x** implementation:
+
+| Entry point | Implementation | Examples |
+|-------------|----------------|----------|
+| `dashscope` | 2.0, following the SDK resource tree | `chat create`, `apps completions create`, `multimodal chat create`, `rl jobs create`, `rl functions register`, `images jobs create`, `audio asr transcribe`, `agentstudio sessions events send` |
+| `dashscope1` | 1.x, using the 1.x SDK | `generation call`, `application call`, `image-synthesis create`, `multimodal-conversation call`, `fine-tunes call`, `agentic-rl run`, `auth login`, `oss upload` |
+
+The two CLI trees do not dispatch to or normalize arguments for each other. Running a 1.x-only command through `dashscope` exits with a usage error and points to `dashscope1`. Their module entry points are likewise independent:
+
+```bash
+python -m dashscope.cli apps completions create ...
+python -m dashscope.legacy_1x.cli generation call ...
+```
+
+Running `dashscope` with no arguments starts the [AI assistant](#ai-assistant-dashscope-sdk-expert) instead of the CLI.
+
+For the complete 2.0 CLI command map, output formats, exit codes, configuration precedence and CI recipes, see the CLI section in [`examples/README.md`](examples/README.md).
+
 ## Shell completion
 
 Run the command for your shell once, then restart the shell (or re-source your config):
@@ -533,6 +553,8 @@ Preview the script without installing:
 ```shell
 dashscope --show-completion bash
 ```
+
+Completion is installed through the 2.0 `dashscope` entry point.
 
 ## Logging
 
@@ -556,10 +578,11 @@ examples/
 ├── 02_advanced_engineering/  Mock debugging, semantic cache, circuit breaker + multi-region DR
 ├── 03_agent_recipes/         Tool-call loop, RAG, MCP server, AgentStudio
 ├── 04_real_world_scenarios/  End-to-end production harnesses (RAG, realtime meetings, customer service)
+├── 05_cli/                   Offline CLI output/error and subprocess CI harnesses
 └── legacy_1x/                1.x module-level API examples, for reference
 ```
 
-See [`examples/README.md`](examples/README.md). Several flagship cases run fully offline (mock transports) with no API key.
+See [`examples/README.md`](examples/README.md) for the full guide, including the complete CLI command map and shell/CI recipes. Several flagship cases and both CLI harnesses run fully offline with no API key.
 
 ## Migrating from 1.x
 
@@ -576,6 +599,8 @@ The 1.x module-level API is unchanged and still supported — you can adopt 2.0 
 | `dashscope.api_key = "sk-xxx"` | `dashscope.Client(api_key=...)` or `dashscope.settings.api_key = ...` |
 | `dashscope.set_region(region, workspace_id)` | `dashscope.Client(region=..., workspace=...)` |
 | OpenAI-compatible via `dashscope.aigc.chat_completion.Completions` | `dashscope.Client(protocol="openai")` |
+
+The CLI follows the same split — see [Command line](#command-line) above.
 
 ### Package layout and compatibility
 

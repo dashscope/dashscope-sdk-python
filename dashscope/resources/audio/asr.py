@@ -42,7 +42,12 @@ from dashscope.resources._jobs import (
     Job,
     Jobs,
 )
-from dashscope.transport.ws import Connector, EVENT_GENERATED, WsSession
+from dashscope.transport.ws import (
+    Connector,
+    EVENT_GENERATED,
+    WsSession,
+    with_client_user_agent,
+)
 from dashscope.transport.ws_connection import WsConnection, WsTask
 from dashscope.types._parse import parse_model
 
@@ -615,7 +620,7 @@ class Recognition:
             "connector": connector,
             "module": MODULE,
             "timeout": config.timeout if timeout is None else timeout,
-            "headers": headers,
+            "headers": with_client_user_agent(client, headers),
         }
         self._session: Union[WsSession, WsTask, None] = None
         self.last_response: Optional[Dict[str, Any]] = None

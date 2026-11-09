@@ -318,8 +318,19 @@ class ChatStream:
             if delta is not None and delta.tool_calls:
                 yield delta.tool_calls
 
+    @property
+    def cumulative(self) -> bool:
+        """True when each frame carries the whole text so far, not a delta.
+
+        Callers that append frames to a terminal have to check this: with
+        ``incremental_output=False`` (or a protocol merged client-side for
+        1.x compatibility) writing every frame in sequence repeats the
+        answer -- "Hi" then "Hi!" comes out as "HiHi!".
+        """
+        return self._merge or self._server_cumulative
+
     def get_final_message(self) -> ChatCompletion:
-        if self._merge or self._server_cumulative:
+        if self.cumulative:
             final = _final_from_cumulative(
                 list(self),
                 strict_validation=self._strict_validation,
@@ -395,9 +406,18 @@ class AsyncChatStream:
             if delta is not None and delta.tool_calls:
                 yield delta.tool_calls
 
+    @property
+    def cumulative(self) -> bool:
+        """True when each frame carries the whole text so far, not a delta.
+
+        Async twin of :attr:`ChatStream.cumulative`; see that docstring for
+        why a caller appending frames to a terminal has to check it.
+        """
+        return self._merge or self._server_cumulative
+
     async def get_final_message(self) -> ChatCompletion:
         chunks = [chunk async for chunk in self]
-        if self._merge or self._server_cumulative:
+        if self.cumulative:
             final = _final_from_cumulative(
                 chunks,
                 strict_validation=self._strict_validation,

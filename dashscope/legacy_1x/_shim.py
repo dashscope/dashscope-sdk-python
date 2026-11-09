@@ -20,7 +20,6 @@ _PACKAGE_ROOTS = frozenset(
         "app",
         "assistants",
         "audio",
-        "cli",
         "common",
         "embeddings",
         "io",

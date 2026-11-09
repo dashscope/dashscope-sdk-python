@@ -26,7 +26,7 @@ it is the other half of the request identity, and it must agree with
 (``dashscope/<version>; python/...; platform/...; processor/...``) and is
 deliberately not shared with the 2.0 transport's own
 ``dashscope.transport.http.default_user_agent()``
-(``dashscope-v2-python/<version>``). Those are two distinct backend
+(``dashscope-sdk-python/<version>``). Those are two distinct backend
 contracts, not two spellings of one value, so they must not be merged.
 
 Only the stdlib is imported at module level; ``dashscope.version`` is
