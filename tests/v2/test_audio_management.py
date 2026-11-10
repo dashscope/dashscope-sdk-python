@@ -227,6 +227,149 @@ def test_voices_clone_create_and_crud():
     assert all(call["model"] == "voice-enrollment" for call in calls)
 
 
+@pytest.mark.parametrize(
+    "audio",
+    [
+        "data:audio/wav;base64,UklGRg==",
+        "https://cdn.test/sample.wav",
+    ],
+)
+def test_voice_create_accepts_audio_source(audio):
+    bodies = []
+
+    def handler(request):
+        assert request.method == "POST"
+        assert request.url.path == "/api/v1/services/audio/tts/customization"
+        bodies.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "req-audio",
+                "output": {"voice_id": "voice-audio"},
+            },
+        )
+
+    with _make_client(handler) as client:
+        voice = client.audio.voices.create(
+            target_model="qwen-audio-3.0-tts-flash",
+            prefix="myvoice",
+            audio=audio,
+        )
+    assert voice.voice_id == "voice-audio"
+    assert voice.request_id == "req-audio"
+    assert bodies == [
+        {
+            "model": "voice-enrollment",
+            "input": {
+                "action": "create_voice",
+                "target_model": "qwen-audio-3.0-tts-flash",
+                "prefix": "myvoice",
+                "audio": audio,
+            },
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        {},
+        {"url": None, "audio": None},
+        {
+            "url": "https://cdn.test/sample.wav",
+            "audio": "data:audio/wav;base64,UklGRg==",
+        },
+    ],
+)
+def test_voice_create_requires_exactly_one_audio_source(source):
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"output": {}})
+
+    with _make_client(handler) as client:
+        with pytest.raises(ValueError, match="exactly one of audio or url"):
+            client.audio.voices.create(
+                target_model="qwen-audio-3.0-tts-flash",
+                prefix="myvoice",
+                **source,
+            )
+    assert bodies == []
+
+
+@pytest.mark.parametrize("audio", ["", "  ", b"\x00\x00", 123])
+def test_voice_create_rejects_empty_or_non_string_audio(audio):
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"output": {}})
+
+    with _make_client(handler) as client:
+        with pytest.raises(
+            ValueError,
+            match="audio must be a non-empty string",
+        ):
+            client.audio.voices.create(
+                target_model="qwen-audio-3.0-tts-flash",
+                prefix="myvoice",
+                audio=audio,
+            )
+    assert bodies == []
+
+
+@pytest.mark.parametrize(
+    "source, expected_source",
+    [
+        (
+            {"audio": "data:audio/wav;base64,UklGRg=="},
+            {"audio": "data:audio/wav;base64,UklGRg=="},
+        ),
+        (
+            {"url": "https://cdn.test/sample.wav"},
+            {"url": "https://cdn.test/sample.wav"},
+        ),
+    ],
+)
+def test_voice_create_named_source_wins_over_extra_input(
+    source,
+    expected_source,
+):
+    bodies = []
+    extra_input = {
+        "audio": "data:audio/wav;base64,aWdub3JlZA==",
+        "url": "https://cdn.test/ignored.wav",
+        "extra": 1,
+    }
+    original = dict(extra_input)
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"output": {"voice_id": "voice-1"}})
+
+    with _make_client(handler) as client:
+        client.audio.voices.create(
+            target_model="qwen-audio-3.0-tts-flash",
+            prefix="myvoice",
+            extra_input=extra_input,
+            **source,
+        )
+    assert bodies == [
+        {
+            "model": "voice-enrollment",
+            "input": {
+                "action": "create_voice",
+                "target_model": "qwen-audio-3.0-tts-flash",
+                "prefix": "myvoice",
+                "extra": 1,
+                **expected_source,
+            },
+        },
+    ]
+    assert extra_input == original
+
+
 # ── voice design (声音设计, qwen-voice-design) ─────────────────────────
 
 

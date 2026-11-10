@@ -303,7 +303,8 @@ class Voices(_CustomizationBase):
         *,
         target_model: str,
         prefix: str,
-        url: str,
+        url: Optional[str] = None,
+        audio: Optional[str] = None,
         language_hints: Optional[List[str]] = None,
         max_prompt_audio_length: Optional[float] = None,
         extra_input: Optional[Dict[str, Any]] = None,
@@ -314,12 +315,25 @@ class Voices(_CustomizationBase):
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> Voice:
-        """Clone a voice from the audio at ``url``; carries ``voice_id``."""
+        """Clone a voice from ``audio`` (Data URI/URL) or a legacy ``url``.
+
+        Provide exactly one source. The result carries ``voice_id``.
+        """
+        if (audio is None) == (url is None):
+            raise ValueError("provide exactly one of audio or url")
+        if audio is not None and (
+            not isinstance(audio, str) or not audio.strip()
+        ):
+            raise ValueError("audio must be a non-empty string")
         fields: Dict[str, Any] = dict(extra_input or {})
         # Named arguments win over the ``extra_input=`` escape hatch.
-        fields.update(
-            {"target_model": target_model, "prefix": prefix, "url": url},
-        )
+        fields.update({"target_model": target_model, "prefix": prefix})
+        if audio is not None:
+            fields.pop("url", None)
+            fields["audio"] = audio
+        else:
+            fields.pop("audio", None)
+            fields["url"] = url
         if language_hints is not None:
             fields["language_hints"] = language_hints
         if max_prompt_audio_length is not None:
