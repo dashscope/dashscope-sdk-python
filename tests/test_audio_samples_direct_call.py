@@ -43,8 +43,9 @@ SAMPLES = (
 NAMES = sorted(
     path.stem
     for path in SAMPLES.glob("*.py")
-    # tingwu is a standalone example without a direct_call copy.
-    if not path.name.startswith("_") and path.stem != "tingwu"
+    # Standalone tutorials do not have direct_call CLI copies.
+    if not path.name.startswith("_")
+    and path.stem not in {"tingwu", "realtime_live"}
 )
 REALTIME = [realtime_omni, realtime_qwen_audio, realtime_translation]
 PCM = b"\x01\x00" * 1600

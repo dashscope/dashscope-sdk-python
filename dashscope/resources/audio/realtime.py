@@ -4,33 +4,30 @@
 
 from __future__ import annotations
 
-import base64
 import json
-import threading
 import time
 import uuid
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Union, cast
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from dashscope._config import WS_REALTIME_PATH, workspace_ws_url
 from dashscope._logging import get_logger, request_id_from_headers
 from dashscope.errors import (
     APIConnectionError,
     APITimeoutError,
     error_from_business_code,
 )
-from dashscope.transport import default_user_agent
-from dashscope.transport._ident import sdk_headers
-from dashscope.transport.ws import Connector, _close_websocket
+from dashscope.resources.audio._ws_session import (
+    _UNSET,
+    WsSessionBase,
+    _as_base64,
+)
+from dashscope.transport.ws import Connector
 
 __all__ = [
     "Realtime",
     "RealtimeSession",
 ]
 
-MODULE = "audio"
 
-_UNSET = object()
 _logger = get_logger("audio.realtime")
 
 
@@ -54,25 +51,7 @@ def _event_request_id(event: Any) -> Optional[str]:
     return None
 
 
-def _default_connector(
-    url: str,
-    headers: Dict[str, str],
-    timeout: Optional[float],
-) -> Any:
-    import websocket  # pylint: disable=import-outside-toplevel
-
-    return websocket.create_connection(url, header=headers, timeout=timeout)
-
-
-def _as_base64(data: Union[str, bytes]) -> str:
-    if isinstance(data, str):
-        return data
-    if isinstance(data, bytes):
-        return base64.b64encode(data).decode("ascii")
-    raise TypeError("expected a base64 string or bytes")
-
-
-class RealtimeSession:
+class RealtimeSession(WsSessionBase):
     """One realtime websocket session (context manager).
 
     Usage::
@@ -105,59 +84,17 @@ class RealtimeSession:
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
     ) -> None:
-        config = client.config
-        if timeout is not None and timeout <= 0:
-            raise ValueError("timeout must be positive")
-        # A per-call workspace override picks that workspace's gateway
-        # for the URL as well, so the socket and the
-        # X-DashScope-WorkSpace header never name different workspaces.
-        space = workspace or config.workspace
-        # URL precedence: explicit ``ws_url`` > the workspace-scoped MaaS
-        # gateway realtime endpoint; without a workspace the legacy shared
-        # gateway is the fallback, with a warning. (The inference
-        # endpoint's DASHSCOPE_WEBSOCKET_BASE_URL does not apply here: the
-        # realtime path differs.)
-        url = ws_url or workspace_ws_url(
-            space,
-            WS_REALTIME_PATH,
-            config.region,
+        super().__init__(
+            client,
+            model=model,
+            ws_url=ws_url,
+            connector=connector,
+            timeout=timeout,
+            headers=headers,
+            api_key=api_key,
+            workspace=workspace,
         )
-        parts = urlsplit(url)
-        query = parse_qsl(parts.query, keep_blank_values=True)
-        if not any(key == "model" for key, _ in query):
-            query.append(("model", model))
-        url = urlunsplit(parts._replace(query=urlencode(query)))
-        # Inherit the client's agent (and any surface suffix on it) so the
-        # realtime socket reports the same identity as its HTTP calls; the
-        # dedup below still lets an explicit per-call header win. The
-        # lookup is defensive for the same reason as
-        # ``transport.ws.with_client_user_agent``.
-        all_headers = {
-            "user-agent": (
-                getattr(
-                    getattr(client, "transport", None),
-                    "user_agent",
-                    None,
-                )
-                or default_user_agent()
-            ),
-            **sdk_headers(MODULE),
-        }
-        key = api_key or config.api_key
-        if key:
-            all_headers["Authorization"] = f"Bearer {key}"
-        if space:
-            all_headers["X-DashScope-WorkSpace"] = space
-        user_headers = dict(headers or {})
-        user_keys = {key.lower() for key in user_headers}
-        all_headers = {
-            key: value
-            for key, value in all_headers.items()
-            if key.lower() not in user_keys
-        }
-        all_headers.update(user_headers)
-        self._model = model
-        wire_model = next(value for key, value in query if key == "model")
+        wire_model = self._wire_model
         if wire_model.startswith("qwen3.8-omni-"):
             self._protocol = "omni_v38"
         elif wire_model.startswith("qwen-audio-"):
@@ -170,22 +107,12 @@ class RealtimeSession:
             self._protocol = "livetranslate"
         else:
             self._protocol = "omni"
-        self._url = url
-        self._headers = all_headers
-        self._connector = connector
-        self._timeout = config.timeout if timeout is None else timeout
-        self._lock = threading.RLock()
-        self._recv_lock = threading.Lock()
-        self._generation = 0
-        self._ws = None
-        self._reset_state()
 
     def _reset_state(self) -> None:
+        super()._reset_state()
         # Logging context is separate from the public latency/response metrics.
         self._request_id: Optional[str] = None
         self._protocol_request_id: Optional[str] = None
-        self._header_request_id: Optional[str] = None
-        self._closed = False
         self._finish_requested = False
         self._finished = False
         self._response_active = False
@@ -197,62 +124,36 @@ class RealtimeSession:
         self.last_first_text_delay: Optional[float] = None
         self.last_first_audio_delay: Optional[float] = None
 
-    @property
-    def model(self) -> str:
-        return self._model
-
-    @property
-    def url(self) -> str:
-        return self._url
-
     def connect(self) -> "RealtimeSession":
         """Open the connection, either explicitly or on context entry."""
-        with self._lock:
-            if self._ws is not None:
-                raise RuntimeError("realtime session is already open")
-            self._generation += 1
-            self._reset_state()
-            try:
-                if self._connector is None:
-                    self._ws = _default_connector(
-                        self._url,
-                        self._headers,
-                        self._timeout,
-                    )
-                else:
-                    self._ws = self._connector(self._url, self._headers)
-                self._header_request_id = request_id_from_headers(
-                    getattr(self._ws, "headers", None),
-                )
-                if self._timeout is not None:
-                    self._ws.settimeout(self._timeout)
-            except BaseException as exc:
-                body = getattr(exc, "resp_body", None)
-                if isinstance(body, (str, bytes, bytearray)):
-                    try:
-                        body = json.loads(body)
-                    except (ValueError, UnicodeError, RecursionError):
-                        body = None
-                request_id = (
-                    _event_request_id(body)
-                    or request_id_from_headers(
-                        getattr(exc, "resp_headers", None),
-                    )
-                    or self._header_request_id
-                )
-                _logger.error(
-                    "Realtime handshake failed: %s, request_id=%s",
-                    type(exc).__name__,
-                    request_id or "unknown",
-                )
-                self.close()
-                self._reset_state()
-                from websocket import WebSocketTimeoutException
+        from websocket import (  # pylint: disable=import-outside-toplevel
+            WebSocketTimeoutException,
+        )
 
-                if isinstance(exc, WebSocketTimeoutException):
-                    raise APITimeoutError(detail=str(exc)) from exc
-                raise
-        return self
+        try:
+            return super().connect()
+        except WebSocketTimeoutException as exc:
+            raise APITimeoutError(detail=str(exc)) from exc
+
+    def _on_connect_error(self, exc: BaseException) -> None:
+        body = getattr(exc, "resp_body", None)
+        if isinstance(body, (str, bytes, bytearray)):
+            try:
+                body = json.loads(body)
+            except (ValueError, UnicodeError, RecursionError):
+                body = None
+        request_id = (
+            _event_request_id(body)
+            or request_id_from_headers(
+                getattr(exc, "resp_headers", None),
+            )
+            or self._header_request_id
+        )
+        _logger.error(
+            "Realtime handshake failed: %s, request_id=%s",
+            type(exc).__name__,
+            request_id or "unknown",
+        )
 
     def _request_id_for_log(self) -> str:
         return (
@@ -262,37 +163,42 @@ class RealtimeSession:
             or "unknown"
         )
 
-    def __enter__(self) -> "RealtimeSession":
-        return self.connect()
-
-    def __exit__(self, *exc: Any) -> None:
-        self.close()
-
     def send_event(self, event: Dict[str, Any]) -> None:
         """Send a raw event, assigning an event_id unless one is supplied."""
-        with self._lock:
-            if self._ws is None:
-                raise RuntimeError("realtime session is not open")
-            if self._finish_requested:
-                if event.get("type") == "session.finish":
-                    return
-                raise RuntimeError("realtime session is finishing")
-            payload = dict(event)
-            payload.setdefault("event_id", "event_" + uuid.uuid4().hex)
-            raw = json.dumps(payload)
-            if payload.get("type") == "session.finish":
-                self._finish_requested = True
-            try:
-                self._ws.send(raw)
+        with self._send_lock:
+            with self._lock:
+                ws, generation = self._ws, self._generation
+                if ws is None:
+                    raise RuntimeError("realtime session is not open")
+                if self._finish_requested:
+                    if event.get("type") == "session.finish":
+                        return
+                    raise RuntimeError("realtime session is finishing")
+                payload = dict(event)
+                payload.setdefault("event_id", "event_" + uuid.uuid4().hex)
+                raw = json.dumps(payload)
+                if payload.get("type") == "session.finish":
+                    self._finish_requested = True
                 if payload.get("type") == "response.create":
+                    # Register before I/O: a response may arrive before send returns.
                     self._pending_response_ids.append(payload["event_id"])
+            try:
+                self._send_raw(ws, raw)
             except BaseException as exc:
-                _logger.error(
-                    "Realtime send failed: %s, request_id=%s",
-                    type(exc).__name__,
-                    self._request_id_for_log(),
-                )
-                self.close()
+                with self._lock:
+                    if ws is self._ws and generation == self._generation:
+                        _logger.error(
+                            "Realtime send failed: %s, request_id=%s",
+                            type(exc).__name__,
+                            self._request_id_for_log(),
+                        )
+                        if payload.get("type") == "response.create" and (
+                            payload["event_id"] in self._pending_response_ids
+                        ):
+                            self._pending_response_ids.remove(
+                                payload["event_id"],
+                            )
+                        self.close()
                 raise
 
     def update_session(
@@ -755,7 +661,7 @@ class RealtimeSession:
             received_on_current_connection = False
             try:
                 try:
-                    raw = ws.recv()
+                    raw = self._recv_raw(ws, generation)
                 except WebSocketConnectionClosedException:
                     raw = None
                 except WebSocketTimeoutException as exc:
@@ -951,13 +857,6 @@ class RealtimeSession:
             yield event
             if event.get("type") == "session.finished":
                 return
-
-    def close(self) -> None:
-        with self._lock:
-            ws, self._ws = self._ws, None
-            if ws is not None:
-                self._closed = True
-                _close_websocket(ws)
 
 
 class Realtime:
