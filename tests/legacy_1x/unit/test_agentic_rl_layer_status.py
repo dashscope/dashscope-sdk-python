@@ -132,8 +132,10 @@ async def test_get_layer_raises_on_region_rejection(monkeypatch):
         await FunctionComponentModel().get_layer(LAYER_CODE)
 
     assert "cn-wulanchabu" in str(excinfo.value)
-    assert excinfo.value.allow_retry is True
-    assert "Retry the status query" in excinfo.value.solution
+    assert excinfo.value.allow_retry is False
+    assert "service owner" in excinfo.value.solution
+    assert excinfo.value.request_id == LAYER_NOT_FOUND_BODY["request_id"]
+    assert excinfo.value.body == LAYER_NOT_FOUND_BODY
     assert calls["count"] == 1
 
 
@@ -235,6 +237,9 @@ async def test_load_reports_server_rejection_with_context(monkeypatch):
     assert ENTITY_ID in result.status.message
     assert LAYER_CODE in result.status.message
     assert "cn-wulanchabu" in result.status.message
+    assert "Empty instance ID" not in result.status.message
+    assert result.request_id == LAYER_NOT_FOUND_BODY["request_id"]
+    assert result.body == LAYER_NOT_FOUND_BODY
 
 
 async def test_load_succeeds_once_layer_is_ready(monkeypatch):
