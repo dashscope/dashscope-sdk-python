@@ -93,7 +93,7 @@ async def test_get_layer_rejects_business_failure(monkeypatch, output):
 async def test_load_preserves_business_failure(monkeypatch, component, output):
     response = {**REGION_REJECTION, "output": output}
     client = AsyncMock(
-        side_effect=[{"output": {"status": "SUCCESS"}}, response]
+        side_effect=[{"output": {"status": "SUCCESS"}}, response],
     )
     monkeypatch.setattr(model, "client_fc", client)
 
@@ -117,7 +117,9 @@ async def test_load_preserves_business_failure(monkeypatch, component, output):
 
 @pytest.mark.parametrize("output", [None, {}])
 async def test_load_missing_instance_is_still_reported(
-    monkeypatch, component, output
+    monkeypatch,
+    component,
+    output,
 ):
     response = {"request_id": "missing-instance", "output": output}
     monkeypatch.setattr(
@@ -149,7 +151,9 @@ async def test_get_layer_missing_status_remains_retryable(monkeypatch):
 
 
 async def test_registration_preserves_layer_creation_failure(
-    monkeypatch, component, tmp_path
+    monkeypatch,
+    component,
+    tmp_path,
 ):
     component.fcmodel.zipdir = str(tmp_path)
     (tmp_path / "requirements.txt").write_text("")
@@ -158,7 +162,8 @@ async def test_registration_preserves_layer_creation_failure(
     monkeypatch.setattr(model, "client_fc", client)
 
     result = await component.register(
-        oss_id="oss-id", oss_url="https://example.com/package"
+        oss_id="oss-id",
+        oss_url="https://example.com/package",
     )
 
     assert not result.status.success
@@ -184,16 +189,19 @@ async def test_load_preserves_layer_query_rejection(monkeypatch, component):
 
 
 @pytest.mark.parametrize(
-    "failure", [{"status": {"code": 400}}, {"success": False}]
+    "failure",
+    [{"status": {"code": 400}}, {"success": False}],
 )
 async def test_load_rejects_other_failure_envelopes(
-    monkeypatch, component, failure
+    monkeypatch,
+    component,
+    failure,
 ):
     client = AsyncMock(
         side_effect=[
             {"output": {"status": "SUCCESS"}},
             {**failure, "output": INSTANCE_OUTPUT},
-        ]
+        ],
     )
     monkeypatch.setattr(model, "client_fc", client)
 
@@ -206,7 +214,9 @@ async def test_load_rejects_other_failure_envelopes(
 
 @pytest.mark.parametrize("code", [None, "", 0, 200])
 async def test_successful_fc_responses_remain_compatible(
-    monkeypatch, component, code
+    monkeypatch,
+    component,
+    code,
 ):
     monkeypatch.setattr(
         model,
@@ -220,7 +230,7 @@ async def test_successful_fc_responses_remain_compatible(
                 },
                 {"code": code, "output": {"status": "SUCCESS"}},
                 {"code": code, "output": INSTANCE_OUTPUT},
-            ]
+            ],
         ),
     )
 
@@ -233,10 +243,11 @@ async def test_successful_fc_responses_remain_compatible(
 
 
 async def test_eager_registration_preserves_load_failure(
-    monkeypatch, component
+    monkeypatch,
+    component,
 ):
     client = AsyncMock(
-        side_effect=[{"output": {"status": "SUCCESS"}}, REGION_REJECTION]
+        side_effect=[{"output": {"status": "SUCCESS"}}, REGION_REJECTION],
     )
     monkeypatch.setattr(model, "client_fc", client)
     tuning = TuningModel(functions=[component])
