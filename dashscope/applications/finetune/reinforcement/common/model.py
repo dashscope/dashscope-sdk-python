@@ -107,6 +107,10 @@ _LAYER_CREATE_TRANSIENT_SOLUTION = (
 _LAYER_STATUS_QUERY_SOLUTION = (
     "Retry the layer status query after connectivity recovers."
 )
+_LAYER_STATUS_REJECTED_SOLUTION = (
+    "Review the server response and layer code. For region lookup errors, "
+    "report the request ID and layer code to the service owner before retrying."
+)
 _LAYER_BUILD_FAILED_SOLUTION = (
     "Check that requirements.txt or setup.py is valid and every dependency "
     "is installable, then review the layer build logs before retrying."
@@ -119,6 +123,15 @@ _LAYER_BUILD_TIMEOUT_SOLUTION = (
     "Increase FC_LAYER_STATUS_TIMEOUT if the layer is still building, then "
     "query the same layer code again instead of creating a duplicate layer."
 )
+
+
+def _fc_response_rejected(result: Dict[str, Any]) -> bool:
+    status = result.get("status")
+    return (
+        (isinstance(status, dict) and status.get("code", 200) != 200)
+        or result.get("code") not in (None, "", 0, 200)
+        or result.get("success") is False
+    )
 
 
 class MountStorage(BaseModel):
@@ -447,14 +460,27 @@ class FunctionComponentModel(BaseModel):
                     # "signed_url": oss_signed_url,
                 },
             )
-            if result.get("status", {}).get("code", 500) != 200:
+            if _fc_response_rejected(result):
                 raise FunctionLayerError(
-                    f"create rejected by server | {result}",
+                    f"create rejected by server | {deep_mask(result)}",
+                    layer_name=layer_name,
+                    request_id=result.get("request_id"),
+                    body=result,
                     allow_retry=False,
                     solution=_LAYER_CREATE_REJECTED_SOLUTION,
                 )
 
-            layer_code = result.get("output", {}).get("layer_code", "")
+            layer_code = (result.get("output") or {}).get("layer_code", "")
+            if not layer_code:
+                raise FunctionLayerError(
+                    f"Empty layer code received: {deep_mask(result)}",
+                    error_code=2013,
+                    layer_name=layer_name,
+                    request_id=result.get("request_id"),
+                    body=result,
+                    allow_retry=False,
+                    solution=_LAYER_CREATE_REJECTED_SOLUTION,
+                )
             logger.debug(
                 f"Create function layer | layer-name: {layer_name} | "
                 f"layer_code: {layer_code}",
@@ -564,7 +590,19 @@ class FunctionComponentModel(BaseModel):
                     solution=_LAYER_STATUS_QUERY_SOLUTION,
                 ) from e
 
-            status = result.get("output", {}).get("status", "")
+            if _fc_response_rejected(result):
+                raise FunctionLayerError(
+                    f"status query rejected by server | layer_code: "
+                    f"{layer_code} | {deep_mask(result)}",
+                    error_code=2016,
+                    layer_code=layer_code,
+                    request_id=result.get("request_id"),
+                    body=result,
+                    allow_retry=False,
+                    solution=_LAYER_STATUS_REJECTED_SOLUTION,
+                )
+
+            status = (result.get("output") or {}).get("status", "")
 
             if status == "SUCCESS":
                 logger.debug(
@@ -579,6 +617,8 @@ class FunctionComponentModel(BaseModel):
                     f"{layer_code} | {result}",
                     error_code=2015,
                     layer_code=layer_code,
+                    request_id=result.get("request_id"),
+                    body=result,
                     allow_retry=False,
                     solution=_LAYER_BUILD_FAILED_SOLUTION,
                 )
@@ -589,6 +629,8 @@ class FunctionComponentModel(BaseModel):
                     f"{layer_code} | {result}",
                     error_code=2016,
                     layer_code=layer_code,
+                    request_id=result.get("request_id"),
+                    body=result,
                     allow_retry=True,
                     solution=_LAYER_STATUS_MISSING_SOLUTION,
                 )
@@ -808,6 +850,8 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     message=f"Function layer deployment failed: {root}",
                 ),
                 output={},
+                request_id=e.request_id,
+                body=e.body,
             )
         except Exception as e:
             root = e
@@ -934,22 +978,36 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                 url,
                 runtime_dict,
             )
-            self.instance_id = result.get("output", {}).get("instanceId", "")
-            if not self.instance_id:
+            if _fc_response_rejected(result):
                 raise FunctionLoadError(
-                    f"Empty instance ID received: {result}",
+                    f"load rejected by server | {deep_mask(result)}",
                     error_code=2023,
+                    entity_id=target_entity_id,
+                    request_id=result.get("request_id"),
+                    body=result,
+                    allow_retry=False,
                 )
 
-            self.instance_url = result.get("output", {}).get("trigger_url", "")
-            self.instance_token = result.get("output", {}).get(
-                "trigger_token",
-                "",
-            )
+            output = result.get("output") or {}
+            self.instance_id = output.get("instanceId", "")
+            if not self.instance_id:
+                raise FunctionLoadError(
+                    f"Empty instance ID received: {deep_mask(result)}",
+                    error_code=2023,
+                    entity_id=target_entity_id,
+                    request_id=result.get("request_id"),
+                    body=result,
+                )
+
+            self.instance_url = output.get("trigger_url", "")
+            self.instance_token = output.get("trigger_token", "")
             if (not self.instance_url) or (not self.instance_token):
                 raise FunctionLoadError(
                     "Missing instance URL or token",
                     error_code=2024,
+                    entity_id=target_entity_id,
+                    request_id=result.get("request_id"),
+                    body=result,
                 )
 
             logger.info(
@@ -978,6 +1036,8 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     ),
                 ),
                 output={},
+                request_id=e.request_id,
+                body=e.body,
             )
 
         except Exception as e:
@@ -998,6 +1058,8 @@ class AgenticRLFunctionComponent(Models, BaseModel):
                     ),
                 ),
                 output={},
+                request_id=getattr(e, "request_id", None),
+                body=getattr(e, "body", None),
             )
 
         # Perform instance warmup if requested
@@ -1627,6 +1689,8 @@ class TuningModel(Models, BaseModel):
                         raise RegistrationError(
                             reg_result.status.message,
                             error_code=2052,
+                            request_id=reg_result.request_id,
+                            body=reg_result.body,
                         )
 
                 if fc.type == FunctionType.ROLLOUT:
@@ -1661,8 +1725,11 @@ class TuningModel(Models, BaseModel):
                             instance_group_reward_ids.append(instance_id)
                     else:
                         raise FunctionLoadError(
-                            f"Load failed: {load_result}",
+                            f"Load failed: {load_result.status.message}",
                             error_code=2054,
+                            entity_id=entity_id,
+                            request_id=load_result.request_id,
+                            body=load_result.body,
                         )
 
         except Exception as e:
