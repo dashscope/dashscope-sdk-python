@@ -15,15 +15,18 @@ import asyncio
 import os
 import time
 from typing import (
+    TYPE_CHECKING,
     Any,
     Awaitable,
     Callable,
     Dict,
     Iterator,
     List,
+    Literal,
     Mapping,
     Optional,
     Union,
+    overload,
 )
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -46,6 +49,10 @@ from dashscope.transport.ws import (
     with_client_user_agent,
 )
 from dashscope.transport.ws_connection import WsConnection, WsTask
+from dashscope.types._parse import parse_model
+
+if TYPE_CHECKING:
+    from dashscope.transport._response import APIResponse
 
 __all__ = [
     "Asr",
@@ -120,6 +127,7 @@ class TranscriptionJobs:
         self._client = client
         self._jobs = Jobs(client, SERVICE, MODULE)
 
+    @overload
     def create(
         self,
         *,
@@ -130,7 +138,54 @@ class TranscriptionJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> Job:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        file_urls: List[str],
+        parameters: Optional[Dict[str, Any]] = None,
+        phrase_id: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    def create(
+        self,
+        *,
+        model: str,
+        file_urls: List[str],
+        parameters: Optional[Dict[str, Any]] = None,
+        phrase_id: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Submit a batch transcription task over one or more audio files.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         return self._jobs.create(
             model=model,
             input=_input_for(file_urls),
@@ -139,7 +194,44 @@ class TranscriptionJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def fetch(
         self,
@@ -148,12 +240,27 @@ class TranscriptionJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Fetch one task snapshot.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         return self._jobs.fetch(
             task_id,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
 
     def wait(
@@ -165,6 +272,10 @@ class TranscriptionJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Any]] = None,
     ) -> Job:
         """Poll with backoff, without starting another poll after the deadline."""
@@ -174,7 +285,15 @@ class TranscriptionJobs:
         current = (
             job
             if isinstance(job, Job)
-            else self.fetch(task_id, api_key=api_key, workspace=workspace)
+            else self.fetch(
+                task_id,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            )
         )
         interval = poll_interval
         while not current.finished:
@@ -192,7 +311,15 @@ class TranscriptionJobs:
                     f"timed out after {timeout}s waiting for task {task_id}",
                 )
             interval = min(interval * 2, max_interval)
-            current = self.fetch(task_id, api_key=api_key, workspace=workspace)
+            current = self.fetch(
+                task_id,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            )
         return _check_terminal(
             current,
             raise_on_error=self._client.raise_on_error,
@@ -204,6 +331,7 @@ class AsyncTranscriptionJobs:
         self._client = client
         self._jobs = AsyncJobs(client, SERVICE, MODULE)
 
+    @overload
     async def create(
         self,
         *,
@@ -214,7 +342,54 @@ class AsyncTranscriptionJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> Job:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        file_urls: List[str],
+        parameters: Optional[Dict[str, Any]] = None,
+        phrase_id: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    async def create(
+        self,
+        *,
+        model: str,
+        file_urls: List[str],
+        parameters: Optional[Dict[str, Any]] = None,
+        phrase_id: Optional[str] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Submit a batch transcription task over one or more audio files.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         return await self._jobs.create(
             model=model,
             input=_input_for(file_urls),
@@ -223,7 +398,44 @@ class AsyncTranscriptionJobs:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
+
+    @overload
+    async def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Job:
+        ...
+
+    @overload
+    async def fetch(
+        self,
+        task_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def fetch(
         self,
@@ -232,12 +444,27 @@ class AsyncTranscriptionJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Fetch one task snapshot.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        of the underlying call before any error check.
+        """
         return await self._jobs.fetch(
             task_id,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+            raw=raw,
         )
 
     async def wait(
@@ -249,6 +476,10 @@ class AsyncTranscriptionJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
     ) -> Job:
         """Async twin of :meth:`TranscriptionJobs.wait`."""
@@ -262,6 +493,10 @@ class AsyncTranscriptionJobs:
                 task_id,
                 api_key=api_key,
                 workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
             )
         )
         interval = poll_interval
@@ -284,6 +519,10 @@ class AsyncTranscriptionJobs:
                 task_id,
                 api_key=api_key,
                 workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
             )
         return _check_terminal(
             current,
@@ -348,6 +587,10 @@ class Recognition:
         workspace: Optional[str] = None,
     ) -> None:
         config = client.config
+        # Kept as the live config, not a snapshot of one flag: every other
+        # resource reads ``strict_validation`` at parse time, and a session
+        # can outlive the setting it was opened with.
+        self._config = config
         self._model = model
         merged = {"format": format, "sample_rate": sample_rate}
         if parameters:
@@ -459,11 +702,19 @@ class Recognition:
             event = session.recv_event()
             self.last_response = event
             self._request_id = session.request_id
-            payload = event.get("payload") or {}
+            payload = event.get("payload")
+            if not isinstance(payload, dict):
+                payload = {}
             if payload.get("usage") is not None:
                 self.usage = payload["usage"]
-            output = payload.get("output") or {}
-            sentence = output.get("sentence") or {}
+            # Metrics are best-effort: a frame whose ``output`` drifted to a
+            # non-dict still gets yielded, it just has no sentence to time.
+            output = payload.get("output")
+            if not isinstance(output, dict):
+                output = {}
+            sentence = output.get("sentence")
+            if not isinstance(sentence, dict):
+                sentence = {}
             has_text = bool(
                 sentence.get("text") and not sentence.get("heartbeat"),
             )
@@ -498,9 +749,16 @@ class Recognition:
         for event in self.events():
             if event["header"].get("event") != EVENT_GENERATED:
                 continue
-            data = dict(event.get("payload") or {})
+            payload = event.get("payload")
+            data = dict(payload) if isinstance(payload, dict) else {}
             data.setdefault("request_id", event["header"].get("request_id"))
-            result = RecognitionResult.model_validate(data)
+            # No ``response``: this frame arrived over a websocket, so there
+            # is no httpx.Response for a strict failure to carry.
+            result = parse_model(
+                RecognitionResult,
+                data,
+                strict=self._config.strict_validation,
+            )
             sentence = result.get_sentence()
             if sentence and sentence.get("heartbeat"):
                 continue
@@ -527,6 +785,10 @@ class Asr:
         max_interval: float = DEFAULT_MAX_INTERVAL,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> Job:
         """Submit and wait; output.results carries per-file transcripts.
 
@@ -541,6 +803,10 @@ class Asr:
             timeout=submit_timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
         return self.jobs.wait(
             job,
@@ -549,6 +815,10 @@ class Asr:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
 
     def recognize(
@@ -664,6 +934,10 @@ class AsyncAsr:
         max_interval: float = DEFAULT_MAX_INTERVAL,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
     ) -> Job:
         """Submit and wait; output.results carries per-file transcripts.
 
@@ -678,6 +952,10 @@ class AsyncAsr:
             timeout=submit_timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )
         return await self.jobs.wait(
             job,
@@ -686,4 +964,8 @@ class AsyncAsr:
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
         )

@@ -397,6 +397,101 @@ def test_models_list_parses_native_output_envelope():
     assert page.request_id == "req-page"
 
 
+def test_models_list_falls_back_to_item_count_when_total_missing():
+    # Gateways that omit ``total`` still have to report a meaningful
+    # ``total_count``: reading the field default would show an empty
+    # catalog for a page that clearly has entries.
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "req-no-total",
+                "output": {
+                    "page_no": 1,
+                    "page_size": 10,
+                    "models": [
+                        {"model": "qwen-plus", "source": "dashscope"},
+                        {"model": "qwen3-max", "source": "bailian"},
+                    ],
+                },
+            },
+        )
+
+    page = _make_client(handler).models.list()
+    assert [m.model for m in page.models] == ["qwen-plus", "qwen3-max"]
+    assert page.total_count == 2
+
+
+def test_models_list_parses_a_bare_list_page():
+    # A page delivered as a bare list carries no ``page_no`` / ``total`` to
+    # read, so it is taken as one whole page. The generic envelope lifter
+    # only unwraps a dict, which parsed this shape as an empty catalog.
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "req-bare-list",
+                "output": [
+                    {"model": "qwen-plus", "source": "dashscope"},
+                    {"model": "qwen3-max", "source": "bailian"},
+                ],
+            },
+        )
+
+    page = _make_client(handler).models.list()
+    assert [m.model for m in page.models] == ["qwen-plus", "qwen3-max"]
+    assert page.page_no == 1
+    assert page.total_count == 2
+    assert page.request_id == "req-bare-list"
+
+
+def test_models_list_retyped_models_does_not_poison_the_total():
+    # ``total`` falls back to ``len(models)``, and the length of a drifted
+    # string is not a page total: without a guard this reported a 10-item
+    # catalog for a page that repaired down to zero entries.
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={"request_id": "req-str", "output": {"models": "nope"}},
+        )
+
+    page = _make_client(handler).models.list()
+    assert page.models == []
+    assert page.total_count == 0
+
+
+def test_models_list_scalar_page_degrades_instead_of_raising():
+    # ``len()`` on a scalar page would escape as a bare TypeError from the
+    # resource, outside any ``except DashScopeError`` the caller has.
+    def handler(request):
+        return httpx.Response(200, json={"request_id": "req-n", "output": 5})
+
+    page = _make_client(handler).models.list()
+    assert page.models == []
+    assert page.total_count == 0
+
+
+def test_files_list_retyped_files_does_not_poison_the_total():
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={"request_id": "req-fs", "data": {"files": "nope"}},
+        )
+
+    page = _make_client(handler).files.list()
+    assert page.files == []
+    assert page.total_count == 0
+
+
+def test_files_list_scalar_page_degrades_instead_of_raising():
+    def handler(request):
+        return httpx.Response(200, json={"request_id": "req-fn", "data": 5})
+
+    page = _make_client(handler).files.list()
+    assert page.files == []
+    assert page.total_count == 0
+
+
 def test_models_list_carries_raw_response_headers():
     # Uniform success-path contract: every HTTP resource mirrors the
     # gateway's response headers on ``resp.headers`` (1.x parity).

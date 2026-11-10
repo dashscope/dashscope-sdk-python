@@ -31,13 +31,18 @@ from typing import (
 
 import httpx
 from httpx_sse import EventSource, SSEError
+from pydantic import ValidationError
 
 from dashscope._logging import (
     get_logger,
     request_id_for_log,
     request_id_from_headers,
 )
-from dashscope.errors import DashScopeError, error_from_business_code
+from dashscope.errors import (
+    APIResponseValidationError,
+    DashScopeError,
+    error_from_business_code,
+)
 
 logger = get_logger("transport.sse")
 
@@ -124,21 +129,46 @@ def _next_event(
     return body
 
 
+def _parse_event(
+    parse: Callable[[Dict[str, Any]], Any],
+    body: Dict[str, Any],
+    response: httpx.Response,
+) -> Any:
+    """Run one event's parser, converting a bare ValidationError.
+
+    Chat parsers go through ``parse_model``, which degrades a drifted
+    body instead of raising, so this only fires for a parser that
+    validates on its own. It is still worth catching: a raw pydantic
+    error is not a ``DashScopeError``, so a caller's handler would miss
+    it -- mid-iteration, after earlier chunks were already consumed.
+    The stream cannot degrade here because it does not know the model
+    class, so converting is the floor rather than a fallback.
+    """
+    try:
+        return parse(body)
+    except ValidationError as exc:
+        raise APIResponseValidationError(
+            response=response,
+            body=body,
+            cause=exc,
+        ) from exc
+
+
 def _parse_chunk(
     parse: Callable[[Dict[str, Any]], Optional[T]],
     body: Dict[str, Any],
-    headers: Mapping[str, str],
+    response: httpx.Response,
     request_id: Optional[str] = None,
 ) -> Optional[T]:
     try:
-        return parse(body)
+        return _parse_event(parse, body, response)
     except Exception:
         logger.error(
             "Failed to parse SSE result, request_id=%s",
             request_id_for_log(
                 body.get("request_id"),
                 request_id,
-                request_id_from_headers(headers),
+                request_id_from_headers(response.headers),
             ),
         )
         raise
@@ -175,7 +205,7 @@ class Stream(Generic[T]):
                 chunk = _parse_chunk(
                     self._parse,
                     body,
-                    self._response.headers,
+                    self._response,
                     self._request_id,
                 )
                 if chunk is not None:
@@ -233,7 +263,7 @@ class AsyncStream(Generic[T]):
                 chunk = _parse_chunk(
                     self._parse,
                     body,
-                    self._response.headers,
+                    self._response,
                     self._request_id,
                 )
                 if chunk is not None:

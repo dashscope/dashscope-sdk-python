@@ -13,16 +13,34 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Union,
+    cast,
+)
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+)
 
 from dashscope.errors import (
     DashScopeError,
-    check_response,
     error_from_business_code,
     response_json,
 )
+from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     ResponseBase,
     Usage,
@@ -30,6 +48,12 @@ from dashscope.types.common import (
     response_envelope,
     with_headers,
 )
+from dashscope.types.pagination import BasePage
+
+if TYPE_CHECKING:
+    import httpx
+
+    from dashscope.transport._response import APIResponse
 
 __all__ = [
     "AsyncJobs",
@@ -133,6 +157,13 @@ class Job(ResponseBase):
     output: Optional[Dict[str, Any]] = None
     usage: Optional[Usage] = None
 
+    # ``output`` is an untyped dict, so the parse boundary that built this
+    # Job validates the envelope but never looks inside it. Carrying the
+    # mode here is what lets ``results`` be as strict as that boundary was,
+    # instead of silently degrading under ``strict_validation=True``.
+    _strict_validation: bool = PrivateAttr(default=False)
+    _response: Optional["httpx.Response"] = PrivateAttr(default=None)
+
     @property
     def job_id(self) -> str:
         """``FineTune`` spells the same identifier ``job_id``."""
@@ -148,10 +179,30 @@ class Job(ResponseBase):
 
     @property
     def results(self) -> List[JobResult]:
-        items = (self.output or {}).get("results") or []
+        """Artifacts the task produced.
+
+        Parsed with the strictness and the response this Job was built
+        with (see :meth:`from_payload`), so under ``strict_validation``
+        a drifted artifact raises here rather than degrading to ``None``.
+        A Job built directly rather than through ``from_payload`` has
+        neither and gets the lenient default.
+        """
+        output = self.output or {}
+        items = output.get("results")
+        if not isinstance(items, list):
+            items = []
         if not items:
-            items = _image_choices(self.output or {})
-        return [JobResult(**item) for item in items if isinstance(item, dict)]
+            items = _image_choices(output)
+        return [
+            parse_model(
+                JobResult,
+                item,
+                strict=self._strict_validation,
+                response=self._response,
+            )
+            for item in items
+            if isinstance(item, dict)
+        ]
 
     @property
     def image_urls(self) -> List[str]:
@@ -171,40 +222,85 @@ class Job(ResponseBase):
         return output.get("url") or self.video_url
 
     @classmethod
-    def from_payload(cls, body: Dict[str, Any]) -> "Job":
+    def from_payload(
+        cls,
+        body: Dict[str, Any],
+        *,
+        strict: bool = False,
+        response: Optional[httpx.Response] = None,
+    ) -> "Job":
         output = body.get("output")
         payload = flatten_envelope(body)
         payload["output"] = output if isinstance(output, dict) else None
         if not isinstance(payload.get("usage"), dict):
             payload.pop("usage", None)
-        return cls(**payload)
+        job = parse_model(
+            cls,
+            payload,
+            strict=strict,
+            response=response,
+        )
+        # Post-hoc: private attrs are not fields, so parse_model cannot
+        # carry them through validation or through its construct fallback.
+        # pylint: disable=protected-access
+        job._strict_validation = strict
+        job._response = response
+        # pylint: enable=protected-access
+        return job
 
 
-class JobList(ResponseBase):
+class JobList(BasePage[Job]):
     """One page of async tasks, from ``jobs.list`` (1.x ``GET /tasks``).
 
     Each entry in ``tasks`` parses with the same aliases as a fetched
     :class:`Job`; a FAILED task inside the list is data, not an error.
+
+    ``page_no`` / ``page_size`` / ``total_count`` come from
+    :class:`~dashscope.types.pagination.BasePage`; iterate the page directly
+    or cross pages with ``iter_pages()`` / ``next_page()``. The wire reports
+    the total as ``total``, which is aliased onto ``total_count`` and also
+    readable through the :attr:`total` property.
     """
 
-    page_no: int = 1
-    page_size: int = 10
-    total: int = 0
     tasks: List[Job] = []
 
+    @property
+    def items(self) -> List[Job]:
+        return self.tasks
+
+    @property
+    def total(self) -> int:
+        """Alias of ``total_count``, keeping the historical field name readable."""
+        return self.total_count
+
     @classmethod
-    def from_payload(cls, body: Dict[str, Any]) -> "JobList":
+    def from_payload(
+        cls,
+        body: Dict[str, Any],
+        *,
+        strict: bool = False,
+        response: Optional[httpx.Response] = None,
+    ) -> "JobList":
         # The list endpoint answers flat (no ``output`` wrapper), but
         # flatten_envelope also accepts an output-wrapped variant.
         data = flatten_envelope(body)
-        tasks = data.pop("tasks", None) or []
+        tasks = data.pop("tasks", None)
+        # A retyped ``tasks`` would blow up in the comprehension below,
+        # ahead of the model layer that repairs the field.
+        if not isinstance(tasks, list):
+            tasks = []
         items = [task for task in tasks if isinstance(task, dict)]
-        return cls(
-            page_no=data.get("page_no", 1),
-            page_size=data.get("page_size", 10),
-            total=data.get("total", len(items)),
-            tasks=items,
-            **response_envelope(data),
+        return parse_model(
+            cls,
+            {
+                "page_no": data.get("page_no", 1),
+                "page_size": data.get("page_size", 10),
+                "total_count": data.get("total", len(items)),
+                "tasks": items,
+                **response_envelope(data),
+            },
+            strict=strict,
+            response=response,
         )
 
 
@@ -234,7 +330,15 @@ def _list_params(
 
 
 class Jobs:
-    """Sync async-task helper for one service (images, videos, ...)."""
+    """Sync async-task helper for one service (images, videos, ...).
+
+    ``raw`` is a plain ``bool`` here, not a ``Literal`` overload pair: this
+    class is only ever held in a resource's private attribute, and every
+    public ``.jobs`` wrapper (``ImageJobs``, ``VideoJobs``, ``EmbeddingJobs``,
+    ``TranscriptionJobs``) carries the overloads that give callers a precise
+    return type. Overloading this one instead would leave the wrappers unable
+    to forward a ``raw`` they only know at runtime.
+    """
 
     def __init__(
         self,
@@ -263,8 +367,18 @@ class Jobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
-        """Submit a task; returns immediately with a PENDING/RUNNING Job."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Submit a task; returns immediately with a PENDING/RUNNING Job.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
         body: Dict[str, Any] = {"model": model, "input": input}
         if parameters is not None:
             body["parameters"] = parameters
@@ -273,7 +387,7 @@ class Jobs:
         submit_headers = dict(ASYNC_HEADER)
         if headers:
             submit_headers.update(headers)
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "POST",
             self.submit_path,
             json=body,
@@ -282,9 +396,18 @@ class Jobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return self._parse(response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return self._parse(resp.http_response)
 
     def fetch(
         self,
@@ -293,18 +416,38 @@ class Jobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
-        """Fetch one task snapshot; raises on FAILED status."""
-        response = self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Fetch one task snapshot; raises on FAILED status.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. It also skips the
+        FAILED-status raise, which belongs to the parsed :class:`Job`.
+        """
+        resp = self._client.transport.request_api(
             "GET",
             f"/tasks/{task_id}",
             timeout=timeout,
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return self._parse(response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return self._parse(resp.http_response)
 
     def cancel(
         self,
@@ -313,18 +456,37 @@ class Jobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
-        """Cancel a PENDING task (1.x: ``POST /tasks/{task_id}/cancel``)."""
-        response = self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Cancel a PENDING task (1.x: ``POST /tasks/{task_id}/cancel``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
+        """
+        resp = self._client.transport.request_api(
             "POST",
             f"/tasks/{task_id}/cancel",
             timeout=timeout,
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return self._parse(response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return self._parse(resp.http_response)
 
     def list(  # pylint: disable=redefined-builtin
         self,
@@ -340,9 +502,21 @@ class Jobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobList:
-        """List async tasks (1.x: ``GET /tasks`` with page_no/page_size)."""
-        response = self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobList, "APIResponse"]:
+        """List async tasks (1.x: ``GET /tasks`` with page_no/page_size).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. Such a response
+        carries no pagination callback; use ``next_page()`` on a parsed
+        :class:`JobList` to walk the catalog.
+        """
+        resp = self._client.transport.request_api(
             "GET",
             "/tasks",
             params=_list_params(
@@ -359,12 +533,44 @@ class Jobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            JobList.from_payload(response_json(response)),
-            response,
+        if raw:
+            return resp
+        resp.raise_for_status()
+        result = JobList.from_payload(
+            resp.json(),
+            strict=self._client.config.strict_validation,
+            response=resp.http_response,
         )
+        result.bind_pagination(
+            lambda next_no, next_size: self.list(
+                start_time=start_time,
+                end_time=end_time,
+                model_name=model_name,
+                api_key_id=api_key_id,
+                region=region,
+                status=status,
+                page_no=next_no,
+                page_size=next_size,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            ),
+            requested_page_no=page_no,
+            requested_page_size=page_size,
+        )
+        return with_headers(result, resp.http_response)
 
     def wait(
         self,
@@ -375,6 +581,10 @@ class Jobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Any]] = None,
     ) -> Job:
         """Poll with exponential backoff until the task finishes.
@@ -394,10 +604,24 @@ class Jobs:
         task_id = job.task_id if isinstance(job, Job) else job
         sleep_fn = _sleep or time.sleep
         deadline = time.monotonic() + timeout
-        current = (
+        # ``wait`` never sets ``raw``, so every ``fetch`` below is a Job.
+        # ``fetch``'s declared return is the wider union only because it also
+        # serves the raw escape hatch.
+        current: Job = (
             job
             if isinstance(job, Job)
-            else self.fetch(task_id, api_key=api_key, workspace=workspace)
+            else cast(
+                Job,
+                self.fetch(
+                    task_id,
+                    api_key=api_key,
+                    workspace=workspace,
+                    extra_headers=extra_headers,
+                    extra_query=extra_query,
+                    extra_body=extra_body,
+                    max_retries=max_retries,
+                ),
+            )
         )
         interval = poll_interval
         while not current.finished:
@@ -413,12 +637,30 @@ class Jobs:
                 )
             sleep_fn(min(interval, remaining))
             interval = min(interval * 2, max_interval)
-            current = self.fetch(task_id, api_key=api_key, workspace=workspace)
+            current = cast(
+                Job,
+                self.fetch(
+                    task_id,
+                    api_key=api_key,
+                    workspace=workspace,
+                    extra_headers=extra_headers,
+                    extra_query=extra_query,
+                    extra_body=extra_body,
+                    max_retries=max_retries,
+                ),
+            )
         return self._check_canceled(current)
 
     def _parse(self, response: Any) -> Job:
         payload = response_json(response)
-        job = with_headers(Job.from_payload(payload), response)
+        job = with_headers(
+            Job.from_payload(
+                payload,
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
         if job.status == FAILED and self._client.raise_on_error:
             raise error_from_business_code(
                 message=job.message or f"task {job.task_id} failed",
@@ -438,7 +680,10 @@ class Jobs:
 
 
 class AsyncJobs:
-    """Async async-task helper for one service (images, videos, ...)."""
+    """Async async-task helper for one service (images, videos, ...).
+
+    ``raw`` is a plain ``bool`` here for the reason given on :class:`Jobs`.
+    """
 
     def __init__(
         self,
@@ -465,7 +710,13 @@ class AsyncJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Async twin of :meth:`Jobs.create`."""
         body: Dict[str, Any] = {"model": model, "input": input}
         if parameters is not None:
             body["parameters"] = parameters
@@ -474,7 +725,7 @@ class AsyncJobs:
         submit_headers = dict(ASYNC_HEADER)
         if headers:
             submit_headers.update(headers)
-        response = await self._client.transport.request(
+        resp = await self._client.transport.request_api(
             "POST",
             self.submit_path,
             json=body,
@@ -483,9 +734,18 @@ class AsyncJobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return self._parse(response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return self._parse(resp.http_response)
 
     async def fetch(
         self,
@@ -494,17 +754,32 @@ class AsyncJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
-        response = await self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Async twin of :meth:`Jobs.fetch`."""
+        resp = await self._client.transport.request_api(
             "GET",
             f"/tasks/{task_id}",
             timeout=timeout,
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return self._parse(response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return self._parse(resp.http_response)
 
     async def cancel(
         self,
@@ -513,18 +788,32 @@ class AsyncJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Job:
-        """Cancel a PENDING task (1.x: ``POST /tasks/{task_id}/cancel``)."""
-        response = await self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Job, "APIResponse"]:
+        """Async twin of :meth:`Jobs.cancel`."""
+        resp = await self._client.transport.request_api(
             "POST",
             f"/tasks/{task_id}/cancel",
             timeout=timeout,
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return self._parse(response)
+        if raw:
+            return resp
+        resp.raise_for_status()
+        return self._parse(resp.http_response)
 
     async def list(  # pylint: disable=redefined-builtin
         self,
@@ -540,9 +829,14 @@ class AsyncJobs:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobList:
-        """List async tasks (1.x: ``GET /tasks`` with page_no/page_size)."""
-        response = await self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobList, "APIResponse"]:
+        """Async twin of :meth:`Jobs.list`."""
+        resp = await self._client.transport.request_api(
             "GET",
             "/tasks",
             params=_list_params(
@@ -559,12 +853,44 @@ class AsyncJobs:
             sdk_module=self._module,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        check_response(response, raise_on_error=self._client.raise_on_error)
-        return with_headers(
-            JobList.from_payload(response_json(response)),
-            response,
+        if raw:
+            return resp
+        resp.raise_for_status()
+        result = JobList.from_payload(
+            resp.json(),
+            strict=self._client.config.strict_validation,
+            response=resp.http_response,
         )
+        result.bind_pagination(
+            lambda next_no, next_size: self.list(
+                start_time=start_time,
+                end_time=end_time,
+                model_name=model_name,
+                api_key_id=api_key_id,
+                region=region,
+                status=status,
+                page_no=next_no,
+                page_size=next_size,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            ),
+            requested_page_no=page_no,
+            requested_page_size=page_size,
+        )
+        return with_headers(result, resp.http_response)
 
     async def wait(
         self,
@@ -575,19 +901,30 @@ class AsyncJobs:
         timeout: float = DEFAULT_WAIT_TIMEOUT,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
     ) -> Job:
         """Async twin of :meth:`Jobs.wait`, same compat-mode contract."""
         task_id = job.task_id if isinstance(job, Job) else job
         sleep_fn = _sleep or asyncio.sleep
         deadline = time.monotonic() + timeout
-        current = (
+        current: Job = (
             job
             if isinstance(job, Job)
-            else await self.fetch(
-                task_id,
-                api_key=api_key,
-                workspace=workspace,
+            else cast(
+                Job,
+                await self.fetch(
+                    task_id,
+                    api_key=api_key,
+                    workspace=workspace,
+                    extra_headers=extra_headers,
+                    extra_query=extra_query,
+                    extra_body=extra_body,
+                    max_retries=max_retries,
+                ),
             )
         )
         interval = poll_interval
@@ -604,16 +941,30 @@ class AsyncJobs:
                 )
             await sleep_fn(min(interval, remaining))
             interval = min(interval * 2, max_interval)
-            current = await self.fetch(
-                task_id,
-                api_key=api_key,
-                workspace=workspace,
+            current = cast(
+                Job,
+                await self.fetch(
+                    task_id,
+                    api_key=api_key,
+                    workspace=workspace,
+                    extra_headers=extra_headers,
+                    extra_query=extra_query,
+                    extra_body=extra_body,
+                    max_retries=max_retries,
+                ),
             )
         return self._check_canceled(current)
 
     def _parse(self, response: Any) -> Job:
         payload = response_json(response)
-        job = with_headers(Job.from_payload(payload), response)
+        job = with_headers(
+            Job.from_payload(
+                payload,
+                strict=self._client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
         if job.status == FAILED and self._client.raise_on_error:
             raise error_from_business_code(
                 message=job.message or f"task {job.task_id} failed",

@@ -362,22 +362,47 @@ def test_sse_result_parse_failure_logs_body_request_id(reset_logging, caplog):
     assert response.is_closed
 
 
-def test_pre_response_failure_log_has_no_request_id(reset_logging, caplog):
+@pytest.mark.parametrize("async_mode", [False, True])
+@pytest.mark.asyncio
+async def test_pre_response_failure_logs_only_client_request_id(
+    reset_logging,
+    caplog,
+    async_mode,
+):
+    captured = {}
+
     def fail(request):
+        captured["client_request_id"] = request.headers[
+            "X-DashScope-Client-Request-Id"
+        ]
         raise httpx.ConnectError("connection refused", request=request)
 
-    with httpx.Client(transport=httpx.MockTransport(fail)) as http_client:
-        transport = SyncTransport(
-            base_url="https://api.test.local",
-            http_client=http_client,
-            max_retries=0,
-        )
-        with caplog.at_level(logging.DEBUG, logger=logging_mod.ROOT_NAME):
-            with pytest.raises(APIConnectionError) as caught:
-                transport.request("POST", "/chat")
-    assert caught.value.request_id is None
+    mock = httpx.MockTransport(fail)
+    with caplog.at_level(logging.DEBUG, logger=logging_mod.ROOT_NAME):
+        with pytest.raises(APIConnectionError) as caught:
+            if async_mode:
+                async with httpx.AsyncClient(transport=mock) as http_client:
+                    transport = AsyncTransport(
+                        base_url="https://api.test.local",
+                        http_client=http_client,
+                        max_retries=0,
+                    )
+                    await transport.request("POST", "/chat")
+            else:
+                with httpx.Client(transport=mock) as http_client:
+                    transport = SyncTransport(
+                        base_url="https://api.test.local",
+                        http_client=http_client,
+                        max_retries=0,
+                    )
+                    transport.request("POST", "/chat")
+    assert caught.value.request_id == captured["client_request_id"]
     assert len(caplog.records) == 1
-    assert "request_id" not in caplog.records[0].message
+    assert (
+        f"client_request_id={captured['client_request_id']}"
+        in caplog.records[0].message
+    )
+    assert " (request_id=" not in caplog.records[0].message
 
 
 def test_static_sse_parser_does_not_log_request_id(reset_logging, caplog):

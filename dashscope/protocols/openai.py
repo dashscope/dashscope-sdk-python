@@ -11,14 +11,19 @@ gateways). Unknown parameters pass through to the body unless
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from dashscope.errors import DashScopeError
 from dashscope.protocols.base import ChatProtocol, ChatRequest
+from dashscope.types._parse import parse_model
 from dashscope.types.completions import (
     ChatCompletion,
     ChatCompletionChunk,
+    _normalize_message_content,
 )
+
+if TYPE_CHECKING:
+    import httpx
 
 __all__ = [
     "OpenAIProtocol",
@@ -143,11 +148,29 @@ def _translate_usage(usage: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     }
     translated["input_tokens"] = usage.get("prompt_tokens", 0)
     translated["output_tokens"] = usage.get("completion_tokens", 0)
-    translated.setdefault(
-        "total_tokens",
-        translated["input_tokens"] + translated["output_tokens"],
-    )
+    if "total_tokens" not in translated:
+        counted = (translated["input_tokens"], translated["output_tokens"])
+        # Summing a drifted counter (``"prompt_tokens": "many"``) would
+        # raise TypeError here, ahead of the model layer that repairs it;
+        # leave the field absent and let Usage fall back to its default.
+        if all(isinstance(value, int) for value in counted):
+            translated["total_tokens"] = sum(counted)
     return translated
+
+
+def _canonical_usage(raw: Any) -> Any:
+    """Translate a usage bag, or pass a drifted one through untouched.
+
+    ``_translate_usage`` indexes into a mapping; a gateway that retyped
+    the bag would raise ``AttributeError`` here, before ``parse_model``
+    got the chance to degrade the field to ``None``. Handing the raw
+    value on keeps the repair in the model layer, where it is logged.
+    """
+    if not raw:
+        return None
+    if isinstance(raw, dict):
+        return _translate_usage(raw)
+    return raw
 
 
 class OpenAIProtocol(ChatProtocol):
@@ -235,31 +258,60 @@ class OpenAIProtocol(ChatProtocol):
             body.update(unknown)
         return ChatRequest(path=path or self.PATH, body=body)
 
-    def parse_completion(self, payload: Dict[str, Any]) -> ChatCompletion:
-        return ChatCompletion(
-            request_id=payload.get("request_id") or payload.get("id"),
-            model=payload.get("model"),
-            choices=payload.get("choices") or [],
-            usage=(
-                _translate_usage(payload["usage"])
-                if payload.get("usage")
-                else None
-            ),
-        )
-
-    def parse_chunk(self, payload: Dict[str, Any]) -> ChatCompletionChunk:
+    def parse_completion(
+        self,
+        payload: Dict[str, Any],
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
+    ) -> ChatCompletion:
         choices = []
         for raw in payload.get("choices") or []:
-            raw = dict(raw)
-            raw.setdefault("delta", {})
+            if isinstance(raw, dict):
+                raw = dict(raw)
+                message = raw.get("message")
+                if isinstance(message, dict):
+                    raw["message"] = _normalize_message_content(message)
             choices.append(raw)
-        return ChatCompletionChunk(
-            request_id=payload.get("request_id") or payload.get("id"),
-            model=payload.get("model"),
-            choices=choices,
-            usage=(
-                _translate_usage(payload["usage"])
-                if payload.get("usage")
-                else None
-            ),
+        return parse_model(
+            ChatCompletion,
+            {
+                "request_id": payload.get("request_id") or payload.get("id"),
+                "model": payload.get("model"),
+                "choices": choices,
+                "usage": _canonical_usage(payload.get("usage")),
+            },
+            strict=strict_validation,
+            response=response,
+        )
+
+    def parse_chunk(
+        self,
+        payload: Dict[str, Any],
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
+    ) -> ChatCompletionChunk:
+        choices = []
+        for raw in payload.get("choices") or []:
+            # A non-mapping element has no ``delta`` to default, and
+            # ``dict()`` on it would escape as a bare ValueError.
+            # Keeping the slot preserves positional alignment for
+            # parse_model to repair in place.
+            if isinstance(raw, dict):
+                raw = dict(raw)
+                raw.setdefault("delta", {})
+                if isinstance(raw["delta"], dict):
+                    raw["delta"] = _normalize_message_content(raw["delta"])
+            choices.append(raw)
+        return parse_model(
+            ChatCompletionChunk,
+            {
+                "request_id": payload.get("request_id") or payload.get("id"),
+                "model": payload.get("model"),
+                "choices": choices,
+                "usage": _canonical_usage(payload.get("usage")),
+            },
+            strict=strict_validation,
+            response=response,
         )

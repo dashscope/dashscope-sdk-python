@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from dashscope.protocols.base import ChatProtocol, ChatRequest
 from dashscope.types.completions import (
@@ -13,6 +13,9 @@ from dashscope.types.completions import (
     parse_chunk,
     parse_completion,
 )
+
+if TYPE_CHECKING:
+    import httpx
 
 __all__ = [
     "NativeProtocol",
@@ -166,11 +169,25 @@ class NativeProtocol(ChatProtocol):
     def parse_completion(
         self,
         payload: Dict[str, Any],
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> ChatCompletion:
-        return parse_completion(payload)
+        return parse_completion(
+            payload,
+            strict_validation=strict_validation,
+            response=response,
+        )
 
     def parse_chunk(
         self,
         payload: Dict[str, Any],
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> ChatCompletionChunk:
-        return parse_chunk(payload)
+        return parse_chunk(
+            payload,
+            strict_validation=strict_validation,
+            response=response,
+        )

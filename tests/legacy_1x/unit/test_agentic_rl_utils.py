@@ -51,10 +51,10 @@ class TestAgenticRLUtils:
         )
 
         # Validate core configuration
-        assert 'SERVICE_TYPE="rollout"' in script
-        assert 'PROCESSOR_CLASS="module.path.Processor"' in script
+        assert "SERVICE_TYPE=rollout" in script
+        assert "PROCESSOR_CLASS=module.path.Processor" in script
         assert 'SDK_PACKAGE="dashscope"' in script
-        assert 'REQUIREMENTS_FILE="requirements.txt"' in script
+        assert "REQUIREMENTS_FILE=requirements.txt" in script
 
         # Validate key functional blocks
         assert "set -euo pipefail" in script  # Error handling
@@ -75,19 +75,18 @@ class TestAgenticRLUtils:
         # Validate conditional logic for missing requirements
         assert 'if [ -f "${REQUIREMENTS_FILE}" ]; then' in script
         assert 'for pkg in "${local_packages[@]}"; do' in script
-        assert "local_packages=($SDK_PACKAGE)" in script
+        assert 'read -r -a local_packages <<< "$SDK_PACKAGE"' in script
 
     def test_special_characters_in_classpath(self):
-        """Test handling of special characters in classpath."""
-        script = generate_agentic_script(
-            fc_pypi_lib="dashscope",
-            fc_pypi_repo="https://pypi.org/simple",
-            requirements_path="reqs.txt",
-            func_type="group_reward",
-            classpath="special.module:Class$With@Chars",
-        )
-
-        assert 'PROCESSOR_CLASS="special.module:Class$With@Chars"' in script
+        """Unsafe classpath values are rejected before script generation."""
+        with pytest.raises(InputError):
+            generate_agentic_script(
+                fc_pypi_lib="dashscope",
+                fc_pypi_repo="https://pypi.org/simple",
+                requirements_path="reqs.txt",
+                func_type="group_reward",
+                classpath="special.module:Class$With@Chars",
+            )
 
     def test_create_deployment_files(self, tmp_path):
         """Test creating deployment files with requirements."""
@@ -112,8 +111,8 @@ class TestAgenticRLUtils:
         start_file = test_dir / "start.sh"
         assert start_file.exists()
         content = start_file.read_text(encoding="utf-8")
-        assert 'PROCESSOR_CLASS="processor.DemoProcessor"' in content
-        assert 'REQUIREMENTS_FILE="requirements.txt"' in content
+        assert "PROCESSOR_CLASS=processor.DemoProcessor" in content
+        assert "REQUIREMENTS_FILE=requirements.txt" in content
 
     def test_create_files_without_requirements(self, tmp_path):
         """Test creating deployment files without requirements."""
@@ -136,8 +135,8 @@ class TestAgenticRLUtils:
         start_file = test_dir / "start.sh"
         assert start_file.exists()
         content = start_file.read_text(encoding="utf-8")
-        assert 'PROCESSOR_CLASS="module.processor.MyProcessor"' in content
-        assert "local_packages=($SDK_PACKAGE)" in content
+        assert "PROCESSOR_CLASS=module.processor.MyProcessor" in content
+        assert 'read -r -a local_packages <<< "$SDK_PACKAGE"' in content
 
     def test_invalid_file_path(self, tmp_path):
         """Test handling of invalid file paths."""

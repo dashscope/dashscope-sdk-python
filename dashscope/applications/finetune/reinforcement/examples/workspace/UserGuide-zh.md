@@ -91,15 +91,15 @@ opentelemetry-api==1.41.1
 opentelemetry-sdk==1.41.1
 opentelemetry-exporter-otlp-proto-http==1.41.1
 opentelemetry-processor-baggage==0.62b1
-loongsuite-util-genai==0.4.0
+loongsuite-util-genai==0.5.0
 ```
 
 ### 2.6 日志配置
 通过 `LOG_LEVEL` 环境变量配置日志详细程度：
 
 ```bash
-export LOG_LEVEL="DEBUG"   # 最详细（会屏蔽敏感信息如 API 密钥）
-export LOG_LEVEL="INFO"    # 默认
+export LOG_LEVEL="DEBUG"   # 最详细（警告：日志可能包含 API 密钥等完整凭证，分享日志前请关闭）
+export LOG_LEVEL="INFO"    # 默认（API 密钥等敏感信息会被脱敏）
 export LOG_LEVEL="WARNING"
 export LOG_LEVEL="ERROR"
 export LOG_LEVEL="CRITICAL"

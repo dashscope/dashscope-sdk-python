@@ -296,7 +296,7 @@ class TestMaasCallTimeResolution(unittest.TestCase):
 
         url = self._capture_request_url(
             lambda: Generation.call(
-                model="qwen3.8-32b",
+                model="qwen3.8-max",
                 prompt="hi",
                 workspace="ws-xyz",
                 api_key="sk-test",
@@ -313,7 +313,7 @@ class TestMaasCallTimeResolution(unittest.TestCase):
 
         url = self._capture_request_url(
             lambda: ImageSynthesis.call(
-                model="qwen-image-3.0",
+                model="qwen-image-2.1-pro",
                 prompt="hi",
                 workspace="ws-xyz",
                 api_key="sk-test",
@@ -332,7 +332,7 @@ class TestMaasCallTimeResolution(unittest.TestCase):
         with patch.object(env_mod, "_default_workspace_id", None):
             with self.assertRaises(InputRequired) as ctx:
                 Generation.call(
-                    model="qwen3.8-32b",
+                    model="qwen3.8-max",
                     prompt="hi",
                     api_key="sk-test",
                 )

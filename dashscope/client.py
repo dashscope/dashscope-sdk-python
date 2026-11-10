@@ -91,6 +91,7 @@ class Client:
         protocol: Optional[str] = None,
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
+        strict_validation: Optional[bool] = None,
         config_path: Union[str, Path, None] = None,
         http_client: Optional[httpx.Client] = None,
         raise_on_error: bool = True,
@@ -105,6 +106,7 @@ class Client:
             protocol=protocol,
             timeout=timeout,
             max_retries=max_retries,
+            strict_validation=strict_validation,
             config_path=config_path,
         )
         self._raise_on_error = raise_on_error
@@ -219,6 +221,7 @@ class Client:
         protocol: Optional[str] = None,
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
+        strict_validation: Optional[bool] = None,
         raise_on_error: Optional[bool] = None,
         user_agent_suffix: Optional[str] = None,
     ) -> "Client":
@@ -255,6 +258,11 @@ class Client:
             timeout=config.timeout if timeout is None else timeout,
             max_retries=(
                 config.max_retries if max_retries is None else max_retries
+            ),
+            strict_validation=(
+                config.strict_validation
+                if strict_validation is None
+                else strict_validation
             ),
             http_client=(self._transport.http_client if share_pool else None),
             raise_on_error=(
@@ -345,6 +353,7 @@ class AsyncClient:
         protocol: Optional[str] = None,
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
+        strict_validation: Optional[bool] = None,
         config_path: Union[str, Path, None] = None,
         http_client: Optional[httpx.AsyncClient] = None,
         raise_on_error: bool = True,
@@ -359,6 +368,7 @@ class AsyncClient:
             protocol=protocol,
             timeout=timeout,
             max_retries=max_retries,
+            strict_validation=strict_validation,
             config_path=config_path,
         )
         self._raise_on_error = raise_on_error
@@ -469,6 +479,7 @@ class AsyncClient:
         protocol: Optional[str] = None,
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
+        strict_validation: Optional[bool] = None,
         raise_on_error: Optional[bool] = None,
         user_agent_suffix: Optional[str] = None,
     ) -> "AsyncClient":
@@ -501,6 +512,11 @@ class AsyncClient:
             timeout=config.timeout if timeout is None else timeout,
             max_retries=(
                 config.max_retries if max_retries is None else max_retries
+            ),
+            strict_validation=(
+                config.strict_validation
+                if strict_validation is None
+                else strict_validation
             ),
             http_client=(self._transport.http_client if share_pool else None),
             raise_on_error=(

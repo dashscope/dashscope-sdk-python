@@ -8,6 +8,7 @@ and one wire format (native / openai / anthropic, see design doc §3).
 
 from __future__ import annotations
 
+import functools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import (
@@ -24,6 +25,8 @@ from typing import (
 if TYPE_CHECKING:
     # Annotation-only: avoid importing resources at runtime, which would
     # cycle back through completions.py into this partially-loaded module.
+    import httpx
+
     from dashscope.types.completions import (
         ChatCompletion,
         ChatCompletionChunk,
@@ -104,24 +107,51 @@ class ChatProtocol(ABC):
     def parse_completion(
         self,
         payload: Dict[str, Any],
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> ChatCompletion:
-        """Translate a non-streaming response body."""
+        """Translate a non-streaming response body.
+
+        ``strict_validation`` raises on a body that does not fit the
+        typed model instead of degrading it; it is unrelated to
+        :attr:`strict`, which governs *request* construction.
+        ``response`` is only carried onto that raised error, so the
+        caller can inspect the status and headers of the body that
+        failed; websocket payloads have none and leave it ``None``.
+        """
 
     @abstractmethod
     def parse_chunk(
         self,
         payload: Dict[str, Any],
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> Optional[ChatCompletionChunk]:
         """Translate one streaming event body; ``None`` skips the event
         (keepalives and control frames carry no user-facing content)."""
 
     def make_chunk_parser(
         self,
+        *,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> Callable[[Dict[str, Any]], Optional[ChatCompletionChunk]]:
         """Return the chunk parser for one new stream.
 
         Stateless adapters reuse ``parse_chunk``; stateful adapters
         (e.g. anthropic tool-use accumulation) return a fresh parser
         per stream so concurrent streams never share state.
+
+        The returned callable takes only the payload, so the validation
+        mode and the response a strict failure should carry are bound
+        here rather than passed per event.
         """
-        return self.parse_chunk
+        if not strict_validation and response is None:
+            return self.parse_chunk
+        return functools.partial(
+            self.parse_chunk,
+            strict_validation=strict_validation,
+            response=response,
+        )

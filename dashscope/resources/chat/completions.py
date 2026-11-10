@@ -9,11 +9,22 @@ carrying media parts route to the multimodal endpoint on their own.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+    overload,
+)
 
 from typing_extensions import Literal
 
-from dashscope.errors import response_error, response_json
+from dashscope.errors import response_error
 from dashscope.protocols.base import ChatRequest
 from dashscope.resources._blocking import run_blocking
 from dashscope.resources._oss import (
@@ -23,6 +34,7 @@ from dashscope.resources._oss import (
 from dashscope.resources.chat._params import (
     should_modify_incremental_output,
 )
+from dashscope.types._parse import parse_model
 from dashscope.types.common import Usage, with_headers
 from dashscope.types.completions import (
     ChatCompletion,
@@ -32,6 +44,7 @@ from dashscope.types.completions import (
     SearchInfo,
     StreamChoice,
 )
+from dashscope.transport._options import RequestOptions, request_options
 from dashscope.transport.sse import AsyncStream, Stream
 from dashscope.types.messages import (
     Message,
@@ -41,6 +54,11 @@ from dashscope.types.messages import (
     has_media_parts,
     normalize_messages,
 )
+
+if TYPE_CHECKING:
+    import httpx
+
+    from dashscope.transport._response import APIResponse
 
 __all__ = [
     "AsyncChatStream",
@@ -72,12 +90,51 @@ def _endpoint(
     return None
 
 
+def _normalize_request_messages(
+    client,
+    *,
+    multimodal: bool,
+    messages: Optional[Union[str, List[MessageInput]]],
+) -> List[Message]:
+    if messages is None:
+        if not multimodal or client.protocol.name != "native":
+            raise ValueError("messages must not be empty")
+        return []
+    if multimodal and client.protocol.name == "native" and messages == []:
+        return []
+    return normalize_messages(messages)
+
+
+def _merge_input_overrides(
+    client,
+    request: ChatRequest,
+    *,
+    multimodal: bool,
+    messages: Optional[Union[str, List[MessageInput]]],
+    extra_input: Optional[Dict[str, Any]],
+) -> ChatRequest:
+    if extra_input and (not multimodal or client.protocol.name != "native"):
+        raise ValueError(
+            "extra_input requires multimodal.chat with the native protocol",
+        )
+    if not extra_input and messages is not None:
+        return request
+    body = dict(request.body)
+    input_data = dict(body.get("input") or {})
+    if messages is None:
+        input_data.pop("messages", None)
+    if extra_input:
+        input_data.update(extra_input)
+    body["input"] = input_data
+    return replace(request, body=body)
+
+
 def _build_request(
     client,
     *,
     multimodal: bool,
     model: str,
-    messages: Union[str, List[MessageInput]],
+    messages: Optional[Union[str, List[MessageInput]]],
     stream: bool,
     tools: Optional[List[Dict[str, Any]]],
     temperature: Optional[float],
@@ -102,8 +159,13 @@ def _build_request(
     parameters: Optional[Dict[str, Any]],
     api_key: Optional[str] = None,
     workspace: Optional[str] = None,
+    extra_input: Optional[Dict[str, Any]] = None,
 ) -> Tuple[ChatRequest, str, bool, bool]:
-    normalized = normalize_messages(messages)
+    normalized = _normalize_request_messages(
+        client,
+        multimodal=multimodal,
+        messages=messages,
+    )
     # 1.x tags the whole chat family "aigc" (MultiModalConversation lives
     # in dashscope.legacy_1x.aigc); media routing does not change the module tag.
     module = "aigc"
@@ -188,6 +250,13 @@ def _build_request(
         extra_parameters=parameters,
         path=_endpoint(client, normalized, multimodal=multimodal),
     )
+    request = _merge_input_overrides(
+        client,
+        request,
+        multimodal=multimodal,
+        messages=messages,
+        extra_input=extra_input,
+    )
     if uploaded:
         request = replace(
             request,
@@ -214,10 +283,14 @@ class ChatStream:
         *,
         merge_incremental: bool = False,
         server_cumulative: bool = False,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> None:
         self._inner = inner
         self._merge = merge_incremental
         self._server_cumulative = server_cumulative
+        self._strict_validation = strict_validation
+        self._response = response
 
     def __iter__(self) -> Iterator[ChatCompletionChunk]:
         if self._merge:
@@ -258,7 +331,11 @@ class ChatStream:
 
     def get_final_message(self) -> ChatCompletion:
         if self.cumulative:
-            final = _final_from_cumulative(list(self))
+            final = _final_from_cumulative(
+                list(self),
+                strict_validation=self._strict_validation,
+                response=self._response,
+            )
         else:
             final = _aggregate(self)
         final.headers = self.headers
@@ -280,10 +357,14 @@ class AsyncChatStream:
         *,
         merge_incremental: bool = False,
         server_cumulative: bool = False,
+        strict_validation: bool = False,
+        response: Optional[httpx.Response] = None,
     ) -> None:
         self._inner = inner
         self._merge = merge_incremental
         self._server_cumulative = server_cumulative
+        self._strict_validation = strict_validation
+        self._response = response
 
     def __aiter__(self):
         if self._merge:
@@ -337,7 +418,11 @@ class AsyncChatStream:
     async def get_final_message(self) -> ChatCompletion:
         chunks = [chunk async for chunk in self]
         if self.cumulative:
-            final = _final_from_cumulative(chunks)
+            final = _final_from_cumulative(
+                chunks,
+                strict_validation=self._strict_validation,
+                response=self._response,
+            )
         else:
             final = _aggregate(chunks)
         final.headers = self.headers
@@ -477,7 +562,10 @@ def _cumulative_chunk(
             signature = _signature_from_blocks(slot["reasoning_blocks"])
         # model_copy keeps provider extras the rebuild would otherwise
         # drop (delta-level omni audio); accumulated logprobs override
-        # the current frame's fragment.
+        # the current frame's fragment. It bypasses validation on
+        # purpose: every value here was accumulated from chunks that
+        # already went through parse_model, so there is nothing left to
+        # repair and strict mode has already had its say per event.
         new_delta = choice.delta.model_copy(
             update={
                 "role": slot["role"],
@@ -506,6 +594,9 @@ def _accumulate_chunks(
 
 def _final_from_cumulative(
     chunks: List[ChatCompletionChunk],
+    *,
+    strict_validation: bool = False,
+    response: Optional[httpx.Response] = None,
 ) -> ChatCompletion:
     """Final message for a cumulative stream: per choice, its last snapshot.
 
@@ -540,12 +631,22 @@ def _final_from_cumulative(
             tool_calls=choice.delta.tool_calls,
             **(choice.delta.model_extra or {}),
         )
+        # Extras first, so a wire field that collides with a computed one
+        # (a chunk carrying both ``delta`` and ``message`` puts the latter
+        # in ``model_extra``) is overridden instead of raising a
+        # duplicate-keyword TypeError -- and so a drifted extra is
+        # repaired rather than escaping as a bare ValidationError.
         choices.append(
-            Choice(
-                index=index,
-                finish_reason=choice.finish_reason,
-                message=message,
-                **(choice.model_extra or {}),
+            parse_model(
+                Choice,
+                {
+                    **(choice.model_extra or {}),
+                    "index": index,
+                    "finish_reason": choice.finish_reason,
+                    "message": message,
+                },
+                strict=strict_validation,
+                response=response,
             ),
         )
     return ChatCompletion(
@@ -655,13 +756,21 @@ def _checked_completion(
         return None
     if client.raise_on_error:
         raise error
-    return ChatCompletion(
-        request_id=error.request_id,
-        status_code=error.status_code,
-        code=error.code,
-        message=error.message,
-        is_error=True,
-        headers=dict(response.headers),
+    # The envelope fields are lifted straight off the body, so a gateway
+    # that types ``code`` as a number would otherwise escape as a bare
+    # ValidationError on the very path meant to avoid raising.
+    return parse_model(
+        ChatCompletion,
+        {
+            "request_id": error.request_id,
+            "status_code": error.status_code,
+            "code": error.code,
+            "message": error.message,
+            "is_error": True,
+            "headers": dict(response.headers),
+        },
+        strict=client.config.strict_validation,
+        response=response,
     )
 
 
@@ -676,10 +785,16 @@ def _send(
     api_key: Optional[str],
     workspace: Optional[str],
     timeout: Optional[float],
-) -> Union[ChatCompletion, ChatStream]:
+    options: Optional[RequestOptions] = None,
+    raw: bool = False,
+) -> Union[ChatCompletion, ChatStream, "APIResponse"]:
     transport = client.transport
     base_url = client.config.protocol_base_url
     if stream:
+        # ``APIResponse`` presumes a materialized body; ``open_stream``
+        # hands back an unread one, so there is nothing to wrap.
+        if raw:
+            raise ValueError("raw=True is not supported with stream=True")
         response = transport.open_stream(
             "POST",
             request.path,
@@ -690,13 +805,22 @@ def _send(
             workspace=workspace,
             sdk_module=module,
             timeout=timeout,
+            options=options,
         )
         return ChatStream(
-            Stream(response, client.protocol.make_chunk_parser()),
+            Stream(
+                response,
+                client.protocol.make_chunk_parser(
+                    strict_validation=client.config.strict_validation,
+                    response=response,
+                ),
+            ),
             merge_incremental=merge_incremental,
             server_cumulative=server_cumulative,
+            strict_validation=client.config.strict_validation,
+            response=response,
         )
-    response = transport.request(
+    resp = transport.request_api(
         "POST",
         request.path,
         json=request.body,
@@ -706,13 +830,21 @@ def _send(
         workspace=workspace,
         sdk_module=module,
         timeout=timeout,
+        options=options,
+        client=client,
     )
-    error_result = _checked_completion(client, response)
+    if raw:
+        return resp
+    error_result = _checked_completion(client, resp.http_response)
     if error_result is not None:
         return error_result
     return with_headers(
-        client.protocol.parse_completion(response_json(response)),
-        response,
+        client.protocol.parse_completion(
+            resp.json(),
+            strict_validation=client.config.strict_validation,
+            response=resp.http_response,
+        ),
+        resp.http_response,
     )
 
 
@@ -727,10 +859,16 @@ async def _asend(
     api_key: Optional[str],
     workspace: Optional[str],
     timeout: Optional[float],
-) -> Union[ChatCompletion, AsyncChatStream]:
+    options: Optional[RequestOptions] = None,
+    raw: bool = False,
+) -> Union[ChatCompletion, AsyncChatStream, "APIResponse"]:
     transport = client.transport
     base_url = client.config.protocol_base_url
     if stream:
+        # ``APIResponse`` presumes a materialized body; ``open_stream``
+        # hands back an unread one, so there is nothing to wrap.
+        if raw:
+            raise ValueError("raw=True is not supported with stream=True")
         response = await transport.open_stream(
             "POST",
             request.path,
@@ -741,13 +879,22 @@ async def _asend(
             workspace=workspace,
             sdk_module=module,
             timeout=timeout,
+            options=options,
         )
         return AsyncChatStream(
-            AsyncStream(response, client.protocol.make_chunk_parser()),
+            AsyncStream(
+                response,
+                client.protocol.make_chunk_parser(
+                    strict_validation=client.config.strict_validation,
+                    response=response,
+                ),
+            ),
             merge_incremental=merge_incremental,
             server_cumulative=server_cumulative,
+            strict_validation=client.config.strict_validation,
+            response=response,
         )
-    response = await transport.request(
+    resp = await transport.request_api(
         "POST",
         request.path,
         json=request.body,
@@ -757,13 +904,21 @@ async def _asend(
         workspace=workspace,
         sdk_module=module,
         timeout=timeout,
+        options=options,
+        client=client,
     )
-    error_result = _checked_completion(client, response)
+    if raw:
+        return resp
+    error_result = _checked_completion(client, resp.http_response)
     if error_result is not None:
         return error_result
     return with_headers(
-        client.protocol.parse_completion(response_json(response)),
-        response,
+        client.protocol.parse_completion(
+            resp.json(),
+            strict_validation=client.config.strict_validation,
+            response=resp.http_response,
+        ),
+        resp.http_response,
     )
 
 
@@ -802,6 +957,11 @@ class Completions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> ChatStream:
         ...
 
@@ -836,7 +996,51 @@ class Completions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> ChatCompletion:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        messages: Union[str, List[MessageInput]],
+        stream: Literal[False] = False,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        stop: Union[str, List[str], None] = None,
+        seed: Optional[int] = None,
+        repetition_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+        enable_thinking: Optional[bool] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        top_k: Optional[int] = None,
+        tool_choice: Union[str, Dict[str, Any], None] = None,
+        n: Optional[int] = None,
+        logprobs: Optional[bool] = None,
+        top_logprobs: Optional[int] = None,
+        thinking_budget: Optional[int] = None,
+        enable_search: Optional[bool] = None,
+        search_options: Optional[Dict[str, Any]] = None,
+        parallel_tool_calls: Optional[bool] = None,
+        incremental_output: Optional[bool] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
         ...
 
     def create(
@@ -869,7 +1073,21 @@ class Completions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Union[ChatCompletion, ChatStream]:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[ChatCompletion, ChatStream, "APIResponse"]:
+        """Run one chat completion.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. It is only
+        available with ``stream=False``: a streaming response body is never
+        materialized, so there is nothing to hand back. Combining the two
+        raises ``ValueError``.
+        """
         built = _build_request(
             self._client,
             multimodal=False,
@@ -911,6 +1129,13 @@ class Completions:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            raw=raw,
         )
 
 
@@ -949,6 +1174,11 @@ class AsyncCompletions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> AsyncChatStream:
         ...
 
@@ -983,7 +1213,51 @@ class AsyncCompletions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> ChatCompletion:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        messages: Union[str, List[MessageInput]],
+        stream: Literal[False] = False,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        stop: Union[str, List[str], None] = None,
+        seed: Optional[int] = None,
+        repetition_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+        enable_thinking: Optional[bool] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+        top_k: Optional[int] = None,
+        tool_choice: Union[str, Dict[str, Any], None] = None,
+        n: Optional[int] = None,
+        logprobs: Optional[bool] = None,
+        top_logprobs: Optional[int] = None,
+        thinking_budget: Optional[int] = None,
+        enable_search: Optional[bool] = None,
+        search_options: Optional[Dict[str, Any]] = None,
+        parallel_tool_calls: Optional[bool] = None,
+        incremental_output: Optional[bool] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
         ...
 
     async def create(
@@ -1016,7 +1290,21 @@ class AsyncCompletions:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Union[ChatCompletion, AsyncChatStream]:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[ChatCompletion, AsyncChatStream, "APIResponse"]:
+        """Run one chat completion.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. It is only
+        available with ``stream=False``: a streaming response body is never
+        materialized, so there is nothing to hand back. Combining the two
+        raises ``ValueError``.
+        """
         # The upload path is blocking (file post + getPolicy), so the whole
         # request build runs in a worker thread -- over a transport bridged
         # back to this loop, which is what lets it serve the policy fetch.
@@ -1062,4 +1350,11 @@ class AsyncCompletions:
             api_key=api_key,
             workspace=workspace,
             timeout=timeout,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            raw=raw,
         )

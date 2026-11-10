@@ -24,9 +24,11 @@ from dashscope.types.messages import (
     extract_text,
     normalize_messages,
 )
+from dashscope.types.pagination import BasePage
 
 __all__ = [
     "AudioPart",
+    "BasePage",
     "ChatCompletion",
     "ChatCompletionChunk",
     "ChatCompletionMessage",

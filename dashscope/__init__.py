@@ -132,6 +132,36 @@ def set_region(region: str, workspace_id: str = None):
     base_websocket_api_url = f"wss://{host}/api-ws/v1/inference"
 
 
+def enable_dev_mock(
+    mode: str = "static",
+    fixture_path: "str | None" = None,
+) -> None:
+    """Turn on the dev mock process-wide (``static``/``replay``/``record``).
+
+    Thin forwarder to :mod:`dashscope.devkit`; imported lazily so the
+    devkit package is never loaded on the production success path. Once
+    enabled, every ``Client``/``AsyncClient`` HTTP call is intercepted at
+    the transport. Equivalent to ``DASHSCOPE_DEV_MOCK=<mode>``.
+    """
+    from dashscope import devkit
+
+    devkit.enable_dev_mock(mode, fixture_path)
+
+
+def disable_dev_mock() -> None:
+    """Turn the dev mock back off (forwarder to the devkit package)."""
+    from dashscope import devkit
+
+    devkit.disable_dev_mock()
+
+
+def dev_mock_active() -> bool:
+    """Whether the dev mock is currently active."""
+    from dashscope import devkit
+
+    return devkit.is_active()
+
+
 # The Assistants API (dashscope.legacy_1x.assistants /
 # dashscope.legacy_1x.threads) is deprecated.
 # Resolve its names lazily (PEP 562) so a plain `import dashscope` does not emit
@@ -275,6 +305,9 @@ __all__ = [
     "WsConnection",
     "WsTask",
     "chat",
+    "dev_mock_active",
+    "disable_dev_mock",
+    "enable_dev_mock",
     "errors",
     "set_region",
 ]

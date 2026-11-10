@@ -13,10 +13,22 @@ before it reached the wire; v2 sends the documented ``page_no``.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Union,
+    overload,
+)
 
 from pydantic import AliasChoices, Field
 
+from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     JobStatus,
     ResponseBase,
@@ -24,6 +36,9 @@ from dashscope.types.common import (
     response_body,
     with_headers,
 )
+
+if TYPE_CHECKING:
+    from dashscope.transport._response import APIResponse
 
 __all__ = [
     "Phrase",
@@ -104,6 +119,16 @@ class Phrases:
     def __init__(self, client) -> None:
         self._client = client
 
+    def _parse(self, model_cls, body: Dict[str, Any], response):
+        """Build one response model, degrading rather than raising."""
+        return parse_model(
+            model_cls,
+            flatten_envelope(body),
+            strict=self._client.config.strict_validation,
+            response=response,
+        )
+
+    @overload
     def create(
         self,
         *,
@@ -114,10 +139,59 @@ class Phrases:
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> Phrase:
-        """Compile a new phrase set; the result carries ``phrase_id``."""
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        phrases: Dict[str, Any],
+        training_type: str = "compile_asr_phrase",
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    def create(
+        self,
+        *,
+        model: str,
+        phrases: Dict[str, Any],
+        training_type: str = "compile_asr_phrase",
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Phrase, "APIResponse"]:
+        """Compile a new phrase set; the result carries ``phrase_id``.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_phrases(phrases)
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "POST",
             _CREATE_PATH,
             json=_compile_body(
@@ -131,12 +205,64 @@ class Phrases:
             sdk_module=MODULE,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
+        if raw:
+            return resp
         body = response_body(
-            response,
+            resp.http_response,
             raise_on_error=self._client.raise_on_error,
         )
-        return with_headers(Phrase(**flatten_envelope(body)), response)
+        return with_headers(
+            self._parse(Phrase, body, resp.http_response),
+            resp.http_response,
+        )
+
+    @overload
+    def update(
+        self,
+        phrase_id: str,
+        *,
+        model: str,
+        phrases: Dict[str, Any],
+        training_type: str = "compile_asr_phrase",
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Phrase:
+        ...
+
+    @overload
+    def update(
+        self,
+        phrase_id: str,
+        *,
+        model: str,
+        phrases: Dict[str, Any],
+        training_type: str = "compile_asr_phrase",
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def update(
         self,
@@ -149,11 +275,23 @@ class Phrases:
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Phrase:
-        """Recompile the phrase set behind ``phrase_id``."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Phrase, "APIResponse"]:
+        """Recompile the phrase set behind ``phrase_id``.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(phrase_id, "phrase_id")
         _require_phrases(phrases)
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "POST",
             _CREATE_PATH,
             json=_compile_body(
@@ -167,12 +305,58 @@ class Phrases:
             sdk_module=MODULE,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
+        if raw:
+            return resp
         body = response_body(
-            response,
+            resp.http_response,
             raise_on_error=self._client.raise_on_error,
         )
-        return with_headers(Phrase(**flatten_envelope(body)), response)
+        return with_headers(
+            self._parse(Phrase, body, resp.http_response),
+            resp.http_response,
+        )
+
+    @overload
+    def get(
+        self,
+        phrase_id: str,
+        *,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> Phrase:
+        ...
+
+    @overload
+    def get(
+        self,
+        phrase_id: str,
+        *,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def get(
         self,
@@ -182,10 +366,22 @@ class Phrases:
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> Phrase:
-        """Fetch one compiled phrase set (1.x ``query_phrases``)."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[Phrase, "APIResponse"]:
+        """Fetch one compiled phrase set (1.x ``query_phrases``).
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(phrase_id, "phrase_id")
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "GET",
             f"{_OUTPUTS_PATH}/{phrase_id}",
             headers=headers,
@@ -193,12 +389,60 @@ class Phrases:
             sdk_module=MODULE,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
+        if raw:
+            return resp
         body = response_body(
-            response,
+            resp.http_response,
             raise_on_error=self._client.raise_on_error,
         )
-        return with_headers(Phrase(**flatten_envelope(body)), response)
+        return with_headers(
+            self._parse(Phrase, body, resp.http_response),
+            resp.http_response,
+        )
+
+    @overload
+    def list(
+        self,
+        *,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> PhraseList:
+        ...
+
+    @overload
+    def list(
+        self,
+        *,
+        page_no: int = 1,
+        page_size: int = 10,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def list(
         self,
@@ -209,9 +453,21 @@ class Phrases:
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> PhraseList:
-        """List compiled phrase sets."""
-        response = self._client.transport.request(
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[PhraseList, "APIResponse"]:
+        """List compiled phrase sets.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
+        resp = self._client.transport.request_api(
             "GET",
             _OUTPUTS_PATH,
             params={"page_no": page_no, "page_size": page_size},
@@ -220,12 +476,58 @@ class Phrases:
             sdk_module=MODULE,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
+        if raw:
+            return resp
         body = response_body(
-            response,
+            resp.http_response,
             raise_on_error=self._client.raise_on_error,
         )
-        return with_headers(PhraseList(**flatten_envelope(body)), response)
+        return with_headers(
+            self._parse(PhraseList, body, resp.http_response),
+            resp.http_response,
+        )
+
+    @overload
+    def delete(
+        self,
+        phrase_id: str,
+        *,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> JobStatus:
+        ...
+
+    @overload
+    def delete(
+        self,
+        phrase_id: str,
+        *,
+        timeout: Optional[float] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     def delete(
         self,
@@ -235,10 +537,22 @@ class Phrases:
         headers: Optional[Mapping[str, str]] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> JobStatus:
-        """Delete one compiled phrase set."""
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[JobStatus, "APIResponse"]:
+        """Delete one compiled phrase set.
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. The non-raw path
+        keeps ``response_body``'s envelope: it preserves non-JSON failure
+        bodies and injects ``status_code``/``request_id``/``is_error``.
+        """
         _require_id(phrase_id, "phrase_id")
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "DELETE",
             f"{_OUTPUTS_PATH}/{phrase_id}",
             headers=headers,
@@ -246,9 +560,21 @@ class Phrases:
             sdk_module=MODULE,
             api_key=api_key,
             workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
+        if raw:
+            return resp
         body = response_body(
-            response,
+            resp.http_response,
             raise_on_error=self._client.raise_on_error,
         )
-        return with_headers(JobStatus(**flatten_envelope(body)), response)
+        return with_headers(
+            self._parse(JobStatus, body, resp.http_response),
+            resp.http_response,
+        )

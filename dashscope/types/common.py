@@ -67,6 +67,26 @@ class ResponseBase(BaseModel):
             self.is_error = True
         return self
 
+    @property
+    def diagnosis(self):
+        """Structured local fix guidance for a non-raising error envelope.
+
+        The ``raise_on_error=False`` counterpart of ``DashScopeError.diagnosis``:
+        when the SDK filled ``code``/``message`` instead of raising, this
+        matches the same offline rule table and returns the guidance (or
+        ``None`` for a success, or when no rule matched). Imported lazily so
+        successful responses pay nothing and never load the devkit package.
+        """
+        if not self.is_error:
+            return None
+        from dashscope.devkit.diagnosis import diagnose
+
+        return diagnose(
+            status_code=self.status_code,
+            code=self.code,
+            message=self.message,
+        )
+
 
 class JobStatus(ResponseBase):
     """Result of a state transition that reports nothing but the new state.
@@ -124,6 +144,10 @@ def with_headers(model: _M, response: Any) -> _M:
     have no HTTP envelope to copy and keep the empty default; SSE
     streams expose theirs via ``Stream.headers`` and
     ``ChatStream.get_final_message()``.
+
+    Resources on the ``APIResponse`` path (``transport.request_api``) get
+    this applied for free by ``APIResponse.parse``; websocket-sourced
+    models, which have no ``APIResponse``, still call it directly.
     """
     model.headers = dict(response.headers)
     if hasattr(model, "request_id") and not model.request_id:

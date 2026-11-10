@@ -183,6 +183,82 @@ resp.request_id
 
 All responses share a common envelope: `request_id`, `status_code`, `code`, `message`, `is_error`, and raw `headers`.
 
+### Pagination
+
+List endpoints return a page object you can iterate and advance instead of looping `page_no` by hand:
+
+```python
+page = client.models.list(page_no=1, page_size=10)
+
+for model in page:            # this page's items
+    ...
+page.total_count              # catalog total, as reported by the gateway
+page.has_next_page()
+page.next_page()              # None on the last page
+
+for page in client.models.list(page_size=50).iter_pages():   # every page
+    ...
+```
+
+On `AsyncClient` use `await page.next_page_async()` and `async for page in page.iter_pages_async()`. Calling the synchronous traversal on an async-fetched page raises `TypeError` naming the async method, rather than handing back an un-awaited coroutine. `client.files.list()` and `client.images.jobs.list()` paginate the same way.
+
+Serialize a page with `model_dump()`. Iterating a page yields its *items*, so `dict(page)` is not a way to read its fields.
+
+`models.list(provider=...)` filters client-side: it narrows each page's `models`, while `total_count` stays the whole-catalog total. Pagination therefore walks the unfiltered catalog and the filter is applied to each page as it arrives.
+
+### Raw responses
+
+Pass `raw=True` to get the response object itself, before any error check:
+
+```python
+resp = client.models.list(raw=True)
+
+resp.status_code
+resp.headers                  # includes non-standard gateway headers
+resp.request_id
+resp.elapsed
+resp.json()                   # decoded body
+resp.parse(ModelList)         # typed model, memoized per type
+```
+
+`raw=True` skips the error check, so a 4xx/5xx is returned to you instead of raising. `raise_for_status()` applies it after the fact.
+
+`parse(...)` needs the model class, and the v2 resource models are not re-exported from the top-level package — import them from where they are defined:
+
+```python
+from dashscope.resources.models import ModelList, Model
+from dashscope.resources.files import FileList, File
+from dashscope.resources._jobs import Job, JobList
+from dashscope.resources.embeddings import EmbeddingResponse
+```
+
+`resp.parse(...)` is the generic envelope mapping and does not replay a resource's own reshaping — on `models.list`, a page the gateway delivered as a bare list parses through it as empty. Use `resp.json()` when you need exactly what the resource method would have built.
+
+### Per-request options
+
+Every resource method that makes an HTTP request takes the same three escape hatches, for anything this SDK does not model yet:
+
+```python
+client.chat.completions.create(
+    model="qwen-plus",
+    messages=["hi"],
+    extra_headers={"x-gateway-experiment": "on"},
+    extra_query={"debug": "1"},
+    extra_body={"parameters": {"top_k": 5}},
+)
+```
+
+`extra_headers` sits above every other layer — the SDK identity headers, the client defaults, your `headers=`, and a per-call `api_key=` / `workspace=` — matched case-insensitively. `extra_body` deep-merges nested dicts, so adding one nested field keeps its siblings; lists and scalars replace. A request whose body is not a JSON object (a file upload, raw bytes) has nothing to merge into, so `extra_body` is dropped with a warning rather than silently lost.
+
+`max_retries` narrows or widens the retry budget for a single call, so a request that must not be replayed no longer needs a whole derived client:
+
+```python
+client.deployments.list(max_retries=0)          # one attempt, no retry
+client.with_options(max_retries=5)              # still works, client-wide
+```
+
+Streaming methods take all four: `open_stream` retries only while no event has reached you yet, so a mid-stream failure is never replayed. The websocket methods (`audio.asr.recognize` / `recognize_file`, `tingwu.realtime`) take none of them — that transport has no per-request options channel, so a parameter there would be silently inert.
+
 ### Streaming
 
 `stream=True` returns a `ChatStream` (`AsyncChatStream` for `AsyncClient`) with typed helpers:
@@ -283,6 +359,7 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_WEBSOCKET_BASE_URL` | Override the WebSocket endpoint | derived from region/workspace |
 | `DASHSCOPE_TIMEOUT` | Request timeout (seconds) | `300` |
 | `DASHSCOPE_MAX_RETRIES` | Automatic retries | `2` |
+| `DASHSCOPE_STRICT_VALIDATION` | Raise on a response body that does not fit its typed model instead of degrading it | `false` |
 | `DASHSCOPE_HTTP_MAX_CONNECTIONS` | Connection-pool size | `100` |
 | `DASHSCOPE_HTTP_MAX_KEEPALIVE_CONNECTIONS` | Keep-alive connections held in the pool | `20` |
 | `DASHSCOPE_HTTP_KEEPALIVE_EXPIRY` | Keep-alive expiry (seconds) | `5.0` |
@@ -291,6 +368,10 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_API_KEY_FILE_PATH` | Path to the 1.x key file (lowest-priority auth tier) | `~/.dashscope/api_key` |
 
 The three `DASHSCOPE_HTTP_*` pool variables are also settable as `http_max_connections`, `http_max_keepalive_connections` and `http_keepalive_expiry` in `settings` and `config.toml`. Passing your own `http_client=` takes precedence over all of them.
+
+By default a response body that does not fit the SDK's typed models is parsed in degraded form — the offending fields fall back to their defaults and the rest of the payload stays usable — with the drift recorded at `DEBUG` on the `dashscope._logging.parse` logger. Set `DASHSCOPE_STRICT_VALIDATION=true` (or `Client(strict_validation=True)`, `settings.strict_validation = True`, `strict_validation = true` in `config.toml`) to raise `APIResponseValidationError` instead, which is what you want in CI or contract tests. Strict validation raises even under `raise_on_error=False`: that flag governs service errors, this one governs parse errors.
+
+One caveat: `DEBUG` is below the SDK's default log level, so a degraded parse is silent unless you raise it — see [Logging](#logging) — and `strict_validation` is the only way to make drift fail loudly. The typed-parse path covers every resource, and not only the final response object: streamed frames (`apps`, `deployments.stream_events`, `fine_tunes.stream_events`, `audio.tts.http.stream`) and websocket results (`audio.asr`) degrade frame by frame as well, so one malformed event cannot break an iteration partway through with a `pydantic.ValidationError` that no `except DashScopeError` would catch.
 
 **Config file** (`~/.dashscope/config.toml`):
 

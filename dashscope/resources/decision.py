@@ -20,13 +20,30 @@ compatible-mode path on every gateway, independent of the client's chat
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Union,
+    overload,
+)
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from dashscope._config import Config, compatible_mode_base_url
 from dashscope.errors import response_error, response_json
+from dashscope.transport._options import request_options
+from dashscope.types._parse import parse_model
 from dashscope.types.common import ResponseBase, Usage, with_headers
+
+if TYPE_CHECKING:
+    import httpx
+
+    from dashscope.transport._response import APIResponse
 
 _PATH = "/systemone"
 # Functional-area tag for x-dashscope-sdk-client. The decision model is
@@ -137,11 +154,21 @@ class DecisionResponse(ResponseBase):
     latency_ms: Optional[float] = None
 
 
-def _parse(body: Dict[str, Any]) -> DecisionResponse:
+def _parse(
+    body: Dict[str, Any],
+    *,
+    strict: bool = False,
+    response: Optional["httpx.Response"] = None,
+) -> DecisionResponse:
     payload = dict(body) if isinstance(body, dict) else {}
     # Tolerate a success body that omits the answers table.
     payload["answers"] = payload.get("answers") or {}
-    return DecisionResponse(**payload)
+    return parse_model(
+        DecisionResponse,
+        payload,
+        strict=strict,
+        response=response,
+    )
 
 
 def _dump_question(question: QuestionInput) -> Dict[str, Any]:
@@ -193,9 +220,18 @@ def _checked_response(client, response) -> DecisionResponse:
     """
     error = response_error(response)
     if error is None:
-        return with_headers(_parse(response_json(response)), response)
+        return with_headers(
+            _parse(
+                response_json(response),
+                strict=client.config.strict_validation,
+                response=response,
+            ),
+            response,
+        )
     if client.raise_on_error:
         raise error
+    # Built from the already-typed error object, not from a wire body, so
+    # there is nothing for parse_model to be fault-tolerant about.
     return with_headers(
         DecisionResponse(
             request_id=error.request_id,
@@ -214,6 +250,7 @@ class Decision:
     def __init__(self, client) -> None:
         self._client = client
 
+    @overload
     def create(
         self,
         *,
@@ -223,7 +260,47 @@ class Decision:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
     ) -> DecisionResponse:
+        ...
+
+    @overload
+    def create(
+        self,
+        *,
+        model: str,
+        state: StateInput,
+        questions: Dict[str, QuestionInput],
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
+
+    def create(
+        self,
+        *,
+        model: str,
+        state: StateInput,
+        questions: Dict[str, QuestionInput],
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[DecisionResponse, "APIResponse"]:
         """Run one decision round.
 
         Usage::
@@ -242,9 +319,15 @@ class Decision:
                 },
             )
             print(resp.answers["department"].choice)
+
+        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself. It also bypasses
+        ``_checked_response``, which is what turns this endpoint's nested
+        ``error`` envelope into ``is_error`` / ``code`` / ``message``.
         """
         body = _build_body(model=model, state=state, questions=questions)
-        response = self._client.transport.request(
+        resp = self._client.transport.request_api(
             "POST",
             _PATH,
             json=body,
@@ -253,8 +336,17 @@ class Decision:
             api_key=api_key,
             workspace=workspace,
             sdk_module=MODULE,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        return _checked_response(self._client, response)
+        if raw:
+            return resp
+        return _checked_response(self._client, resp.http_response)
 
 
 class AsyncDecision:
@@ -262,6 +354,42 @@ class AsyncDecision:
 
     def __init__(self, client) -> None:
         self._client = client
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        state: StateInput,
+        questions: Dict[str, QuestionInput],
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[False] = False,
+    ) -> DecisionResponse:
+        ...
+
+    @overload
+    async def create(
+        self,
+        *,
+        model: str,
+        state: StateInput,
+        questions: Dict[str, QuestionInput],
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: Literal[True],
+    ) -> "APIResponse":
+        ...
 
     async def create(
         self,
@@ -272,9 +400,15 @@ class AsyncDecision:
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
-    ) -> DecisionResponse:
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+        raw: bool = False,
+    ) -> Union[DecisionResponse, "APIResponse"]:
+        """Async twin of :meth:`Decision.create`."""
         body = _build_body(model=model, state=state, questions=questions)
-        response = await self._client.transport.request(
+        resp = await self._client.transport.request_api(
             "POST",
             _PATH,
             json=body,
@@ -283,5 +417,14 @@ class AsyncDecision:
             api_key=api_key,
             workspace=workspace,
             sdk_module=MODULE,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
         )
-        return _checked_response(self._client, response)
+        if raw:
+            return resp
+        return _checked_response(self._client, resp.http_response)

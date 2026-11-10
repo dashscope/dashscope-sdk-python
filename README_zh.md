@@ -183,6 +183,82 @@ resp.request_id
 
 所有响应共享统一信封：`request_id`、`status_code`、`code`、`message`、`is_error`，以及原始的 `headers`。
 
+### 分页
+
+列表类接口返回一个可迭代、可翻页的页面对象，不必自己循环 `page_no`：
+
+```python
+page = client.models.list(page_no=1, page_size=10)
+
+for model in page:            # 仅当前页的条目
+    ...
+page.total_count              # 网关上报的目录总数
+page.has_next_page()
+page.next_page()              # 末页返回 None
+
+for page in client.models.list(page_size=50).iter_pages():   # 遍历所有页
+    ...
+```
+
+`AsyncClient` 上请用 `await page.next_page_async()` 和 `async for page in page.iter_pages_async()`。对异步取回的页面调用同步翻页方法会抛出 `TypeError` 并指明该用哪个异步方法，而不是把一个未 await 的 coroutine 交给你。`client.files.list()` 和 `client.images.jobs.list()` 的分页方式相同。
+
+序列化页面请用 `model_dump()`。迭代页面对象得到的是它的**条目**，所以 `dict(page)` 不是读取字段的方式。
+
+`models.list(provider=...)` 是客户端侧过滤：它只收窄每一页的 `models`，而 `total_count` 始终是整个目录的总数。因此翻页走的是未过滤的目录，过滤在每页到达时各自施加。
+
+### 原始响应
+
+传 `raw=True` 可以拿到响应对象本身，且在任何错误检查之前：
+
+```python
+resp = client.models.list(raw=True)
+
+resp.status_code
+resp.headers                  # 含网关的非标准响应头
+resp.request_id
+resp.elapsed
+resp.json()                   # 解码后的报文体
+resp.parse(ModelList)         # 类型化模型，按类型记忆化
+```
+
+`raw=True` 会跳过错误检查，所以 4xx/5xx 是返回给你而不是抛异常。事后可以用 `raise_for_status()` 补上这道检查。
+
+`parse(...)` 需要模型类本身，而 v2 的资源模型没有从顶层包再导出——请从它们各自定义的模块导入：
+
+```python
+from dashscope.resources.models import ModelList, Model
+from dashscope.resources.files import FileList, File
+from dashscope.resources._jobs import Job, JobList
+from dashscope.resources.embeddings import EmbeddingResponse
+```
+
+`resp.parse(...)` 走的是通用信封映射，不会重放资源自己的重塑逻辑——对 `models.list` 而言，网关以裸数组形式下发的页经它解析会得到空目录。若你需要与资源方法完全一致的结果，请用 `resp.json()`。
+
+### 单次请求定制
+
+所有发起 HTTP 请求的资源方法都接受同样的三个逃生舱，用于承载 SDK 尚未建模的东西：
+
+```python
+client.chat.completions.create(
+    model="qwen-plus",
+    messages=["hi"],
+    extra_headers={"x-gateway-experiment": "on"},
+    extra_query={"debug": "1"},
+    extra_body={"parameters": {"top_k": 5}},
+)
+```
+
+`extra_headers` 位于所有其他层之上——SDK 身份头、客户端默认头、你的 `headers=`、以及单次调用的 `api_key=` / `workspace=`——且大小写不敏感匹配。`extra_body` 对嵌套 dict 做深合并，所以新增一个嵌套字段不会丢掉它的兄弟字段；列表和标量则是整体替换。若请求体不是 JSON 对象（文件上传、裸字节），就无处可合并，此时 `extra_body` 会被丢弃并告警，而不是静默丢失。
+
+`max_retries` 为单次调用收窄或放宽重试预算，所以一个绝不能被重放的请求不再需要派生整个客户端：
+
+```python
+client.deployments.list(max_retries=0)          # 只打一次，不重试
+client.with_options(max_retries=5)              # 依然有效，作用于整个客户端
+```
+
+流式方法四个都接受：`open_stream` 只在还没有任何事件到达你之前重试，所以流中途的失败绝不会被重放。WebSocket 方法（`audio.asr.recognize` / `recognize_file`、`tingwu.realtime`）一个都不接受——那条传输链路根本没有单次请求的 options 通道，加了形参也只会被静默忽略。
+
 ### 流式
 
 `stream=True` 返回 `ChatStream`（`AsyncClient` 对应 `AsyncChatStream`），并提供类型化辅助属性：
@@ -283,6 +359,7 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_WEBSOCKET_BASE_URL` | 覆盖 WebSocket 端点 | 由地域/业务空间推导 |
 | `DASHSCOPE_TIMEOUT` | 请求超时（秒） | `300` |
 | `DASHSCOPE_MAX_RETRIES` | 自动重试次数 | `2` |
+| `DASHSCOPE_STRICT_VALIDATION` | 响应体与类型模型不符时抛错，而不是降级解析 | `false` |
 | `DASHSCOPE_HTTP_MAX_CONNECTIONS` | 连接池大小 | `100` |
 | `DASHSCOPE_HTTP_MAX_KEEPALIVE_CONNECTIONS` | 连接池保持的 keep-alive 连接数 | `20` |
 | `DASHSCOPE_HTTP_KEEPALIVE_EXPIRY` | keep-alive 过期时间（秒） | `5.0` |
@@ -291,6 +368,10 @@ dashscope.settings.log_level = "INFO"
 | `DASHSCOPE_API_KEY_FILE_PATH` | 1.x key 文件路径（优先级最低的鉴权层） | `~/.dashscope/api_key` |
 
 三个 `DASHSCOPE_HTTP_*` 连接池变量同样可以在 `settings` 和 `config.toml` 中以 `http_max_connections`、`http_max_keepalive_connections`、`http_keepalive_expiry` 设置。传入自备的 `http_client=` 时，以它为准，上述配置全部被忽略。
+
+默认情况下，若响应体与 SDK 的类型模型不符，会走降级解析——出问题的字段回退到各自的默认值，报文中其余部分照常可用——同时把漂移以 `DEBUG` 级别记录到 `dashscope._logging.parse` 这个 logger。设置 `DASHSCOPE_STRICT_VALIDATION=true`（或 `Client(strict_validation=True)`、`settings.strict_validation = True`、`config.toml` 里的 `strict_validation = true`）则改为抛出 `APIResponseValidationError`，这正是 CI 或契约测试想要的行为。严格校验即使在 `raise_on_error=False` 下也会抛错：那个开关管的是服务端错误，这个管的是解析错误。
+
+一点需要注意：`DEBUG` 低于 SDK 的默认日志级别，所以除非你调高它（见[日志](#日志)），降级解析是无声的——而 `strict_validation` 是让漂移大声失败的唯一手段。类型化解析路径覆盖全部资源，且不止最终的响应对象：流式帧（`apps`、`deployments.stream_events`、`fine_tunes.stream_events`、`audio.tts.http.stream`）和 WebSocket 结果（`audio.asr`）同样逐帧降级，因此单个畸形事件不会在迭代中途抛出 `except DashScopeError` 抓不到的 `pydantic.ValidationError`。
 
 **配置文件**（`~/.dashscope/config.toml`）：
 

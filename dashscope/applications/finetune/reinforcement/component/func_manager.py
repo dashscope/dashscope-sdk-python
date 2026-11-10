@@ -182,7 +182,14 @@ class FuncManager:
         # Avoid blocking the uvicorn event loop when processor.process is sync.
         loop = asyncio.get_running_loop()
         ctx = contextvars.copy_context()
-        return await loop.run_in_executor(self.executor, ctx.run, fn)
+        future = loop.run_in_executor(self.executor, ctx.run, fn)
+        try:
+            return await asyncio.shield(future)
+        except asyncio.CancelledError:
+            # A running thread cannot be cancelled; keep the task pending so
+            # callers can retain admission accounting until the worker exits.
+            await asyncio.gather(future, return_exceptions=True)
+            raise
 
     async def setups(self):
         try:
@@ -232,7 +239,7 @@ class FuncManager:
             partial(self._processor.process, input_data),
         )
 
-    def execute(self, raw_data: Dict[str, Any]) -> Any:
+    async def execute(self, raw_data: Dict[str, Any]) -> Any:
         """
         Complete processing pipeline: parse + execute.
 
@@ -242,8 +249,8 @@ class FuncManager:
         Returns:
             Processing result
         """
-        input_data = self.parse(raw_data)
-        return self.process(input_data)
+        input_data = self.parses(raw_data)
+        return await self.processes(input_data)
 
     @classmethod
     def create_from_env(
