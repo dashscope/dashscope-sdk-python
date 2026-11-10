@@ -6,8 +6,12 @@ Assembly only — each sub-resource lives in its own module, so the tree
 here is two levels deep at most: ``client.audio.asr.transcribe``,
 ``client.audio.asr.recognize``, ``client.audio.tts.synthesize``,
 ``client.audio.tts.http.synthesize``, ``client.audio.realtime.connect``,
-and the management plane ``client.audio.vocabularies`` / ``phrases`` /
-``voices`` / ``voice_design``.
+``client.audio.live.connect``, and the management plane
+``client.audio.vocabularies`` / ``phrases`` / ``voices`` /
+``voice_design``.
+
+The Qwen-Live wire event names (``EVENT_*``) are re-exported here too, so
+callers can import them from the same package as ``LiveSession``.
 """
 
 from dashscope.v2.resources.audio.asr import (
@@ -32,6 +36,38 @@ from dashscope.v2.resources.audio.http_tts import (
     HttpSynthesisStream,
     HttpTts,
 )
+from dashscope.v2.resources.audio.live import (
+    EVENT_ERROR,
+    EVENT_RESPONSE_CREATE,
+    EVENT_RESPONSE_EVENT,
+    EVENT_RESPONSE_ITEM_CREATE,
+    EVENT_SESSION_CLOSE,
+    EVENT_SESSION_CLOSED,
+    EVENT_SESSION_COMMENTARY_APPEND,
+    EVENT_SESSION_COMMENTARY_APPENDED,
+    EVENT_SESSION_CREATED,
+    EVENT_SESSION_DELEGATION_CREATED,
+    EVENT_SESSION_EVENT,
+    EVENT_SESSION_INPUT_AUDIO_APPEND,
+    EVENT_SESSION_INPUT_AUDIO_MUTE,
+    EVENT_SESSION_INPUT_AUDIO_MUTED,
+    EVENT_SESSION_INPUT_AUDIO_UNMUTE,
+    EVENT_SESSION_INPUT_AUDIO_UNMUTED,
+    EVENT_SESSION_INPUT_TRANSCRIPT_DELTA,
+    EVENT_SESSION_INSTRUCTION_APPEND,
+    EVENT_SESSION_INSTRUCTIONS_APPENDED,
+    EVENT_SESSION_ITEM_CREATE,
+    EVENT_SESSION_OUTPUT_AUDIO_DELTA,
+    EVENT_SESSION_OUTPUT_AUDIO_INTERRUPTED,
+    EVENT_SESSION_OUTPUT_TRANSCRIPT_DELTA,
+    EVENT_SESSION_THINKING_APPEND,
+    EVENT_SESSION_THINKING_APPENDED,
+    EVENT_SESSION_UPDATE,
+    EVENT_SESSION_UPDATED,
+    EVENT_SESSION_USAGE_UPDATED,
+    Live,
+    LiveSession,
+)
 from dashscope.v2.resources.audio.phrases import (
     Phrase,
     PhraseList,
@@ -47,10 +83,40 @@ __all__ = [
     "Audio",
     "DesignedVoice",
     "DesignedVoiceList",
+    "EVENT_ERROR",
+    "EVENT_RESPONSE_CREATE",
+    "EVENT_RESPONSE_EVENT",
+    "EVENT_RESPONSE_ITEM_CREATE",
+    "EVENT_SESSION_CLOSE",
+    "EVENT_SESSION_CLOSED",
+    "EVENT_SESSION_COMMENTARY_APPEND",
+    "EVENT_SESSION_COMMENTARY_APPENDED",
+    "EVENT_SESSION_CREATED",
+    "EVENT_SESSION_DELEGATION_CREATED",
+    "EVENT_SESSION_EVENT",
+    "EVENT_SESSION_INPUT_AUDIO_APPEND",
+    "EVENT_SESSION_INPUT_AUDIO_MUTE",
+    "EVENT_SESSION_INPUT_AUDIO_MUTED",
+    "EVENT_SESSION_INPUT_AUDIO_UNMUTE",
+    "EVENT_SESSION_INPUT_AUDIO_UNMUTED",
+    "EVENT_SESSION_INPUT_TRANSCRIPT_DELTA",
+    "EVENT_SESSION_INSTRUCTION_APPEND",
+    "EVENT_SESSION_INSTRUCTIONS_APPENDED",
+    "EVENT_SESSION_ITEM_CREATE",
+    "EVENT_SESSION_OUTPUT_AUDIO_DELTA",
+    "EVENT_SESSION_OUTPUT_AUDIO_INTERRUPTED",
+    "EVENT_SESSION_OUTPUT_TRANSCRIPT_DELTA",
+    "EVENT_SESSION_THINKING_APPEND",
+    "EVENT_SESSION_THINKING_APPENDED",
+    "EVENT_SESSION_UPDATE",
+    "EVENT_SESSION_UPDATED",
+    "EVENT_SESSION_USAGE_UPDATED",
     "HttpSynthesis",
     "HttpSynthesisChunk",
     "HttpSynthesisStream",
     "HttpTts",
+    "Live",
+    "LiveSession",
     "Phrase",
     "PhraseList",
     "Phrases",
@@ -80,6 +146,7 @@ class Audio:
         self.asr = Asr(client)
         self.tts = Tts(client)
         self.realtime = Realtime(client)
+        self.live = Live(client)
         self.vocabularies = Vocabularies(client)
         self.phrases = Phrases(client)
         self.voices = Voices(client)

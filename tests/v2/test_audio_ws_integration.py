@@ -178,6 +178,68 @@ def local_ws_server(monkeypatch):
     return serve
 
 
+@pytest.mark.parametrize("receiving", [False, True])
+def test_live_close_sends_normal_control_frame(
+    local_ws_server,
+    client,
+    receiving,
+):
+    entered = threading.Event()
+    acknowledged = Future()
+    results, failures = [], []
+
+    class ObservedSocket(websocket.WebSocket):
+        def recv(self):
+            entered.set()
+            return super().recv()
+
+    async def scenario(ws, request):
+        message = await ws.receive(timeout=SERVER_TIMEOUT)
+        # close() is a transport handshake, not a session.close JSON event.
+        assert message.type == WSMsgType.CLOSE
+        assert message.data == 1000
+        acknowledged.set_result(None)
+
+    with local_ws_server(scenario) as server:
+        session = client.audio.live.connect(
+            model="live",
+            ws_url=server.url,
+            timeout=TIMEOUT,
+            connector=lambda url, headers: websocket.create_connection(
+                url,
+                header=headers,
+                timeout=TIMEOUT,
+                class_=ObservedSocket,
+            ),
+        ).connect()
+
+        def receive():
+            try:
+                results.append(session.recv_event())
+            except BaseException as exc:
+                failures.append(exc)
+
+        receiver = threading.Thread(target=receive, daemon=True)
+        try:
+            if receiving:
+                receiver.start()
+                assert entered.wait(TIMEOUT)
+            session.close()
+            assert acknowledged.result(timeout=TIMEOUT) is None
+            session.close()
+            session.cancel()
+            assert session.recv_event() is None
+            if receiving:
+                receiver.join(TIMEOUT)
+                assert not receiver.is_alive()
+                assert results == [None]
+                assert failures == []
+        finally:
+            session.cancel()
+            if receiver.ident is not None:
+                receiver.join(SERVER_TIMEOUT)
+
+
 @pytest.fixture(autouse=True)
 def closed_client_sockets(monkeypatch):
     connect = websocket.create_connection
