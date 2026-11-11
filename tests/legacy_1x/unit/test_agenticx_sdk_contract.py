@@ -87,9 +87,12 @@ def test_agenticx_embedded_api_matches_dashscope_adapter():
 def test_agenticx_expert_downloader_matches_dashscope_adapter():
     examples = importlib.import_module("dashscope_agenticx.cli.examples")
     assert callable(examples._handle_example_command)
-    assert "args" in inspect.signature(
-        examples._handle_example_command,
-    ).parameters
+    assert (
+        "args"
+        in inspect.signature(
+            examples._handle_example_command,
+        ).parameters
+    )
     assert examples._DEFAULT_EXAMPLES_REPO == (
         "https://github.com/dashscope/dashscope-agenticx-experts.git"
     )
