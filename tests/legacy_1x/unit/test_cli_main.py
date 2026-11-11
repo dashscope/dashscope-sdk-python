@@ -10,6 +10,7 @@ import sys
 from types import SimpleNamespace
 
 import pytest
+from typer.main import get_command
 from typer.testing import CliRunner
 
 import dashscope
@@ -111,8 +112,11 @@ class TestCliMain:
         )
 
         assert result.exit_code == 0
-        clean_output = strip_ansi_codes(result.output)
-        assert "rollout-classpaths" in clean_output
+        command = get_command(agentic_rl.app).commands["register-functions"]
+        assert any(
+            "--rollout-classpaths" in parameter.opts
+            for parameter in command.params
+        )
 
     def test_rl_test_functions_hyphen_alias_help(self):
         result = CliRunner().invoke(

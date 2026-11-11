@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from enum import Enum
 from typing import Optional, List, Any, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StatusType(str, Enum):
@@ -91,8 +91,17 @@ class RequestFC(BaseModel):
 
 
 class ResponseFC(BaseModel):
+    """FC result with optional upstream failure context.
+
+    ``request_id`` and ``body`` retain the original FaaS rejection without
+    replacing the SDK's existing numeric ``status.code``. The raw ``body``
+    may contain credentials and is excluded from the model's repr.
+    """
+
     status: Status = Status()
     output: Optional[Dict[str, Any]] = None
+    request_id: Optional[str] = None
+    body: Optional[Dict[str, Any]] = Field(default=None, repr=False)
 
 
 class RequestTuning(BaseModel):
