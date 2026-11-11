@@ -36,8 +36,8 @@ line, 3 auth, 4 not found.
 def _epilog() -> str:
     return (
         "CLI 1.x commands such as `generation create` and `application create` "
-        "have moved to `dashscope1`. A bare `dashscope` opens the bundled "
-        "`expert` agent interactively."
+        "have moved to `dashscope1`. A bare `dashscope` opens the "
+        "AgenticX-backed `expert` agent interactively."
     )
 
 

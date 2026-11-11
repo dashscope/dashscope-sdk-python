@@ -116,22 +116,14 @@ setuptools.setup(
     install_requires=get_dependencies(),
     include_package_data=True,
     extras_require={
-        # Interactive AI assistant (dashscope.acli); typer/rich are core deps
-        "acli": [
-            "prompt-toolkit>=3.0",
-            "textual>=0.50,<9",
-            "PyYAML>=6.0",
-            "tomli>=2.0; python_version < '3.11'",
-        ],
+        # Interactive AI assistant; typer/rich are core deps
+        "acli": ["dashscope-agenticx[tui]>=1.0.0,<2"],
         "acli-anthropic": ["anthropic>=0.40,<2"],
         "acli-openai": ["openai>=1.30,<4"],
         "acli-voice": ["sounddevice>=0.4", "numpy>=1.20"],
         "acli-camera": ["opencv-python-headless>=4.5"],
         "acli-all": [
-            "prompt-toolkit>=3.0",
-            "textual>=0.50,<9",
-            "PyYAML>=6.0",
-            "tomli>=2.0; python_version < '3.11'",
+            "dashscope-agenticx[tui]>=1.0.0,<2",
             "anthropic>=0.40,<2",
             "openai>=1.30,<4",
             "sounddevice>=0.4",

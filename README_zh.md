@@ -26,7 +26,7 @@ DashScope Python SDK 是[阿里云百炼（Model Studio）](https://help.aliyun.
 pip install -U dashscope
 ```
 
-基础安装包含 SDK API 调用、`dashscope` CLI 命令、Agentic RL 微调和本地 tokenizer，要求 Python 3.9+。可选功能组都属于内置的 AI 助手：
+基础安装包含 SDK API 调用、`dashscope` CLI 命令、Agentic RL 微调和本地 tokenizer，要求 Python 3.9+。可选功能组用于配置由 `dashscope-agenticx` 提供的 AI 助手；助手要求 Python 3.10+：
 
 | Extra | 提供的能力 | 安装命令 |
 |-------|----------|---------|
@@ -511,11 +511,11 @@ connection.close()
 
 ## AI 助手：DashScope SDK Expert
 
-SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，基于随包提供的 Agentic CLI（`dashscope/acli`）框架构建。它能直接在终端中解答 SDK/API 问题、生成可运行示例、展示 CLI 用法、诊断错误。
+SDK 集成了交互式 AI 助手 **DashScope SDK Expert**，由可选依赖 `dashscope-agenticx` 提供。它能直接在终端中解答 SDK/API 问题、生成可运行示例、展示 CLI 用法、诊断错误。
 
-- 直接运行 `dashscope`（不带参数）即可启动助手。首次运行时会提示安装知识包（按领域划分的速查技能：文本、多模态、语音、检索、微调、Agent、CLI），使助手的指导来自 SDK 的公开接口 —— 参数、输出、错误码 —— 而无需阅读源码。
+- 直接运行 `dashscope`（不带参数）即可启动助手。首次运行时会提示将 Expert 配置和按领域划分的 Skills 下载到 `./.agenticx/`；之后也可以运行 `agenticx expert download dashscope-sdk-expert` 安装。
 - 直接提问代替翻文档 —— 如 `dashscope expert "如何流式输出对话结果"`（一次性提问后退出）。在助手内输入 `/help` 查看可用命令；`dashscope expert --help` 查看全部形式。
-- 通过 `acli` extra 安装：`pip install "dashscope[acli]"`。需要语音/摄像头输入可加装 `acli-voice` / `acli-camera`，或直接用 `acli-all` 装齐 —— 详见[安装](#安装)一节的 extra 表格。
+- 使用 Python 3.10+ 时，通过 `acli` extra 安装：`pip install "dashscope[acli]"`。需要语音/摄像头输入可加装 `acli-voice` / `acli-camera`，或直接用 `acli-all` 装齐 —— 详见[安装](#安装)一节的 extra 表格。
 - 完整使用指南：[DashScope SDK Expert 文档](https://help.aliyun.com/zh/model-studio/dashscope-sdk-expert)。
 
 ## 命令行

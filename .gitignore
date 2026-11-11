@@ -137,7 +137,7 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-/.acli/
+/.agenticx/
 
 .qoder/
 

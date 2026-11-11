@@ -262,7 +262,7 @@ dashscope chat create -m qwen-plus --prompt "hi" --output json             # exi
 | `dashscope config get` | 读回一个键（api_key 默认打码，除非 `--reveal`） |
 | `dashscope config list` | 每个键、它的生效值，以及这个值来自哪一层 |
 
-两代命令使用相互独立的入口和实现。所有 1.x 命令都使用 `dashscope1`，包括 1.x 专有命令组（`generation`、`application`、`image-synthesis`、`multimodal-conversation`、`speech-synthesis`、`transcription`、`video-synthesis`、`image-generation`、`multimodal-embedding`）、Typer 之前的点式拼写，以及采用 1.x 参数的共享命令组。上述 2.0 命令使用 `dashscope`，按 SDK 资源树命名，因此应用调用是 `apps completions create`，不是简化的 `apps call`。在 `dashscope` 下运行 1.x 专有命令会被作为未知命令拒绝，并给出改用 `dashscope1` 的提示。不带子命令的裸 `dashscope` 会交互式打开内置的 `expert` agent。
+两代命令使用相互独立的入口和实现。所有 1.x 命令都使用 `dashscope1`，包括 1.x 专有命令组（`generation`、`application`、`image-synthesis`、`multimodal-conversation`、`speech-synthesis`、`transcription`、`video-synthesis`、`image-generation`、`multimodal-embedding`）、Typer 之前的点式拼写，以及采用 1.x 参数的共享命令组。上述 2.0 命令使用 `dashscope`，按 SDK 资源树命名，因此应用调用是 `apps completions create`，不是简化的 `apps call`。在 `dashscope` 下运行 1.x 专有命令会被作为未知命令拒绝，并给出改用 `dashscope1` 的提示。不带子命令的裸 `dashscope` 会交互式打开由 AgenticX 提供的 `expert` agent。
 
 这里*没有*的东西是一个决定，而不是一堆待办，而且这些空缺长得都一样：一条长连接的双向 socket，或者一长串 shell 加不出任何价值的 CRUD。`audio realtime run` 驱动双工 Omni socket 的**一轮**然后挂断；真正的实时麦克风——它跨多轮保持打开，并且要求音频以实时速率到达——是 Python 里的 `client.audio.realtime.connect()`，`tingwu realtime` 也是同一个故事。`agentstudio` 覆盖了你真会拿去写脚本的那个回路（agents、sessions、session events）；它另外九个顶层资源（deployments 及其 runs、environments、files、skills、vaults、memory stores、webhook endpoints、security），加上 session threads 和 session resources，仍然只有 SDK。SDK 暴露的其余东西都有命令了。
 

@@ -134,9 +134,9 @@ def expert(monkeypatch):
     def route_to_expert(command, tui=None):
         calls.append((command, tui))
 
-    module = ModuleType("dashscope.acli.expert")
+    module = ModuleType("dashscope.expert")
     module._route_to_expert = route_to_expert
-    monkeypatch.setitem(sys.modules, "dashscope.acli.expert", module)
+    monkeypatch.setitem(sys.modules, "dashscope.expert", module)
     return calls
 
 

@@ -116,12 +116,12 @@ _TOP_LEVEL_COMMANDS = {
 
 _COMMANDS_WITH_LOCAL_API_KEY = {"oss", "rl", "agentic-rl"}
 
-# Routing keyword for the bundled agent, handled in main() before typer sees
+# Routing keyword for the AgenticX agent, handled in main() before typer sees
 # argv. Deliberately NOT a member of _TOP_LEVEL_COMMANDS: that set mirrors the
 # typer-registered command groups, and `expert` is not one of them.
 _EXPERT_COMMAND = "expert"
 
-_EXPERT_USAGE = """[bold]DashScope SDK Expert[/bold] — the built-in AI assistant.
+_EXPERT_USAGE = """[bold]DashScope SDK Expert[/bold] — the AgenticX AI assistant.
 
 [bold]Usage:[/bold]
   dashscope1                     interactive assistant (TUI by default)
@@ -268,7 +268,7 @@ def _translate_help_shortcut(argv):
 
 
 def _route_to_expert(command, tui=None):
-    from dashscope.acli.expert import _route_to_expert as route
+    from dashscope.expert import _route_to_expert as route
 
     route(command, tui=tui)
 
