@@ -121,6 +121,8 @@ _COMMANDS_WITH_LOCAL_API_KEY = {"oss", "rl", "agentic-rl"}
 # typer-registered command groups, and `expert` is not one of them.
 _EXPERT_COMMAND = "expert"
 
+# Rich markup printed through a Console; `\[acli]` keeps rich from eating the
+# extra name, which would print an install command that installs no agent.
 _EXPERT_USAGE = """[bold]DashScope SDK Expert[/bold] — the AgenticX AI assistant.
 
 [bold]Usage:[/bold]
@@ -135,7 +137,7 @@ SDK subcommands (generation, ft, files, models, ...) dispatch as usual; an
 unrecognized command is reported as an error rather than treated as a
 question, so ask one with [bold]dashscope1 expert "question"[/bold].
 
-Requires [bold]pip install dashscope[acli][/bold]."""
+Requires [bold]pip install dashscope\\[acli][/bold] with Python 3.10+."""
 
 _LEGACY_COMMANDS_WITH_SIZE_OPTION = {
     "files.list",

@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+import io
 import sys
 
 import pytest
+from rich.console import Console
 
 import dashscope
 from dashscope import expert
@@ -51,6 +53,18 @@ class TtyStdin:
 
 def _make_tty(monkeypatch):
     monkeypatch.setattr(sys, "stdin", TtyStdin())
+
+
+def _render(markup: str) -> str:
+    """Render rich markup to the plain text a user would read.
+
+    Asserting on the raw string would miss markup bugs: an unescaped
+    ``[acli]`` parses as a style tag, silently dropping the extra name from
+    the command the tip tells the user to copy.
+    """
+    buffer = io.StringIO()
+    Console(file=buffer, width=200).print(markup)
+    return buffer.getvalue()
 
 
 class NonTtyStdin:
@@ -124,13 +138,21 @@ class TestRouteToExpert:
         assert captured_run["tui"] is None
         assert captured_run["module"] == "expert"
 
-    def test_failed_download_does_not_start_setup(
+    def test_failed_download_still_starts_the_agent(
         self,
         captured_run,
+        captured_err,
         fake_agenticx_modules,
         monkeypatch,
         tmp_path,
     ):
+        """An unreachable catalog must not cost the user the assistant.
+
+        The download shells out to git and clones from github.com, and the
+        offer's default answer is Yes -- exactly the branch that fails there.
+        Ending the run left the user with agenticx's error line and no word
+        from us, so the recovery command has to be printed by this side.
+        """
         monkeypatch.chdir(tmp_path)
         _make_tty(monkeypatch)
         monkeypatch.setattr("builtins.input", lambda prompt="": "")
@@ -139,6 +161,28 @@ class TestRouteToExpert:
             "_handle_example_command",
             lambda args: False,
         )
+
+        expert._route_to_expert(None)
+
+        assert captured_run["command"] is None
+        assert captured_run["module"] == "expert"
+        message = "\n".join(captured_err)
+        assert "agenticx expert download dashscope-sdk-expert" in message
+
+    def test_cancelled_offer_aborts_the_launch(
+        self,
+        captured_run,
+        monkeypatch,
+        tmp_path,
+    ):
+        """Ctrl-C at the offer is the one answer that stops the launch."""
+        monkeypatch.chdir(tmp_path)
+        _make_tty(monkeypatch)
+
+        def cancel(prompt=""):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr("builtins.input", cancel)
 
         expert._route_to_expert(None)
 
@@ -233,7 +277,7 @@ class TestOfferExampleDownload:
             calls.append,
         )
 
-        expert._maybe_offer_example_download()
+        assert expert._maybe_offer_example_download() is True
 
         assert calls == [["download", "dashscope-sdk-expert"]]
         assert not (
@@ -256,7 +300,7 @@ class TestOfferExampleDownload:
             calls.append,
         )
 
-        expert._maybe_offer_example_download()
+        assert expert._maybe_offer_example_download() is True
 
         assert not calls
         marker = tmp_path / ".agenticx" / ".dashscope-example-declined"
@@ -309,6 +353,106 @@ class TestOfferExampleDownload:
 
         monkeypatch.setattr("builtins.input", fail_input)
         expert._maybe_offer_example_download()
+
+    def test_download_failure_keeps_going_with_a_retry_hint(
+        self,
+        captured_err,
+        fake_agenticx_modules,
+        monkeypatch,
+        tmp_path,
+    ):
+        monkeypatch.chdir(tmp_path)
+        _make_tty(monkeypatch)
+        monkeypatch.setattr("builtins.input", lambda prompt="": "")
+        monkeypatch.setattr(
+            fake_agenticx_modules["examples"],
+            "_handle_example_command",
+            lambda args: False,
+        )
+
+        assert expert._maybe_offer_example_download() is True
+        assert "Retry later with" in "\n".join(captured_err)
+
+    def test_cancelled_prompt_is_the_only_false(self, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        _make_tty(monkeypatch)
+
+        def cancel(prompt=""):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr("builtins.input", cancel)
+
+        assert expert._maybe_offer_example_download() is False
+
+
+def _fake_importlib(monkeypatch, *, installed, version=None):
+    """Swap expert's importlib lookups for a stub, leaving the real one alone.
+
+    ``version=None`` reports the distribution as having no metadata, which is
+    what an editable or stubbed install looks like.
+    """
+    from types import SimpleNamespace
+
+    not_found = expert.importlib.metadata.PackageNotFoundError
+
+    def find_spec(name):
+        return object() if installed else None
+
+    def dist_version(name):
+        if version is None:
+            raise not_found(name)
+        return version
+
+    monkeypatch.setattr(
+        expert,
+        "importlib",
+        SimpleNamespace(
+            util=SimpleNamespace(find_spec=find_spec),
+            metadata=SimpleNamespace(
+                version=dist_version,
+                PackageNotFoundError=not_found,
+            ),
+        ),
+    )
+
+
+class TestImportTip:
+    """One ImportError, two causes -- only one of them needs installing."""
+
+    def test_missing_runtime_points_at_the_extra(self, monkeypatch):
+        _fake_importlib(monkeypatch, installed=False)
+
+        tip = _render(
+            expert._agenticx_import_tip(ImportError("No module named ui")),
+        )
+
+        assert "Install dashscope[acli]" in tip
+        assert "Python 3.10+" in tip
+
+    def test_installed_runtime_names_its_version(self, monkeypatch):
+        _fake_importlib(monkeypatch, installed=True, version="1.4.0")
+
+        tip = _render(
+            expert._agenticx_import_tip(
+                ImportError("cannot import name '_GUIDE_DOC'"),
+            ),
+        )
+
+        assert "1.4.0" in tip
+        assert "_GUIDE_DOC" in tip
+        # Telling this user to install the extra sends them in a circle.
+        assert "Install dashscope[acli]" not in tip
+
+    def test_installed_without_metadata_still_blames_the_mismatch(
+        self,
+        monkeypatch,
+    ):
+        _fake_importlib(monkeypatch, installed=True)
+
+        tip = _render(expert._agenticx_import_tip(ImportError("boom")))
+
+        assert "an unknown version" in tip
+        assert "Install dashscope[acli]" not in tip
 
 
 class TestMainRouting:
@@ -443,7 +587,12 @@ class TestMainRouting:
 
         # Must not fall through to typer, which has no `expert` command.
         assert not routed
-        assert "DashScope SDK Expert" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "DashScope SDK Expert" in out
+        # Asserted as rendered: rich eats an unescaped [acli] as a style tag,
+        # leaving an install command that installs no agent.
+        assert "pip install dashscope[acli]" in out
+        assert "Python 3.10+" in out
 
     def test_multiword_unknown_command_reaches_typer(self, monkeypatch):
         """A typo'd command group must error in typer, not open a chat."""

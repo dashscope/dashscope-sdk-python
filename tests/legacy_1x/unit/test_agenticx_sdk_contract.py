@@ -96,3 +96,27 @@ def test_agenticx_expert_downloader_matches_dashscope_adapter():
     assert examples._DEFAULT_EXAMPLES_REPO == (
         "https://github.com/dashscope/dashscope-agenticx-experts.git"
     )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="dashscope-agenticx requires Python 3.10+",
+)
+def test_agenticx_guide_doc_matches_dashscope_adapter():
+    """dashscope/expert.py builds the guide URL and hands it to run().
+
+    The adapter does ``_GUIDE_DOC.format(_doc_locale())`` on two private
+    names, so a rename upstream would otherwise surface only as a runtime
+    ImportError deep in the interactive path. Pinning both here turns that
+    into a test failure naming the missing symbol.
+    """
+    handlers_key = importlib.import_module(
+        "dashscope_agenticx.cli.handlers_key",
+    )
+
+    assert handlers_key._GUIDE_DOC.count("{}") == 1
+    assert handlers_key._doc_locale() in ("en", "zh")
+
+    guide_url = handlers_key._GUIDE_DOC.format(handlers_key._doc_locale())
+    assert guide_url.startswith("https://")
+    assert "{}" not in guide_url

@@ -123,6 +123,8 @@ _AGENT_MODE_FLAGS = ("--cli", "--tui")
 _AGENT_HELP = ("-h", "--help")
 
 # Rich markup, so it is printed through a Console rather than click.echo.
+# The extra name is written `\[acli]`: unescaped, rich parses it as a style
+# tag and the help prints `pip install dashscope`, which installs no agent.
 _AGENT_USAGE = """[bold]DashScope SDK Expert[/bold] — the AgenticX AI assistant.
 
 [bold]Usage:[/bold]
@@ -136,7 +138,7 @@ With no argument, piped stdin is read as a one-shot prompt. An unrecognized
 command is reported as an error rather than treated as a question, so ask
 one with [bold]dashscope expert "question"[/bold].
 
-Requires [bold]pip install dashscope[acli][/bold].
+Requires [bold]pip install dashscope\\[acli][/bold] with Python 3.10+.
 """
 
 # Root options that consume the token after them. Without this the
