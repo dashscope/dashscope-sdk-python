@@ -22,17 +22,17 @@ def fake_agenticx_modules(monkeypatch):
     handlers = ModuleType("dashscope_agenticx.cli.handlers_key")
     handlers._GUIDE_DOC = "https://example.test/{}/expert"
     handlers._doc_locale = lambda: "en"
-    examples = ModuleType("dashscope_agenticx.cli.examples")
-    examples._handle_example_command = lambda args: None
+    experts = ModuleType("dashscope_agenticx.cli.experts")
+    experts._handle_expert_command = lambda args: None
     embedded = ModuleType("dashscope_agenticx.ui.embedded")
     embedded.run = lambda **kwargs: None
     for name, module in (
         ("dashscope_agenticx.cli.handlers_key", handlers),
-        ("dashscope_agenticx.cli.examples", examples),
+        ("dashscope_agenticx.cli.experts", experts),
         ("dashscope_agenticx.ui.embedded", embedded),
     ):
         monkeypatch.setitem(sys.modules, name, module)
-    return {"embedded": embedded, "examples": examples}
+    return {"embedded": embedded, "experts": experts}
 
 
 @pytest.fixture()
@@ -107,7 +107,7 @@ class TestRouteToExpert:
 
         assert calls == [("hello", False)]
 
-    def test_interactive_run_offers_example_and_runs_agent(
+    def test_interactive_run_offers_expert_and_runs_agent(
         self,
         captured_run,
         monkeypatch,
@@ -123,7 +123,7 @@ class TestRouteToExpert:
 
         monkeypatch.setattr(
             expert,
-            "_maybe_offer_example_download",
+            "_maybe_offer_expert_download",
             offer_download,
         )
         monkeypatch.setattr(dashscope, "api_key", "sk-test")
@@ -157,8 +157,8 @@ class TestRouteToExpert:
         _make_tty(monkeypatch)
         monkeypatch.setattr("builtins.input", lambda prompt="": "")
         monkeypatch.setattr(
-            fake_agenticx_modules["examples"],
-            "_handle_example_command",
+            fake_agenticx_modules["experts"],
+            "_handle_expert_command",
             lambda args: False,
         )
 
@@ -196,7 +196,7 @@ class TestRouteToExpert:
         called: list = []
         monkeypatch.setattr(
             expert,
-            "_maybe_offer_example_download",
+            "_maybe_offer_expert_download",
             lambda: called.append(1),
         )
         monkeypatch.setattr(dashscope, "api_key", None)
@@ -214,7 +214,7 @@ class TestRouteToExpert:
     ):
         monkeypatch.setattr(
             expert,
-            "_maybe_offer_example_download",
+            "_maybe_offer_expert_download",
             lambda: None,
         )
         monkeypatch.setattr(sys, "stdin", NonTtyStdin("  怎么用 Generation  \n"))
@@ -260,8 +260,8 @@ class TestRouteToExpert:
         assert 'dashscope expert "your question"' in "\n".join(captured_err)
 
 
-class TestOfferExampleDownload:
-    def test_accept_downloads_example(
+class TestOfferExpertDownload:
+    def test_accept_downloads_expert(
         self,
         fake_agenticx_modules,
         monkeypatch,
@@ -272,16 +272,16 @@ class TestOfferExampleDownload:
         monkeypatch.setattr("builtins.input", lambda prompt="": "")
         calls: list = []
         monkeypatch.setattr(
-            fake_agenticx_modules["examples"],
-            "_handle_example_command",
+            fake_agenticx_modules["experts"],
+            "_handle_expert_command",
             calls.append,
         )
 
-        assert expert._maybe_offer_example_download() is True
+        assert expert._maybe_offer_expert_download() is True
 
         assert calls == [["download", "dashscope-sdk-expert"]]
         assert not (
-            tmp_path / ".agenticx" / ".dashscope-example-declined"
+            tmp_path / ".agenticx" / ".dashscope-expert-declined"
         ).exists()
 
     def test_decline_writes_marker_and_skips_download(
@@ -295,15 +295,15 @@ class TestOfferExampleDownload:
         monkeypatch.setattr("builtins.input", lambda prompt="": "n")
         calls: list = []
         monkeypatch.setattr(
-            fake_agenticx_modules["examples"],
-            "_handle_example_command",
+            fake_agenticx_modules["experts"],
+            "_handle_expert_command",
             calls.append,
         )
 
-        assert expert._maybe_offer_example_download() is True
+        assert expert._maybe_offer_expert_download() is True
 
         assert not calls
-        marker = tmp_path / ".agenticx" / ".dashscope-example-declined"
+        marker = tmp_path / ".agenticx" / ".dashscope-expert-declined"
         assert marker.is_file()
 
     def test_declined_marker_suppresses_future_offers(
@@ -314,7 +314,7 @@ class TestOfferExampleDownload:
         monkeypatch.chdir(tmp_path)
         _make_tty(monkeypatch)
         (tmp_path / ".agenticx").mkdir()
-        (tmp_path / ".agenticx" / ".dashscope-example-declined").write_text(
+        (tmp_path / ".agenticx" / ".dashscope-expert-declined").write_text(
             "declined\n",
             encoding="utf-8",
         )
@@ -323,7 +323,7 @@ class TestOfferExampleDownload:
             raise AssertionError("should not prompt")
 
         monkeypatch.setattr("builtins.input", fail_input)
-        expert._maybe_offer_example_download()
+        expert._maybe_offer_expert_download()
 
     def test_existing_workspace_agenticx_skips_offer(
         self,
@@ -338,7 +338,7 @@ class TestOfferExampleDownload:
             raise AssertionError("should not prompt")
 
         monkeypatch.setattr("builtins.input", fail_input)
-        expert._maybe_offer_example_download()
+        expert._maybe_offer_expert_download()
 
     def test_non_tty_skips_offer(
         self,
@@ -352,7 +352,7 @@ class TestOfferExampleDownload:
             raise AssertionError("should not prompt")
 
         monkeypatch.setattr("builtins.input", fail_input)
-        expert._maybe_offer_example_download()
+        expert._maybe_offer_expert_download()
 
     def test_download_failure_keeps_going_with_a_retry_hint(
         self,
@@ -365,12 +365,12 @@ class TestOfferExampleDownload:
         _make_tty(monkeypatch)
         monkeypatch.setattr("builtins.input", lambda prompt="": "")
         monkeypatch.setattr(
-            fake_agenticx_modules["examples"],
-            "_handle_example_command",
+            fake_agenticx_modules["experts"],
+            "_handle_expert_command",
             lambda args: False,
         )
 
-        assert expert._maybe_offer_example_download() is True
+        assert expert._maybe_offer_expert_download() is True
         assert "Retry later with" in "\n".join(captured_err)
 
     def test_cancelled_prompt_is_the_only_false(self, monkeypatch, tmp_path):
@@ -382,7 +382,7 @@ class TestOfferExampleDownload:
 
         monkeypatch.setattr("builtins.input", cancel)
 
-        assert expert._maybe_offer_example_download() is False
+        assert expert._maybe_offer_expert_download() is False
 
 
 def _fake_importlib(monkeypatch, *, installed, version=None):

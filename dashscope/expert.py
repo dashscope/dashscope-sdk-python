@@ -12,8 +12,8 @@ import dashscope
 
 err_console = Console(stderr=True)
 
-_EXPERT_EXAMPLE = "dashscope-sdk-expert"
-_DOWNLOAD_HINT = f"agenticx expert download {_EXPERT_EXAMPLE}"
+_EXPERT_PROFILE = "dashscope-sdk-expert"
+_DOWNLOAD_HINT = f"agenticx expert download {_EXPERT_PROFILE}"
 
 
 def _agenticx_import_tip(exception) -> str:
@@ -50,7 +50,7 @@ def _agenticx_import_tip(exception) -> str:
     )
 
 
-def _maybe_offer_example_download():
+def _maybe_offer_expert_download():
     """Offer the Expert profile on a first interactive run.
 
     Returns False only when the user cancels the prompt, which aborts the
@@ -64,7 +64,7 @@ def _maybe_offer_example_download():
     if not sys.stdin.isatty() or (Path.cwd() / ".agenticx").is_dir():
         return True
     try:
-        from dashscope_agenticx.cli.examples import _handle_example_command
+        from dashscope_agenticx.cli.experts import _handle_expert_command
         from dashscope_agenticx.cli.handlers_key import _GUIDE_DOC, _doc_locale
     except ImportError as exception:
         # _route_to_expert already imported handlers_key, so what is missing
@@ -88,7 +88,7 @@ def _maybe_offer_example_download():
         return False
     if answer in ("n", "no"):
         try:
-            marker = Path.cwd() / ".agenticx" / ".dashscope-example-declined"
+            marker = Path.cwd() / ".agenticx" / ".dashscope-expert-declined"
             marker.parent.mkdir(parents=True, exist_ok=True)
             marker.write_text("declined\n", encoding="utf-8")
         except OSError:
@@ -97,7 +97,7 @@ def _maybe_offer_example_download():
             f"[dim]Skipped. To customize later, run: {_DOWNLOAD_HINT}[/dim]",
         )
         return True
-    if _handle_example_command(["download", _EXPERT_EXAMPLE]) is False:
+    if _handle_expert_command(["download", _EXPERT_PROFILE]) is False:
         err_console.print(
             "[yellow]Tip:[/yellow] The expert config was not downloaded; "
             "starting the assistant without it.\n"
@@ -130,7 +130,7 @@ def _route_to_expert(command, tui=None):
             sys.exit(2)
         command = piped
 
-    if command is None and not _maybe_offer_example_download():
+    if command is None and not _maybe_offer_expert_download():
         return
 
     try:

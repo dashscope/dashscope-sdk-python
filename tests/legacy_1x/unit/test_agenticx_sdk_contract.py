@@ -85,15 +85,15 @@ def test_agenticx_embedded_api_matches_dashscope_adapter():
     reason="dashscope-agenticx requires Python 3.10+",
 )
 def test_agenticx_expert_downloader_matches_dashscope_adapter():
-    examples = importlib.import_module("dashscope_agenticx.cli.examples")
-    assert callable(examples._handle_example_command)
+    experts = importlib.import_module("dashscope_agenticx.cli.experts")
+    assert callable(experts._handle_expert_command)
     assert (
         "args"
         in inspect.signature(
-            examples._handle_example_command,
+            experts._handle_expert_command,
         ).parameters
     )
-    assert examples._DEFAULT_EXAMPLES_REPO == (
+    assert experts._DEFAULT_EXPERTS_REPO == (
         "https://github.com/dashscope/dashscope-agenticx-experts.git"
     )
 
