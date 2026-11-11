@@ -23,9 +23,8 @@ drive it end to end with ``client_demo.py``.
 import json
 import sys
 
-# The protocol version the SDK's own MCP clients negotiate. Mirrors
-# ``dashscope/acli/platforms/bailian/mcp.py`` (read-only reference); the
-# constant is inlined here to keep this server dependency-free.
+# The protocol version AgenticX MCP clients negotiate. The constant is
+# inlined here to keep this server dependency-free.
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_INFO = {"name": "dashscope-demo-mcp-server", "version": "0.1.0"}
 

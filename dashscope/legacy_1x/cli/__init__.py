@@ -116,12 +116,14 @@ _TOP_LEVEL_COMMANDS = {
 
 _COMMANDS_WITH_LOCAL_API_KEY = {"oss", "rl", "agentic-rl"}
 
-# Routing keyword for the bundled agent, handled in main() before typer sees
+# Routing keyword for the AgenticX agent, handled in main() before typer sees
 # argv. Deliberately NOT a member of _TOP_LEVEL_COMMANDS: that set mirrors the
 # typer-registered command groups, and `expert` is not one of them.
 _EXPERT_COMMAND = "expert"
 
-_EXPERT_USAGE = """[bold]DashScope SDK Expert[/bold] — the built-in AI assistant.
+# Rich markup printed through a Console; `\[acli]` keeps rich from eating the
+# extra name, which would print an install command that installs no agent.
+_EXPERT_USAGE = """[bold]DashScope SDK Expert[/bold] — the AgenticX AI assistant.
 
 [bold]Usage:[/bold]
   dashscope1                     interactive assistant (TUI by default)
@@ -135,7 +137,7 @@ SDK subcommands (generation, ft, files, models, ...) dispatch as usual; an
 unrecognized command is reported as an error rather than treated as a
 question, so ask one with [bold]dashscope1 expert "question"[/bold].
 
-Requires [bold]pip install dashscope[acli][/bold]."""
+Requires [bold]pip install dashscope\\[acli][/bold] with Python 3.10+."""
 
 _LEGACY_COMMANDS_WITH_SIZE_OPTION = {
     "files.list",
@@ -268,7 +270,7 @@ def _translate_help_shortcut(argv):
 
 
 def _route_to_expert(command, tui=None):
-    from dashscope.acli.expert import _route_to_expert as route
+    from dashscope.expert import _route_to_expert as route
 
     route(command, tui=tui)
 

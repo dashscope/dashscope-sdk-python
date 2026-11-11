@@ -134,9 +134,9 @@ def expert(monkeypatch):
     def route_to_expert(command, tui=None):
         calls.append((command, tui))
 
-    module = ModuleType("dashscope.acli.expert")
+    module = ModuleType("dashscope.expert")
     module._route_to_expert = route_to_expert
-    monkeypatch.setitem(sys.modules, "dashscope.acli.expert", module)
+    monkeypatch.setitem(sys.modules, "dashscope.expert", module)
     return calls
 
 
@@ -212,7 +212,13 @@ class TestMainDispatch:
     ):
         main(["expert", "--help"])
         assert expert == []
-        assert "DashScope SDK Expert" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "DashScope SDK Expert" in out
+        # This line is the user's only route to the extra, so it is asserted
+        # as rendered: an unescaped [acli] is eaten by rich as a style tag and
+        # the help would tell them to install a package with no agent in it.
+        assert "pip install dashscope[acli]" in out
+        assert "Python 3.10+" in out
 
     @pytest.mark.parametrize(
         "argv",

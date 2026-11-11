@@ -40,7 +40,6 @@ _VERSION_FILE = "dashscope/version.py"
 _NEUTRAL_PACKAGES = frozenset(
     {
         "_shared",
-        "acli",
         "agentstudio",
         "applications",
         "devkit",
@@ -78,9 +77,6 @@ _COMPATIBILITY_IMPORTS = {
 # ``__version__`` bindings that are not the distribution version.
 _OTHER_VERSION_OWNERS = frozenset(
     {
-        # acli versions itself and is a one-way sync copy of the
-        # agenticCLI repo, so it must stay independent.
-        "dashscope/acli/__init__.py",
         # The version of the vendored error-registry data.
         "dashscope/_error_registry.py",
     },

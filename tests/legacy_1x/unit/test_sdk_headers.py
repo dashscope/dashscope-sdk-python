@@ -6,9 +6,6 @@
 import pytest
 
 from dashscope import __version__ as sdk_version
-from dashscope.acli import SDK_SESSION_ID as ACLI_SESSION_ID
-from dashscope.acli import __version__ as acli_version
-from dashscope.acli.providers.tongyi import TongyiProvider
 from dashscope.legacy_1x.common.utils import _SDK_SESSION_ID, get_sdk_headers
 
 CLIENT_HEADER = "x-dashscope-sdk-client"
@@ -19,7 +16,6 @@ DISABLE_ENV = "DASHSCOPE_DISABLE_SDK_HEADERS"
 #   - "python-sdk": SDK default (_SDK_CLIENT in _shared/_sdk_ident.py)
 #   - "python-cli": dashscope/cli/__init__.py calls
 #                   set_sdk_client("python-cli") at CLI process startup
-#   - "acli":       acli/providers/tongyi.py builds its own header
 # module rules (see get_api_module in common/utils.py):
 #   - service calls (BaseApi/BaseAioApi/BaseAsyncApi/BaseAsyncAioApi.call):
 #     first package segment of the API class, e.g. aigc/audio/embeddings/
@@ -27,9 +23,7 @@ DISABLE_ENV = "DASHSCOPE_DISABLE_SDK_HEADERS"
 #   - task management (fetch/cancel/wait/list on /tasks/* endpoints): "tasks"
 #   - agentstudio: passed explicitly by agentstudio/transport.py
 #   - realtime/dialog WebSocket: passed explicitly where headers are built
-#   - acli side: TongyiProvider ctor arg, defaults to "app"
 SDK_MODULES = ["", "agentstudio"]
-ACLI_MODULES = ["", "app"]
 
 
 @pytest.fixture(autouse=True)
@@ -78,34 +72,10 @@ def test_session_id_has_one_source_across_stacks():
     assert leaf() == _SDK_SESSION_ID
 
 
-def test_acli_client_header():
-    # pylint: disable=protected-access
-    print("\n=== acli: x-dashscope-sdk-client ===")
-    default = TongyiProvider(model="qwen-plus", api_key="sk-x")
-    value = default._get_headers()[CLIENT_HEADER]
-    print(f"module=(default app)   -> {value}")
-    _check_client_header(value, "acli", acli_version, "app")
-    for module in ACLI_MODULES:
-        provider = TongyiProvider(
-            model="qwen-plus",
-            api_key="sk-x",
-            module=module,
-        )
-        headers = provider._get_headers()
-        value = headers[CLIENT_HEADER]
-        print(f"module={module or '(none)':<15} -> {value}")
-        _check_client_header(value, "acli", acli_version, module)
-        assert headers[SESSION_HEADER] == ACLI_SESSION_ID
-
-
 def test_sdk_headers_disabled(monkeypatch):
-    # pylint: disable=protected-access
     monkeypatch.setenv(DISABLE_ENV, "1")
     assert not get_sdk_headers()
     assert not get_sdk_headers(module="agentstudio")
-    provider = TongyiProvider(model="qwen-plus", api_key="sk-x", module="app")
-    assert CLIENT_HEADER not in provider._get_headers()
-    assert SESSION_HEADER not in provider._get_headers()
 
 
 def test_python_cli_client_header():
@@ -147,51 +117,6 @@ def test_cli_import_marks_process():
     )
     assert result.returncode == 0, result.stderr
     print(f"\nCLI process -> {result.stdout.strip()}")
-
-
-def _embedded_config(module):
-    from types import SimpleNamespace
-
-    return SimpleNamespace(
-        provider="tongyi",
-        model="qwen3.8-max",
-        tongyi_api_key="sk-x",
-        base_url="",
-        protocol="openai",
-        timeout=60,
-        fallback_providers=[],
-        anthropic_api_key="",
-        openai_api_key="",
-        _embedded_module=module,
-    )
-
-
-def _provider_for(config, monkeypatch):
-    # pylint: disable=protected-access
-    monkeypatch.setattr(
-        "dashscope.acli.extensions.find_provider",
-        lambda *a, **k: None,
-    )
-    from dashscope.acli.providers import _create_provider
-    from dashscope.acli.providers.profile import build_profiles_from_config
-
-    profile = build_profiles_from_config(config)[0]
-    return _create_provider(profile)
-
-
-def test_embedded_module_segment_flows_to_header(monkeypatch):
-    # pylint: disable=protected-access
-    provider = _provider_for(_embedded_config("expert"), monkeypatch)
-    value = provider._get_headers()[CLIENT_HEADER]
-    print(f"\nembedded expert -> {value}")
-    _check_client_header(value, "acli", acli_version, "expert")
-
-
-def test_embedded_module_defaults_to_app(monkeypatch):
-    # pylint: disable=protected-access
-    provider = _provider_for(_embedded_config(""), monkeypatch)
-    value = provider._get_headers()[CLIENT_HEADER]
-    _check_client_header(value, "acli", acli_version, "app")
 
 
 # ---------------------------------------------------------------------------

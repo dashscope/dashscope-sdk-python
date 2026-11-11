@@ -1,133 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Tests for the dashscope → acli agent route.
-
-Covers:
-- _cleanup_legacy_expert_sync: removes old managed-marker files from ~/.acli
-  without touching user-owned files.
-- _route_to_expert: runs embedded acli with the global -k api key passed
-  through, and offers the example download only for interactive no-arg runs.
-  On non-TTY stdin, piped text becomes a one-shot prompt and an empty pipe
-  exits 2 telling the user the `expert` keyword form.
-- _maybe_offer_example_download: accept/decline/marker/workspace gating.
-- main(): only a bare `dashscope` or an explicit `expert` keyword reach the
-  agent; everything else is dispatched to typer so typos, stray options and
-  unrecognized commands produce a real error.
-"""
-# pylint: disable=protected-access,redefined-outer-name,unused-argument
+"""Tests for legacy CLI Expert routing."""
+# pylint: disable=protected-access
 
 from __future__ import annotations
 
 import sys
-from pathlib import Path
-
-import pytest
 
 import dashscope
-from dashscope.acli import expert
+from dashscope import expert
 from dashscope.legacy_1x import cli
 
 
-@pytest.fixture()
-def fake_config_dir(tmp_path, monkeypatch):
-    cfg = tmp_path / "home-acli"
-    cfg.mkdir()
-    monkeypatch.setattr("dashscope.acli.config.CONFIG_DIR", cfg)
-    return cfg
-
-
-@pytest.fixture()
-def captured_run(monkeypatch):
-    from dashscope.acli.ui import embedded
-
-    captured: dict = {}
-    monkeypatch.setattr(embedded, "run", lambda **kw: captured.update(kw))
-    return captured
-
-
-class TtyStdin:
-    def isatty(self):
-        return True
-
-
-def _make_tty(monkeypatch):
-    monkeypatch.setattr(sys, "stdin", TtyStdin())
-
-
-class NonTtyStdin:
-    """Piped stdin, optionally empty or unreadable."""
-
-    def __init__(self, data=""):
-        self._data = data
-
-    def isatty(self):
-        return False
-
-    def read(self):
-        if self._data is None:
-            raise OSError("stdin unavailable")
-        return self._data
-
-
-@pytest.fixture()
-def captured_err(monkeypatch):
-    lines: list = []
-
-    class Recorder:
-        def print(self, *args, **kwargs):
-            lines.append(" ".join(str(a) for a in args))
-
-    monkeypatch.setattr(expert, "err_console", Recorder())
-    return lines
-
-
-class TestCleanupLegacyExpertSync:
-    def test_removes_managed_files(self, fake_config_dir):
-        skills = fake_config_dir / "skills"
-        skills.mkdir()
-        managed_skill = skills / "diagnose.md"
-        managed_skill.write_text(
-            f"skill body\n\n{expert._MD_MARKER}\n",
-            encoding="utf-8",
-        )
-        refs = fake_config_dir / "references"
-        refs.mkdir()
-        managed_ref = refs / "python-sdk.md"
-        managed_ref.write_text(
-            f"old index\n\n{expert._MD_MARKER}\n",
-            encoding="utf-8",
-        )
-        build = fake_config_dir / "build_sdk_index.py"
-        build.write_text(f"# script\n{expert._PY_MARKER}\n", encoding="utf-8")
-
-        expert._cleanup_legacy_expert_sync()
-
-        assert not managed_skill.exists()
-        assert not managed_ref.exists()
-        assert not build.exists()
-
-    def test_user_files_untouched(self, fake_config_dir):
-        skills = fake_config_dir / "skills"
-        skills.mkdir()
-        user_skill = skills / "translate.md"
-        user_skill.write_text("my own skill", encoding="utf-8")
-        refs = fake_config_dir / "references"
-        refs.mkdir()
-        user_ref = refs / "notes.md"
-        user_ref.write_text("my own notes", encoding="utf-8")
-        build = fake_config_dir / "build_sdk_index.py"
-        build.write_text("# my own script\n", encoding="utf-8")
-
-        expert._cleanup_legacy_expert_sync()
-
-        assert user_skill.read_text(encoding="utf-8") == "my own skill"
-        assert user_ref.read_text(encoding="utf-8") == "my own notes"
-        assert build.read_text(encoding="utf-8") == "# my own script\n"
-
-    def test_missing_dirs_are_noop(self, fake_config_dir):
-        expert._cleanup_legacy_expert_sync()  # no skills/references dirs at all
-
-
-class TestRouteToExpert:
+class TestLegacyExpertRoute:
     def test_legacy_entry_delegates_to_the_shared_route(self, monkeypatch):
         calls = []
         monkeypatch.setattr(
@@ -139,223 +23,6 @@ class TestRouteToExpert:
         cli._route_to_expert("hello", tui=False)
 
         assert calls == [("hello", False)]
-
-    def test_interactive_run_offers_example_and_runs_agent(
-        self,
-        fake_config_dir,
-        captured_run,
-        monkeypatch,
-        tmp_path,
-    ):
-        monkeypatch.chdir(tmp_path)
-        _make_tty(monkeypatch)
-        offered: list = []
-        monkeypatch.setattr(
-            expert,
-            "_maybe_offer_example_download",
-            lambda: offered.append(1),
-        )
-        monkeypatch.setattr(dashscope, "api_key", "sk-test")
-
-        expert._route_to_expert(None)
-
-        assert offered == [1]
-        assert captured_run["app_name"] == "DashScope SDK Expert"
-        assert captured_run["prompt_symbol"] == "dashscope> "
-        assert captured_run["api_key"] == "sk-test"
-        assert captured_run["command"] is None
-
-    def test_one_shot_skips_offer_and_passes_command(
-        self,
-        fake_config_dir,
-        captured_run,
-        monkeypatch,
-    ):
-        called: list = []
-        monkeypatch.setattr(
-            expert,
-            "_maybe_offer_example_download",
-            lambda: called.append(1),
-        )
-        monkeypatch.setattr(dashscope, "api_key", None)
-
-        expert._route_to_expert("Generation.call 怎么用？")
-
-        assert not called
-        assert captured_run["command"] == "Generation.call 怎么用？"
-        assert captured_run["api_key"] is None
-
-    def test_cleanup_runs_before_agent(
-        self,
-        fake_config_dir,
-        captured_run,
-        monkeypatch,
-    ):
-        monkeypatch.setattr(
-            expert,
-            "_maybe_offer_example_download",
-            lambda: None,
-        )
-        skills = fake_config_dir / "skills"
-        skills.mkdir()
-        managed = skills / "diagnose.md"
-        managed.write_text(f"x\n\n{expert._MD_MARKER}\n", encoding="utf-8")
-
-        expert._route_to_expert("hi")
-
-        assert not managed.exists()
-        assert captured_run["command"] == "hi"
-
-    def test_piped_stdin_becomes_a_one_shot_prompt(
-        self,
-        fake_config_dir,
-        captured_run,
-        monkeypatch,
-    ):
-        monkeypatch.setattr(
-            expert,
-            "_maybe_offer_example_download",
-            lambda: None,
-        )
-        monkeypatch.setattr(sys, "stdin", NonTtyStdin("  怎么用 Generation  \n"))
-
-        expert._route_to_expert(None)
-
-        assert captured_run["command"] == "怎么用 Generation"
-
-    def test_empty_pipe_names_the_expert_keyword(
-        self,
-        fake_config_dir,
-        captured_run,
-        captured_err,
-        monkeypatch,
-    ):
-        """The refusal is the user's only recovery instruction.
-
-        It told people to run `dashscope "your question"` for two releases
-        after that form stopped routing to the agent, so the one message that
-        could have fixed their command line sent them to `No such command`.
-        """
-        monkeypatch.setattr(sys, "stdin", NonTtyStdin("   \n"))
-
-        with pytest.raises(SystemExit) as exc:
-            expert._route_to_expert(None)
-
-        assert exc.value.code == 2
-        assert not captured_run
-        message = "\n".join(captured_err)
-        assert 'dashscope expert "your question"' in message
-        assert 'e.g. dashscope "' not in message
-
-    def test_unreadable_stdin_refuses_the_same_way(
-        self,
-        fake_config_dir,
-        captured_err,
-        monkeypatch,
-    ):
-        monkeypatch.setattr(sys, "stdin", NonTtyStdin(None))
-
-        with pytest.raises(SystemExit) as exc:
-            expert._route_to_expert(None)
-
-        assert exc.value.code == 2
-        assert 'dashscope expert "your question"' in "\n".join(captured_err)
-
-
-class TestOfferExampleDownload:
-    def test_accept_downloads_example(
-        self,
-        fake_config_dir,
-        monkeypatch,
-        tmp_path,
-    ):
-        monkeypatch.chdir(tmp_path)
-        _make_tty(monkeypatch)
-        monkeypatch.setattr("builtins.input", lambda prompt="": "")
-        calls: list = []
-        monkeypatch.setattr(
-            "dashscope.acli.cli.examples._handle_example_command",
-            calls.append,
-        )
-
-        expert._maybe_offer_example_download()
-
-        assert calls == [["download", "dashscope-sdk-expert"]]
-        assert not (
-            tmp_path / ".acli" / ".dashscope-example-declined"
-        ).exists()
-
-    def test_decline_writes_marker_and_skips_download(
-        self,
-        fake_config_dir,
-        monkeypatch,
-        tmp_path,
-    ):
-        monkeypatch.chdir(tmp_path)
-        _make_tty(monkeypatch)
-        monkeypatch.setattr("builtins.input", lambda prompt="": "n")
-        calls: list = []
-        monkeypatch.setattr(
-            "dashscope.acli.cli.examples._handle_example_command",
-            calls.append,
-        )
-
-        expert._maybe_offer_example_download()
-
-        assert not calls
-        marker = tmp_path / ".acli" / ".dashscope-example-declined"
-        assert marker.is_file()
-
-    def test_declined_marker_suppresses_future_offers(
-        self,
-        fake_config_dir,
-        monkeypatch,
-        tmp_path,
-    ):
-        monkeypatch.chdir(tmp_path)
-        _make_tty(monkeypatch)
-        (tmp_path / ".acli").mkdir()
-        (tmp_path / ".acli" / ".dashscope-example-declined").write_text(
-            "declined\n",
-            encoding="utf-8",
-        )
-
-        def fail_input(prompt=""):
-            raise AssertionError("should not prompt")
-
-        monkeypatch.setattr("builtins.input", fail_input)
-        expert._maybe_offer_example_download()
-
-    def test_existing_workspace_acli_skips_offer(
-        self,
-        fake_config_dir,
-        monkeypatch,
-        tmp_path,
-    ):
-        monkeypatch.chdir(tmp_path)
-        (tmp_path / ".acli").mkdir()
-        _make_tty(monkeypatch)
-
-        def fail_input(prompt=""):
-            raise AssertionError("should not prompt")
-
-        monkeypatch.setattr("builtins.input", fail_input)
-        expert._maybe_offer_example_download()
-
-    def test_non_tty_skips_offer(
-        self,
-        fake_config_dir,
-        monkeypatch,
-        tmp_path,
-    ):
-        monkeypatch.chdir(tmp_path)
-        # pytest's stdin is already non-TTY (isatty() -> False)
-
-        def fail_input(prompt=""):
-            raise AssertionError("should not prompt")
-
-        monkeypatch.setattr("builtins.input", fail_input)
-        expert._maybe_offer_example_download()
 
 
 class TestMainRouting:
@@ -490,7 +157,12 @@ class TestMainRouting:
 
         # Must not fall through to typer, which has no `expert` command.
         assert not routed
-        assert "DashScope SDK Expert" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "DashScope SDK Expert" in out
+        # Asserted as rendered: rich eats an unescaped [acli] as a style tag,
+        # leaving an install command that installs no agent.
+        assert "pip install dashscope[acli]" in out
+        assert "Python 3.10+" in out
 
     def test_multiword_unknown_command_reaches_typer(self, monkeypatch):
         """A typo'd command group must error in typer, not open a chat."""
@@ -579,37 +251,3 @@ class TestMainRouting:
 
         assert not routed
         assert invoked == [True]
-
-
-class TestBundledExample:
-    def test_expert_example_bundled(self):
-        examples_dir = (
-            Path(dashscope.acli.__file__).resolve().parent / "examples"
-        )
-        expert = examples_dir / "dashscope-sdk-expert"
-        assert (expert / ".acli" / "system-prompt.md").is_file()
-        assert (expert / ".acli" / "skills" / "text-generation.md").is_file()
-        assert (expert / ".acli" / "skills" / "cli.md").is_file()
-        assert (expert / ".acli" / "config.toml").is_file()
-        assert (expert / "README.md").is_file()
-
-    def test_example_download_merges_into_workspace(
-        self,
-        tmp_path,
-        monkeypatch,
-    ):
-        from dashscope.acli.cli import examples as examples_cli
-
-        # The vendored acli prefers <repo-root>/examples (upstream dev-mode
-        # layout); in this repo that tree holds the SDK examples, not the
-        # bundled acli ones, so pin the lookup to the packaged directory.
-        bundled = Path(dashscope.acli.__file__).resolve().parent / "examples"
-        monkeypatch.setattr(examples_cli, "_get_examples_dir", lambda: bundled)
-
-        examples_cli._handle_example_command(
-            ["download", "dashscope-sdk-expert", "--target", str(tmp_path)],
-        )
-
-        assert (tmp_path / ".acli" / "system-prompt.md").is_file()
-        assert (tmp_path / ".acli" / "skills" / "sdk-example.md").is_file()
-        assert (tmp_path / ".acli" / "skills" / "cli.md").is_file()

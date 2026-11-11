@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Alibaba, Inc. and its affiliates.
-"""Route ``dashscope`` to the SDK-shaped v2 tree or the bundled agent.
+"""Route ``dashscope`` to the SDK-shaped v2 tree or the AgenticX agent.
 
 The 1.x CLI has its own ``dashscope1`` entry point. Recognizing its command
 names here only produces a migration hint; no legacy implementation is
@@ -116,14 +116,16 @@ NEW_COMMANDS = frozenset(
     },
 )
 
-# The bundled agent's routing keyword, the flags that pick its interactive
+# The AgenticX agent's routing keyword, the flags that pick its interactive
 # mode, and the help request it answers itself.
 _AGENT_COMMAND = "expert"
 _AGENT_MODE_FLAGS = ("--cli", "--tui")
 _AGENT_HELP = ("-h", "--help")
 
 # Rich markup, so it is printed through a Console rather than click.echo.
-_AGENT_USAGE = """[bold]DashScope SDK Expert[/bold] — the built-in AI assistant.
+# The extra name is written `\[acli]`: unescaped, rich parses it as a style
+# tag and the help prints `pip install dashscope`, which installs no agent.
+_AGENT_USAGE = """[bold]DashScope SDK Expert[/bold] — the AgenticX AI assistant.
 
 [bold]Usage:[/bold]
   dashscope                     interactive assistant (TUI by default)
@@ -136,7 +138,7 @@ With no argument, piped stdin is read as a one-shot prompt. An unrecognized
 command is reported as an error rather than treated as a question, so ask
 one with [bold]dashscope expert "question"[/bold].
 
-Requires [bold]pip install dashscope[acli][/bold].
+Requires [bold]pip install dashscope\\[acli][/bold] with Python 3.10+.
 """
 
 # Root options that consume the token after them. Without this the
@@ -283,7 +285,7 @@ def _reject_legacy(argv: Sequence[str]) -> None:
 
 
 def _run_agent(argv: Sequence[str]) -> None:
-    """Hand the invocation to the bundled agent, bypassing the 1.x tree."""
+    """Hand the invocation to AgenticX, bypassing the 1.x tree."""
     tui = True
     tokens: List[str] = []
     for arg in _without_api_key_options(argv):
@@ -308,7 +310,7 @@ def _run_agent(argv: Sequence[str]) -> None:
 
     # Keep the agent and its optional dependencies off every other command.
     # pylint: disable-next=import-outside-toplevel
-    from dashscope.acli.expert import _route_to_expert
+    from dashscope.expert import _route_to_expert
 
     _route_to_expert(" ".join(tokens).strip() or None, tui=tui)
 

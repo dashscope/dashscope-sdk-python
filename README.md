@@ -26,7 +26,7 @@ The DashScope Python SDK is the official client for [Alibaba Cloud Model Studio 
 pip install -U dashscope
 ```
 
-The base install covers SDK API calls, the `dashscope` CLI command, Agentic RL fine-tuning and the local tokenizer. Python 3.9+ is required. Optional feature groups all belong to the bundled AI assistant:
+The base install covers SDK API calls, the `dashscope` CLI command, Agentic RL fine-tuning and the local tokenizer. Python 3.9+ is required. Optional feature groups configure the AI assistant provided by `dashscope-agenticx`; the assistant requires Python 3.10+:
 
 | Extra | Provides | Install |
 |-------|----------|---------|
@@ -511,11 +511,11 @@ For the latest model list, visit the [Model Studio model plaza](https://bailian.
 
 ## AI Assistant: DashScope SDK Expert
 
-The SDK ships with an interactive AI assistant, **DashScope SDK Expert**, built on the bundled Agentic CLI (`dashscope/acli`). It answers SDK/API questions, generates runnable examples, shows CLI usage, and diagnoses errors right in your terminal.
+The SDK integrates an interactive AI assistant, **DashScope SDK Expert**, powered by the optional `dashscope-agenticx` dependency. It answers SDK/API questions, generates runnable examples, shows CLI usage, and diagnoses errors right in your terminal.
 
-- Run `dashscope` with no arguments to start the assistant. On first run it offers to install the knowledge pack (per-domain quick-reference skills: text, multimodal, speech, retrieval, fine-tuning, agent, cli), so guidance comes from the SDK's public interfaces — parameters, outputs, error codes — without reading the source.
+- Run `dashscope` with no arguments to start the assistant. On first run it offers to download the Expert profile and per-domain skills into `./.agenticx/`; the same profile can be installed later with `agenticx expert download dashscope-sdk-expert`.
 - Ask it instead of reading docs — e.g. `dashscope expert "how do I stream chat output"` (asks once and exits). Type `/help` inside the assistant for available commands; `dashscope expert --help` shows all forms.
-- Install with the `acli` extra: `pip install "dashscope[acli]"`. Add `acli-voice` / `acli-camera` for voice and camera input, or `acli-all` for everything — see the [extras table](#installation).
+- With Python 3.10+, install the `acli` extra: `pip install "dashscope[acli]"`. Add `acli-voice` / `acli-camera` for voice and camera input, or `acli-all` for everything — see the [extras table](#installation).
 - Full walkthrough: [DashScope SDK Expert guide](https://help.aliyun.com/en/model-studio/dashscope-sdk-expert).
 
 ## Command line

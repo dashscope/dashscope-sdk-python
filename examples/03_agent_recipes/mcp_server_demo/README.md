@@ -18,8 +18,7 @@ tools. This folder shows both sides so the demo is self-contained:
 - `tools/list` -> the tool schemas the agent may call (`add`, `echo`)
 - `tools/call` -> runs one tool and returns its `content` (or `isError`)
 
-The protocol version (`2024-11-05`) matches the SDK's own MCP clients;
-see `dashscope/acli/platforms/bailian/mcp.py` (read-only reference).
+The protocol version (`2024-11-05`) matches AgenticX MCP clients.
 
 ## Run it
 
