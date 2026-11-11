@@ -18,8 +18,10 @@ from dashscope.errors import (
     APIConnectionError,
     APITimeoutError,
     BadRequestError,
+    DashScopeError,
 )
 from dashscope.resources.audio._ws_session import WsSessionBase
+from dashscope.transport.ws import WsEventError
 
 
 class FrameSocket:
@@ -349,6 +351,264 @@ def test_close_waits_for_inflight_send_before_sending_control_frame(resource):
         sender.join(3)
         if closer.ident is not None:
             closer.join(3)
+        session.close()
+        local.close()
+
+
+def test_close_preserves_handshake_budget_after_waiting_for_send(resource):
+    entered, detached, release = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+    failures = []
+
+    class DelayedSocket(WebSocket):
+        def send(self, payload, opcode=1):
+            if opcode == 1:
+                entered.set()
+                assert release.wait(3)
+            return super().send(payload, opcode)
+
+    local, peer = socket.socketpair()
+    ws, remote = DelayedSocket(), WebSocket()
+    ws.sock, ws.connected = local, True
+    remote.sock, remote.connected = peer, True
+    peer.settimeout(3)
+    session = resource.connect(
+        model="route",
+        connector=lambda u, h: ws,
+    ).connect()
+    lock = session._lock
+
+    class ObservedLock:
+        def __enter__(self):
+            return lock.__enter__()
+
+        def __exit__(self, *args):
+            if session._ws is None:
+                detached.set()
+            return lock.__exit__(*args)
+
+    session._lock = ObservedLock()
+
+    def send():
+        try:
+            session.send_event({"type": "custom", "event_id": "last"})
+        except BaseException as exc:
+            failures.append(exc)
+
+    sender = threading.Thread(target=send, daemon=True)
+    closer = threading.Thread(target=session.close, daemon=True)
+    try:
+        sender.start()
+        assert entered.wait(2)
+        closer.start()
+        assert detached.wait(2)
+        # Deliberately consume the send-wait budget, then delay the peer ACK.
+        assert not release.wait(0.65)
+        release.set()
+        assert remote.recv_frame().opcode == 1
+        final = remote.recv_frame()
+        assert final.opcode == 8
+        assert final.data == b"\x03\xe8"
+        peer.settimeout(0.6)
+        with pytest.raises(socket.timeout):
+            peer.recv(1)  # Must stay open for this part of the handshake.
+        remote.send_close()
+        sender.join(2)
+        closer.join(2)
+        assert not sender.is_alive()
+        assert not closer.is_alive()
+        assert failures == []
+        assert local.fileno() == -1
+    finally:
+        release.set()
+        remote.shutdown()
+        sender.join(3)
+        if closer.ident is not None:
+            closer.join(3)
+        session.close()
+        local.close()
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["terminal", "fatal", "malformed", "eof", "timeout"],
+)
+def test_receive_cleanup_does_not_invert_send_and_state_locks(resource, kind):
+    read, processing, sending = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+    send_errors, receive_errors, results = [], [], []
+    live = resource is resource._client.audio.live
+    terminal = "session.closed" if live else "session.finished"
+    raw = {
+        "terminal": json.dumps(
+            {"type": terminal, "reason": "close_requested"},
+        ),
+        "fatal": '{"type":"error","error":{"type":"server_error"}}',
+        "malformed": "not JSON",
+        "eof": "",
+        "timeout": "",
+    }[kind]
+
+    class ObservedSocket(WebSocket):
+        def recv(self):
+            try:
+                if kind == "timeout":
+                    raise WebSocketTimeoutException("read timed out")
+                return super().recv()
+            finally:
+                read.set()
+
+    local, peer = socket.socketpair()
+    ws, remote = ObservedSocket(), WebSocket()
+    ws.sock, ws.connected = local, True
+    remote.sock, remote.connected = peer, True
+    peer.settimeout(3)
+    session = resource.connect(
+        model="route",
+        connector=lambda u, h: ws,
+    ).connect()
+    lock = session._lock
+
+    class ObservedLock:
+        receive_entries = 0
+
+        def __enter__(self):
+            result = lock.__enter__()
+            if threading.current_thread() is receiver and read.is_set():
+                self.receive_entries += 1
+                # Live checks ownership once before mapping transport errors.
+                cleanup_entry = 2 if live and kind == "timeout" else 1
+                if self.receive_entries == cleanup_entry:
+                    processing.set()
+                    try:
+                        assert sending.wait(2)
+                    except BaseException:
+                        lock.release()  # __exit__ is not called if entry fails.
+                        raise
+            return result
+
+        def __exit__(self, *args):
+            return lock.__exit__(*args)
+
+    session._lock = ObservedLock()
+
+    def send():
+        try:
+            assert processing.wait(2)
+            with session._send_lock:
+                sending.set()
+                session.send_event({"type": "custom"})
+        except BaseException as exc:
+            send_errors.append(exc)
+
+    def receive():
+        try:
+            results.append(session.recv_event())
+        except BaseException as exc:
+            receive_errors.append(exc)
+
+    sender = threading.Thread(target=send, daemon=True)
+    receiver = threading.Thread(target=receive, daemon=True)
+    try:
+        if kind != "timeout":
+            remote.send(raw)
+        sender.start()
+        receiver.start()
+        final = remote.recv_frame()
+        # No application frame after the terminal event.
+        assert final.opcode == 8
+        assert final.data == b"\x03\xe8"
+        remote.send_close()
+        sender.join(2)
+        receiver.join(2)
+        assert not sender.is_alive()
+        assert not receiver.is_alive()
+        assert len(send_errors) == 1
+        assert isinstance(send_errors[0], RuntimeError)
+        if kind == "terminal":
+            assert receive_errors == []
+            assert results[0]["type"] == terminal
+        elif kind == "eof" and not live:
+            assert receive_errors == []
+            assert results == [None]
+        else:
+            expected = {
+                "fatal": DashScopeError,
+                "malformed": WsEventError if live else ValueError,
+                "eof": APIConnectionError,
+                "timeout": APITimeoutError,
+            }[kind]
+            assert len(receive_errors) == 1
+            assert isinstance(receive_errors[0], expected)
+        assert local.fileno() == -1
+    finally:
+        remote.shutdown()
+        sender.join(3)
+        receiver.join(3)
+        session.close()
+        local.close()
+
+
+def test_connect_failure_cleanup_releases_state_lock_before_close(resource):
+    configuring, sending = threading.Event(), threading.Event()
+    connect_errors, send_errors = [], []
+    failure = RuntimeError("cannot configure socket")
+
+    class FailedSocket(WebSocket):
+        def settimeout(self, timeout):
+            configuring.set()
+            assert sending.wait(2)
+            raise failure
+
+    local, peer = socket.socketpair()
+    ws, remote = FailedSocket(), WebSocket()
+    ws.sock, ws.connected = local, True
+    remote.sock, remote.connected = peer, True
+    peer.settimeout(3)
+    session = resource.connect(model="route", connector=lambda u, h: ws)
+
+    def connect():
+        try:
+            session.connect()
+        except BaseException as exc:
+            connect_errors.append(exc)
+
+    def send():
+        try:
+            assert configuring.wait(2)
+            with session._send_lock:
+                sending.set()
+                session.send_event({"type": "custom"})
+        except BaseException as exc:
+            send_errors.append(exc)
+
+    opener = threading.Thread(target=connect, daemon=True)
+    sender = threading.Thread(target=send, daemon=True)
+    try:
+        sender.start()
+        opener.start()
+        final = remote.recv_frame()
+        assert final.opcode == 8
+        assert final.data == b"\x03\xe8"
+        remote.send_close()
+        opener.join(2)
+        sender.join(2)
+        assert not opener.is_alive()
+        assert not sender.is_alive()
+        assert connect_errors == [failure]
+        assert len(send_errors) == 1
+        assert isinstance(send_errors[0], RuntimeError)
+        assert local.fileno() == -1
+    finally:
+        remote.shutdown()
+        opener.join(3)
+        sender.join(3)
         session.close()
         local.close()
 

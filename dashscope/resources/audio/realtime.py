@@ -185,6 +185,7 @@ class RealtimeSession(WsSessionBase):
             try:
                 self._send_raw(ws, raw)
             except BaseException as exc:
+                closing_ws = None
                 with self._lock:
                     if ws is self._ws and generation == self._generation:
                         _logger.error(
@@ -198,7 +199,8 @@ class RealtimeSession(WsSessionBase):
                             self._pending_response_ids.remove(
                                 payload["event_id"],
                             )
-                        self.close()
+                        closing_ws = self._detach_socket()
+                self._close_socket(closing_ws)
                 raise
 
     def update_session(
@@ -658,6 +660,7 @@ class RealtimeSession(WsSessionBase):
                         return None
                     raise RuntimeError("realtime session is not open")
             failure = None
+            closing_ws = None
             received_on_current_connection = False
             try:
                 try:
@@ -674,7 +677,7 @@ class RealtimeSession(WsSessionBase):
                         return None
                     received_on_current_connection = True
                     if raw is None or raw == "" or raw == b"":
-                        self.close()
+                        closing_ws = self._detach_socket()
                         self._check_unfinished()
                         _logger.debug(
                             "Realtime connection closed, request_id=%s",
@@ -690,7 +693,7 @@ class RealtimeSession(WsSessionBase):
                     self._track_event(event)
                     if event.get("type") == "session.finished":
                         self._finished = True
-                        self.close()
+                        closing_ws = self._detach_socket()
                         self._check_unfinished()
                     elif event.get("type") == "error":
                         error = event.get("error")
@@ -727,7 +730,7 @@ class RealtimeSession(WsSessionBase):
                             ):
                                 self._pending_response_ids.remove(request_id)
                         if not recoverable or self._finish_requested:
-                            self.close()
+                            closing_ws = self._detach_socket()
             except BaseException as exc:
                 with self._lock:
                     if generation == self._generation and (
@@ -739,8 +742,10 @@ class RealtimeSession(WsSessionBase):
                             self._request_id_for_log(),
                         )
                     if ws is self._ws and generation == self._generation:
-                        self.close()
+                        closing_ws = self._detach_socket()
                 raise
+            finally:
+                self._close_socket(closing_ws)
             # Malformed errors require cleanup; parsed request errors may recover.
             if failure is not None:
                 raise failure

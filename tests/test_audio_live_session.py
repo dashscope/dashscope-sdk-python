@@ -1478,7 +1478,7 @@ def test_minimal_live_example_waits_for_configuration_and_prints_reply(
 
 
 @pytest.mark.parametrize("override", [False, True])
-def test_minimal_live_example_uses_successful_environment_or_explicit_overrides(
+def test_minimal_live_example_uses_sdk_gateway_or_explicit_overrides(
     client,
     monkeypatch,
     override,
@@ -1529,8 +1529,8 @@ def test_minimal_live_example_uses_successful_environment_or_explicit_overrides(
     assert seen["url"] == (
         "wss://live.example.test/api-ws/v1/realtime?model=custom-live-route"
         if override
-        else "wss://poc-01.cn-beijing.pre-maas.aliyuncs.com"
-        "/api-ws/v1/realtime?model=pre-qwen-live-test"
+        else "wss://ws-test.cn-beijing.maas.aliyuncs.com"
+        "/api-ws/v1/realtime?model=your-live-route-model"
     )
     assert seen["client"]["api_key"] == ("sk-test-live" if override else None)
     session_config = json.loads(ws.sent[0])["session"]

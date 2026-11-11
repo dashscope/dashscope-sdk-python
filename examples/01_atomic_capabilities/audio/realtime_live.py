@@ -2,9 +2,10 @@
 """Live 简洁示例：发送文字或音频文件，实时打印回答转写；Ctrl+C 退出。
 
 设置 LIVE_API_KEY 或 DASHSCOPE_API_KEY；密钥须有目标环境访问权限。
-默认复用已实测跑通的预发环境，可用 LIVE_WS_URL / LIVE_ROUTE_MODEL /
-LIVE_FRONTEND_MODEL / LIVE_BACKEND_MODEL 覆写：路由模型决定接入地址，前端模型
-处理语音，设置后端模型才委派 responses 后台推理。服务端必填 context.compaction，
+设置 LIVE_ROUTE_MODEL 为服务提供方分配的路由模型，默认值仅为占位符。
+默认使用 SDK 网关，可用 LIVE_WS_URL 覆写；LIVE_FRONTEND_MODEL 选择语音
+前端模型，设置 LIVE_BACKEND_MODEL 才委派 responses 后台推理。
+服务端必填 context.compaction，
 缺失会拒绝初始化。WAV / PCM 文件需为 16 kHz、单声道 PCM16LE。
 音频按 100 ms 帧发送，不追赶补发；本示例不采集或播放音频。
 回答后连接保持打开；连续 30 秒未收到事件会报 SDK 超时异常。
@@ -21,10 +22,8 @@ from threading import Event
 
 from dashscope import Client
 
-WS_URL = os.getenv(
-    "LIVE_WS_URL", "wss://poc-01.cn-beijing.pre-maas.aliyuncs.com/api-ws/v1/realtime",
-)
-ROUTE_MODEL = os.getenv("LIVE_ROUTE_MODEL", "pre-qwen-live-test")
+WS_URL = os.getenv("LIVE_WS_URL")
+ROUTE_MODEL = os.getenv("LIVE_ROUTE_MODEL", "your-live-route-model")
 FRONTEND_MODEL = os.getenv("LIVE_FRONTEND_MODEL", "qwen-audio-realtime")
 BACKEND_MODEL = os.getenv("LIVE_BACKEND_MODEL", "")
 

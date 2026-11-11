@@ -232,11 +232,13 @@ class LiveSession(WsSessionBase):
                 self._send_raw(ws, raw)
             except BaseException as exc:
                 error = _transport_error(exc, "send")
+                closing_ws = None
                 with self._lock:
                     if ws is self._ws and generation == self._generation:
                         if isinstance(error, DashScopeError):
                             self._failure = error
-                        self.close()
+                        closing_ws = self._detach_socket()
+                self._close_socket(closing_ws)
                 if error is exc:
                     raise
                 raise error from exc
@@ -270,6 +272,7 @@ class LiveSession(WsSessionBase):
                     raise RuntimeError("live session is not open")
             failure = None
             recoverable = False
+            closing_ws = None
             try:
                 try:
                     raw = self._recv_raw(ws, generation)
@@ -320,7 +323,7 @@ class LiveSession(WsSessionBase):
                     self._track_event(event)
                     if event["type"] == EVENT_SESSION_CLOSED:
                         self._finished = True
-                        self.close()
+                        closing_ws = self._detach_socket()
                         self._check_unfinished()
                     elif event["type"] == EVENT_ERROR:
                         error = event.get("error")
@@ -356,14 +359,16 @@ class LiveSession(WsSessionBase):
                                 self._finish_event_id = None
                         else:
                             self._failure = failure
-                            self.close()
+                            closing_ws = self._detach_socket()
             except BaseException as exc:
                 with self._lock:
                     if ws is self._ws and generation == self._generation:
                         if isinstance(exc, DashScopeError):
                             self._failure = exc
-                        self.close()
+                        closing_ws = self._detach_socket()
                 raise
+            finally:
+                self._close_socket(closing_ws)
             if failure is not None and (
                 raise_request_errors or not recoverable
             ):

@@ -133,42 +133,46 @@ class WsSessionBase:
 
     def connect(self: _SelfT) -> _SelfT:
         """Open the connection, either explicitly or on context entry."""
-        with self._lock:
-            if self._closing:
-                raise RuntimeError(f"{self._LABEL} session is closing")
-            if self._ws is not None:
-                raise RuntimeError(
-                    f"{self._LABEL} session is already open",
-                )
-            self._generation += 1
-            # Reset first so handshake context survives into failure logs.
-            self._reset_state()
-            try:
-                if self._connector is None:
-                    self._ws = _default_connector(
-                        self._url,
-                        self._headers,
-                        timeout=self._timeout,
+        closing_ws = None
+        try:
+            with self._lock:
+                if self._closing:
+                    raise RuntimeError(f"{self._LABEL} session is closing")
+                if self._ws is not None:
+                    raise RuntimeError(
+                        f"{self._LABEL} session is already open",
                     )
-                else:
-                    self._ws = self._connector(self._url, self._headers)
-                self._header_request_id = request_id_from_headers(
-                    getattr(self._ws, "headers", None),
-                )
-                if self._timeout is not None:
-                    self._ws.settimeout(self._timeout)
-                # pylint: disable=import-outside-toplevel
-                from websocket import WebSocket
-
-                if isinstance(self._ws, WebSocket):
-                    # Raw writes share the native lock with automatic Close
-                    # replies; send_frame() acquires this same lock again.
-                    self._ws.lock = threading.RLock()
-            except BaseException as exc:
-                self._on_connect_error(exc)
-                self.close()
+                self._generation += 1
+                # Reset first so handshake context survives into failure logs.
                 self._reset_state()
-                raise
+                try:
+                    if self._connector is None:
+                        self._ws = _default_connector(
+                            self._url,
+                            self._headers,
+                            timeout=self._timeout,
+                        )
+                    else:
+                        self._ws = self._connector(self._url, self._headers)
+                    self._header_request_id = request_id_from_headers(
+                        getattr(self._ws, "headers", None),
+                    )
+                    if self._timeout is not None:
+                        self._ws.settimeout(self._timeout)
+                    # pylint: disable=import-outside-toplevel
+                    from websocket import WebSocket
+
+                    if isinstance(self._ws, WebSocket):
+                        # Raw writes share the native lock with automatic Close
+                        # replies; send_frame() acquires this same lock again.
+                        self._ws.lock = threading.RLock()
+                except BaseException as exc:
+                    self._on_connect_error(exc)
+                    closing_ws = self._detach_socket()
+                    self._reset_state()
+                    raise
+        finally:
+            self._close_socket(closing_ws)
         return self
 
     def _on_connect_error(self, exc: BaseException) -> None:
@@ -210,18 +214,27 @@ class WsSessionBase:
         return ws.recv()
 
     def close(self) -> None:
-        """Send a normal WebSocket Close, allowing one second for the handshake."""
+        """Wait up to one second for sends, then one for the Close handshake."""
         self._close(abort=False)
 
     def _close(self, *, abort: bool) -> None:
+        with self._lock:
+            ws = self._detach_socket()
+        self._close_socket(ws, abort=abort)
+
+    def _detach_socket(self) -> Any:
+        """Detach under _lock; the caller must close the socket outside it."""
+        ws, self._ws = self._ws, None
+        if ws is not None:
+            self._closed = self._closing = True
+        return ws
+
+    def _close_socket(self, ws: Any, *, abort: bool = False) -> None:
+        """Release only the detached socket, keeping reconnect blocked until done."""
         from websocket import (
             WebSocket,
         )  # pylint: disable=import-outside-toplevel
 
-        with self._lock:
-            ws, self._ws = self._ws, None
-            if ws is not None:
-                self._closed = self._closing = True
         if ws is None:
             return
 
@@ -253,19 +266,20 @@ class WsSessionBase:
                 if abort:
                     release()
                     return
-                deadline = threading.Timer(_CLOSE_TIMEOUT, interrupt)
-                deadline.daemon = True
-                try:
-                    deadline.start()
-                except Exception:
-                    release()
-                    return
                 # Complete an in-flight data frame before sending Close. The
                 # reentrant lock also permits cleanup from a failed send.
                 # A context manager cannot bound lock-acquisition time.
                 # pylint: disable-next=consider-using-with
                 sending = self._send_lock.acquire(timeout=_CLOSE_TIMEOUT)
                 if not sending:
+                    release()
+                    return
+                # Waiting for the sender must not consume the handshake budget.
+                deadline = threading.Timer(_CLOSE_TIMEOUT, interrupt)
+                deadline.daemon = True
+                try:
+                    deadline.start()
+                except Exception:
                     release()
                     return
             _close_websocket(ws)
