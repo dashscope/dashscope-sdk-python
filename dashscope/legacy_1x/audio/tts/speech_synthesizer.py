@@ -180,6 +180,14 @@ class SpeechSynthesizer(BaseApi):
                             part,
                         )
                     else:
+                        if (
+                            not isinstance(part.output, dict)
+                            or "sentence" not in part.output
+                        ):
+                            # Non-timestamp message (e.g. extra messages returned
+                            # in the SSML/bgm scenario). Skip it safely instead of
+                            # raising KeyError on part.output["sentence"].
+                            continue
                         if _callback is not None:
                             sentence = SpeechSynthesisResult(
                                 None,  # type: ignore[arg-type]
