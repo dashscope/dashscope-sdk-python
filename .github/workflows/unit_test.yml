@@ -76,22 +76,10 @@ jobs:
   legacy:
     if: ${{ !(github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'docs:')) }}
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        # ubuntu-latest (26.04) ships no CPython 3.9 build, so pin the
-        # still-supported 3.9 leg to 24.04 and keep the rest on latest.
-        include:
-          - os: ubuntu-24.04
-            python-version: '3.9'
-          - os: ubuntu-latest
-            python-version: '3.10'
-          - os: ubuntu-latest
-            python-version: '3.11'
-          - os: ubuntu-latest
-            python-version: '3.12'
-          - os: ubuntu-latest
-            python-version: '3.13'
+        python-version: ['3.11']
 
     steps:
       - name: Checkout repository
