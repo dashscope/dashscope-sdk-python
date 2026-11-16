@@ -1,0 +1,12 @@
+# Build configuration for dashscope.
+#
+# dashscope is a pure-Python package: ``python -m build`` emits ONE universal
+# ``py3-none-any`` wheel plus an sdist, and pip installs that single wheel on
+# every platform (Linux, Windows, macOS, iOS, Android, ...). There is no
+# compiled extension and no cibuildwheel matrix. Native multi-platform
+# distribution of the ``dashscope`` CLI is handled separately by PyInstaller
+# binaries built in .github/workflows/release.yml.
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
