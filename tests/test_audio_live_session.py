@@ -826,6 +826,101 @@ def test_events_raises_fatal_errors_instead_of_yielding_them(opened):
         session.recv_event()
 
 
+def test_error_cleanup_completes_before_a_queued_send_can_observe_the_session(
+    opened,
+):
+    # A send queued on the state lock must never observe a still-attached
+    # socket after a fatal receive error: cleanup has to finish before the
+    # receive path drops the lock, or the send races it into _send_raw.
+    session, ws = opened
+    gate = threading.Event()
+    resume = threading.Event()
+    blocked = threading.Event()
+    queued = threading.Event()
+    exit_unlocked = threading.Event()
+    processing_error = []
+    sender_errors = []
+    lock = session._lock
+
+    class ObservedLock:
+        def __enter__(self):
+            if threading.current_thread().name == "witness-send":
+                queued.set()
+            return lock.__enter__()
+
+        def __exit__(self, *args):
+            result = lock.__exit__(*args)
+            if processing_error:
+                # Widen the post-error unlock window deterministically: the
+                # queued sender must get the lock before any further cleanup.
+                processing_error.clear()
+                exit_unlocked.set()
+                assert resume.wait(5)
+            return result
+
+    original_track = session._track_event
+
+    def gated_track(event):
+        original_track(event)
+        if event.get("type") == "error":
+            processing_error.append(True)
+            blocked.set()
+            assert gate.wait(5)
+
+    session._lock = ObservedLock()
+    session._track_event = gated_track
+    ws.inbox.append(
+        {
+            "type": "error",
+            # A non-dict error object raises WsEventError after _track_event,
+            # exercising the exception cleanup path (not the business-error
+            # branch, which already detached under the lock before the fix).
+            "error": "boom",
+        },
+    )
+
+    def send():
+        try:
+            session.send_event({"type": "input_audio_buffer.append"})
+        except BaseException as exc:  # noqa: BLE001 - record any outcome
+            sender_errors.append(exc)
+
+    sender = threading.Thread(target=send, name="witness-send", daemon=True)
+    receiver_errors = []
+
+    def receive():
+        try:
+            session.recv_event()
+        except BaseException as exc:  # noqa: BLE001 - record any outcome
+            receiver_errors.append(exc)
+
+    receiver = threading.Thread(target=receive, daemon=True)
+    receiver.start()
+    try:
+        assert blocked.wait(5)
+        sender.start()
+        assert queued.wait(5)
+        gate.set()
+        assert exit_unlocked.wait(5)
+        resume.set()
+        sender.join(5)
+        receiver.join(5)
+        assert not sender.is_alive()
+        assert not receiver.is_alive()
+        assert len(receiver_errors) == 1
+        assert isinstance(receiver_errors[0], DashScopeError)
+        assert len(sender_errors) == 1
+        assert isinstance(sender_errors[0], RuntimeError)
+        assert "not open" in str(sender_errors[0])
+        assert ws.sent == []
+        assert session._ws is None
+    finally:
+        gate.set()
+        resume.set()
+        sender.join(3)
+        receiver.join(3)
+
+
 def test_websocket_business_errors_have_no_invented_http_status(opened):
     session, ws = opened
     ws.inbox.append(
