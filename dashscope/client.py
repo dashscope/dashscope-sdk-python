@@ -29,6 +29,7 @@ from dashscope.resources.models import AsyncModels, Models
 from dashscope.resources.multimodal import AsyncMultimodal, Multimodal
 from dashscope.resources.rerank import AsyncRerank, Rerank
 from dashscope.resources.reinforcement_learning import AsyncRl, Rl
+from dashscope.resources.responses import AsyncResponses, Responses
 from dashscope.resources.tingwu import AsyncTingWu, TingWu
 from dashscope.resources.tokenization import AsyncTokenization, Tokenization
 from dashscope.resources.videos import AsyncVideos, Videos
@@ -137,6 +138,7 @@ class Client:
         self.tokenization = Tokenization(self)
         self.files = Files(self)
         self.batches = Batches(self)
+        self.responses = Responses(self)
         self.models = Models(self)
         self.images = Images(self)
         self.videos = Videos(self)
@@ -400,6 +402,7 @@ class AsyncClient:
         self.tokenization = AsyncTokenization(self)
         self.files = AsyncFiles(self)
         self.batches = AsyncBatches(self)
+        self.responses = AsyncResponses(self)
         self.models = AsyncModels(self)
         self.images = AsyncImages(self)
         self.videos = AsyncVideos(self)
