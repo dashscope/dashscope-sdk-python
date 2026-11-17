@@ -318,6 +318,11 @@ def _build_create_body(
 class FineTunes:
     def __init__(self, client) -> None:
         self._client = client
+        # Lazy import: fine_tunes_compress imports JobLogs from this module,
+        # so a top-level import here would be circular.
+        from dashscope.resources.fine_tunes_compress import Compress
+
+        self.compress = Compress(client)
 
     @overload
     def create(
@@ -958,6 +963,9 @@ class FineTunes:
 class AsyncFineTunes:
     def __init__(self, client) -> None:
         self._client = client
+        from dashscope.resources.fine_tunes_compress import AsyncCompress
+
+        self.compress = AsyncCompress(client)
 
     @overload
     async def create(
