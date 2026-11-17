@@ -11,6 +11,9 @@ theme:
   name: material
   custom_dir: docs/overrides
   language: en
+  # System font stack: the Google Fonts stylesheet is render-blocking and
+  # unreachable for mainland-China readers, stalling first paint.
+  font: false
   logo: assets/logo.png
   favicon: assets/logo.png
   features:
@@ -54,6 +57,9 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+      # Sidebar outline stops at API root headings (h3); member methods
+      # and attributes (h4) stay out of the "On this page" nav.
+      toc_depth: 3
   - pymdownx.details
   - pymdownx.superfences
   - pymdownx.highlight:
@@ -115,6 +121,10 @@ plugins:
           paths: [.]
           options:
             docstring_style: google
+            # Roots render as h3 under each page's h2 sections so the
+            # toc_depth above groups them per section instead of mixing
+            # them with section titles.
+            heading_level: 3
             show_source: true
             show_root_heading: true
             show_root_full_path: false

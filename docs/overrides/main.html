@@ -4,7 +4,7 @@
 {% block content %}
   {{ super() }}
   {% set zh = (i18n_page_locale | default("en")) == "zh" %}
-  <nav class="docs-actions" aria-label="Page actions">
+  <nav class="docs-actions" aria-label="{{ '页面操作' if zh else 'Page actions' }}">
     <a href="{{ config.repo_url }}/issues/new?title={{ page.title | urlencode }}&amp;labels=documentation" target="_blank" rel="noopener">
       {% include ".icons/fontawesome/brands/github.svg" %}
       <span>{{ "报告文档问题" if zh else "Report a docs issue" }}</span>
