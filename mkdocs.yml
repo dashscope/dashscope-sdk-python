@@ -11,8 +11,8 @@ theme:
   name: material
   custom_dir: docs/overrides
   language: en
-  logo: assets/logo.svg
-  favicon: assets/logo.svg
+  logo: assets/logo.png
+  favicon: assets/logo.png
   features:
     - navigation.tabs
     - navigation.tabs.sticky
