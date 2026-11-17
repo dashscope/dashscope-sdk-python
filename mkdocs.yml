@@ -23,6 +23,11 @@ theme:
     - navigation.sections
     - navigation.top
     - navigation.footer
+    # Scroll position reflected in the URL hash for shareable links.
+    # navigation.instant is deliberately NOT enabled: the i18n contextual
+    # language switcher is incompatible with it (stale header links after
+    # client-side page swaps).
+    - navigation.tracking
     - search.suggest
     - search.highlight
     - content.code.copy
@@ -131,6 +136,12 @@ plugins:
             members_order: source
             separate_signature: true
             show_signature_annotations: true
+            # Kind badges (class/function/method) in headings and TOC.
+            # merge_init_into_class / signature_crossrefs were tested and
+            # render no effect on mkdocstrings <=1.0.8 / handler <=2.0.11,
+            # so they are deliberately not set.
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
             filters:
               - "!^_"
 
