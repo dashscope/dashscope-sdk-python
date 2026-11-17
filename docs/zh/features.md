@@ -60,8 +60,8 @@ dashscope 2.0 SDK 是面向阿里云百炼（Model Studio / DashScope）的
 
 ## 用 dev mock 离线开发
 
-- `static` / `replay` / `record` 三种模式走通完整 HTTP 请求路径，
-  不消耗云端 token。
+- `static` / `replay` 模式离线走通 HTTP 请求路径，不消耗云端 token。
+- `record` 会发送真实请求，可能产生费用，并保存响应供后续离线回放。
 - 关闭时零开销；成功路径上不导入任何相关代码。
 
 见[开发工具](reference/devkit.md)。

@@ -4,8 +4,9 @@ description: "dashscope 2.0 各能力的即抄即用示例：多模态、图像�
 # 能力速查示例
 
 每个能力一段可直接运行的短示例。均假设已导出 `DASHSCOPE_API_KEY`
-（见[快速开始](../quickstart.md)），并使用同步客户端；`AsyncClient`
-以 `await` 镜像全部调用。响应字段均为类型化对象，
+（见[快速开始](../quickstart.md)），并使用同步客户端。`AsyncClient`
+以 `await` 镜像 HTTP 调用；下方基于 WebSocket 的语音合成与文件识别
+示例仅支持同步客户端。响应字段均为类型化对象，
 [API 参考](../reference/client.md)逐一说明。
 
 ## 多模态理解
@@ -73,6 +74,10 @@ print(resp.results)
 
 ## 语音合成
 
+!!! note "仅支持同步的 WebSocket API"
+    此示例需使用 `Client`。`AsyncClient.audio.tts` 不提供
+    `synthesize()`，不能仅通过添加 `await` 改为异步调用。
+
 `synthesize()` 返回拼接后的音频字节。
 
 ```python
@@ -86,6 +91,10 @@ with open("out.mp3", "wb") as f:
 ```
 
 ## 文件识别
+
+!!! note "仅支持同步的 WebSocket API"
+    此示例需使用 `Client`。`AsyncClient.audio.asr` 不提供
+    `recognize_file()`，不能仅通过添加 `await` 改为异步调用。
 
 ```python
 for event in client.audio.asr.recognize_file(

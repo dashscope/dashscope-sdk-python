@@ -62,8 +62,10 @@ See [Errors](reference/errors.md) and [Devkit](reference/devkit.md).
 
 ## Offline development with dev mock
 
-- `static` / `replay` / `record` modes exercise the full HTTP request path
-  without spending cloud tokens.
+- `static` / `replay` modes exercise the HTTP request path offline without
+  spending cloud tokens.
+- `record` sends real requests, which may incur charges, and saves the
+  responses for later offline replay.
 - Zero overhead when disabled; nothing is imported on the success path.
 
 See [Devkit](reference/devkit.md).

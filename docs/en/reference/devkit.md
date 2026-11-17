@@ -6,8 +6,10 @@ description: "API reference for dev mock modes and local self-diagnosis."
 `dashscope.devkit` provides two opt-in developer aids with near-zero overhead
 when disabled. Nothing here is imported on the production success path.
 
-- **Dev mock** — `static` / `replay` / `record` modes that exercise the full
-  2.0 HTTP request path without spending cloud tokens. HTTP only; the
+- **Dev mock** — `static` / `replay` / `record` modes that exercise the
+  2.0 HTTP request path. `static` and `replay` run offline without spending
+  cloud tokens; `record` sends real requests to the service, which may incur
+  charges, and saves the responses for later replay. HTTP only; the
   WebSocket transport is not covered. Activate in code with
   `dashscope.enable_dev_mock(...)` or via `DASHSCOPE_DEV_MOCK=<mode>`.
 - **Self-diagnosis** — a local, bilingual rule table that turns a failed call

@@ -5,8 +5,10 @@ description: "Copy-paste recipes for every dashscope 2.0 capability: multimodal,
 
 Short runnable snippets, one per capability. All of them assume an exported
 `DASHSCOPE_API_KEY` (see [Quickstart](../quickstart.md)) and use the sync
-client; `AsyncClient` mirrors every call with `await`. Response fields are
-typed — the [API Reference](../reference/client.md) documents each one.
+client. `AsyncClient` mirrors the HTTP calls with `await`; the WebSocket
+speech synthesis and file recognition examples below are sync-only.
+Response fields are typed — the [API Reference](../reference/client.md)
+documents each one.
 
 ## Multimodal understanding
 
@@ -74,6 +76,10 @@ print(resp.results)
 
 ## Speech synthesis
 
+!!! note "Sync-only WebSocket API"
+    Use `Client` for this example. `AsyncClient.audio.tts` does not expose
+    `synthesize()`; adding `await` does not make this call async.
+
 `synthesize()` returns the concatenated audio bytes.
 
 ```python
@@ -87,6 +93,10 @@ with open("out.mp3", "wb") as f:
 ```
 
 ## File recognition
+
+!!! note "Sync-only WebSocket API"
+    Use `Client` for this example. `AsyncClient.audio.asr` does not expose
+    `recognize_file()`; adding `await` does not make this call async.
 
 ```python
 for event in client.audio.asr.recognize_file(
