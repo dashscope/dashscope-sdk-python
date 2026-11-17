@@ -95,6 +95,11 @@ setuptools.setup(
     author_email="dashscope@alibabacloud.com",
     license="Apache 2.0",
     url=url,
+    project_urls={
+        "Documentation": "https://dashscope.github.io/dashscope-sdk-python/",
+        "Source": "https://github.com/dashscope/dashscope-sdk-python",
+        "Issues": "https://github.com/dashscope/dashscope-sdk-python/issues",
+    },
     packages=setuptools.find_packages(
         exclude=("tests", "tests.*"),
     ),  # pylint: disable=superfluous-parens

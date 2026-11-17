@@ -79,7 +79,7 @@ class Files(FileUploadMixin, ListMixin, DeleteMixin, GetMixin):
 
         Args:
             api_key (str, optional):
-            The api api_key, can be None,
+                The api api_key, can be None,
                 if None, will get by default rule(TODO: api key doc).
             page (int, optional): Page number. Defaults to 1.
             page_size (int, optional): Items per page. Defaults to 10.

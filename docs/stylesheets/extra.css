@@ -1,0 +1,43 @@
+/* FastAPI-style template tweaks on top of Material:
+   - white header keeps links readable (primary fg is white)
+   - active top tab gets an underline indicator
+   - page title centered, like fastapi.tiangolo.com */
+:root {
+  --md-typeset-a-color: #3f51b5;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-typeset-a-color: #8c9eff;
+}
+
+.md-tabs__item--active {
+  border-bottom: 2px solid currentColor;
+}
+
+.md-typeset h1 {
+  text-align: center;
+}
+
+/* Elastic-style per-page action block (see overrides/main.html) */
+.docs-actions {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+  font-size: .7rem;
+}
+
+.docs-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  color: var(--md-typeset-a-color);
+}
+
+.docs-actions svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}

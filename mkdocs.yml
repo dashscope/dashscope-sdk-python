@@ -1,0 +1,172 @@
+site_name: DashScope Python SDK
+site_description: dashscope 2.0 Python SDK documentation — sync/async client and API reference for Alibaba Cloud Model Studio (DashScope)
+site_url: https://dashscope.github.io/dashscope-sdk-python/
+repo_url: https://github.com/dashscope/dashscope-sdk-python
+repo_name: dashscope/dashscope-sdk-python
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  language: en
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.path
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: white
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+# FastAPI-style template tweaks (link color on white header, active tab
+# underline, centered page title)
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search:
+      lang:
+        - en
+        - zh
+  # i18n must come after search and before mkdocstrings; Material renders
+  # the language selector in the header automatically from this config.
+  - i18n:
+      docs_structure: folder
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: zh
+          name: 简体中文
+          build: true
+          nav_translations:
+            Features: 特征
+            Learn: 学习
+            Quickstart: 快速开始
+            Migrating from 1.x: 从 1.x 迁移
+            Guides: 专题指南
+            Capability recipes: 能力速查示例
+            Qwen Live (realtime voice): Qwen Live（实时语音）
+            CLI: 命令行工具
+            Reference: 参考
+            Client & Configuration: 客户端与配置
+            Chat: 对话（Chat）
+            Audio: 语音（Audio）
+            Client Resources: 客户端资源
+            Protocols: 协议适配器
+            Agentic RL: 强化学习微调
+            Types: 类型（Types）
+            Errors: 错误（Errors）
+            Devkit: 开发工具
+            Legacy 1.x: 旧版 1.x
+            Resources: 资源
+            Developer Guide: 开发者指南
+            Examples (GitHub): 示例（GitHub）
+            Help & Issues: 帮助与问题反馈
+            About: 关于
+            Release Notes: 发行说明
+  # Resolve cross-references to the same-language page when an identifier
+  # exists in both locales (en at the root, zh under zh/).
+  - autorefs:
+      resolve_closest: true
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            filters:
+              - "!^_"
+
+nav:
+  - DashScope Python SDK: index.md
+  - Features: features.md
+  - Learn:
+      - Quickstart: quickstart.md
+      - Migrating from 1.x: migration.md
+      - Guides:
+          - Capability recipes: guides/recipes.md
+          - Qwen Live (realtime voice): guides/qwen-live-python-sdk.md
+      - CLI: cli.md
+  - Reference:
+      - Client & Configuration: reference/client.md
+      - Chat: reference/chat.md
+      - Audio: reference/audio.md
+      - Client Resources: reference/resources.md
+      - Protocols: reference/protocols.md
+      - AgentStudio: reference/agentstudio.md
+      - Agentic RL: reference/agentic-rl.md
+      - Types: reference/types.md
+      - Errors: reference/errors.md
+      - Devkit: reference/devkit.md
+      - Legacy 1.x: reference/legacy.md
+  - Resources:
+      - Developer Guide: develop.md
+      - Examples (GitHub): https://github.com/dashscope/dashscope-sdk-python/tree/main/examples
+      - Help & Issues: https://github.com/dashscope/dashscope-sdk-python/issues
+  - About: about.md
+  - Release Notes: release-notes.md
+
+# Maintenance notes are repo-only, not part of the site (README.md would
+# conflict with index.md)
+exclude_docs: |
+  README.md
+  README_zh.md
+  overrides/*
+  hooks.py
+
+hooks:
+  - docs/hooks.py
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/dashscope/dashscope-sdk-python
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/dashscope/

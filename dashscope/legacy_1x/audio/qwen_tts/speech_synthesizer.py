@@ -45,7 +45,7 @@ class SpeechSynthesizer(BaseApi):
                 if None, will retrieve by rule [1].
                 [1]: https://help.aliyun.com/zh/dashscope/developer-reference/api-key-settings. # noqa E501  # pylint: disable=line-too-long
             workspace (str): The dashscope workspace id.
-            **kwargs:
+            **kwargs (Any):
                 stream(bool, `optional`): Enable server-sent events
                     (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501  # pylint: disable=line-too-long
                     the result will back partially[qwen-turbo,bailian-v1].

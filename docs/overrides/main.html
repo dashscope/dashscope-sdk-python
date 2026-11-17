@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{# Elastic-style per-page action block: view source, report, edit, contribute #}
+{% block content %}
+  {{ super() }}
+  {% set zh = (i18n_page_locale | default("en")) == "zh" %}
+  <nav class="docs-actions" aria-label="Page actions">
+    <a href="{{ config.repo_url }}/issues/new?title={{ page.title | urlencode }}&amp;labels=documentation" target="_blank" rel="noopener">
+      {% include ".icons/fontawesome/brands/github.svg" %}
+      <span>{{ "报告文档问题" if zh else "Report a docs issue" }}</span>
+    </a>
+    <a href="{{ ('zh/develop/' if zh else 'develop/') | url }}">
+      {% include ".icons/material/file-document-outline.svg" %}
+      <span>{{ "了解如何贡献" if zh else "Learn how to contribute" }}</span>
+    </a>
+  </nav>
+{% endblock %}

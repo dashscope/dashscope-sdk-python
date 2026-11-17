@@ -2,6 +2,8 @@
 
 > [English](README.md) | **中文**
 
+**文档站点**：[dashscope.github.io/dashscope-sdk-python](https://dashscope.github.io/dashscope-sdk-python/zh/) —— [English docs](https://dashscope.github.io/dashscope-sdk-python/)
+
 DashScope Python SDK 是[阿里云百炼（Model Studio）](https://help.aliyun.com/zh/model-studio/)的官方客户端，覆盖文本生成、多模态理解、向量（Embedding）、重排（Rerank）、图像/视频生成、语音合成与识别、模型调优、Agentic RL、应用调用等能力。
 
 **2.0 版本**引入了资源风格的客户端 —— `dashscope.Client()`，其易用性对标 OpenAI SDK：一个客户端持有共享连接池，每项能力都以类型化资源的形式挂载其上（`client.chat`、`client.images`、`client.audio`……），响应是类型化对象而非裸字典，失败默认抛出异常。1.x 的完整公开接口仍保留在历史导入路径上，由 `dashscope.legacy_1x` 下的 Facade 实现；AgentStudio 与 Agentic RL 与 2.0 共享同一套业务核心，但各自的公开返回类型与错误契约保持独立。

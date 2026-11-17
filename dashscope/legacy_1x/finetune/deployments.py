@@ -176,7 +176,7 @@ class Deployments(
         """Scaling model deployment.
 
         Args:
-            deployment_id (str): The deployment id.
+            deployed_model (str): The deployed model id.
             capacity (int): The target service capacity.
             api_key (str, optional): The api key. Defaults to None.
 

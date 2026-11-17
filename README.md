@@ -2,6 +2,8 @@
 
 > **English** | [中文](README_zh.md)
 
+**Documentation**: [dashscope.github.io/dashscope-sdk-python](https://dashscope.github.io/dashscope-sdk-python/) — [中文文档](https://dashscope.github.io/dashscope-sdk-python/zh/)
+
 The DashScope Python SDK is the official client for [Alibaba Cloud Model Studio (Bailian)](https://www.alibabacloud.com/help/en/model-studio/), covering text generation, multi-modal understanding, embeddings, reranking, image/video generation, speech synthesis & recognition, fine-tuning, agentic RL, applications and more.
 
 **Version 2.0** introduces a resource-style client — `dashscope.Client()` — modeled on the ergonomics of the OpenAI SDK: one client holds a shared connection pool, every capability hangs off it as a typed resource (`client.chat`, `client.images`, `client.audio`, …), responses are typed objects instead of raw dicts, and failures raise exceptions by default. The complete 1.x public surface remains available at its historical import paths and is implemented by facades under `dashscope.legacy_1x`; AgentStudio and Agentic RL share their large business cores with 2.0 without sharing public return or error contracts.

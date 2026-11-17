@@ -24,7 +24,8 @@ class Models(ListMixin, GetMixin):
         Args:
             name (str): The model name.
             api_key (str, optional): The api key. Defaults to None.
-            workspace (str): The dashscope workspace id.
+            **kwargs (Any):
+                workspace (str): The dashscope workspace id.
 
         Returns:
             DashScopeAPIResponse: The model information.

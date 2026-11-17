@@ -148,7 +148,7 @@ class HttpSpeechSynthesizer(BaseApi):
             workspace (str): The DashScope workspace ID.
             api_key (str): The DashScope API key.
             url (str): custom http url if needed.
-            **kwargs: Additional parameters like volume, rate, pitch, etc.
+            **kwargs (Any): Additional parameters like volume, rate, pitch, etc.
 
         Returns:
             HttpSpeechSynthesisResult: For non-streaming mode.

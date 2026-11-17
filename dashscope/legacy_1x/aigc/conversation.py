@@ -53,7 +53,7 @@ class HistoryItem(dict):
 
         Args:
             key (str): The key of the content.
-            value (Any): The history content.
+            content (Any): The history content.
         """
         self[self.role].append({key: content})
 
