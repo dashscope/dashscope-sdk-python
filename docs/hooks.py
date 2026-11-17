@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """MkDocs hooks: surface the SDK version from dashscope/version.py in pages.
 
 Pages opt in with the ``{{ sdk_version }}`` placeholder; the value is read
