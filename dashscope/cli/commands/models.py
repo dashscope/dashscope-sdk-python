@@ -40,7 +40,7 @@ def build_app() -> typer.Typer:
         provider: Optional[str] = typer.Option(
             None,
             "--provider",
-            help="Filter by provider or source (client-side, per page).",
+            help="Filter by provider (server-side; folds into providers).",
         ),
     ) -> None:
         """List available models."""

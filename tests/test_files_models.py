@@ -327,12 +327,25 @@ async def test_async_files_delete_missing_file_raises_not_found():
 
 
 def test_models_list_with_provider_filter():
-    # ``data``-wrapped pages stay supported for gateways that re-wrap
-    # the native ``output`` envelope OpenAI-style.
+    # ``data``-wrapped pages stay supported for gateways that re-wrap the
+    # native ``output`` envelope OpenAI-style. ``provider`` / ``providers``
+    # are sent server-side as a repeated ``providers`` param, and the
+    # gateway's filtered total drives pagination.
+    catalog = [
+        {"model": "qwen-plus", "provider": "qwen"},
+        {"model": "qwen3-max", "provider": "qwen"},
+        {"model": "llama-3", "provider": "community"},
+    ]
     captured = {}
 
     def handler(request):
-        captured["params"] = dict(request.url.params)
+        captured["params"] = request.url.params
+        providers = request.url.params.get_list("providers")
+        models = (
+            [m for m in catalog if m["provider"] in providers]
+            if providers
+            else catalog
+        )
         return httpx.Response(
             200,
             json={
@@ -340,26 +353,233 @@ def test_models_list_with_provider_filter():
                 "data": {
                     "page_no": 1,
                     "page_size": 10,
-                    "total": 3,
-                    "models": [
-                        {"model": "qwen-plus", "source": "dashscope"},
-                        {"model": "qwen3-max", "source": "bailian"},
-                        {"model": "qwen-turbo", "provider": "Community"},
-                    ],
+                    "total": len(models),
+                    "models": models,
                 },
             },
         )
 
     client = _make_client(handler)
     all_models = client.models.list()
-    assert captured["params"] == {"page_no": "1", "page_size": "10"}
+    assert dict(captured["params"]) == {"page_no": "1", "page_size": "10"}
     assert len(all_models.models) == 3
+    assert all_models.total_count == 3
 
-    bailian = client.models.list(provider="Bailian")
-    assert [m.model for m in bailian.models] == ["qwen3-max"]
+    qwen = client.models.list(provider="qwen")
+    assert captured["params"].get_list("providers") == ["qwen"]
+    assert [m.model for m in qwen.models] == ["qwen-plus", "qwen3-max"]
+    assert qwen.total_count == 2
 
-    community = client.models.list(provider="community")
-    assert [m.model for m in community.models] == ["qwen-turbo"]
+    community = client.models.list(providers=["community"])
+    assert captured["params"].get_list("providers") == ["community"]
+    assert [m.model for m in community.models] == ["llama-3"]
+
+
+def test_models_list_array_filters_use_repeated_keys():
+    # Array filters serialize as repeated parameter names, not a joined
+    # string or a bracketed key: capabilities=TG&capabilities=Reasoning.
+    captured = {}
+
+    def handler(request):
+        captured["params"] = request.url.params
+        return httpx.Response(
+            200,
+            json={"request_id": "r", "output": {"models": [], "total": 0}},
+        )
+
+    client = _make_client(handler)
+    client.models.list(
+        providers=["qwen", "deepseek"],
+        inference_providers=["aliyun-bailian"],
+        capabilities=["TG", "Reasoning"],
+        features=["function-calling"],
+        supports=["fine-tune"],
+        deployment_methods=["ptu"],
+        deployment_ptu_service_tiers=["standard"],
+    )
+    params = captured["params"]
+    assert params.get_list("providers") == ["qwen", "deepseek"]
+    assert params.get_list("inference_providers") == ["aliyun-bailian"]
+    assert params.get_list("capabilities") == ["TG", "Reasoning"]
+    assert params.get_list("features") == ["function-calling"]
+    assert params.get_list("supports") == ["fine-tune"]
+    assert params.get_list("deployment_methods") == ["ptu"]
+    assert params.get_list("deployment_ptu_service_tiers") == ["standard"]
+
+
+def test_models_list_scalar_filters_pass_through():
+    captured = {}
+
+    def handler(request):
+        captured["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json={"request_id": "r", "output": {"models": [], "total": 0}},
+        )
+
+    client = _make_client(handler)
+    client.models.list(
+        name="qwen",
+        model="qwen-plus",
+        language="zh",
+        context_window=131072,
+        service_site="international",
+    )
+    assert captured["params"] == {
+        "page_no": "1",
+        "page_size": "10",
+        "name": "qwen",
+        "model": "qwen-plus",
+        "language": "zh",
+        "context_window": "131072",
+        "service_site": "international",
+    }
+
+
+def test_models_list_provider_merges_into_providers_without_dupes():
+    captured = {}
+
+    def handler(request):
+        captured["params"] = request.url.params
+        return httpx.Response(
+            200,
+            json={"request_id": "r", "output": {"models": [], "total": 0}},
+        )
+
+    client = _make_client(handler)
+    client.models.list(provider="qwen", providers=["qwen", "deepseek"])
+    assert captured["params"].get_list("providers") == ["qwen", "deepseek"]
+
+
+def test_models_list_parses_rich_metadata():
+    body = {
+        "request_id": "r",
+        "output": {
+            "page_no": 1,
+            "page_size": 10,
+            "total": 1,
+            "models": [
+                {
+                    "model": "qwen3-max",
+                    "name": "Qwen3-Max",
+                    "description": "flagship",
+                    "capabilities": ["TG", "Reasoning"],
+                    "inference_provider": "aliyun-bailian",
+                    "features": ["function-calling"],
+                    "published_time": "2025-09-01",
+                    "equivalent_snapshot": "qwen3-max-2025-09-01",
+                    "prices": [
+                        {
+                            "range_name": "Default",
+                            "prices": [
+                                {
+                                    "type": "input",
+                                    "price": "0.0008",
+                                    "price_unit": "per 1k tokens",
+                                    "price_name": "Input",
+                                },
+                            ],
+                        },
+                    ],
+                    "inference_metadata": {
+                        "request_modality": ["Text"],
+                        "response_modality": ["Text"],
+                    },
+                    "model_info": {
+                        "context_window": 262144,
+                        "max_input_tokens": 258048,
+                        "max_output_tokens": 32768,
+                    },
+                },
+            ],
+        },
+    }
+    client = _make_client(lambda r: httpx.Response(200, json=body))
+    model = client.models.list().models[0]
+    assert model.name == "Qwen3-Max"
+    assert model.capabilities == ["TG", "Reasoning"]
+    assert model.inference_provider == "aliyun-bailian"
+    assert model.equivalent_snapshot == "qwen3-max-2025-09-01"
+    assert model.prices[0].range_name == "Default"
+    assert model.prices[0].prices[0].price == "0.0008"  # verbatim string
+    assert model.inference_metadata.request_modality == ["Text"]
+    assert model.model_info.context_window == 262144
+    assert model.model_info.max_output_tokens == 32768
+
+
+def test_models_list_pagination_preserves_filters():
+    catalog = [{"model": f"m{i}", "provider": "qwen"} for i in range(5)]
+    seen = []
+
+    def handler(request):
+        params = request.url.params
+        seen.append(
+            (int(params.get("page_no", 1)), params.get_list("capabilities")),
+        )
+        page_no = int(params.get("page_no", 1))
+        page_size = int(params.get("page_size", 10))
+        start = (page_no - 1) * page_size
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "r",
+                "output": {
+                    "models": catalog[start : start + page_size],
+                    "page_no": page_no,
+                    "page_size": page_size,
+                    "total": len(catalog),
+                },
+            },
+        )
+
+    client = _make_client(handler)
+    page = client.models.list(
+        page_no=1,
+        page_size=2,
+        capabilities=["TG"],
+        provider="qwen",
+    )
+    collected = [m.model for p in page.iter_pages() for m in p]
+    assert collected == ["m0", "m1", "m2", "m3", "m4"]
+    # Every advanced page re-sends the same filters.
+    assert seen == [(1, ["TG"]), (2, ["TG"]), (3, ["TG"])]
+
+
+@pytest.mark.asyncio
+async def test_models_async_list_filters_and_pagination():
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    seen = []
+
+    def handler(request):
+        params = request.url.params
+        seen.append(
+            (int(params.get("page_no", 1)), params.get_list("providers")),
+        )
+        page_no = int(params.get("page_no", 1))
+        page_size = int(params.get("page_size", 10))
+        start = (page_no - 1) * page_size
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "r",
+                "output": {
+                    "models": catalog[start : start + page_size],
+                    "page_no": page_no,
+                    "page_size": page_size,
+                    "total": len(catalog),
+                },
+            },
+        )
+
+    client = _make_async_client(handler)
+    page = await client.models.list(page_no=1, page_size=2, provider="qwen")
+    assert seen[0] == (1, ["qwen"])
+    collected = [
+        m.model async for p in page.iter_pages_async() for m in p
+    ]
+    assert collected == ["m0", "m1", "m2", "m3", "m4"]
+    assert seen == [(1, ["qwen"]), (2, ["qwen"]), (3, ["qwen"])]
+    await client.aclose()
 
 
 def test_models_list_parses_native_output_envelope():

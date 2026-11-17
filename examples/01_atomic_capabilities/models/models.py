@@ -22,9 +22,10 @@ if __name__ == "__main__":
     for model in page.models:
         print(f"model: {model.model}")
 
-    # List only Model Studio (Bailian) models
-    print("----- list models (provider=Bailian) -----")
-    page = client.models.list(provider="Bailian")
+    # Filter server-side by provider (repeated ``providers`` query param);
+    # total_count then reflects the filtered catalog and pagination walks it.
+    print("----- list models (providers=[qwen]) -----")
+    page = client.models.list(providers=["qwen"])
     for model in page.models[:5]:
         print(f"model: {model.model}")
 

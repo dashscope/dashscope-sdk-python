@@ -16,7 +16,7 @@ from typing import (
     overload,
 )
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from dashscope.errors import (
     ErrorCode,
@@ -40,7 +40,60 @@ _BASE_PATH = "/models"
 
 MODULE = "models"
 
-__all__ = ["AsyncModels", "Model", "ModelList", "Models"]
+__all__ = [
+    "AsyncModels",
+    "InferenceMetadata",
+    "Model",
+    "ModelInfo",
+    "ModelList",
+    "ModelPrice",
+    "ModelPriceRange",
+    "Models",
+]
+
+
+class ModelPrice(BaseModel):
+    """One billing item inside a price range (``type``/``price``/unit/name)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    type: Optional[str] = None
+    # The wire sends price as a string ("2", "0.0008"); kept verbatim so no
+    # precision is lost coercing it to a float.
+    price: Optional[str] = None
+    price_unit: Optional[str] = None
+    price_name: Optional[str] = None
+
+
+class ModelPriceRange(BaseModel):
+    """One tiered billing range; ``range_name`` is ``Default`` when untiered."""
+
+    model_config = ConfigDict(extra="allow")
+
+    prices: List[ModelPrice] = []
+    range_name: Optional[str] = None
+
+
+class InferenceMetadata(BaseModel):
+    """Input/output modalities (``Text``/``Image``/``Audio``/``Video``)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    request_modality: List[str] = []
+    response_modality: List[str] = []
+
+
+class ModelInfo(BaseModel):
+    """Context-length limits; ``None`` means unlimited or not applicable."""
+
+    model_config = ConfigDict(extra="allow")
+
+    context_window: Optional[int] = None
+    max_input_tokens: Optional[int] = None
+    max_output_tokens: Optional[int] = None
+    max_reasoning_tokens: Optional[int] = None
+    reasoning_max_input_tokens: Optional[int] = None
+    reasoning_max_output_tokens: Optional[int] = None
 
 
 class Model(ResponseBase):
@@ -60,6 +113,16 @@ class Model(ResponseBase):
         None,
         validation_alias=AliasChoices("open_source", "opensource"),
     )
+    name: Optional[str] = None
+    description: Optional[str] = None
+    capabilities: List[str] = []
+    inference_provider: Optional[str] = None
+    features: List[str] = []
+    prices: List[ModelPriceRange] = []
+    published_time: Optional[str] = None
+    inference_metadata: Optional[InferenceMetadata] = None
+    model_info: Optional[ModelInfo] = None
+    equivalent_snapshot: Optional[str] = None
 
 
 class ModelList(BasePage[Model]):
@@ -135,12 +198,61 @@ def _parse_get_models(body: Dict[str, Any]) -> List[Dict[str, Any]]:
     return []
 
 
-def _match_provider(model: Model, provider: str) -> bool:
-    wanted = provider.lower()
-    return wanted in (
-        (model.provider or "").lower(),
-        (model.source or "").lower(),
-    )
+def _build_list_params(
+    page_no: int,
+    page_size: int,
+    *,
+    name: Optional[str],
+    model: Optional[str],
+    language: Optional[str],
+    provider: Optional[str],
+    providers: Optional[List[str]],
+    inference_providers: Optional[List[str]],
+    capabilities: Optional[List[str]],
+    features: Optional[List[str]],
+    context_window: Optional[int],
+    service_site: Optional[str],
+    supports: Optional[List[str]],
+    deployment_methods: Optional[List[str]],
+    deployment_ptu_service_tiers: Optional[List[str]],
+) -> Dict[str, Any]:
+    """Translate the public filters into the server's query contract.
+
+    Array filters are sent as repeated parameter names (``capabilities=TG&
+    capabilities=Reasoning``), which httpx produces from a list value. The
+    singular ``provider`` convenience folds into the server-side ``providers``
+    filter so the catalog total reflects the filtered set, rather than the
+    old client-side per-page slice whose ``total_count`` stayed pre-filter.
+    """
+    params: Dict[str, Any] = {"page_no": page_no, "page_size": page_size}
+    effective_providers = list(providers or [])
+    if provider and provider not in effective_providers:
+        effective_providers.append(provider)
+    if effective_providers:
+        params["providers"] = effective_providers
+    if name is not None:
+        params["name"] = name
+    if model is not None:
+        params["model"] = model
+    if language is not None:
+        params["language"] = language
+    if inference_providers:
+        params["inference_providers"] = inference_providers
+    if capabilities:
+        params["capabilities"] = capabilities
+    if features:
+        params["features"] = features
+    if context_window is not None:
+        params["context_window"] = context_window
+    if service_site is not None:
+        params["service_site"] = service_site
+    if supports:
+        params["supports"] = supports
+    if deployment_methods:
+        params["deployment_methods"] = deployment_methods
+    if deployment_ptu_service_tiers:
+        params["deployment_ptu_service_tiers"] = deployment_ptu_service_tiers
+    return params
 
 
 class Models:
@@ -154,6 +266,18 @@ class Models:
         page_no: int = 1,
         page_size: int = 10,
         provider: Optional[str] = None,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        inference_providers: Optional[List[str]] = None,
+        capabilities: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        service_site: Optional[str] = None,
+        supports: Optional[List[str]] = None,
+        deployment_methods: Optional[List[str]] = None,
+        deployment_ptu_service_tiers: Optional[List[str]] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -172,6 +296,18 @@ class Models:
         page_no: int = 1,
         page_size: int = 10,
         provider: Optional[str] = None,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        inference_providers: Optional[List[str]] = None,
+        capabilities: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        service_site: Optional[str] = None,
+        supports: Optional[List[str]] = None,
+        deployment_methods: Optional[List[str]] = None,
+        deployment_ptu_service_tiers: Optional[List[str]] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -189,6 +325,18 @@ class Models:
         page_no: int = 1,
         page_size: int = 10,
         provider: Optional[str] = None,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        inference_providers: Optional[List[str]] = None,
+        capabilities: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        service_site: Optional[str] = None,
+        supports: Optional[List[str]] = None,
+        deployment_methods: Optional[List[str]] = None,
+        deployment_ptu_service_tiers: Optional[List[str]] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -198,13 +346,15 @@ class Models:
         max_retries: Optional[int] = None,
         raw: bool = False,
     ) -> Union[ModelList, "APIResponse"]:
-        """List models; ``provider`` filters client-side per page.
+        """List models with the server's full filter contract.
 
-        The server has no provider filter, so ``total_count`` is always
-        the pre-filter total of the whole catalog, not of the filtered
-        ``models`` slice. Pagination therefore walks the unfiltered catalog:
-        ``has_next_page()`` / ``iter_pages()`` follow ``total_count``, and the
-        ``provider`` filter is applied to each fetched page independently.
+        All filters are applied server-side, so ``total_count`` is the total
+        of the *filtered* catalog and pagination walks that filtered set.
+        Array filters (``providers``/``capabilities``/``features``/...) are
+        sent as repeated query parameters. The singular ``provider`` is a
+        convenience that folds into ``providers``; it no longer filters the
+        current page client-side (which left ``total_count`` pre-filter and
+        hid matches on other pages).
 
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         instead of a ``ModelList``, before any error check, so callers can
@@ -215,10 +365,25 @@ class Models:
         through it as an empty catalog. Use ``resp.json()`` and
         ``_parse_list`` when the raw path has to agree with this one.
         """
+        filter_kwargs = dict(
+            name=name,
+            model=model,
+            language=language,
+            provider=provider,
+            providers=providers,
+            inference_providers=inference_providers,
+            capabilities=capabilities,
+            features=features,
+            context_window=context_window,
+            service_site=service_site,
+            supports=supports,
+            deployment_methods=deployment_methods,
+            deployment_ptu_service_tiers=deployment_ptu_service_tiers,
+        )
         resp = self._client.transport.request_api(
             "GET",
             _BASE_PATH,
-            params={"page_no": page_no, "page_size": page_size},
+            params=_build_list_params(page_no, page_size, **filter_kwargs),
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -239,15 +404,11 @@ class Models:
             strict=self._client.config.strict_validation,
             response=resp.http_response,
         )
-        if provider:
-            result.models = [
-                m for m in result.models if _match_provider(m, provider)
-            ]
         result.bind_pagination(
             lambda next_no, next_size: self.list(
                 page_no=next_no,
                 page_size=next_size,
-                provider=provider,
+                **filter_kwargs,
                 timeout=timeout,
                 api_key=api_key,
                 workspace=workspace,
@@ -370,6 +531,18 @@ class AsyncModels:
         page_no: int = 1,
         page_size: int = 10,
         provider: Optional[str] = None,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        inference_providers: Optional[List[str]] = None,
+        capabilities: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        service_site: Optional[str] = None,
+        supports: Optional[List[str]] = None,
+        deployment_methods: Optional[List[str]] = None,
+        deployment_ptu_service_tiers: Optional[List[str]] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -388,6 +561,18 @@ class AsyncModels:
         page_no: int = 1,
         page_size: int = 10,
         provider: Optional[str] = None,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        inference_providers: Optional[List[str]] = None,
+        capabilities: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        service_site: Optional[str] = None,
+        supports: Optional[List[str]] = None,
+        deployment_methods: Optional[List[str]] = None,
+        deployment_ptu_service_tiers: Optional[List[str]] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -405,6 +590,18 @@ class AsyncModels:
         page_no: int = 1,
         page_size: int = 10,
         provider: Optional[str] = None,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        inference_providers: Optional[List[str]] = None,
+        capabilities: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        service_site: Optional[str] = None,
+        supports: Optional[List[str]] = None,
+        deployment_methods: Optional[List[str]] = None,
+        deployment_ptu_service_tiers: Optional[List[str]] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -414,10 +611,25 @@ class AsyncModels:
         max_retries: Optional[int] = None,
         raw: bool = False,
     ) -> Union[ModelList, "APIResponse"]:
+        filter_kwargs = dict(
+            name=name,
+            model=model,
+            language=language,
+            provider=provider,
+            providers=providers,
+            inference_providers=inference_providers,
+            capabilities=capabilities,
+            features=features,
+            context_window=context_window,
+            service_site=service_site,
+            supports=supports,
+            deployment_methods=deployment_methods,
+            deployment_ptu_service_tiers=deployment_ptu_service_tiers,
+        )
         resp = await self._client.transport.request_api(
             "GET",
             _BASE_PATH,
-            params={"page_no": page_no, "page_size": page_size},
+            params=_build_list_params(page_no, page_size, **filter_kwargs),
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -438,15 +650,11 @@ class AsyncModels:
             strict=self._client.config.strict_validation,
             response=resp.http_response,
         )
-        if provider:
-            result.models = [
-                m for m in result.models if _match_provider(m, provider)
-            ]
         result.bind_pagination(
             lambda next_no, next_size: self.list(
                 page_no=next_no,
                 page_size=next_size,
-                provider=provider,
+                **filter_kwargs,
                 timeout=timeout,
                 api_key=api_key,
                 workspace=workspace,
