@@ -17,6 +17,7 @@ from dashscope._config import Config, resolve_config
 from dashscope.protocols import ChatProtocol, get_protocol
 from dashscope.resources.apps import Apps, AsyncApps
 from dashscope.resources.audio import AsyncAudio, Audio
+from dashscope.resources.batches import AsyncBatches, Batches
 from dashscope.resources.chat import AsyncChat, Chat
 from dashscope.resources.decision import AsyncDecision, Decision
 from dashscope.resources.deployments import AsyncDeployments, Deployments
@@ -135,6 +136,7 @@ class Client:
         self.decision = Decision(self)
         self.tokenization = Tokenization(self)
         self.files = Files(self)
+        self.batches = Batches(self)
         self.models = Models(self)
         self.images = Images(self)
         self.videos = Videos(self)
@@ -397,6 +399,7 @@ class AsyncClient:
         self.decision = AsyncDecision(self)
         self.tokenization = AsyncTokenization(self)
         self.files = AsyncFiles(self)
+        self.batches = AsyncBatches(self)
         self.models = AsyncModels(self)
         self.images = AsyncImages(self)
         self.videos = AsyncVideos(self)
