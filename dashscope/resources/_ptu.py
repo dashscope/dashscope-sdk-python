@@ -174,7 +174,11 @@ class CapacityInstanceList(ResponseBase):
     page: int = Field(1, validation_alias=AliasChoices("page", "page_no"))
     items_per_page: int = Field(
         20,
-        validation_alias=AliasChoices("items_per_page", "itemsPerPage", "page_size"),
+        validation_alias=AliasChoices(
+            "items_per_page",
+            "itemsPerPage",
+            "page_size",
+        ),
     )
     page_count: int = Field(
         0,
@@ -263,7 +267,9 @@ def _ptu_capacity_body(capacity: Any) -> Dict[str, Any]:
             raise ValueError(f"ptu_capacity requires '{key}'")
         value = body[key]
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-            raise ValueError(f"ptu_capacity '{key}' must be a non-negative int")
+            raise ValueError(
+                f"ptu_capacity '{key}' must be a non-negative int",
+            )
     return body
 
 
@@ -282,7 +288,9 @@ def _pre_paid_info_body(info: Any) -> Dict[str, Any]:
             raise ValueError("pre_paid_info 'duration' must be positive")
     cycle = body.get("pricing_cycle")
     if cycle is not None and cycle not in ("Day", "Hour"):
-        raise ValueError("pre_paid_info 'pricing_cycle' must be 'Day' or 'Hour'")
+        raise ValueError(
+            "pre_paid_info 'pricing_cycle' must be 'Day' or 'Hour'",
+        )
     return body
 
 
@@ -326,7 +334,9 @@ def _renew_body(
     ptu_capacity: Any,
     instance_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    body: Dict[str, Any] = {"pre_paid_info": _pre_paid_info_body(pre_paid_info)}
+    body: Dict[str, Any] = {
+        "pre_paid_info": _pre_paid_info_body(pre_paid_info),
+    }
     if instance_id is not None:
         body["instance_id"] = instance_id
     if is_change is not None:
@@ -501,7 +511,11 @@ class CapacityInstances:
         to ``max_retries=0`` and carries an idempotency key. Returns the
         :class:`CapacityOperation` to poll (HTTP 200 is not success).
         """
-        body = _instance_create_body(billing_method, ptu_capacity, pre_paid_info)
+        body = _instance_create_body(
+            billing_method,
+            ptu_capacity,
+            pre_paid_info,
+        )
         resp = self._client.transport.request_api(
             "POST",
             self._path(deployed_model),
@@ -1213,7 +1227,11 @@ class AsyncCapacityInstances:
         raw: bool = False,
     ) -> Union[CapacityOperation, "APIResponse"]:
         """Buy an additional capacity instance (stacked purchase)."""
-        body = _instance_create_body(billing_method, ptu_capacity, pre_paid_info)
+        body = _instance_create_body(
+            billing_method,
+            ptu_capacity,
+            pre_paid_info,
+        )
         resp = await self._client.transport.request_api(
             "POST",
             self._path(deployed_model),

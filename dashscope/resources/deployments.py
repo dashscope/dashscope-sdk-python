@@ -226,6 +226,25 @@ def _parse_event(
     )
 
 
+def _validate_ptu_create(
+    plan: Optional[str],
+    charge_type: Optional[str],
+    ptu_capacity: Any,
+    pre_paid_info: Any,
+) -> None:
+    # PTU expresses capacity as ptu_capacity (kTPM), not instance count.
+    # charge_type and ptu_capacity are required; pre_paid billing
+    # additionally requires pre_paid_info.
+    if plan != "ptu":
+        return
+    if charge_type is None:
+        raise ValueError("plan='ptu' requires charge_type")
+    if ptu_capacity is None:
+        raise ValueError("plan='ptu' requires ptu_capacity")
+    if charge_type == "pre_paid" and pre_paid_info is None:
+        raise ValueError("pre_paid charge_type requires pre_paid_info")
+
+
 def _build_create_body(
     model: str,
     capacity: Optional[int],
@@ -245,41 +264,24 @@ def _build_create_body(
     body: Dict[str, Any] = {"model_name": model}
     if capacity is not None:
         body["capacity"] = capacity
-    if model_version is not None:
-        body["model_version"] = model_version
-    if suffix is not None:
-        body["suffix"] = suffix
-    if plan is not None:
-        body["plan"] = plan
-    if template_id is not None:
-        body["template_id"] = template_id
-
-    # MU deployments reject the create call unless both are present.
-    if deploy_spec is not None:
-        body["deploy_spec"] = deploy_spec
-    if billing_method is not None:
-        body["billing_method"] = billing_method
-
-    # PTU throughput reservation: capacity is expressed as ptu_capacity
-    # (kTPM), not instance count. charge_type and ptu_capacity are required;
-    # pre_paid billing additionally requires pre_paid_info.
-    if name is not None:
-        body["name"] = name
-    if service_tier is not None:
-        body["service_tier"] = service_tier
-    if charge_type is not None:
-        body["charge_type"] = charge_type
+    optional = {
+        "model_version": model_version,
+        "suffix": suffix,
+        "plan": plan,
+        "template_id": template_id,
+        # MU deployments reject the create call unless both are present.
+        "deploy_spec": deploy_spec,
+        "billing_method": billing_method,
+        "name": name,
+        "service_tier": service_tier,
+        "charge_type": charge_type,
+    }
+    body.update({k: v for k, v in optional.items() if v is not None})
     if ptu_capacity is not None:
         body["ptu_capacity"] = _ptu_capacity_body(ptu_capacity)
     if pre_paid_info is not None:
         body["pre_paid_info"] = _pre_paid_info_body(pre_paid_info)
-    if plan == "ptu":
-        if charge_type is None:
-            raise ValueError("plan='ptu' requires charge_type")
-        if ptu_capacity is None:
-            raise ValueError("plan='ptu' requires ptu_capacity")
-        if charge_type == "pre_paid" and pre_paid_info is None:
-            raise ValueError("pre_paid charge_type requires pre_paid_info")
+    _validate_ptu_create(plan, charge_type, ptu_capacity, pre_paid_info)
     return body
 
 

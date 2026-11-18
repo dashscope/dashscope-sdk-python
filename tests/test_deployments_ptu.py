@@ -256,7 +256,9 @@ def test_mu_create_keeps_default_retry(monkeypatch):
     ],
 )
 def test_ptu_create_validation(kwargs, match):
-    client = _make_client(lambda r: httpx.Response(200, json=_deployment_output()))
+    client = _make_client(
+        lambda r: httpx.Response(200, json=_deployment_output()),
+    )
     with pytest.raises(ValueError, match=match):
         client.deployments.create(model="qwen-plus", **kwargs)
     client.close()
@@ -313,11 +315,17 @@ def test_mu_scale_has_no_idempotency_key():
 
 
 def test_scale_requires_capacity_or_ptu():
-    client = _make_client(lambda r: httpx.Response(200, json=_deployment_output()))
+    client = _make_client(
+        lambda r: httpx.Response(200, json=_deployment_output()),
+    )
     with pytest.raises(ValueError, match="capacity or ptu_capacity"):
         client.deployments.scale("pm-abc123")
     with pytest.raises(ValueError, match="order_type"):
-        client.deployments.scale("pm-abc123", capacity=2, order_type="SIDEWAYS")
+        client.deployments.scale(
+            "pm-abc123",
+            capacity=2,
+            order_type="SIDEWAYS",
+        )
     client.close()
 
 
@@ -374,7 +382,9 @@ def test_renew_body_and_safeguards():
 
 
 def test_renew_capacity_change_requires_is_change():
-    client = _make_client(lambda r: httpx.Response(200, json=_deployment_output()))
+    client = _make_client(
+        lambda r: httpx.Response(200, json=_deployment_output()),
+    )
     with pytest.raises(ValueError, match="is_change"):
         client.deployments.renew(
             "pm-abc123",
@@ -391,7 +401,10 @@ def test_update_overflow_strategy():
         captured["body"] = json.loads(request.content)
         captured["path"] = request.url.path
         captured["headers"] = request.headers
-        return httpx.Response(200, json=_deployment_output(overflow_strategy="enable"))
+        return httpx.Response(
+            200,
+            json=_deployment_output(overflow_strategy="enable"),
+        )
 
     client = _make_client(handler)
     updated = client.deployments.update_overflow_strategy(
@@ -477,7 +490,10 @@ def test_instance_create_postpaid_no_prepaid_ok():
             {"billing_method": "pre_pay", "ptu_capacity": _PTU_CAPACITY},
             "billing_method",
         ),
-        ({"billing_method": "PRE_PAY", "ptu_capacity": _PTU_CAPACITY}, "pre_paid_info"),
+        (
+            {"billing_method": "PRE_PAY", "ptu_capacity": _PTU_CAPACITY},
+            "pre_paid_info",
+        ),
         (
             {"billing_method": "POST_PAY", "ptu_capacity": {"input_tpm": 1}},
             "output_tpm",
