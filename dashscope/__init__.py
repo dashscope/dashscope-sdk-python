@@ -87,6 +87,12 @@ from dashscope._config import Config, Settings, save_api_key, settings
 from dashscope._quickstart import chat
 from dashscope.client import AsyncClient, Client
 from dashscope.errors import DashScopeError, ErrorCode
+from dashscope.region_router import (
+    AsyncRegionRouter,
+    ModelAvailability,
+    RegionModelInfo,
+    RegionRouter,
+)
 from dashscope.transport.ws_connection import WsConnection, WsTask
 
 # cn-beijing defaults to the legacy dashscope.aliyuncs.com endpoints;
@@ -297,10 +303,14 @@ __all__ = [
     "VideoSynthesis",
     # dashscope 2.0
     "AsyncClient",
+    "AsyncRegionRouter",
     "Client",
     "Config",
     "DashScopeError",
     "ErrorCode",
+    "ModelAvailability",
+    "RegionModelInfo",
+    "RegionRouter",
     "Settings",
     "WsConnection",
     "WsTask",
