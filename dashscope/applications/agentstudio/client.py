@@ -16,6 +16,10 @@ from dashscope._shared._validation import (
     validate_region,
     validate_workspace_id,
 )
+from dashscope.applications.agentstudio.resources.usage import (
+    Usage,
+    AsyncUsage,
+)
 from dashscope.applications.agentstudio.resources.agents import (
     Agents,
     AsyncAgents,
@@ -213,6 +217,7 @@ class Client:
         self.memory_stores = MemoryStores(self)
         self.webhook_endpoints = WebhookEndpoints(self)
         self.security = Security(self)
+        self.usage = Usage(self)
 
     def close(self) -> None:
         self.transport.close()
@@ -295,6 +300,7 @@ class AsyncClient:
         self.memory_stores = AsyncMemoryStores(self)
         self.webhook_endpoints = AsyncWebhookEndpoints(self)
         self.security = AsyncSecurity(self)
+        self.usage = AsyncUsage(self)
 
     async def aclose(self) -> None:
         await self.transport.aclose()
