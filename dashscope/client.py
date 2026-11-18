@@ -20,6 +20,7 @@ from dashscope.resources.audio import AsyncAudio, Audio
 from dashscope.resources.batch_chat import AsyncBatchChat, BatchChat
 from dashscope.resources.batches import AsyncBatches, Batches
 from dashscope.resources.chat import AsyncChat, Chat
+from dashscope.resources.conversations import AsyncConversations, Conversations
 from dashscope.resources.decision import AsyncDecision, Decision
 from dashscope.resources.deployments import AsyncDeployments, Deployments
 from dashscope.resources.embeddings import AsyncEmbeddings, Embeddings
@@ -141,6 +142,7 @@ class Client:
         self.batches = Batches(self)
         self.batch_chat = BatchChat(self)
         self.responses = Responses(self)
+        self.conversations = Conversations(self)
         self.models = Models(self)
         self.images = Images(self)
         self.videos = Videos(self)
@@ -406,6 +408,7 @@ class AsyncClient:
         self.batches = AsyncBatches(self)
         self.batch_chat = AsyncBatchChat(self)
         self.responses = AsyncResponses(self)
+        self.conversations = AsyncConversations(self)
         self.models = AsyncModels(self)
         self.images = AsyncImages(self)
         self.videos = AsyncVideos(self)
