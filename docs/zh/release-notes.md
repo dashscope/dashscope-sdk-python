@@ -12,15 +12,15 @@ description: "dashscope Python SDK 发行说明与变更日志指引，含 2.0 �
 
 | Tag | 说明 |
 | --- | --- |
-| [v2.1.0](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.1.0) | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.1.0) |
-| [v2.0.4](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.4) | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.4) |
-| [v2.0.3](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.3) | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.3) |
-| [v2.0.2](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.2) | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.2) |
-| [v2.0.1](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.1) | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.1) |
+| v2.1.0 | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.1.0) |
+| v2.0.4 | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.4) |
+| v2.0.3 | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.3) |
+| v2.0.2 | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.2) |
+| v2.0.1 | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.1) |
 
 ## 2.0 亮点
 
-2.0 引入了参照 OpenAI SDK 人体工学的资源式客户端：
+2.0 引入了沿用 OpenAI SDK 使用体验的资源式客户端：
 
 - **入口** —— `client.chat.completions.create(...)` 取代模块级静态类；
   一行式 `dashscope.chat("qwen-plus", "...")`。

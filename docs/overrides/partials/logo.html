@@ -1,0 +1,10 @@
+{#-
+  Override of partials/logo.html: Material hardcodes alt="logo"; use the
+  site name so the header mark carries a meaningful accessible name.
+-#}
+{% if config.theme.logo %}
+  <img src="{{ config.theme.logo | url }}" alt="{{ config.site_name }}">
+{% else %}
+  {% set icon = config.theme.icon.logo or "material/library" %}
+  {% include ".icons/" ~ icon ~ ".svg" %}
+{% endif %}

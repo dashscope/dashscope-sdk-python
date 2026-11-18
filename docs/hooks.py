@@ -18,6 +18,11 @@ _SECTION_ONLY_TOC_PAGES = {
     "reference/resources.md",
 }
 
+# The theme's static 404.html template renders once per i18n pass and the
+# last (zh) pass overwrites site/404.html, shipping a mixed-language shell.
+# Stash the en pass render context and reuse it for every later pass.
+_EN_404_CONTEXT = None
+
 
 def _read_version(docs_dir: str) -> str:
     source = Path(docs_dir).parent / "dashscope" / "version.py"
@@ -64,3 +69,65 @@ def on_page_markdown(markdown, *, page, config, files):
         "{{ sdk_version }}",
         config.extra.get("sdk_version", "unknown"),
     )
+
+
+def _snapshot_404_context(context, config):
+    """Snapshot a 404 render context with explicit language destinations."""
+    # Plain-dict snapshot: Config/Theme are UserDict/MutableMapping whose
+    # internal storage copy.copy would share, and i18n mutates it per pass.
+    snapshot = dict(context)
+    cfg = dict(config)
+    cfg["theme"] = dict(config.theme)
+    cfg["extra"] = dict(config.extra)
+    # Static theme templates have no page context. Without this override, the
+    # i18n plugin leaves the last content page's alternates behind.
+    base_url = context.get("base_url", "/")
+    cfg["extra"]["alternate"] = [
+        {"link": base_url, "lang": "en", "name": "English"},
+        {
+            "link": base_url + "zh/404/",
+            "lang": "zh",
+            "name": "简体中文",
+        },
+    ]
+    snapshot["config"] = cfg
+    return snapshot
+
+
+def on_template_context(context, *, template_name, config):
+    global _EN_404_CONTEXT
+    if template_name != "404.html":
+        return context
+    if config.theme.get("language", "en") == "en":
+        _EN_404_CONTEXT = _snapshot_404_context(context, config)
+        return _EN_404_CONTEXT
+    if _EN_404_CONTEXT is None:
+        # mkdocs serve can rebuild only the zh pass; static destinations must
+        # not depend on an earlier en render having populated the cache.
+        return _snapshot_404_context(context, config)
+    # Fresh copy per pass: later plugin hooks may mutate the returned dict.
+    return dict(_EN_404_CONTEXT)
+
+
+def on_post_build(*, config):
+    """Keep the localized 404 page out of the sitemap.
+
+    mkdocs only special-cases the root ``404.html``; the zh 404 lives at
+    ``zh/404/`` and would otherwise be listed as a regular page.
+    """
+    import gzip
+
+    sitemap = Path(config.site_dir) / "sitemap.xml"
+    if not sitemap.exists():
+        return
+    text = sitemap.read_text(encoding="utf-8")
+    pruned = text
+    for block in re.findall(r"<url>.*?</url>", text, re.S):
+        if re.search(r"<loc>[^<]*/404/</loc>", block):
+            pruned = pruned.replace(block, "", 1)
+    if pruned == text:
+        return
+    sitemap.write_text(pruned, encoding="utf-8")
+    compressed = sitemap.with_suffix(".xml.gz")
+    if compressed.exists():
+        compressed.write_bytes(gzip.compress(pruned.encode("utf-8")))

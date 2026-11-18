@@ -7,6 +7,9 @@ repos:
       - id: sort-simple-yaml
         exclude: ^tests/legacy_1x/legacy/
       - id: check-yaml
+        # mkdocs.yml uses Material's !!python/name emoji tags; --unsafe
+        # accepts custom tags while still validating YAML syntax.
+        args: [--unsafe]
         exclude: |
           (?x)^(
               meta.yaml

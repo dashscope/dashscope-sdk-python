@@ -3,29 +3,74 @@ description: "Official Python SDK for Alibaba Cloud Model Studio (DashScope): ty
 ---
 # DashScope Python SDK
 
+<p class="hero-badges" markdown>
+[**v{{ sdk_version }}**](release-notes.md){ .hero-badge }
+[**Python 3.9+**](#requirements){ .hero-badge }
+[**Apache-2.0**](https://github.com/dashscope/dashscope-sdk-python/blob/main/LICENSE){ .hero-badge }
+</p>
+
 The `dashscope` SDK is the official Python client for
 [Alibaba Cloud Model Studio (Bailian)](https://www.alibabacloud.com/help/en/model-studio/):
 chat completions, multimodal understanding, embeddings, reranking, image and
 video generation, speech synthesis & recognition, realtime voice, fine-tuning,
 agentic RL, managed agents and applications.
 
+<div class="hero-cta" markdown>
+[Quickstart](quickstart.md){ .md-button .md-button--primary }
+[Get an API key](https://bailian.console.aliyun.com/){ .md-button }
+</div>
+
 Version 2.0 is a typed, resource-style client — `dashscope.Client()` — modeled
 on the ergonomics of the OpenAI SDK: one client holds a shared connection pool,
 every capability hangs off it as a typed resource, responses are typed objects,
 and failures raise exceptions by default.
 
-!!! tip "Where to start"
-    New here? Follow the [Quickstart](quickstart.md). Migrating existing
-    1.x code? See [Migrating from 1.x](migration.md).
+Migrating existing 1.x code? See [Migrating from 1.x](migration.md).
 
 ## Features
 
-- **Typed resources** — `client.chat`, `client.images`, `client.audio`, …
-- **Sync & async** — `AsyncClient` mirrors the sync surface.
-- **Three protocols** — `native`, `openai`, `anthropic` on one client.
-- **Text-like streaming** — `.text_stream`, `.reasoning_stream`.
-- **Typed errors + self-diagnosis** and an offline **dev mock**.
-- **A real CLI** and an optional interactive AI assistant.
+<div class="grid cards" markdown>
+
+-   :material-package-variant:{ .lg .middle } **Typed resources**
+
+    ---
+
+    `client.chat`, `client.images`, `client.audio`, … — every capability
+    hangs off one client as a typed resource.
+
+-   :material-sync:{ .lg .middle } **Sync & async**
+
+    ---
+
+    `AsyncClient` mirrors the sync surface, so `await` is a drop-in switch.
+
+-   :material-api:{ .lg .middle } **Three protocols**
+
+    ---
+
+    `native`, `openai` and `anthropic` wire protocols on the same client.
+
+-   :material-waveform:{ .lg .middle } **Text-like streaming**
+
+    ---
+
+    Iterate `.text_stream` / `.reasoning_stream` like plain text.
+
+-   :material-stethoscope:{ .lg .middle } **Typed errors & diagnosis**
+
+    ---
+
+    Exceptions carry `code` and `request_id`; opt-in self-diagnosis plus an
+    offline dev mock.
+
+-   :material-console:{ .lg .middle } **A real CLI**
+
+    ---
+
+    Script every resource from a shell, or start the optional interactive
+    AI assistant.
+
+</div>
 
 The full list: [Features](features.md).
 
@@ -61,16 +106,35 @@ client = dashscope.Client()  # reads DASHSCOPE_API_KEY
 
 ### Run it
 
-```python
-resp = client.chat.completions.create(
-    model="qwen-plus",
-    messages=[{"role": "user", "content": "Tell me a joke"}],
-)
-print(resp.output_text)
-print(resp.usage.total_tokens)
-```
+=== "Sync"
 
-Or the one-liner: `dashscope.chat("qwen-plus", "Tell me a joke")`.
+    ```python
+    resp = client.chat.completions.create(
+        model="qwen-plus",
+        messages=[{"role": "user", "content": "Tell me a joke"}],
+    )
+    print(resp.output_text)
+    print(resp.usage.total_tokens)
+    ```
+
+    Or the one-liner: `dashscope.chat("qwen-plus", "Tell me a joke")`.
+
+=== "Async"
+
+    ```python
+    import asyncio
+    import dashscope
+
+    async def main():
+        async with dashscope.AsyncClient() as client:
+            resp = await client.chat.completions.create(
+                model="qwen-plus",
+                messages=[{"role": "user", "content": "Hello!"}],
+            )
+            print(resp.output_text)
+
+    asyncio.run(main())
+    ```
 
 ### Stream it
 
@@ -83,23 +147,6 @@ with client.chat.completions.create(
     for text in stream.text_stream:
         print(text, end="", flush=True)
     final = stream.get_final_message()
-```
-
-### Async it
-
-```python
-import asyncio
-import dashscope
-
-async def main():
-    async with dashscope.AsyncClient() as client:
-        resp = await client.chat.completions.create(
-            model="qwen-plus",
-            messages=[{"role": "user", "content": "Hello!"}],
-        )
-        print(resp.output_text)
-
-asyncio.run(main())
 ```
 
 ### Talk to it (realtime voice)

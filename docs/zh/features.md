@@ -1,7 +1,7 @@
 ---
-description: "dashscope 2.0 SDK 特征总览：类型化资源、同步/异步、协议、流式、错误、dev mock、CLI 与 1.x 兼容。"
+description: "dashscope 2.0 SDK 特性总览：类型化资源、同步/异步、协议、流式、错误、dev mock、CLI 与 1.x 兼容。"
 ---
-# 特征
+# 特性
 
 dashscope 2.0 SDK 是面向阿里云百炼（Model Studio / DashScope）的
 类型化、资源式客户端。亮点如下：

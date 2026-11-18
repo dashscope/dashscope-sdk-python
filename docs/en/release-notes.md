@@ -12,11 +12,11 @@ Current SDK version: **{{ sdk_version }}**.
 
 | Tag | Notes |
 | --- | --- |
-| [v2.1.0](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.1.0) | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.1.0) |
-| [v2.0.4](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.4) | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.4) |
-| [v2.0.3](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.3) | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.3) |
-| [v2.0.2](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.2) | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.2) |
-| [v2.0.1](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.1) | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.1) |
+| v2.1.0 | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.1.0) |
+| v2.0.4 | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.4) |
+| v2.0.3 | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.3) |
+| v2.0.2 | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.2) |
+| v2.0.1 | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.1) |
 
 ## 2.0 highlights
 

@@ -14,8 +14,11 @@ theme:
   # System font stack: the Google Fonts stylesheet is render-blocking and
   # unreachable for mainland-China readers, stalling first paint.
   font: false
-  logo: assets/logo.png
-  favicon: assets/logo.png
+  # logo.svg is a 1:1 potrace vectorization of logo.png with the opaque
+  # white background dropped (the white tile read as a solid block on the
+  # dark header); the mark itself is unchanged.
+  logo: assets/logo.svg
+  favicon: assets/favicon.png
   features:
     - navigation.tabs
     - navigation.tabs.sticky
@@ -68,8 +71,16 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.superfences
   - pymdownx.highlight:
-      anchor_linenums: true
+      # Every highlighted block restarts its anchor counter at zero. With
+      # multiple mkdocstrings source blocks this duplicates IDs and makes
+      # later gutter links jump to earlier blocks; keep visual line numbers
+      # but disable the broken per-line anchors.
+      anchor_linenums: false
   - pymdownx.inlinehilite
+  # Icon shortcodes for the landing-page feature cards (:material-*:).
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.tabbed:
       alternate_style: true
 
@@ -91,7 +102,7 @@ plugins:
           name: 简体中文
           build: true
           nav_translations:
-            Features: 特征
+            Features: 特性
             Learn: 学习
             Quickstart: 快速开始
             Migrating from 1.x: 从 1.x 迁移

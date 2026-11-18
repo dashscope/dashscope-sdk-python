@@ -1,7 +1,13 @@
 ---
-description: "阿里云百炼（DashScope）官方 Python SDK：类型化同步/异步客户端、示例与特征总览。"
+description: "阿里云百炼（DashScope）官方 Python SDK：类型化同步/异步客户端、示例与特性总览。"
 ---
 # DashScope Python SDK
+
+<p class="hero-badges" markdown>
+[**v{{ sdk_version }}**](release-notes.md){ .hero-badge }
+[**Python 3.9+**](#requirements){ .hero-badge }
+[**Apache-2.0**](https://github.com/dashscope/dashscope-sdk-python/blob/main/LICENSE){ .hero-badge }
+</p>
 
 `dashscope` SDK 是
 [阿里云百炼（Model Studio）](https://help.aliyun.com/zh/model-studio/)
@@ -9,26 +15,64 @@ description: "阿里云百炼（DashScope）官方 Python SDK：类型化同步/
 图像与视频生成、语音合成与识别、实时语音、微调、智能体强化学习、
 托管智能体与应用调用。
 
-2.0 是类型化、资源式客户端——`dashscope.Client()`——参照 OpenAI SDK
-的人体工学：一个客户端持有共享连接池，每种能力以类型化资源挂在
+<div class="hero-cta" markdown>
+[快速开始](quickstart.md){ .md-button .md-button--primary }
+[获取 API Key](https://bailian.console.aliyun.com/){ .md-button }
+</div>
+
+2.0 是类型化、资源式客户端——`dashscope.Client()`——沿用 OpenAI SDK
+的使用体验：一个客户端持有共享连接池，每种能力以类型化资源挂在
 其上，响应是类型化对象，失败默认抛出异常。
 
-!!! tip "从哪里开始"
-    初次使用？跟随[快速开始](quickstart.md)。迁移既有 1.x 代码？
-    见[从 1.x 迁移](migration.md)。
+迁移既有 1.x 代码？见[从 1.x 迁移](migration.md)。
 
-## 特征
+## 特性
 
-- **类型化资源** —— `client.chat`、`client.images`、`client.audio`……
-- **同步与异步** —— `AsyncClient` 镜像同步接口。
-- **三种协议** —— 一个客户端支持 `native`、`openai`、`anthropic`。
-- **像读文本一样的流式** —— `.text_stream`、`.reasoning_stream`。
-- **类型化错误 + 自诊断**，以及离线 **dev mock**。
-- **真正的命令行**与可选交互式 AI 助手。
+<div class="grid cards" markdown>
 
-完整列表见[特征](features.md)。
+-   :material-package-variant:{ .lg .middle } **类型化资源**
 
-## 要求
+    ---
+
+    `client.chat`、`client.images`、`client.audio`……每种能力都以
+    类型化资源挂在同一个客户端上。
+
+-   :material-sync:{ .lg .middle } **同步与异步**
+
+    ---
+
+    `AsyncClient` 镜像同步接口，切换到 `await` 即可。
+
+-   :material-api:{ .lg .middle } **三种协议**
+
+    ---
+
+    同一个客户端支持 `native`、`openai`、`anthropic` 三种传输协议。
+
+-   :material-waveform:{ .lg .middle } **像读文本一样的流式**
+
+    ---
+
+    像遍历普通文本一样迭代 `.text_stream` / `.reasoning_stream`。
+
+-   :material-stethoscope:{ .lg .middle } **类型化错误与自诊断**
+
+    ---
+
+    异常携带 `code` 与 `request_id`；可选本地自诊断，另有离线
+    dev mock。
+
+-   :material-console:{ .lg .middle } **真正的命令行**
+
+    ---
+
+    在 shell 里脚本化所有资源，或启动可选的交互式 AI 助手。
+
+</div>
+
+完整列表见[特性](features.md)。
+
+## 要求 { #requirements }
 
 - Python 3.9+（可选交互式助手需要 3.10+）。
 - 百炼 API Key——在[百炼控制台](https://bailian.console.aliyun.com/)
@@ -48,7 +92,7 @@ pip install -U dashscope
 分词器。可选 extras 用于配置交互式 AI 助手，例如
 `pip install "dashscope[acli]"`（见[命令行工具](cli.md)）。
 
-## 例子
+## 示例
 
 ### 创建它
 
@@ -60,16 +104,35 @@ client = dashscope.Client()  # 读取 DASHSCOPE_API_KEY
 
 ### 运行它
 
-```python
-resp = client.chat.completions.create(
-    model="qwen-plus",
-    messages=[{"role": "user", "content": "讲个笑话"}],
-)
-print(resp.output_text)
-print(resp.usage.total_tokens)
-```
+=== "同步"
 
-或一行式：`dashscope.chat("qwen-plus", "讲个笑话")`。
+    ```python
+    resp = client.chat.completions.create(
+        model="qwen-plus",
+        messages=[{"role": "user", "content": "讲个笑话"}],
+    )
+    print(resp.output_text)
+    print(resp.usage.total_tokens)
+    ```
+
+    或一行式：`dashscope.chat("qwen-plus", "讲个笑话")`。
+
+=== "异步"
+
+    ```python
+    import asyncio
+    import dashscope
+
+    async def main():
+        async with dashscope.AsyncClient() as client:
+            resp = await client.chat.completions.create(
+                model="qwen-plus",
+                messages=[{"role": "user", "content": "你好！"}],
+            )
+            print(resp.output_text)
+
+    asyncio.run(main())
+    ```
 
 ### 流式运行它
 
@@ -82,23 +145,6 @@ with client.chat.completions.create(
     for text in stream.text_stream:
         print(text, end="", flush=True)
     final = stream.get_final_message()
-```
-
-### 异步运行它
-
-```python
-import asyncio
-import dashscope
-
-async def main():
-    async with dashscope.AsyncClient() as client:
-        resp = await client.chat.completions.create(
-            model="qwen-plus",
-            messages=[{"role": "user", "content": "你好！"}],
-        )
-        print(resp.output_text)
-
-asyncio.run(main())
 ```
 
 ### 和它对话（实时语音）
@@ -152,7 +198,7 @@ client = dashscope.Client(protocol="openai")  # 或 "native"、"anthropic"
 `websocket-client`、`pydantic`（v2）、`tenacity`、`tiktoken`，以及
 CLI 所需的 `typer` + `rich`。可选助手 extras 见上文「安装」一节。
 
-## 执照
+## 许可证
 
 本项目采用
 [Apache License 2.0](https://github.com/dashscope/dashscope-sdk-python/blob/main/LICENSE)
