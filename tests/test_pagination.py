@@ -207,6 +207,11 @@ def test_model_dump_excludes_callback():
             "inference_metadata": None,
             "model_info": None,
             "equivalent_snapshot": None,
+            # SDK-injected query context (A2): default region, no workspace,
+            # unfiltered service_site.
+            "served_region": "cn-beijing",
+            "workspace": None,
+            "service_site": None,
         },
     ]
 

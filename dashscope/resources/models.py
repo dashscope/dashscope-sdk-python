@@ -7,7 +7,9 @@ from __future__ import annotations
 from typing import (
     TYPE_CHECKING,
     Any,
+    AsyncIterator,
     Dict,
+    Iterator,
     List,
     Literal,
     Mapping,
@@ -123,6 +125,15 @@ class Model(ResponseBase):
     inference_metadata: Optional[InferenceMetadata] = None
     model_info: Optional[ModelInfo] = None
     equivalent_snapshot: Optional[str] = None
+    # SDK-injected query context, not per-model wire fields: the catalog
+    # endpoint's region and the effective workspace. ``service_site`` echoes
+    # the query's deployment-site filter (None when unfiltered, i.e. the page
+    # may span sites); it is a different dimension from ``served_region`` and
+    # the two are never conflated. A gateway that does return ``service_site``
+    # per model keeps its own value.
+    served_region: Optional[str] = None
+    workspace: Optional[str] = None
+    service_site: Optional[str] = None
 
 
 class ModelList(BasePage[Model]):
@@ -141,11 +152,36 @@ class ModelList(BasePage[Model]):
         return self.models
 
 
+def _with_context(
+    item: Dict[str, Any],
+    *,
+    region: Optional[str],
+    workspace: Optional[str],
+    service_site: Optional[str],
+) -> Dict[str, Any]:
+    """Stamp the SDK-injected query context onto one wire model dict.
+
+    ``served_region`` / ``workspace`` describe the endpoint the catalog was
+    read from, so the SDK's values are authoritative and override any a
+    gateway might echo. ``service_site`` is only filled from the query filter
+    when the wire item does not carry its own, so a real per-model value is
+    never erased by an unfiltered (None) query.
+    """
+    merged = dict(item)
+    merged["served_region"] = region
+    merged["workspace"] = workspace
+    merged.setdefault("service_site", service_site)
+    return merged
+
+
 def _parse_list(
     body: Dict[str, Any],
     *,
     strict: bool = False,
     response: Optional[httpx.Response] = None,
+    region: Optional[str] = None,
+    workspace: Optional[str] = None,
+    service_site: Optional[str] = None,
 ) -> ModelList:
     """Build a page from the native envelope.
 
@@ -159,6 +195,9 @@ def _parse_list(
     parse as an empty catalog rather than as the malformed one it is. The
     ``total`` fallback to ``len(models)`` keeps ``total_count`` meaningful
     for gateways that omit it, matching ``files.list``.
+
+    ``region`` / ``workspace`` / ``service_site`` are stamped onto every model
+    as SDK-injected query context (see :func:`_with_context`).
     """
     data = body.get("output") or body.get("data") or {}
     if isinstance(data, dict):
@@ -177,6 +216,17 @@ def _parse_list(
         # drifted scalar would escape as a bare TypeError from here.
         models = data if isinstance(data, list) else []
         page_no, page_size, total = 1, 10, len(models)
+    models = [
+        _with_context(
+            m,
+            region=region,
+            workspace=workspace,
+            service_site=service_site,
+        )
+        if isinstance(m, dict)
+        else m
+        for m in models
+    ]
     return parse_model(
         ModelList,
         {
@@ -403,6 +453,13 @@ class Models:
             resp.json(),
             strict=self._client.config.strict_validation,
             response=resp.http_response,
+            region=self._client.config.region,
+            workspace=(
+                workspace
+                if workspace is not None
+                else self._client.config.workspace
+            ),
+            service_site=service_site,
         )
         result.bind_pagination(
             lambda next_no, next_size: self.list(
@@ -489,6 +546,12 @@ class Models:
         resp.raise_for_status()
         body = resp.json()
         models = _parse_get_models(body)
+        region = self._client.config.region
+        effective_workspace = (
+            workspace
+            if workspace is not None
+            else self._client.config.workspace
+        )
         if not models:
             if self._client.raise_on_error:
                 raise error_from_business_code(
@@ -500,7 +563,11 @@ class Models:
             return with_headers(
                 parse_model(
                     Model,
-                    response_envelope(body),
+                    {
+                        **response_envelope(body),
+                        "served_region": region,
+                        "workspace": effective_workspace,
+                    },
                     strict=self._client.config.strict_validation,
                     response=resp.http_response,
                 ),
@@ -512,12 +579,180 @@ class Models:
                 # Dict merge, not ``**`` twice: a wire entry carrying an
                 # envelope key of its own would otherwise raise a
                 # duplicate-keyword TypeError instead of being parsed.
-                {**models[0], **response_envelope(body)},
+                {
+                    **_with_context(
+                        models[0],
+                        region=region,
+                        workspace=effective_workspace,
+                        service_site=None,
+                    ),
+                    **response_envelope(body),
+                },
                 strict=self._client.config.strict_validation,
                 response=resp.http_response,
             ),
             resp.http_response,
         )
+
+    def iter(
+        self,
+        *,
+        page_size: int = 100,
+        provider: Optional[str] = None,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        inference_providers: Optional[List[str]] = None,
+        capabilities: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        service_site: Optional[str] = None,
+        supports: Optional[List[str]] = None,
+        deployment_methods: Optional[List[str]] = None,
+        deployment_ptu_service_tiers: Optional[List[str]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> Iterator[Model]:
+        """Iterate every model across all pages, lazily.
+
+        Takes the same server-side filters as :meth:`list` (minus ``page_no``
+        / ``raw``) and walks the filtered catalog from page 1 to the end, so
+        callers never maintain ``page_no`` / ``total_count`` by hand.
+        ``page_size`` defaults to 100 to cut round-trips. Each yielded
+        :class:`Model` carries the injected ``served_region`` / ``workspace``
+        / ``service_site`` context. Only the current Client Region is read.
+        """
+        page = self.list(
+            page_no=1,
+            page_size=page_size,
+            provider=provider,
+            name=name,
+            model=model,
+            language=language,
+            providers=providers,
+            inference_providers=inference_providers,
+            capabilities=capabilities,
+            features=features,
+            context_window=context_window,
+            service_site=service_site,
+            supports=supports,
+            deployment_methods=deployment_methods,
+            deployment_ptu_service_tiers=deployment_ptu_service_tiers,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+        )
+        for following in page.iter_pages():
+            yield from following
+
+    def list_all(
+        self,
+        *,
+        page_size: int = 100,
+        provider: Optional[str] = None,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        inference_providers: Optional[List[str]] = None,
+        capabilities: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        service_site: Optional[str] = None,
+        supports: Optional[List[str]] = None,
+        deployment_methods: Optional[List[str]] = None,
+        deployment_ptu_service_tiers: Optional[List[str]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> List[Model]:
+        """Collect every model across all pages into one list.
+
+        Eager counterpart of :meth:`iter` with the same filters; walks the
+        whole filtered catalog of the current Client Region. Prefer
+        :meth:`iter` when the catalog is large or only a prefix is needed.
+        """
+        return list(
+            self.iter(
+                page_size=page_size,
+                provider=provider,
+                name=name,
+                model=model,
+                language=language,
+                providers=providers,
+                inference_providers=inference_providers,
+                capabilities=capabilities,
+                features=features,
+                context_window=context_window,
+                service_site=service_site,
+                supports=supports,
+                deployment_methods=deployment_methods,
+                deployment_ptu_service_tiers=deployment_ptu_service_tiers,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            ),
+        )
+
+    def is_available(
+        self,
+        model: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> bool:
+        """Whether ``model`` is in the current Client Region's catalog.
+
+        Answers only for this Client's Region/endpoint and never queries
+        other Regions implicitly (use a per-Region Client for that). Returns
+        ``True`` when the catalog query returns a matching entry, ``False``
+        when it returns none. Transport/HTTP errors propagate rather than
+        being read as "unavailable". ``model`` must be a non-empty id, so an
+        empty filter cannot masquerade as the whole catalog being a match.
+        """
+        if not model or not model.strip():
+            raise ValueError("model must be a non-empty model id")
+        resp = self._client.transport.request_api(
+            "GET",
+            _BASE_PATH,
+            params={"model": model, "page_no": 1, "page_size": 1},
+            sdk_module=MODULE,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
+        )
+        resp.raise_for_status()
+        return bool(_parse_get_models(resp.json()))
 
 
 class AsyncModels:
@@ -649,6 +884,13 @@ class AsyncModels:
             resp.json(),
             strict=self._client.config.strict_validation,
             response=resp.http_response,
+            region=self._client.config.region,
+            workspace=(
+                workspace
+                if workspace is not None
+                else self._client.config.workspace
+            ),
+            service_site=service_site,
         )
         result.bind_pagination(
             lambda next_no, next_size: self.list(
@@ -735,6 +977,12 @@ class AsyncModels:
         resp.raise_for_status()
         body = resp.json()
         models = _parse_get_models(body)
+        region = self._client.config.region
+        effective_workspace = (
+            workspace
+            if workspace is not None
+            else self._client.config.workspace
+        )
         if not models:
             if self._client.raise_on_error:
                 raise error_from_business_code(
@@ -746,7 +994,11 @@ class AsyncModels:
             return with_headers(
                 parse_model(
                     Model,
-                    response_envelope(body),
+                    {
+                        **response_envelope(body),
+                        "served_region": region,
+                        "workspace": effective_workspace,
+                    },
                     strict=self._client.config.strict_validation,
                     response=resp.http_response,
                 ),
@@ -758,9 +1010,164 @@ class AsyncModels:
                 # Dict merge, not ``**`` twice: a wire entry carrying an
                 # envelope key of its own would otherwise raise a
                 # duplicate-keyword TypeError instead of being parsed.
-                {**models[0], **response_envelope(body)},
+                {
+                    **_with_context(
+                        models[0],
+                        region=region,
+                        workspace=effective_workspace,
+                        service_site=None,
+                    ),
+                    **response_envelope(body),
+                },
                 strict=self._client.config.strict_validation,
                 response=resp.http_response,
             ),
             resp.http_response,
         )
+
+    async def iter(
+        self,
+        *,
+        page_size: int = 100,
+        provider: Optional[str] = None,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        inference_providers: Optional[List[str]] = None,
+        capabilities: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        service_site: Optional[str] = None,
+        supports: Optional[List[str]] = None,
+        deployment_methods: Optional[List[str]] = None,
+        deployment_ptu_service_tiers: Optional[List[str]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> AsyncIterator[Model]:
+        """Async :meth:`Models.iter`: ``async for m in client.models.iter(...)``.
+
+        Walks every page of the current Client Region's filtered catalog,
+        fetching the next page lazily only as iteration advances. Each model
+        carries the injected ``served_region`` / ``workspace`` /
+        ``service_site`` context.
+        """
+        page = await self.list(
+            page_no=1,
+            page_size=page_size,
+            provider=provider,
+            name=name,
+            model=model,
+            language=language,
+            providers=providers,
+            inference_providers=inference_providers,
+            capabilities=capabilities,
+            features=features,
+            context_window=context_window,
+            service_site=service_site,
+            supports=supports,
+            deployment_methods=deployment_methods,
+            deployment_ptu_service_tiers=deployment_ptu_service_tiers,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+        )
+        async for following in page.iter_pages_async():
+            for item in following.items:
+                yield item
+
+    async def list_all(
+        self,
+        *,
+        page_size: int = 100,
+        provider: Optional[str] = None,
+        name: Optional[str] = None,
+        model: Optional[str] = None,
+        language: Optional[str] = None,
+        providers: Optional[List[str]] = None,
+        inference_providers: Optional[List[str]] = None,
+        capabilities: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        context_window: Optional[int] = None,
+        service_site: Optional[str] = None,
+        supports: Optional[List[str]] = None,
+        deployment_methods: Optional[List[str]] = None,
+        deployment_ptu_service_tiers: Optional[List[str]] = None,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> List[Model]:
+        """Async :meth:`Models.list_all`; collects the whole filtered catalog."""
+        return [
+            m
+            async for m in self.iter(
+                page_size=page_size,
+                provider=provider,
+                name=name,
+                model=model,
+                language=language,
+                providers=providers,
+                inference_providers=inference_providers,
+                capabilities=capabilities,
+                features=features,
+                context_window=context_window,
+                service_site=service_site,
+                supports=supports,
+                deployment_methods=deployment_methods,
+                deployment_ptu_service_tiers=deployment_ptu_service_tiers,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            )
+        ]
+
+    async def is_available(
+        self,
+        model: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> bool:
+        """Async :meth:`Models.is_available`; current Client Region only."""
+        if not model or not model.strip():
+            raise ValueError("model must be a non-empty model id")
+        resp = await self._client.transport.request_api(
+            "GET",
+            _BASE_PATH,
+            params={"model": model, "page_no": 1, "page_size": 1},
+            sdk_module=MODULE,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            options=request_options(
+                extra_headers,
+                extra_query,
+                extra_body,
+                max_retries=max_retries,
+            ),
+            client=self._client,
+        )
+        resp.raise_for_status()
+        return bool(_parse_get_models(resp.json()))

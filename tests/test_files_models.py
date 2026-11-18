@@ -857,3 +857,283 @@ def test_nested_list_items_carry_no_envelope():
     # The envelope belongs to the response, not to each item inside it.
     assert page.files[0].request_id is None
     assert not page.files[0].is_error
+
+
+# --- A2: auto-pagination, availability, region/workspace context ---
+
+
+def _catalog_handler(catalog, seen=None):
+    def handler(request):
+        params = request.url.params
+        page_no = int(params.get("page_no", 1))
+        page_size = int(params.get("page_size", 10))
+        if seen is not None:
+            seen.append((page_no, page_size))
+        start = (page_no - 1) * page_size
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "r",
+                "output": {
+                    "models": catalog[start : start + page_size],
+                    "page_no": page_no,
+                    "page_size": page_size,
+                    "total": len(catalog),
+                },
+            },
+        )
+
+    return handler
+
+
+def _one_model_body(extra=None):
+    item = {"model": "qwen-plus"}
+    if extra:
+        item.update(extra)
+    return {
+        "request_id": "r",
+        "output": {"models": [item], "total": 1},
+    }
+
+
+def test_models_list_injects_served_region_and_workspace():
+    client = _make_client(
+        lambda r: httpx.Response(200, json=_one_model_body()),
+        region="ap-southeast-1",
+        workspace="ws-sg",
+    )
+    m = client.models.list().models[0]
+    assert m.served_region == "ap-southeast-1"
+    assert m.workspace == "ws-sg"
+    assert m.service_site is None
+
+
+def test_models_list_injects_default_region_when_unset():
+    client = _make_client(
+        lambda r: httpx.Response(200, json=_one_model_body()),
+    )
+    m = client.models.list().models[0]
+    assert m.served_region == "cn-beijing"
+    assert m.workspace is None
+
+
+def test_models_list_workspace_override_wins_over_config():
+    client = _make_client(
+        lambda r: httpx.Response(200, json=_one_model_body()),
+        workspace="ws-config",
+    )
+    m = client.models.list(workspace="ws-call").models[0]
+    assert m.workspace == "ws-call"
+
+
+def test_models_list_service_site_echoes_filter():
+    client = _make_client(
+        lambda r: httpx.Response(200, json=_one_model_body()),
+    )
+    m = client.models.list(service_site="international").models[0]
+    assert m.service_site == "international"
+    # served_region is a different dimension, never conflated with the site.
+    assert m.served_region == "cn-beijing"
+
+
+def test_models_list_wire_service_site_is_not_erased():
+    body = _one_model_body({"service_site": "global"})
+    client = _make_client(lambda r: httpx.Response(200, json=body))
+    # An unfiltered query (None) must not erase a real per-model wire value.
+    assert client.models.list().models[0].service_site == "global"
+    # Even a conflicting filter does not override the wire's own value.
+    assert (
+        client.models.list(service_site="international").models[0].service_site
+        == "global"
+    )
+
+
+def test_models_get_injects_context():
+    client = _make_client(
+        lambda r: httpx.Response(200, json=_one_model_body()),
+        region="eu-central-1",
+        workspace="ws-eu",
+    )
+    m = client.models.get("qwen-plus")
+    assert m.served_region == "eu-central-1"
+    assert m.workspace == "ws-eu"
+    assert m.service_site is None
+
+
+def test_models_get_not_found_still_injects_context():
+    client = _make_client(
+        lambda r: httpx.Response(200, json={"output": {"models": []}}),
+        region="cn-beijing",
+        workspace="ws-bj",
+        raise_on_error=False,
+    )
+    m = client.models.get("nope")
+    assert m.model is None
+    assert m.served_region == "cn-beijing"
+    assert m.workspace == "ws-bj"
+
+
+def test_models_iter_walks_all_pages_and_preserves_filters():
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    seen = []
+
+    def handler(request):
+        params = request.url.params
+        seen.append(
+            (
+                int(params.get("page_no", 1)),
+                params.get_list("capabilities"),
+                params.get("service_site"),
+            ),
+        )
+        page_no = int(params.get("page_no", 1))
+        page_size = int(params.get("page_size", 10))
+        start = (page_no - 1) * page_size
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "r",
+                "output": {
+                    "models": catalog[start : start + page_size],
+                    "page_no": page_no,
+                    "page_size": page_size,
+                    "total": len(catalog),
+                },
+            },
+        )
+
+    client = _make_client(handler, region="cn-beijing", workspace="ws")
+    got = list(
+        client.models.iter(
+            page_size=2,
+            capabilities=["TG"],
+            service_site="international",
+        ),
+    )
+    assert [m.model for m in got] == ["m0", "m1", "m2", "m3", "m4"]
+    assert seen == [
+        (1, ["TG"], "international"),
+        (2, ["TG"], "international"),
+        (3, ["TG"], "international"),
+    ]
+    assert all(
+        m.served_region == "cn-beijing"
+        and m.workspace == "ws"
+        and m.service_site == "international"
+        for m in got
+    )
+
+
+def test_models_iter_is_lazy():
+    catalog = [{"model": f"m{i}"} for i in range(6)]
+    seen = []
+    client = _make_client(_catalog_handler(catalog, seen))
+    it = client.models.iter(page_size=2)
+    assert next(it).model == "m0"
+    # Only page 1 is fetched until iteration advances past it.
+    assert seen == [(1, 2)]
+    assert next(it).model == "m1"
+    assert seen == [(1, 2)]
+    assert next(it).model == "m2"
+    assert seen == [(1, 2), (2, 2)]
+
+
+def test_models_list_all_collects_every_page():
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    client = _make_client(_catalog_handler(catalog))
+    got = client.models.list_all(page_size=2)
+    assert isinstance(got, list)
+    assert [m.model for m in got] == ["m0", "m1", "m2", "m3", "m4"]
+
+
+def test_models_is_available_true_and_queries_current_region():
+    seen = {}
+
+    def handler(request):
+        seen["path"] = request.url.path
+        seen["model"] = request.url.params.get("model")
+        seen["page_size"] = request.url.params.get("page_size")
+        seen["sdk"] = request.headers.get("x-dashscope-sdk-client")
+        return httpx.Response(200, json=_one_model_body())
+
+    client = _make_client(handler)
+    assert client.models.is_available("qwen-plus") is True
+    assert seen["path"] == "/api/v1/models"
+    assert seen["model"] == "qwen-plus"
+    assert seen["page_size"] == "1"
+    assert seen["sdk"].endswith("/models2")
+
+
+def test_models_is_available_false_when_absent():
+    client = _make_client(
+        lambda r: httpx.Response(200, json={"output": {"models": []}}),
+    )
+    assert client.models.is_available("nope") is False
+
+
+def test_models_is_available_rejects_empty_model():
+    client = _make_client(
+        lambda r: httpx.Response(200, json=_one_model_body()),
+    )
+    with pytest.raises(ValueError):
+        client.models.is_available("")
+    with pytest.raises(ValueError):
+        client.models.is_available("   ")
+
+
+def test_models_is_available_propagates_http_error():
+    client = _make_client(
+        lambda r: httpx.Response(
+            400,
+            json={"code": "InvalidParameter", "message": "bad"},
+        ),
+    )
+    with pytest.raises(BadRequestError):
+        client.models.is_available("qwen-plus")
+
+
+@pytest.mark.asyncio
+async def test_async_models_iter_and_list_all():
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    seen = []
+    client = _make_async_client(
+        _catalog_handler(catalog, seen),
+        region="ap-southeast-1",
+        workspace="ws-sg",
+    )
+    got = [m async for m in client.models.iter(page_size=2)]
+    assert [m.model for m in got] == ["m0", "m1", "m2", "m3", "m4"]
+    assert all(
+        m.served_region == "ap-southeast-1" and m.workspace == "ws-sg"
+        for m in got
+    )
+    collected = await client.models.list_all(page_size=2)
+    assert [m.model for m in collected] == ["m0", "m1", "m2", "m3", "m4"]
+
+
+@pytest.mark.asyncio
+async def test_async_models_is_available():
+    present = _make_async_client(
+        lambda r: httpx.Response(200, json=_one_model_body()),
+    )
+    assert await present.models.is_available("qwen-plus") is True
+    absent = _make_async_client(
+        lambda r: httpx.Response(200, json={"output": {"models": []}}),
+    )
+    assert await absent.models.is_available("nope") is False
+    with pytest.raises(ValueError):
+        await absent.models.is_available("")
+
+
+@pytest.mark.asyncio
+async def test_async_models_list_injects_context():
+    client = _make_async_client(
+        lambda r: httpx.Response(200, json=_one_model_body()),
+        region="eu-central-1",
+        workspace="ws-eu",
+    )
+    page = await client.models.list(service_site="international")
+    m = page.models[0]
+    assert m.served_region == "eu-central-1"
+    assert m.workspace == "ws-eu"
+    assert m.service_site == "international"
