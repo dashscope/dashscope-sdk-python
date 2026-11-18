@@ -10,7 +10,10 @@ import pytest
 
 from dashscope import AsyncClient, Client
 from dashscope.protocols import AnthropicProtocol
-from dashscope.protocols.anthropic import DEFAULT_MAX_TOKENS
+from dashscope.protocols.anthropic import (
+    DEFAULT_MAX_TOKENS,
+    WEB_SEARCH_BILLING_HEADER,
+)
 
 MODEL = "qwen3-max"
 
@@ -297,3 +300,100 @@ async def test_public_tool_choice_translation_and_null_compatibility(
         else:
             client.close()
             http_client.close()
+
+
+# --- Adapter backfill: server web_search billing injection ---------------
+# The native ``client.messages`` resource and the chat ``protocol=anthropic``
+# adapter share the same injection helpers, so declaring a server web_search
+# tool through ``extra_parameters`` must enable search identically (C3).
+
+_WEB_SEARCH_TOOL = {
+    "type": "web_search_20250305",
+    "name": "web_search",
+    "max_uses": 8,
+}
+
+
+def test_adapter_web_search_injects_billing_into_string_system():
+    request = _v2_request(
+        [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "Search the news"},
+        ],
+        extra_parameters={"tools": [_WEB_SEARCH_TOOL]},
+    )
+    assert request.body["system"] == [
+        {"type": "text", "text": "You are helpful."},
+        {"type": "text", "text": WEB_SEARCH_BILLING_HEADER},
+    ]
+    assert request.body["tools"] == [_WEB_SEARCH_TOOL]
+
+
+def test_adapter_web_search_injects_billing_without_system():
+    request = _v2_request(
+        [{"role": "user", "content": "Search the news"}],
+        extra_parameters={"tools": [_WEB_SEARCH_TOOL]},
+    )
+    assert request.body["system"] == [
+        {"type": "text", "text": WEB_SEARCH_BILLING_HEADER},
+    ]
+
+
+def test_adapter_web_search_caller_marker_wins():
+    marker_system = f"Custom rules. {WEB_SEARCH_BILLING_HEADER}"
+    request = _v2_request(
+        [
+            {"role": "system", "content": marker_system},
+            {"role": "user", "content": "Search the news"},
+        ],
+        extra_parameters={"tools": [_WEB_SEARCH_TOOL]},
+    )
+    assert request.body["system"] == marker_system
+
+
+def test_adapter_custom_function_named_web_search_not_injected():
+    request = _v2_request(
+        [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "hi"},
+        ],
+        extra_parameters={
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "web_search",
+                    "input_schema": {"type": "object", "properties": {}},
+                },
+            ],
+        },
+    )
+    assert request.body["system"] == "You are helpful."
+
+
+def test_adapter_web_fetch_alone_not_injected():
+    request = _v2_request(
+        [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "Fetch a page"},
+        ],
+        extra_parameters={
+            "tools": [
+                {
+                    "type": "web_fetch_20250910",
+                    "name": "web_fetch",
+                    "max_uses": 3,
+                },
+            ],
+        },
+    )
+    assert request.body["system"] == "You are helpful."
+
+
+def test_adapter_no_server_tools_leaves_system_untouched():
+    request = _v2_request(
+        [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "hi"},
+        ],
+    )
+    assert request.body["system"] == "You are helpful."

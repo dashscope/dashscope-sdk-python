@@ -351,6 +351,26 @@ def compatible_mode_base_url(
     return _protocol_default_base_url("openai", workspace, region)
 
 
+def anthropic_base_url(
+    workspace: Optional[str],
+    region: Optional[str] = None,
+    configured_base_url: Optional[str] = None,
+) -> str:
+    """Endpoint root for the Anthropic-compatible Messages API.
+
+    Messages lives under ``/apps/anthropic`` (the wire path is
+    ``/v1/messages`` beneath it), independent of the chat ``protocol``
+    setting -- the same rule ``compatible_mode_base_url`` applies. An
+    explicit base_url stays the service root (callers point it at
+    ``.../apps/anthropic``); otherwise the default gateway host carries
+    the fixed anthropic path. The root deliberately does not end in
+    ``/v1`` so clients appending ``/v1/messages`` do not double it.
+    """
+    if configured_base_url is not None:
+        return configured_base_url
+    return _protocol_default_base_url("anthropic", workspace, region)
+
+
 def workspace_ws_url(
     workspace: Optional[str],
     path: str,

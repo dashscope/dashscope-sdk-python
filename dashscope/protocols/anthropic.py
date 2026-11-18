@@ -35,6 +35,7 @@ from typing import (
     Callable,
     Dict,
     List,
+    Mapping,
     Optional,
     Tuple,
     Union,
@@ -53,10 +54,68 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AnthropicProtocol",
+    "WEB_SEARCH_BILLING_HEADER",
+    "detect_web_search_tool",
+    "ensure_billing_header",
+    "system_has_billing_header",
 ]
 
 # Anthropic requires max_tokens; used when the caller omits it.
 DEFAULT_MAX_TOKENS = 4096
+
+# Server-side web search only fires when the system prompt carries this
+# client identifier. The SDK injects it when a web_search server tool is
+# declared (a caller-provided marker wins). Shared with the native
+# ``client.messages`` resource so both Anthropic paths behave identically.
+WEB_SEARCH_BILLING_HEADER = "x-anthropic-billing-header: cc_entrypoint=cli;"
+_BILLING_MARKER = "x-anthropic-billing-header"
+
+
+def detect_web_search_tool(tools: Any) -> bool:
+    """True when a server-side web_search tool is declared in ``tools``.
+
+    Identified by ``name == "web_search"`` plus a date-suffixed
+    ``web_search_*`` type, so a custom function merely named web_search
+    (no such type) does not trigger the billing-header injection.
+    """
+    if not isinstance(tools, (list, tuple)):
+        return False
+    return any(
+        isinstance(t, Mapping)
+        and t.get("name") == "web_search"
+        and str(t.get("type") or "").startswith("web_search")
+        for t in tools
+    )
+
+
+def system_has_billing_header(system: Any) -> bool:
+    if isinstance(system, str):
+        return _BILLING_MARKER in system
+    if isinstance(system, (list, tuple)):
+        return any(
+            isinstance(b, Mapping) and _BILLING_MARKER in (b.get("text") or "")
+            for b in system
+        )
+    return False
+
+
+def ensure_billing_header(system: Any, tools: Any) -> Any:
+    """Inject the web-search billing identifier into ``system`` when needed.
+
+    Returns ``system`` unchanged when no web_search server tool is declared
+    or the caller already supplied the marker. A string system becomes a
+    block list so the marker rides as its own text block (documented form).
+    """
+    if not detect_web_search_tool(tools) or system_has_billing_header(system):
+        return system
+    marker_block = {"type": "text", "text": WEB_SEARCH_BILLING_HEADER}
+    if system is None:
+        return [marker_block]
+    if isinstance(system, str):
+        return [{"type": "text", "text": system}, marker_block]
+    if isinstance(system, (list, tuple)):
+        return list(system) + [marker_block]
+    return system
 
 # Canonical parameters this adapter does not map onto the Anthropic
 # Messages wire (``tool_choice`` does map — see _translate_tool_choice;
@@ -761,6 +820,13 @@ class AnthropicProtocol(ChatProtocol):
             ),
         )
         _apply_extra_parameters(body, self._strict, extra_parameters)
+        # Server tools (web_search) reach the wire via extra_parameters;
+        # inject the billing identifier the same way the native messages
+        # resource does, so both Anthropic paths enable search identically.
+        if detect_web_search_tool(body.get("tools")):
+            body["system"] = ensure_billing_header(
+                body.get("system"), body.get("tools")
+            )
         return ChatRequest(
             path=path or self.PATH,
             body=body,

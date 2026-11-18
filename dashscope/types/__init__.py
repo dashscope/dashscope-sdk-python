@@ -3,6 +3,20 @@
 """Shared typed models for the dashscope 2.0 SDK."""
 
 from dashscope.types.common import JobStatus, ResponseBase, Usage
+from dashscope.types.anthropic_messages import (
+    AnthropicCacheCreation,
+    AnthropicContentBlock,
+    AnthropicMessage,
+    AnthropicServerToolUsage,
+    AnthropicStreamEvent,
+    AnthropicUsage,
+    CacheControl,
+    OutputConfig,
+    ThinkingConfig,
+    WebSearchResult,
+    parse_message,
+    parse_message_stream_event,
+)
 from dashscope.types.completions import (
     ChatCompletion,
     ChatCompletionChunk,
@@ -64,8 +78,15 @@ from dashscope.types.responses import (
 )
 
 __all__ = [
+    "AnthropicCacheCreation",
+    "AnthropicContentBlock",
+    "AnthropicMessage",
+    "AnthropicServerToolUsage",
+    "AnthropicStreamEvent",
+    "AnthropicUsage",
     "AudioPart",
     "BasePage",
+    "CacheControl",
     "ChatCompletion",
     "ChatCompletionChunk",
     "ChatCompletionMessage",
@@ -86,6 +107,7 @@ __all__ = [
     "McpTool",
     "Message",
     "OcrOptions",
+    "OutputConfig",
     "PromptCacheBreakpoint",
     "PromptCacheOptions",
     "Reasoning",
@@ -99,6 +121,7 @@ __all__ = [
     "StreamChoice",
     "SummaryText",
     "TextPart",
+    "ThinkingConfig",
     "ToolCall",
     "ToolCallFunction",
     "ToolUsage",
@@ -106,6 +129,7 @@ __all__ = [
     "VideoPart",
     "WebExtractorTool",
     "WebSearchImageTool",
+    "WebSearchResult",
     "WebSearchTool",
     "extract_text",
     "normalize_messages",
@@ -115,6 +139,8 @@ __all__ = [
     "parse_conversation_deleted",
     "parse_conversation_item",
     "parse_conversation_item_deleted",
+    "parse_message",
+    "parse_message_stream_event",
     "parse_response",
     "parse_response_deleted",
     "parse_stream_event",

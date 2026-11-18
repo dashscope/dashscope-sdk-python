@@ -27,6 +27,7 @@ from dashscope.resources.embeddings import AsyncEmbeddings, Embeddings
 from dashscope.resources.files import AsyncFiles, Files
 from dashscope.resources.fine_tunes import AsyncFineTunes, FineTunes
 from dashscope.resources.images import AsyncImages, Images
+from dashscope.resources.messages import AsyncMessages, Messages
 from dashscope.resources.models import AsyncModels, Models
 from dashscope.resources.multimodal import AsyncMultimodal, Multimodal
 from dashscope.resources.rerank import AsyncRerank, Rerank
@@ -143,6 +144,7 @@ class Client:
         self.batch_chat = BatchChat(self)
         self.responses = Responses(self)
         self.conversations = Conversations(self)
+        self.messages = Messages(self)
         self.models = Models(self)
         self.images = Images(self)
         self.videos = Videos(self)
@@ -409,6 +411,7 @@ class AsyncClient:
         self.batch_chat = AsyncBatchChat(self)
         self.responses = AsyncResponses(self)
         self.conversations = AsyncConversations(self)
+        self.messages = AsyncMessages(self)
         self.models = AsyncModels(self)
         self.images = AsyncImages(self)
         self.videos = AsyncVideos(self)
