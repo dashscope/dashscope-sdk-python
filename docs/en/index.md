@@ -67,8 +67,8 @@ Migrating existing 1.x code? See [Migrating from 1.x](migration.md).
 
     ---
 
-    Script every resource from a shell, or start the optional interactive
-    AI assistant.
+    Script every resource from a shell, or run bare `dashscope` to open the
+    [SDK Expert](guides/expert.md) AI assistant (AgenticX).
 
 </div>
 
@@ -92,7 +92,8 @@ pip install -U dashscope
 
 The base install covers SDK API calls, the `dashscope` CLI, Agentic RL
 fine-tuning and the local tokenizer. Optional extras configure the interactive
-AI assistant, e.g. `pip install "dashscope[acli]"` (see [CLI](cli.md)).
+AI assistant, e.g. `pip install "dashscope[acli]"` (see
+[SDK Expert](guides/expert.md)).
 
 ## Examples
 
@@ -154,9 +155,9 @@ with client.chat.completions.create(
 `client.audio.live` runs full-duplex voice sessions over WebSocket — see the
 [Qwen Live guide](guides/qwen-live-python-sdk.md) for a complete walkthrough.
 
-## Command line (CLI 2.0)
+## Command line (CLI)
 
-Installing the SDK also installs the `dashscope` command. The 2.0 CLI
+Installing the SDK also installs the `dashscope` command. The CLI
 mirrors the SDK resources, so anything you can do with `Client` you can
 also script from a shell:
 
@@ -171,8 +172,24 @@ It covers chat, multimodal, embeddings, images/videos, audio, files,
 fine-tuning, agentic RL and more, with global options for protocol,
 region and output format. Running `dashscope` with no arguments starts
 the optional interactive AI assistant (`pip install "dashscope[acli]"`).
-The frozen 1.x command tree remains available as `dashscope1`.
+**The frozen 1.x command tree remains available as `dashscope1`.**
 See [Command Line Interface](cli.md).
+
+## AI assistant (SDK Expert)
+
+Bare `dashscope` (or `dashscope expert`) opens **DashScope SDK Expert**, an
+AgenticX-powered assistant that answers SDK questions, generates runnable
+examples and diagnoses errors right in your terminal. It needs Python 3.10+
+and the optional extra:
+
+```bash
+pip install -U "dashscope[acli]"
+dashscope                                       # interactive assistant
+dashscope expert "how do I stream chat output?" # ask once and exit
+```
+
+See [SDK Expert (AgenticX)](guides/expert.md) for launch modes, the first-run
+expert profile and troubleshooting.
 
 ## Protocols
 

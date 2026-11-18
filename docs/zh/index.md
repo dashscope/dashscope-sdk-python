@@ -66,7 +66,8 @@ description: "阿里云百炼（DashScope）官方 Python SDK：类型化同步/
 
     ---
 
-    在 shell 里脚本化所有资源，或启动可选的交互式 AI 助手。
+    在 shell 里脚本化所有资源；裸跑 `dashscope` 则打开
+    [SDK Expert](guides/expert.md) AI 助手（AgenticX）。
 
 </div>
 
@@ -90,7 +91,8 @@ pip install -U dashscope
 
 基础安装覆盖 SDK API 调用、`dashscope` CLI、Agentic RL 微调与本地
 分词器。可选 extras 用于配置交互式 AI 助手，例如
-`pip install "dashscope[acli]"`（见[命令行工具](cli.md)）。
+`pip install "dashscope[acli]"`（见
+[SDK 专家（AgenticX）](guides/expert.md)）。
 
 ## 示例
 
@@ -152,9 +154,9 @@ with client.chat.completions.create(
 `client.audio.live` 通过 WebSocket 运行全双工语音会话——完整接入
 流程见 [Qwen Live 指南](guides/qwen-live-python-sdk.md)。
 
-## 命令行（CLI 2.0）
+## 命令行（CLI）
 
-安装 SDK 的同时会安装 `dashscope` 命令。2.0 CLI 与 SDK 资源一一对应，
+安装 SDK 的同时会安装 `dashscope` 命令。CLI 与 SDK 资源一一对应，
 `Client` 能做的任何事情都可以直接在 shell 里脚本化：
 
 ```bash
@@ -167,8 +169,24 @@ dashscope -o json ft list         # 机器可读输出，便于脚本处理
 覆盖对话、多模态、向量嵌入、图像/视频、音频、文件、微调、智能体
 强化学习等能力，并提供协议、区域与输出格式等全局选项。不带任何
 参数运行 `dashscope` 会启动可选的交互式 AI 助手
-（`pip install "dashscope[acli]"`）。冻结的 1.x 命令树仍以
-`dashscope1` 提供。详见[命令行工具](cli.md)。
+（`pip install "dashscope[acli]"`）。**冻结的 1.x 命令树仍以
+`dashscope1` 提供。**详见[命令行工具](cli.md)。
+
+## AI 助手（SDK Expert）
+
+不带参数运行 `dashscope`（或 `dashscope expert`）会启动
+**DashScope SDK Expert**——由 AgenticX 驱动的智能体助手，直接在
+终端里解答 SDK 问题、生成可运行示例、诊断错误。需要 Python 3.10+
+与可选 extra：
+
+```bash
+pip install -U "dashscope[acli]"
+dashscope                                     # 交互式助手
+dashscope expert "如何流式输出对话结果？"       # 一次性提问后退出
+```
+
+启动方式、首次运行的 Expert 配置与故障排查见
+[SDK 专家（AgenticX）](guides/expert.md)。
 
 ## 协议
 

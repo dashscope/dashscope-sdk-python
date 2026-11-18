@@ -61,16 +61,21 @@ dashscope -k sk-xxx --output json ft list
 
 ## 智能体入口
 
-**不带任何参数**运行 `dashscope` 会启动交互式 AgenticX 智能体，
-而不是命令树。需要可选 extra 与 Python 3.10+：
+**不带任何参数**运行 `dashscope`（或 `dashscope expert`）会启动交互式
+AgenticX 智能体，而不是命令树。需要可选 extra 与 Python 3.10+：
 
 ```bash
 pip install -U "dashscope[acli]"
-dashscope                         # 启动智能体
+dashscope                         # 启动智能体（默认 TUI）
+dashscope expert --cli            # 用纯 REPL 代替 TUI
+dashscope expert "问题"            # 一次性提问后退出
 ```
+
+启动方式、首次运行的 Expert 配置与故障排查见
+[SDK 专家（AgenticX）](guides/expert.md)。
 
 ## 1.x CLI
 
-旧版命令树（`generation create`、`application create`、`files.upload`、
-`login` 等）单独安装为 `dashscope1`，已冻结。在 `dashscope` 下运行
-1.x 命令名只会打印迁移提示，指向 `dashscope1` 或对应的 2.0 命令。
+**旧版命令树（`generation create`、`application create`、`files.upload`、
+`login` 等）单独安装为 `dashscope1`，已冻结。**在 `dashscope` 下运行
+1.x 命令名只会打印迁移提示，指向 `dashscope1` 或对应的命令。

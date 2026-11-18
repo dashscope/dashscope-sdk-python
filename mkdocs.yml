@@ -109,6 +109,7 @@ plugins:
             Guides: 专题指南
             Capability recipes: 能力速查示例
             Qwen Live (realtime voice): Qwen Live（实时语音）
+            SDK Expert (AgenticX): SDK 专家（AgenticX）
             CLI: 命令行工具
             Reference: 参考
             Client & Configuration: 客户端与配置
@@ -165,6 +166,7 @@ nav:
       - Guides:
           - Capability recipes: guides/recipes.md
           - Qwen Live (realtime voice): guides/qwen-live-python-sdk.md
+          - SDK Expert (AgenticX): guides/expert.md
       - CLI: cli.md
   - Reference:
       - Client & Configuration: reference/client.md

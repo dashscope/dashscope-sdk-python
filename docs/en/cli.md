@@ -62,18 +62,23 @@ the exact arguments of each command.
 
 ## The agent entry point
 
-Invoking `dashscope` with **no arguments** starts the interactive AgenticX
-agent instead of the command tree. It requires the optional extra and
-Python 3.10+:
+Invoking `dashscope` with **no arguments** — or `dashscope expert` — starts
+the interactive AgenticX agent instead of the command tree. It requires the
+optional extra and Python 3.10+:
 
 ```bash
 pip install -U "dashscope[acli]"
-dashscope                         # launches the agent
+dashscope                         # launches the agent (TUI by default)
+dashscope expert --cli            # plain REPL instead of the TUI
+dashscope expert "question"       # ask once and exit
 ```
+
+See [SDK Expert (AgenticX)](guides/expert.md) for launch modes, the
+first-run expert profile and troubleshooting.
 
 ## The 1.x CLI
 
-The legacy command tree (`generation create`, `application create`,
+**The legacy command tree (`generation create`, `application create`,
 `files.upload`, `login`, ...) is installed separately as `dashscope1` and is
-frozen. Running a 1.x command name under `dashscope` only prints a migration
-hint pointing at `dashscope1` or the 2.0 equivalent.
+frozen.** Running a 1.x command name under `dashscope` only prints a migration
+hint pointing at `dashscope1` or the equivalent command.
