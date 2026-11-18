@@ -80,9 +80,7 @@ class ModelAvailability(BaseModel):
     def available_in(self) -> List[str]:
         """The Region labels whose catalog serves the model."""
         return [
-            region
-            for region, info in self.regions.items()
-            if info.available
+            region for region, info in self.regions.items() if info.available
         ]
 
 

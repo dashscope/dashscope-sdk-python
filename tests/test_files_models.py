@@ -574,9 +574,7 @@ async def test_models_async_list_filters_and_pagination():
     client = _make_async_client(handler)
     page = await client.models.list(page_no=1, page_size=2, provider="qwen")
     assert seen[0] == (1, ["qwen"])
-    collected = [
-        m.model async for p in page.iter_pages_async() for m in p
-    ]
+    collected = [m.model async for p in page.iter_pages_async() for m in p]
     assert collected == ["m0", "m1", "m2", "m3", "m4"]
     assert seen == [(1, ["qwen"]), (2, ["qwen"]), (3, ["qwen"])]
     await client.aclose()

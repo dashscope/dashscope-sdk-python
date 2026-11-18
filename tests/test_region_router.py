@@ -39,9 +39,7 @@ def _catalog_handler(catalog, calls):
         model = request.url.params.get("model")
         calls.append(model)
         models = (
-            [m for m in catalog if m["model"] == model]
-            if model
-            else catalog
+            [m for m in catalog if m["model"] == model] if model else catalog
         )
         return httpx.Response(
             200,
@@ -210,9 +208,7 @@ class TestSyncDiscovery:
         )
         result = router.models.available_regions("absent-model")
         assert result.available_in == []
-        assert all(
-            info.error is None for info in result.regions.values()
-        )
+        assert all(info.error is None for info in result.regions.values())
 
     def test_blank_model_rejected(self):
         router = _router(

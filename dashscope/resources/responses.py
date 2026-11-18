@@ -76,7 +76,7 @@ _SESSION_CACHE_HEADER = "x-dashscope-session-cache"
 
 # Terminal stream events carry the full response object.
 _TERMINAL_EVENTS = frozenset(
-    {"response.completed", "response.failed", "response.incomplete"}
+    {"response.completed", "response.failed", "response.incomplete"},
 )
 
 _ENABLE_THINKING_WARNED = False
@@ -103,7 +103,9 @@ def _response_id(value: Union[Response, str]) -> str:
     return str(rid)
 
 
-def _normalize_config(value: Optional[ConfigInput]) -> Optional[Dict[str, Any]]:
+def _normalize_config(
+    value: Optional[ConfigInput],
+) -> Optional[Dict[str, Any]]:
     if value is None:
         return None
     if isinstance(value, BaseModel):
@@ -122,7 +124,7 @@ def _normalize_items(
             items.append(dict(item))
         else:
             raise ValueError(
-                "each item must be a mapping or a pydantic model"
+                "each item must be a mapping or a pydantic model",
             )
     return items
 
@@ -147,7 +149,7 @@ def _validate_function_call_sequence(items: List[Dict[str, Any]]) -> None:
             ):
                 raise ValueError(
                     "each function_call_output must immediately follow its "
-                    "matching function_call (same call_id) in the input array"
+                    "matching function_call (same call_id) in the input array",
                 )
         prev = item
 
@@ -198,7 +200,7 @@ def _build_create_body(
         raise ValueError("input is required")
     if previous_response_id is not None and conversation is not None:
         raise ValueError(
-            "previous_response_id and conversation are mutually exclusive"
+            "previous_response_id and conversation are mutually exclusive",
         )
     normalized_input = _normalize_input(input)
     if isinstance(normalized_input, list):
@@ -395,7 +397,7 @@ class ResponseStream:
                 final = event.response
         if final is None:
             raise DashScopeError(
-                "response stream ended without a terminal response event"
+                "response stream ended without a terminal response event",
             )
         final.headers = self.headers
         return final
@@ -450,7 +452,7 @@ class AsyncResponseStream:
                 final = event.response
         if final is None:
             raise DashScopeError(
-                "response stream ended without a terminal response event"
+                "response stream ended without a terminal response event",
             )
         final.headers = self.headers
         return final
@@ -514,7 +516,12 @@ class InputItems:
         )
         if raw:
             return resp
-        result = _checked(self._client, resp, InputItemList, _parse_input_item_list)
+        result = _checked(
+            self._client,
+            resp,
+            InputItemList,
+            _parse_input_item_list,
+        )
         if not result.is_error:
             result.bind_pagination(
                 lambda cursor: self.list(
@@ -578,7 +585,12 @@ class AsyncInputItems:
         )
         if raw:
             return resp
-        result = _checked(self._client, resp, InputItemList, _parse_input_item_list)
+        result = _checked(
+            self._client,
+            resp,
+            InputItemList,
+            _parse_input_item_list,
+        )
         if not result.is_error:
             result.bind_pagination(
                 lambda cursor: self.list(
@@ -606,7 +618,7 @@ class Responses:
         self.input_items = InputItems(client)
 
     @overload
-    def create(
+    def create(  # pylint: disable=redefined-builtin
         self,
         *,
         model: str,
@@ -640,7 +652,7 @@ class Responses:
         ...
 
     @overload
-    def create(
+    def create(  # pylint: disable=redefined-builtin
         self,
         *,
         model: str,
@@ -674,7 +686,7 @@ class Responses:
         ...
 
     @overload
-    def create(
+    def create(  # pylint: disable=redefined-builtin
         self,
         *,
         model: str,
@@ -807,7 +819,7 @@ class Responses:
                         strict=self._client.config.strict_validation,
                         response=response,
                     ),
-                )
+                ),
             )
         resp = transport.request_api(
             "POST",
@@ -897,7 +909,12 @@ class Responses:
         )
         if raw:
             return resp
-        return _checked(self._client, resp, ResponseDeleted, parse_response_deleted)
+        return _checked(
+            self._client,
+            resp,
+            ResponseDeleted,
+            parse_response_deleted,
+        )
 
 
 class AsyncResponses:
@@ -908,7 +925,7 @@ class AsyncResponses:
         self.input_items = AsyncInputItems(client)
 
     @overload
-    async def create(
+    async def create(  # pylint: disable=redefined-builtin
         self,
         *,
         model: str,
@@ -942,7 +959,7 @@ class AsyncResponses:
         ...
 
     @overload
-    async def create(
+    async def create(  # pylint: disable=redefined-builtin
         self,
         *,
         model: str,
@@ -976,7 +993,7 @@ class AsyncResponses:
         ...
 
     @overload
-    async def create(
+    async def create(  # pylint: disable=redefined-builtin
         self,
         *,
         model: str,
@@ -1093,7 +1110,7 @@ class AsyncResponses:
                         strict=self._client.config.strict_validation,
                         response=response,
                     ),
-                )
+                ),
             )
         resp = await transport.request_api(
             "POST",
@@ -1180,4 +1197,9 @@ class AsyncResponses:
         )
         if raw:
             return resp
-        return _checked(self._client, resp, ResponseDeleted, parse_response_deleted)
+        return _checked(
+            self._client,
+            resp,
+            ResponseDeleted,
+            parse_response_deleted,
+        )

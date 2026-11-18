@@ -92,11 +92,14 @@ class AnthropicContentBlock(BaseModel):
     @property
     def search_results(self) -> List[WebSearchResult]:
         """Typed view of a ``web_search_tool_result`` block's content."""
-        if not isinstance(self.content, list):
+        content = self.content
+        if not isinstance(content, list):
             return []
+        # list() materializes the Optional[Any] so type checkers see an
+        # iterable (astroid cannot narrow it through the isinstance guard).
         return [
             parse_model(WebSearchResult, item)
-            for item in self.content
+            for item in list(content)
             if isinstance(item, dict)
         ]
 

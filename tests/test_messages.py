@@ -114,7 +114,9 @@ def test_create_wire_body_and_parse():
     captured = {}
     client = _make_client(_ok_handler(captured))
     msg = client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
     )
     assert captured["method"] == "POST"
     assert captured["path"] == _MESSAGES_PATH
@@ -137,10 +139,12 @@ def test_sdk_module_header():
     captured = {}
     client = _make_client(_ok_handler(captured))
     client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
     )
     assert captured["headers"]["x-dashscope-sdk-client"] == sdk_client_value(
-        "messages"
+        "messages",
     )
     assert captured["headers"]["x-dashscope-sdk-client"].endswith("/messages2")
     client.close()
@@ -163,7 +167,11 @@ def test_system_blocks_with_cache_control():
     captured = {}
     client = _make_client(_ok_handler(captured))
     system = [
-        {"type": "text", "text": "repo", "cache_control": {"type": "ephemeral"}}
+        {
+            "type": "text",
+            "text": "repo",
+            "cache_control": {"type": "ephemeral"},
+        },
     ]
     client.messages.create(
         model="qwen4-max",
@@ -303,7 +311,7 @@ def test_function_tools_and_tool_choice():
                 "properties": {"city": {"type": "string"}},
                 "required": ["city"],
             },
-        }
+        },
     ]
     client.messages.create(
         model="qwen4-max",
@@ -347,7 +355,11 @@ def test_web_search_injects_billing_header_into_string_system():
         messages=_USER_MESSAGES,
         system="You are helpful",
         tools=[
-            {"type": "web_search_20250305", "name": "web_search", "max_uses": 8}
+            {
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 8,
+            },
         ],
     )
     system = captured["body"]["system"]
@@ -367,7 +379,7 @@ def test_web_search_injects_billing_header_when_no_system():
         tools=[{"type": "web_search_20250305", "name": "web_search"}],
     )
     assert captured["body"]["system"] == [
-        {"type": "text", "text": WEB_SEARCH_BILLING_HEADER}
+        {"type": "text", "text": WEB_SEARCH_BILLING_HEADER},
     ]
     client.close()
 
@@ -415,7 +427,7 @@ def test_custom_function_named_web_search_not_injected():
             {
                 "name": "web_search",
                 "input_schema": {"type": "object", "properties": {}},
-            }
+            },
         ],
     )
     # No web_search_* server type -> no injection, system stays a string.
@@ -453,10 +465,12 @@ def test_multimodal_input_blocks_passthrough():
                 },
                 {"type": "text", "text": "describe"},
             ],
-        }
+        },
     ]
     client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=messages
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=messages,
     )
     assert captured["body"]["messages"] == messages
     client.close()
@@ -489,12 +503,14 @@ def test_thinking_and_tool_blocks_passthrough():
                     "type": "tool_result",
                     "tool_use_id": "toolu_1",
                     "content": "sunny",
-                }
+                },
             ],
         },
     ]
     client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=messages
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=messages,
     )
     assert captured["body"]["messages"] == messages
     client.close()
@@ -509,7 +525,9 @@ def test_empty_model_rejected():
     client = _make_client(_ok_handler())
     with pytest.raises(ValueError, match="model"):
         client.messages.create(
-            model=" ", max_tokens=1024, messages=_USER_MESSAGES
+            model=" ",
+            max_tokens=1024,
+            messages=_USER_MESSAGES,
         )
     client.close()
 
@@ -519,7 +537,9 @@ def test_invalid_max_tokens_rejected(max_tokens):
     client = _make_client(_ok_handler())
     with pytest.raises(ValueError, match="max_tokens"):
         client.messages.create(
-            model="qwen4-max", max_tokens=max_tokens, messages=_USER_MESSAGES
+            model="qwen4-max",
+            max_tokens=max_tokens,
+            messages=_USER_MESSAGES,
         )
     client.close()
 
@@ -528,7 +548,9 @@ def test_empty_messages_rejected():
     client = _make_client(_ok_handler())
     with pytest.raises(ValueError, match="messages"):
         client.messages.create(
-            model="qwen4-max", max_tokens=1024, messages=[]
+            model="qwen4-max",
+            max_tokens=1024,
+            messages=[],
         )
     client.close()
 
@@ -563,7 +585,7 @@ def test_parse_thinking_and_server_tool_blocks():
                         "url": "https://x",
                         "encrypted_content": "enc",
                         "page_age": None,
-                    }
+                    },
                 ],
             },
             {
@@ -610,7 +632,9 @@ def test_parse_thinking_and_server_tool_blocks():
 
     client = _make_client(handler)
     msg = client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
     )
     assert msg.text == "answer"
     assert msg.content[0].thinking == "reason"
@@ -648,7 +672,9 @@ def test_http_error_anthropic_nested_raises():
     client = _make_client(handler)
     with pytest.raises(BadRequestError) as ei:
         client.messages.create(
-            model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+            model="qwen4-max",
+            max_tokens=1024,
+            messages=_USER_MESSAGES,
         )
     assert ei.value.code == "invalid_request_error"
     assert "max_tokens too large" in ei.value.message
@@ -667,7 +693,9 @@ def test_http_error_non_raising_envelope():
 
     client = _make_client(handler, raise_on_error=False)
     msg = client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
     )
     assert msg.is_error is True
     assert msg.code == "not_found_error"
@@ -678,12 +706,15 @@ def test_http_error_non_raising_envelope():
 def test_business_code_on_http_200():
     def handler(request):
         return httpx.Response(
-            200, json={"code": "InvalidParameter", "message": "boom"}
+            200,
+            json={"code": "InvalidParameter", "message": "boom"},
         )
 
     client = _make_client(handler, raise_on_error=False)
     msg = client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
     )
     assert msg.is_error is True
     assert msg.code == "InvalidParameter"
@@ -743,7 +774,9 @@ def test_routing_default_gateway_ignores_chat_protocol(clean_env, protocol):
         http_client=http_client,
     )
     client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
     )
     assert urls == [_WS_HOST + _MESSAGES_PATH], protocol
     client.close()
@@ -758,7 +791,9 @@ def test_routing_explicit_base_url():
 
     client = _make_client(handler)
     client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
     )
     assert urls == [BASE_URL + "/v1/messages"]
     client.close()
@@ -994,7 +1029,7 @@ def test_stream_get_final_message_server_tool_result():
                         "url": "https://x",
                         "encrypted_content": "enc",
                         "page_age": None,
-                    }
+                    },
                 ],
             },
         },
@@ -1065,7 +1100,9 @@ async def test_async_create_wire_and_parse():
     captured = {}
     client = _make_async_client(_ok_handler(captured))
     msg = await client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
     )
     assert captured["path"] == _MESSAGES_PATH
     assert msg.text == "Hello"
@@ -1082,7 +1119,7 @@ async def test_async_billing_header_injection():
         tools=[{"type": "web_search_20250305", "name": "web_search"}],
     )
     assert captured["body"]["system"] == [
-        {"type": "text", "text": WEB_SEARCH_BILLING_HEADER}
+        {"type": "text", "text": WEB_SEARCH_BILLING_HEADER},
     ]
     await client.aclose()
 
@@ -1099,7 +1136,9 @@ async def test_async_error_non_raising_envelope():
 
     client = _make_async_client(handler, raise_on_error=False)
     msg = await client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
     )
     assert msg.is_error is True
     assert msg.code == "invalid_request_error"
@@ -1149,7 +1188,9 @@ async def test_async_routing_ignores_chat_protocol(clean_env):
         http_client=http_client,
     )
     await client.messages.create(
-        model="qwen4-max", max_tokens=1024, messages=_USER_MESSAGES
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
     )
     assert urls == [_WS_HOST + _MESSAGES_PATH]
     await client.aclose()

@@ -55,9 +55,9 @@ _RESPONSE_BODY = {
             "role": "assistant",
             "status": "completed",
             "content": [
-                {"type": "output_text", "text": "Hello", "annotations": []}
+                {"type": "output_text", "text": "Hello", "annotations": []},
             ],
-        }
+        },
     ],
     "usage": {
         "input_tokens": 10,
@@ -83,7 +83,7 @@ _INPUT_ITEMS_BODY = {
             "role": "user",
             "status": "completed",
             "content": [{"type": "input_text", "text": "hi"}],
-        }
+        },
     ],
     "first_id": "msg_1",
     "last_id": "msg_1",
@@ -248,10 +248,14 @@ def test_create_previous_response_id_and_conversation_exclusive():
         )
     # Either alone is fine.
     client.responses.create(
-        model="qwen-plus", input="hi", previous_response_id="resp_1"
+        model="qwen-plus",
+        input="hi",
+        previous_response_id="resp_1",
     )
     client.responses.create(
-        model="qwen-plus", input="hi", conversation="conv_1"
+        model="qwen-plus",
+        input="hi",
+        conversation="conv_1",
     )
     client.close()
 
@@ -277,7 +281,7 @@ def test_create_function_call_output_adjacency():
     assert captured["body"]["input"] == good
 
     orphan = [
-        {"type": "function_call_output", "call_id": "call_1", "output": "sun"}
+        {"type": "function_call_output", "call_id": "call_1", "output": "sun"},
     ]
     with pytest.raises(ValueError, match="function_call_output"):
         client.responses.create(model="qwen-plus", input=orphan)
@@ -299,7 +303,9 @@ def test_create_enable_thinking_deprecation():
     client = _make_client(handler)
     with pytest.warns(DeprecationWarning, match="enable_thinking"):
         client.responses.create(
-            model="qwen-plus", input="hi", enable_thinking=True
+            model="qwen-plus",
+            input="hi",
+            enable_thinking=True,
         )
     client.close()
 
@@ -326,7 +332,9 @@ def test_get_parses_response():
         assert request.method == "GET"
         assert request.url.path == "/api/v1/responses/resp_abc123"
         return httpx.Response(
-            200, json=_RESPONSE_BODY, headers={"x-request-id": "rid-1"}
+            200,
+            json=_RESPONSE_BODY,
+            headers={"x-request-id": "rid-1"},
         )
 
     client = _make_client(handler)
@@ -355,7 +363,8 @@ def test_delete_returns_id_and_deleted_no_object():
         assert request.method == "DELETE"
         assert request.url.path == "/api/v1/responses/resp_abc123"
         return httpx.Response(
-            200, json={"id": "resp_abc123", "deleted": True}
+            200,
+            json={"id": "resp_abc123", "deleted": True},
         )
 
     client = _make_client(handler)
@@ -503,7 +512,10 @@ def test_input_items_params_validation():
     client.responses.input_items.list("resp_1")
     assert captured["params"] == {}
     client.responses.input_items.list(
-        "resp_1", after="msg_9", limit=100, order="desc"
+        "resp_1",
+        after="msg_9",
+        limit=100,
+        order="desc",
     )
     assert captured["params"] == {
         "after": "msg_9",
@@ -516,7 +528,8 @@ def test_input_items_params_validation():
 def test_input_items_error_page_does_not_bind_pagination():
     def handler(request):
         return httpx.Response(
-            400, json={"error": {"code": "InvalidParameter", "message": "bad"}}
+            400,
+            json={"error": {"code": "InvalidParameter", "message": "bad"}},
         )
 
     client = _make_client(handler, raise_on_error=False)
@@ -600,7 +613,10 @@ def test_raw_with_stream_raises():
     client = _make_client(handler)
     with pytest.raises(ValueError, match="raw=True"):
         client.responses.create(
-            model="qwen-plus", input="hi", stream=True, raw=True
+            model="qwen-plus",
+            input="hi",
+            stream=True,
+            raw=True,
         )
     client.close()
 
@@ -650,7 +666,9 @@ def _stream_handler(request):
 def test_stream_iterates_events_and_text_stream():
     client = _make_client(_stream_handler)
     stream = client.responses.create(
-        model="qwen-plus", input="hi", stream=True
+        model="qwen-plus",
+        input="hi",
+        stream=True,
     )
     events = list(stream)
     assert [e.type for e in events] == [
@@ -665,7 +683,9 @@ def test_stream_iterates_events_and_text_stream():
 
     client = _make_client(_stream_handler)
     stream = client.responses.create(
-        model="qwen-plus", input="hi", stream=True
+        model="qwen-plus",
+        input="hi",
+        stream=True,
     )
     assert "".join(stream.text_stream) == "Hello"
     client.close()
@@ -674,7 +694,9 @@ def test_stream_iterates_events_and_text_stream():
 def test_stream_get_final_response():
     client = _make_client(_stream_handler)
     stream = client.responses.create(
-        model="qwen-plus", input="hi", stream=True
+        model="qwen-plus",
+        input="hi",
+        stream=True,
     )
     final = stream.get_final_response()
     assert isinstance(final, Response)
@@ -700,7 +722,9 @@ def test_stream_in_stream_error_raises():
 
     client = _make_client(handler)
     stream = client.responses.create(
-        model="qwen-plus", input="hi", stream=True
+        model="qwen-plus",
+        input="hi",
+        stream=True,
     )
     with pytest.raises(BadRequestError) as ei:
         list(stream)
@@ -718,7 +742,9 @@ def test_stream_without_terminal_raises():
 
     client = _make_client(handler)
     stream = client.responses.create(
-        model="qwen-plus", input="hi", stream=True
+        model="qwen-plus",
+        input="hi",
+        stream=True,
     )
     with pytest.raises(DashScopeError, match="terminal"):
         stream.get_final_response()
@@ -737,7 +763,8 @@ async def test_async_create_get_delete():
         captured.append((request.method, request.url.path))
         if request.method == "DELETE":
             return httpx.Response(
-                200, json={"id": "resp_abc123", "deleted": True}
+                200,
+                json={"id": "resp_abc123", "deleted": True},
             )
         return httpx.Response(200, json=_RESPONSE_BODY)
 
@@ -791,7 +818,9 @@ async def test_async_input_items_pagination():
 async def test_async_stream_get_final_response():
     client = _make_async_client(_stream_handler)
     stream = await client.responses.create(
-        model="qwen-plus", input="hi", stream=True
+        model="qwen-plus",
+        input="hi",
+        stream=True,
     )
     final = await stream.get_final_response()
     assert final.id == "resp_s"
@@ -802,7 +831,8 @@ async def test_async_stream_get_final_response():
 async def test_async_error_envelope_when_not_raising():
     def handler(request):
         return httpx.Response(
-            404, json={"error": {"code": "NotFound", "message": "gone"}}
+            404,
+            json={"error": {"code": "NotFound", "message": "gone"}},
         )
 
     client = _make_async_client(handler, raise_on_error=False)

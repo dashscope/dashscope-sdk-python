@@ -382,28 +382,23 @@ def _build_list_params(
         effective_providers.append(provider)
     if effective_providers:
         params["providers"] = effective_providers
-    if name is not None:
-        params["name"] = name
-    if model is not None:
-        params["model"] = model
-    if language is not None:
-        params["language"] = language
-    if inference_providers:
-        params["inference_providers"] = inference_providers
-    if capabilities:
-        params["capabilities"] = capabilities
-    if features:
-        params["features"] = features
-    if context_window is not None:
-        params["context_window"] = context_window
-    if service_site is not None:
-        params["service_site"] = service_site
-    if supports:
-        params["supports"] = supports
-    if deployment_methods:
-        params["deployment_methods"] = deployment_methods
-    if deployment_ptu_service_tiers:
-        params["deployment_ptu_service_tiers"] = deployment_ptu_service_tiers
+    scalar_filters = {
+        "name": name,
+        "model": model,
+        "language": language,
+        "context_window": context_window,
+        "service_site": service_site,
+    }
+    params.update({k: v for k, v in scalar_filters.items() if v is not None})
+    list_filters = {
+        "inference_providers": inference_providers,
+        "capabilities": capabilities,
+        "features": features,
+        "supports": supports,
+        "deployment_methods": deployment_methods,
+        "deployment_ptu_service_tiers": deployment_ptu_service_tiers,
+    }
+    params.update({k: v for k, v in list_filters.items() if v})
     return params
 
 
@@ -677,21 +672,21 @@ class Models:
         through it as an empty catalog. Use ``resp.json()`` and
         ``_parse_list`` when the raw path has to agree with this one.
         """
-        filter_kwargs = dict(
-            name=name,
-            model=model,
-            language=language,
-            provider=provider,
-            providers=providers,
-            inference_providers=inference_providers,
-            capabilities=capabilities,
-            features=features,
-            context_window=context_window,
-            service_site=service_site,
-            supports=supports,
-            deployment_methods=deployment_methods,
-            deployment_ptu_service_tiers=deployment_ptu_service_tiers,
-        )
+        filter_kwargs: Dict[str, Any] = {
+            "name": name,
+            "model": model,
+            "language": language,
+            "provider": provider,
+            "providers": providers,
+            "inference_providers": inference_providers,
+            "capabilities": capabilities,
+            "features": features,
+            "context_window": context_window,
+            "service_site": service_site,
+            "supports": supports,
+            "deployment_methods": deployment_methods,
+            "deployment_ptu_service_tiers": deployment_ptu_service_tiers,
+        }
         resp = self._models_get(
             _build_list_params(page_no, page_size, **filter_kwargs),
             refresh=refresh,
@@ -1176,21 +1171,21 @@ class AsyncModels:
         refresh: bool = False,
         raw: bool = False,
     ) -> Union[ModelList, "APIResponse"]:
-        filter_kwargs = dict(
-            name=name,
-            model=model,
-            language=language,
-            provider=provider,
-            providers=providers,
-            inference_providers=inference_providers,
-            capabilities=capabilities,
-            features=features,
-            context_window=context_window,
-            service_site=service_site,
-            supports=supports,
-            deployment_methods=deployment_methods,
-            deployment_ptu_service_tiers=deployment_ptu_service_tiers,
-        )
+        filter_kwargs: Dict[str, Any] = {
+            "name": name,
+            "model": model,
+            "language": language,
+            "provider": provider,
+            "providers": providers,
+            "inference_providers": inference_providers,
+            "capabilities": capabilities,
+            "features": features,
+            "context_window": context_window,
+            "service_site": service_site,
+            "supports": supports,
+            "deployment_methods": deployment_methods,
+            "deployment_ptu_service_tiers": deployment_ptu_service_tiers,
+        }
         resp = await self._models_get(
             _build_list_params(page_no, page_size, **filter_kwargs),
             refresh=refresh,

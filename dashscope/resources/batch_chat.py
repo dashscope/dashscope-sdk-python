@@ -104,7 +104,9 @@ def _resolve_timeout(timeout: Optional[float]) -> float:
     return float(timeout)
 
 
-def _messages(messages: Union[str, List[MessageInput]]) -> List[Dict[str, Any]]:
+def _messages(
+    messages: Union[str, List[MessageInput]],
+) -> List[Dict[str, Any]]:
     normalized = normalize_messages(messages)
     if not normalized:
         raise ValueError("messages must not be empty")

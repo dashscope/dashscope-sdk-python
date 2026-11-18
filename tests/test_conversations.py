@@ -432,8 +432,7 @@ def test_metadata_key_value_length_limits():
 def test_items_max_20():
     client = _make_client(_capture_handler({}, _ITEMS_CREATE_BODY))
     items = [
-        {"type": "message", "role": "user", "content": "x"}
-        for _ in range(21)
+        {"type": "message", "role": "user", "content": "x"} for _ in range(21)
     ]
     with pytest.raises(ValueError, match="at most 20"):
         client.conversations.items.create(_CONV_ID, items=items)

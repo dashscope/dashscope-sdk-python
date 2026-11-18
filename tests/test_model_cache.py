@@ -94,12 +94,8 @@ class TestKeyHelpers:
             )
             != base
         )
-        assert (
-            catalog_key(cfg, params, api_key=None, workspace="ws-2") != base
-        )
-        assert (
-            catalog_key(cfg, params, api_key="sk-2", workspace=None) != base
-        )
+        assert catalog_key(cfg, params, api_key=None, workspace="ws-2") != base
+        assert catalog_key(cfg, params, api_key="sk-2", workspace=None) != base
         assert (
             catalog_key(
                 cfg,
@@ -114,10 +110,12 @@ class TestKeyHelpers:
         cfg = _Cfg()
         params = {"page_no": 1, "page_size": 10}
         # Per-call values equal to the config resolve to the same key.
-        assert (
-            catalog_key(cfg, params, api_key="sk-1", workspace="ws-1")
-            == catalog_key(cfg, params, api_key=None, workspace=None)
-        )
+        assert catalog_key(
+            cfg,
+            params,
+            api_key="sk-1",
+            workspace="ws-1",
+        ) == catalog_key(cfg, params, api_key=None, workspace=None)
 
 
 class TestCatalogCache:
@@ -219,7 +217,7 @@ class TestSyncCache:
 
         client = _make_client(handler)
         r1 = client.models.list(raw=True)
-        r2 = client.models.list(raw=True)
+        client.models.list(raw=True)
         assert r1.status_code == 200
         assert len(calls) == 2  # raw never caches
         client.models.list()  # non-raw still has to fetch

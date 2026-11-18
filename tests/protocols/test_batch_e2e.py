@@ -84,10 +84,13 @@ def test_batch_full_loop_with_test_model(tmp_path):
     )
     uploaded = []
     with client:
-        assert client.batches.validate_input(
-            str(input_path),
-            endpoint=_ENDPOINT,
-        ) == 2
+        assert (
+            client.batches.validate_input(
+                str(input_path),
+                endpoint=_ENDPOINT,
+            )
+            == 2
+        )
         file_obj = client.batches.files.upload(
             file_path=str(input_path),
             purpose="batch",

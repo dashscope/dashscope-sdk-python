@@ -280,7 +280,9 @@ def _parse_templates(
     return parse_model(
         CompressTemplateList,
         {
-            "base_models": base_models if isinstance(base_models, list) else [],
+            "base_models": base_models
+            if isinstance(base_models, list)
+            else [],
             "custom_models": (
                 custom_models if isinstance(custom_models, list) else []
             ),
@@ -786,21 +788,21 @@ class CompressJobs:
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check.
         """
-        filter_kwargs = dict(
-            status=status,
-            model=model,
-            template_id=template_id,
-            quant_spec=quant_spec,
-            quant_method=quant_method,
-            start_time=start_time,
-            end_time=end_time,
-            job_name=job_name,
-            job_id=job_id,
-            search_key=search_key,
-            select_key=select_key,
-            sort_by=sort_by,
-            sort_order=sort_order,
-        )
+        filter_kwargs: Dict[str, Any] = {
+            "status": status,
+            "model": model,
+            "template_id": template_id,
+            "quant_spec": quant_spec,
+            "quant_method": quant_method,
+            "start_time": start_time,
+            "end_time": end_time,
+            "job_name": job_name,
+            "job_id": job_id,
+            "search_key": search_key,
+            "select_key": select_key,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+        }
         resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/jobs",
@@ -1528,21 +1530,21 @@ class AsyncCompressJobs:
         raw: bool = False,
     ) -> Union[CompressJobList, "APIResponse"]:
         """Async twin of :meth:`CompressJobs.list`."""
-        filter_kwargs = dict(
-            status=status,
-            model=model,
-            template_id=template_id,
-            quant_spec=quant_spec,
-            quant_method=quant_method,
-            start_time=start_time,
-            end_time=end_time,
-            job_name=job_name,
-            job_id=job_id,
-            search_key=search_key,
-            select_key=select_key,
-            sort_by=sort_by,
-            sort_order=sort_order,
-        )
+        filter_kwargs: Dict[str, Any] = {
+            "status": status,
+            "model": model,
+            "template_id": template_id,
+            "quant_spec": quant_spec,
+            "quant_method": quant_method,
+            "start_time": start_time,
+            "end_time": end_time,
+            "job_name": job_name,
+            "job_id": job_id,
+            "search_key": search_key,
+            "select_key": select_key,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+        }
         resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/jobs",

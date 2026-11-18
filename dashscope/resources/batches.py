@@ -57,6 +57,7 @@ from typing import (
     Optional,
     Sequence,
     Set,
+    Tuple,
     TypeVar,
     Union,
     overload,
@@ -757,6 +758,45 @@ def _batch_list_params(
     return params
 
 
+def _validate_batch_row(
+    row: Any,
+    lineno: int,
+    *,
+    endpoint: Optional[str],
+) -> Tuple[str, str]:
+    """Validate one batch JSONL row's fields; return ``(custom_id, model)``.
+
+    Uniqueness and cross-row model consistency are checked by the caller,
+    which owns the ``seen`` set and the running ``model``.
+    """
+    if not isinstance(row, dict):
+        raise ValueError(f"line {lineno}: each row must be a JSON object")
+    custom_id = row.get("custom_id")
+    if not isinstance(custom_id, str) or not custom_id.strip():
+        raise ValueError(
+            f"line {lineno}: custom_id must be a non-empty string",
+        )
+    if row.get("method") != "POST":
+        raise ValueError(f"line {lineno}: method must be 'POST'")
+    url = row.get("url")
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError(f"line {lineno}: url must be a non-empty string")
+    if endpoint is not None and url != endpoint:
+        raise ValueError(
+            f"line {lineno}: url {url!r} does not match "
+            f"endpoint {endpoint!r}",
+        )
+    body = row.get("body")
+    if not isinstance(body, dict):
+        raise ValueError(f"line {lineno}: body must be a JSON object")
+    row_model = body.get("model")
+    if not isinstance(row_model, str) or not row_model.strip():
+        raise ValueError(
+            f"line {lineno}: body.model must be a non-empty string",
+        )
+    return custom_id, row_model
+
+
 def _validate_input_rows(
     file_path: str,
     *,
@@ -792,42 +832,16 @@ def _validate_input_rows(
                     raise ValueError(
                         f"line {lineno}: not valid JSON ({exc})",
                     ) from exc
-                if not isinstance(row, dict):
-                    raise ValueError(
-                        f"line {lineno}: each row must be a JSON object",
-                    )
-                custom_id = row.get("custom_id")
-                if not isinstance(custom_id, str) or not custom_id.strip():
-                    raise ValueError(
-                        f"line {lineno}: custom_id must be a non-empty string",
-                    )
+                custom_id, row_model = _validate_batch_row(
+                    row,
+                    lineno,
+                    endpoint=endpoint,
+                )
                 if custom_id in seen:
                     raise ValueError(
                         f"line {lineno}: duplicate custom_id {custom_id!r}",
                     )
                 seen.add(custom_id)
-                if row.get("method") != "POST":
-                    raise ValueError(f"line {lineno}: method must be 'POST'")
-                url = row.get("url")
-                if not isinstance(url, str) or not url.strip():
-                    raise ValueError(
-                        f"line {lineno}: url must be a non-empty string",
-                    )
-                if endpoint is not None and url != endpoint:
-                    raise ValueError(
-                        f"line {lineno}: url {url!r} does not match "
-                        f"endpoint {endpoint!r}",
-                    )
-                body = row.get("body")
-                if not isinstance(body, dict):
-                    raise ValueError(
-                        f"line {lineno}: body must be a JSON object",
-                    )
-                row_model = body.get("model")
-                if not isinstance(row_model, str) or not row_model.strip():
-                    raise ValueError(
-                        f"line {lineno}: body.model must be a non-empty string",
-                    )
                 if model is None:
                     model = row_model
                 elif row_model != model:

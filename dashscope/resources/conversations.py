@@ -113,19 +113,19 @@ def _validate_metadata(
     if len(metadata) > _MAX_METADATA_PAIRS:
         raise ValueError(
             f"metadata supports at most {_MAX_METADATA_PAIRS} key/value "
-            f"pairs (got {len(metadata)})"
+            f"pairs (got {len(metadata)})",
         )
     result: Dict[str, str] = {}
     for key, value in metadata.items():
         if not isinstance(key, str) or len(key) > _MAX_METADATA_KEY_LEN:
             raise ValueError(
                 f"metadata keys must be strings of at most "
-                f"{_MAX_METADATA_KEY_LEN} characters"
+                f"{_MAX_METADATA_KEY_LEN} characters",
             )
         if not isinstance(value, str) or len(value) > _MAX_METADATA_VALUE_LEN:
             raise ValueError(
                 f"metadata values must be strings of at most "
-                f"{_MAX_METADATA_VALUE_LEN} characters"
+                f"{_MAX_METADATA_VALUE_LEN} characters",
             )
         result[key] = value
     return result
@@ -143,7 +143,7 @@ def _normalize_items(value: ItemsInput) -> List[Dict[str, Any]]:
     if len(items) > _MAX_ITEMS:
         raise ValueError(
             f"items supports at most {_MAX_ITEMS} entries per call "
-            f"(got {len(items)})"
+            f"(got {len(items)})",
         )
     return items
 

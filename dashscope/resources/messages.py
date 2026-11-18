@@ -66,8 +66,6 @@ from dashscope.types.anthropic_messages import (
 from dashscope.types.common import with_headers
 
 if TYPE_CHECKING:
-    import httpx
-
     from dashscope.transport._response import APIResponse
 
 _MESSAGES_PATH = "/v1/messages"
@@ -108,12 +106,14 @@ def _normalize_items(
             items.append(dict(item))
         else:
             raise ValueError(
-                "each item must be a mapping or a pydantic model"
+                "each item must be a mapping or a pydantic model",
             )
     return items
 
 
-def _normalize_config(value: Optional[ConfigInput]) -> Optional[Dict[str, Any]]:
+def _normalize_config(
+    value: Optional[ConfigInput],
+) -> Optional[Dict[str, Any]]:
     if value is None:
         return None
     if isinstance(value, BaseModel):
@@ -137,7 +137,7 @@ def _normalize_tool_choice(value: ToolChoiceInput) -> Dict[str, Any]:
     if isinstance(value, Mapping):
         return dict(value)
     raise ValueError(
-        "tool_choice must be a string, mapping or pydantic model"
+        "tool_choice must be a string, mapping or pydantic model",
     )
 
 
@@ -147,7 +147,7 @@ def _validate_temperature(temperature: Optional[float]) -> None:
     if not _MIN_TEMPERATURE <= temperature < _MAX_TEMPERATURE:
         raise ValueError(
             "temperature must be in [0, 2) on the Bailian Messages API "
-            "(the official Anthropic [0, 1] range does not apply)"
+            "(the official Anthropic [0, 1] range does not apply)",
         )
 
 
@@ -202,7 +202,8 @@ def _build_create_body(
     # tool is declared (a caller-provided marker wins); shared with the
     # chat protocol="anthropic" adapter so both paths enable search alike.
     injected_system = ensure_billing_header(
-        _normalize_system(system), normalized_tools
+        _normalize_system(system),
+        normalized_tools,
     )
     if injected_system is not None:
         body["system"] = injected_system
@@ -297,80 +298,99 @@ class _MessageBuilder:
     def feed(self, event: AnthropicStreamEvent) -> None:
         kind = event.type
         if kind == "message_start":
-            message = event.message
-            if message is not None:
-                self._skeleton = {
-                    "id": message.id,
-                    "type": message.type,
-                    "role": message.role,
-                    "model": message.model,
-                }
-                if message.usage is not None:
-                    self._usage = message.usage.model_dump(exclude_none=True)
+            self._on_message_start(event)
         elif kind == "content_block_start":
-            index = event.index
-            block = (
-                event.content_block.model_dump(exclude_none=True)
-                if event.content_block is not None
-                else {}
-            )
-            self._blocks[index] = block
-            if block.get("type") == "tool_use":
-                # tool_use input arrives incrementally via input_json_delta;
-                # server_tool_use / web_search_tool_result carry complete
-                # input/content in this start event (no deltas to buffer).
-                self._json[index] = ""
-                block.setdefault("input", {})
+            self._on_content_block_start(event)
         elif kind == "content_block_delta":
-            index = event.index
-            delta = event.delta or {}
-            block = self._blocks.setdefault(index, {})
-            delta_type = delta.get("type")
-            if delta_type == "text_delta":
-                block["text"] = (block.get("text") or "") + (
-                    delta.get("text") or ""
-                )
-            elif delta_type == "thinking_delta":
-                block["thinking"] = (block.get("thinking") or "") + (
-                    delta.get("thinking") or ""
-                )
-            elif delta_type == "signature_delta":
-                block["signature"] = delta.get("signature") or ""
-            elif delta_type == "input_json_delta":
-                self._json[index] = self._json.get(index, "") + (
-                    delta.get("partial_json") or ""
-                )
+            self._on_content_block_delta(event)
         elif kind == "content_block_stop":
-            index = event.index
-            if index in self._json:
-                raw = self._json.pop(index)
-                block = self._blocks.setdefault(index, {})
-                if raw.strip():
-                    block["input"] = _parse_tool_json(raw)
-                elif not block.get("input"):
-                    block["input"] = {}
+            self._on_content_block_stop(event)
         elif kind == "message_delta":
-            delta = event.delta or {}
-            if "stop_reason" in delta:
-                self._stop_reason = delta.get("stop_reason")
-            if "stop_sequence" in delta:
-                self._stop_sequence = delta.get("stop_sequence")
-            if event.usage is not None:
-                self._usage.update(event.usage.model_dump(exclude_none=True))
+            self._on_message_delta(event)
         elif kind == "message_stop":
             self._saw_stop = True
+
+    def _on_message_start(self, event: AnthropicStreamEvent) -> None:
+        message = event.message
+        if message is not None:
+            self._skeleton = {
+                "id": message.id,
+                "type": message.type,
+                "role": message.role,
+                "model": message.model,
+            }
+            if message.usage is not None:
+                self._usage = message.usage.model_dump(exclude_none=True)
+
+    def _on_content_block_start(self, event: AnthropicStreamEvent) -> None:
+        index = event.index
+        if index is None:
+            return
+        block = (
+            event.content_block.model_dump(exclude_none=True)
+            if event.content_block is not None
+            else {}
+        )
+        self._blocks[index] = block
+        if block.get("type") == "tool_use":
+            # tool_use input arrives incrementally via input_json_delta;
+            # server_tool_use / web_search_tool_result carry complete
+            # input/content in this start event (no deltas to buffer).
+            self._json[index] = ""
+            block.setdefault("input", {})
+
+    def _on_content_block_delta(self, event: AnthropicStreamEvent) -> None:
+        index = event.index
+        if index is None:
+            return
+        delta = event.delta or {}
+        block = self._blocks.setdefault(index, {})
+        delta_type = delta.get("type")
+        if delta_type == "text_delta":
+            block["text"] = (block.get("text") or "") + (
+                delta.get("text") or ""
+            )
+        elif delta_type == "thinking_delta":
+            block["thinking"] = (block.get("thinking") or "") + (
+                delta.get("thinking") or ""
+            )
+        elif delta_type == "signature_delta":
+            block["signature"] = delta.get("signature") or ""
+        elif delta_type == "input_json_delta":
+            self._json[index] = self._json.get(index, "") + (
+                delta.get("partial_json") or ""
+            )
+
+    def _finalize_json_block(self, index: int, raw: str) -> None:
+        block = self._blocks.setdefault(index, {})
+        if raw.strip():
+            block["input"] = _parse_tool_json(raw)
+        elif not block.get("input"):
+            block["input"] = {}
+
+    def _on_content_block_stop(self, event: AnthropicStreamEvent) -> None:
+        index = event.index
+        if index is None:
+            return
+        if index in self._json:
+            self._finalize_json_block(index, self._json.pop(index))
+
+    def _on_message_delta(self, event: AnthropicStreamEvent) -> None:
+        delta = event.delta or {}
+        if "stop_reason" in delta:
+            self._stop_reason = delta.get("stop_reason")
+        if "stop_sequence" in delta:
+            self._stop_sequence = delta.get("stop_sequence")
+        if event.usage is not None:
+            self._usage.update(event.usage.model_dump(exclude_none=True))
 
     def build(self) -> AnthropicMessage:
         if not self._saw_stop:
             raise DashScopeError(
-                "message stream ended without a message_stop event"
+                "message stream ended without a message_stop event",
             )
         for index, raw in self._json.items():
-            block = self._blocks.setdefault(index, {})
-            if raw.strip():
-                block["input"] = _parse_tool_json(raw)
-            elif not block.get("input"):
-                block["input"] = {}
+            self._finalize_json_block(index, raw)
         content = [self._blocks[i] for i in sorted(self._blocks)]
         return parse_message(
             {
@@ -379,7 +399,7 @@ class _MessageBuilder:
                 "stop_reason": self._stop_reason,
                 "stop_sequence": self._stop_sequence,
                 "usage": self._usage or None,
-            }
+            },
         )
 
 
@@ -412,7 +432,7 @@ class MessageStream:
             if event.type == "content_block_delta":
                 delta = event.delta or {}
                 if delta.get("type") == "thinking_delta" and delta.get(
-                    "thinking"
+                    "thinking",
                 ):
                     yield delta["thinking"]
 
@@ -462,7 +482,7 @@ class AsyncMessageStream:
             if event.type == "content_block_delta":
                 delta = event.delta or {}
                 if delta.get("type") == "thinking_delta" and delta.get(
-                    "thinking"
+                    "thinking",
                 ):
                     yield delta["thinking"]
 
@@ -668,7 +688,7 @@ class Messages:
                         strict=self._client.config.strict_validation,
                         response=response,
                     ),
-                )
+                ),
             )
         resp = transport.request_api(
             "POST",
@@ -856,7 +876,7 @@ class AsyncMessages:
                         strict=self._client.config.strict_validation,
                         response=response,
                     ),
-                )
+                ),
             )
         resp = await transport.request_api(
             "POST",

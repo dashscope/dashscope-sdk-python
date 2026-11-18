@@ -26,7 +26,6 @@ from dashscope import AsyncClient, Client
 from dashscope.errors import (
     BadRequestError,
     DashScopeError,
-    NotFoundError,
     RateLimitError,
     SdkError,
 )
@@ -271,7 +270,10 @@ def test_get_wire_and_parse():
 
     client = _make_client(handler)
     resp = client.batches.get("batch_abc123")
-    assert captured == {"method": "GET", "path": "/api/v1/batches/batch_abc123"}
+    assert captured == {
+        "method": "GET",
+        "path": "/api/v1/batches/batch_abc123",
+    }
     assert resp.status == "completed"
     assert resp.finished is True
     assert resp.succeeded is True
@@ -612,7 +614,11 @@ def test_wait_failed_raises_with_errors_detail():
                 "errors": {
                     "object": "list",
                     "data": [
-                        {"code": "invalid_row", "message": "row 3 bad", "line": 3},
+                        {
+                            "code": "invalid_row",
+                            "message": "row 3 bad",
+                            "line": 3,
+                        },
                     ],
                 },
             },
@@ -983,7 +989,9 @@ async def test_async_routing_default_gateway(clean_env):
 
 
 async def test_async_validate_input_is_local(tmp_path):
-    client = _make_async_client(lambda r: httpx.Response(200, json=_BATCH_BODY))
+    client = _make_async_client(
+        lambda r: httpx.Response(200, json=_BATCH_BODY),
+    )
     # Plain (non-async) method: local file I/O, no network.
     n = client.batches.validate_input(_rows_file(tmp_path, _GOOD_ROWS))
     assert n == 2
@@ -991,7 +999,9 @@ async def test_async_validate_input_is_local(tmp_path):
 
 
 async def test_async_empty_batch_id_rejected_locally():
-    client = _make_async_client(lambda r: httpx.Response(200, json=_BATCH_BODY))
+    client = _make_async_client(
+        lambda r: httpx.Response(200, json=_BATCH_BODY),
+    )
     with pytest.raises(ValueError, match="batch_id"):
         await client.batches.get("")
     await client.aclose()

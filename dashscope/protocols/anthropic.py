@@ -118,6 +118,7 @@ def ensure_billing_header(system: Any, tools: Any) -> Any:
         return list(system) + [marker_block]
     return system
 
+
 # Canonical parameters this adapter does not map onto the Anthropic
 # Messages wire (``tool_choice`` does map — see _translate_tool_choice;
 # ``enable_thinking``/``thinking_budget`` reach the wire's ``thinking``
@@ -826,7 +827,8 @@ class AnthropicProtocol(ChatProtocol):
         # resource does, so both Anthropic paths enable search identically.
         if detect_web_search_tool(body.get("tools")):
             body["system"] = ensure_billing_header(
-                body.get("system"), body.get("tools")
+                body.get("system"),
+                body.get("tools"),
             )
         return ChatRequest(
             path=path or self.PATH,
