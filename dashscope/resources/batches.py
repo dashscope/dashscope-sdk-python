@@ -10,6 +10,11 @@ Two planes share the ``Batches`` resource:
 * ``client.batches`` (B2) -- the batch job plane: ``create`` / ``get`` /
   ``list`` / ``cancel`` / ``wait`` plus a pre-upload ``validate_input``
   row-level JSONL check.
+* ``client.batches.download_output`` / ``download_error`` (B3) -- resolve a
+  batch's ``output_file_id`` / ``error_file_id`` and download the results
+  JSONL through ``files.content`` (``None`` when the file is absent). An
+  uploaded input file id is reusable across creates (no re-upload needed);
+  discover existing batch files with ``files.list(purpose="batch")``.
 
 Wire: every call sits under ``{gateway}/compatible-mode/v1`` -- the
 OpenAI-compatible File/Batch API, NOT the native ``/api/v1/files`` that
@@ -655,6 +660,16 @@ def _batch_id(batch: Union[Batch, str]) -> str:
     if not batch_id:
         raise DashScopeError("batch id required")
     return batch_id
+
+
+def _result_file_id(batch: Batch, attr: str) -> Optional[str]:
+    # output_file_id / error_file_id stay null until the batch produces
+    # results (error_file_id only when some row failed); treat blank as
+    # absent so the download helpers return None instead of GETting "".
+    value = getattr(batch, attr, None)
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
 
 
 def _validate_completion_window(window: str) -> None:
@@ -1690,6 +1705,10 @@ class Batches:
         otherwise spawn a duplicate batch. Passing ``max_retries``
         explicitly re-enables retry and the caller owns that duplicate
         risk. Validate the input first with :meth:`validate_input`.
+
+        ``input_file_id`` is reusable: an already-uploaded batch file id
+        (``file-batch-xxx``) can drive many creates without re-uploading;
+        find existing ones with ``files.list(purpose="batch")``.
         """
         body = _build_batch_create_body(
             input_file_id=input_file_id,
@@ -2083,6 +2102,114 @@ class Batches:
         violation. Run this before ``files.upload`` + ``create``.
         """
         return _validate_input_rows(file_path, endpoint=endpoint)
+
+    def download_output(
+        self,
+        batch: Union[Batch, str],
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> Optional[FileContent]:
+        """Download a batch's successful-results JSONL (``output_file_id``).
+
+        Accepts a :class:`Batch` (used as-is) or a batch id (fetched via
+        :meth:`get`). Resolves ``output_file_id`` and downloads it through
+        ``files.content`` (``GET /files/{id}/content``), returning
+        :class:`FileContent` (bytes with ``text`` / ``write_to_file``).
+        Returns ``None`` when the batch has no output file yet (not
+        ``completed``, or an error envelope under ``raise_on_error=False``).
+        Each output row is ``{id, custom_id, response:{status_code,
+        request_id, body}, error}``. Call :meth:`wait` first for a terminal
+        batch. High-level helper -- no ``raw`` overload; use
+        ``files.content(file_id, raw=True)`` for the raw response.
+        """
+        return self._download_result(
+            batch,
+            "output_file_id",
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+        )
+
+    def download_error(
+        self,
+        batch: Union[Batch, str],
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> Optional[FileContent]:
+        """Download a batch's failed-requests JSONL (``error_file_id``).
+
+        Like :meth:`download_output` but for ``error_file_id``; returns
+        ``None`` when no row failed (the common case for a clean batch).
+        """
+        return self._download_result(
+            batch,
+            "error_file_id",
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+        )
+
+    def _download_result(
+        self,
+        batch: Union[Batch, str],
+        attr: str,
+        *,
+        timeout: Optional[float],
+        api_key: Optional[str],
+        workspace: Optional[str],
+        extra_headers: Optional[Mapping[str, str]],
+        extra_query: Optional[Mapping[str, Any]],
+        extra_body: Optional[Mapping[str, Any]],
+        max_retries: Optional[int],
+    ) -> Optional[FileContent]:
+        batch_id = _batch_id(batch)
+        current = (
+            batch
+            if isinstance(batch, Batch)
+            else self.get(
+                batch_id,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            )
+        )
+        file_id = _result_file_id(current, attr)
+        if file_id is None:
+            return None
+        return self.files.content(
+            file_id,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+        )
 
 
 class AsyncBatches:
@@ -2508,3 +2635,95 @@ class AsyncBatches:
         A plain (non-async) method: it does local file I/O, no network.
         """
         return _validate_input_rows(file_path, endpoint=endpoint)
+
+    async def download_output(
+        self,
+        batch: Union[Batch, str],
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> Optional[FileContent]:
+        """Async twin of :meth:`Batches.download_output`."""
+        return await self._download_result(
+            batch,
+            "output_file_id",
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+        )
+
+    async def download_error(
+        self,
+        batch: Union[Batch, str],
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        extra_headers: Optional[Mapping[str, str]] = None,
+        extra_query: Optional[Mapping[str, Any]] = None,
+        extra_body: Optional[Mapping[str, Any]] = None,
+        max_retries: Optional[int] = None,
+    ) -> Optional[FileContent]:
+        """Async twin of :meth:`Batches.download_error`."""
+        return await self._download_result(
+            batch,
+            "error_file_id",
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+        )
+
+    async def _download_result(
+        self,
+        batch: Union[Batch, str],
+        attr: str,
+        *,
+        timeout: Optional[float],
+        api_key: Optional[str],
+        workspace: Optional[str],
+        extra_headers: Optional[Mapping[str, str]],
+        extra_query: Optional[Mapping[str, Any]],
+        extra_body: Optional[Mapping[str, Any]],
+        max_retries: Optional[int],
+    ) -> Optional[FileContent]:
+        batch_id = _batch_id(batch)
+        current = (
+            batch
+            if isinstance(batch, Batch)
+            else await self.get(
+                batch_id,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                extra_headers=extra_headers,
+                extra_query=extra_query,
+                extra_body=extra_body,
+                max_retries=max_retries,
+            )
+        )
+        file_id = _result_file_id(current, attr)
+        if file_id is None:
+            return None
+        return await self.files.content(
+            file_id,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            extra_headers=extra_headers,
+            extra_query=extra_query,
+            extra_body=extra_body,
+            max_retries=max_retries,
+        )
