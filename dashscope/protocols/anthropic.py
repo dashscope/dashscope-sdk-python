@@ -104,7 +104,8 @@ def ensure_billing_header(system: Any, tools: Any) -> Any:
 
     Returns ``system`` unchanged when no web_search server tool is declared
     or the caller already supplied the marker. A string system becomes a
-    block list so the marker rides as its own text block (documented form).
+    block list so the marker rides as its own text block (a valid system
+    block form; the docs mandate the identifier, not this packaging).
     """
     if not detect_web_search_tool(tools) or system_has_billing_header(system):
         return system
