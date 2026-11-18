@@ -103,7 +103,7 @@ class TestValidation:
         "key,value",
         [
             ("protocol", "bogus"),
-            ("region", "mars-1"),
+            ("region", "mars.1"),
             ("output", "csv"),
             ("timeout", "0"),
             ("timeout", "-1"),
@@ -141,6 +141,16 @@ class TestValidation:
         set_value("protocol", "openai", path=config)
         set_value("region", "cn-beijing", path=config)
         assert load_raw(config)["protocol"] == "openai"
+
+    def test_unknown_but_safe_region_passes_through(self, config):
+        # A4: the SDK no longer hard-rejects a safe DNS region label, so
+        # the CLI (which mirrors resolve-time acceptance) must accept it
+        # too; a newly launched region works without an SDK upgrade.
+        assert set_value("region", "mars-1", path=config) == (
+            "region",
+            "mars-1",
+        )
+        assert load_raw(config)["region"] == "mars-1"
 
 
 class TestPreservation:

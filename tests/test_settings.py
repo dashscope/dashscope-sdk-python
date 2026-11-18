@@ -139,8 +139,14 @@ def test_region_lazy_env_and_setter(clean):
 
 
 def test_region_setter_validation(clean):
+    # A4: an unsafe label is still rejected; a safe but unknown region
+    # warns instead of raising (passthrough), so new regions work
+    # without an SDK upgrade.
     with pytest.raises(ValueError, match="invalid region"):
+        settings.region = "moon.1"
+    with pytest.warns(UserWarning, match="not a known DashScope region"):
         settings.region = "moon-1"
+    assert settings.region == "moon-1"
 
 
 def test_base_url_uses_settings_region(clean):

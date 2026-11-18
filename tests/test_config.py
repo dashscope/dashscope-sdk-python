@@ -338,6 +338,85 @@ def test_region_catalogs_stay_in_sync():
     assert DEFAULT_REGION in VALID_REGIONS
 
 
+def test_unsafe_region_labels_rejected(clean_env):
+    # A4: region is interpolated into the gateway host, so any label that
+    # could rewrite the host (dot/slash/uppercase/underscore/empty/
+    # overlong/leading-trailing hyphen) is rejected even with a workspace.
+    for bad in (
+        "cn-beijing.evil.com",
+        "a/b",
+        "CN-BEIJING",
+        "cn_beijing",
+        "",
+        "-cn-beijing",
+        "cn-beijing-",
+        "a" * 64,
+        "cn-beijing@x",
+    ):
+        with pytest.raises(ValueError, match="invalid region"):
+            resolve_config(
+                region=bad,
+                workspace="ws-123",
+                config_path="/nonexistent/config.toml",
+            )
+
+
+def test_unknown_region_with_workspace_passes_through(clean_env, tmp_path):
+    # A4: a safe but unknown region is allowed with a workspace, warning
+    # instead of rejecting, so a newly launched region works pre-upgrade.
+    with pytest.warns(UserWarning, match="not a known DashScope region"):
+        cfg = resolve_config(
+            region="mars-1",
+            workspace="ws-123",
+            config_path=tmp_path / "absent.toml",
+        )
+    assert cfg.region == "mars-1"
+    assert cfg.base_url == "https://ws-123.mars-1.maas.aliyuncs.com/api/v1"
+
+
+def test_unknown_region_without_workspace_rejected(clean_env):
+    # No workspace -> the legacy shared gateway needs a known mapping.
+    with pytest.raises(ValueError, match="invalid region"):
+        resolve_config(
+            region="mars-1",
+            config_path="/nonexistent/config.toml",
+        )
+
+
+def test_explicit_base_url_bypasses_region_whitelist(clean_env, tmp_path):
+    # Escape hatch: an unknown region is recorded but never gates the
+    # request, and no warning is emitted.
+    import warnings as _warnings
+
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("error")
+        cfg = resolve_config(
+            region="mars-1",
+            base_url="https://explicit.example.com",
+            config_path=tmp_path / "absent.toml",
+        )
+    assert cfg.region == "mars-1"
+    assert cfg.base_url == "https://explicit.example.com"
+
+
+def test_unsafe_workspace_rejected(clean_env):
+    # The workspace is host-interpolated too; a dot could rewrite the host.
+    with pytest.raises(ValueError, match="invalid workspace"):
+        resolve_config(
+            region="cn-beijing",
+            workspace="ws.123",
+            config_path="/nonexistent/config.toml",
+        )
+
+
+def test_settings_region_setter_warns_on_unknown(clean_env):
+    from dashscope._config import settings
+
+    with pytest.warns(UserWarning, match="not a known DashScope region"):
+        settings.region = "mars-1"
+    assert settings.region == "mars-1"
+
+
 def test_configured_base_url_beats_region(clean_env, tmp_path):
     # An explicit base_url stays the escape hatch: region is still
     # recorded but does not rewrite the configured URL.

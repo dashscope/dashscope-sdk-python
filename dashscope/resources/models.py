@@ -23,6 +23,11 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from dashscope.errors import (
     ErrorCode,
     error_from_business_code,
+    response_error,
+)
+from dashscope.resources._model_cache import (
+    _CatalogCache,
+    catalog_key,
 )
 from dashscope.transport._options import request_options
 from dashscope.types._parse import parse_model
@@ -496,6 +501,66 @@ class Models:
         self._client = client
         self.limits = ModelLimits(client)
         self.permissions = ModelPermissions(client)
+        self._catalog_cache = _CatalogCache()
+
+    def _models_get(
+        self,
+        params: Mapping[str, Any],
+        *,
+        refresh: bool,
+        raw: bool,
+        timeout: Optional[float],
+        api_key: Optional[str],
+        workspace: Optional[str],
+        options: Any,
+    ) -> "APIResponse":
+        """Single cached read seam for the catalog (list/get/is_available).
+
+        ``raw=True`` bypasses the cache and the error check, returning the
+        live response. Otherwise a fresh, unexpired entry is reused; on a
+        miss the response is fetched, error-checked, and cached only when it
+        is genuinely successful, so errors are never cached even in
+        non-raising mode. ``refresh=True`` skips the lookup but still updates
+        the entry. The cached response is re-parsed by each caller, so every
+        call hands back fresh model objects rather than a shared instance.
+        """
+        if raw:
+            return self._client.transport.request_api(
+                "GET",
+                _BASE_PATH,
+                params=params,
+                sdk_module=MODULE,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                options=options,
+                client=self._client,
+            )
+        key = catalog_key(
+            self._client.config,
+            params,
+            api_key=api_key,
+            workspace=workspace,
+        )
+        if not refresh:
+            cached = self._catalog_cache.get(key)
+            if cached is not None:
+                return cached
+        resp = self._client.transport.request_api(
+            "GET",
+            _BASE_PATH,
+            params=params,
+            sdk_module=MODULE,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            options=options,
+            client=self._client,
+        )
+        resp.raise_for_status()
+        if response_error(resp.http_response) is None:
+            self._catalog_cache.set(key, resp)
+        return resp
 
     @overload
     def list(
@@ -523,6 +588,7 @@ class Models:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: Literal[False] = False,
     ) -> ModelList:
         ...
@@ -553,6 +619,7 @@ class Models:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: Literal[True],
     ) -> "APIResponse":
         ...
@@ -582,6 +649,7 @@ class Models:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: bool = False,
     ) -> Union[ModelList, "APIResponse"]:
         """List models with the server's full filter contract.
@@ -593,6 +661,12 @@ class Models:
         convenience that folds into ``providers``; it no longer filters the
         current page client-side (which left ``total_count`` pre-filter and
         hid matches on other pages).
+
+        Reads are served from a short-TTL (60s) per-client cache keyed by
+        Region, workspace, credential and the exact query, so repeated
+        identical reads avoid the gateway. ``refresh=True`` forces a fresh
+        fetch (and updates the cache); errors and ``raw=True`` are never
+        cached. The cache never crosses tenants or Regions.
 
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         instead of a ``ModelList``, before any error check, so callers can
@@ -618,11 +692,10 @@ class Models:
             deployment_methods=deployment_methods,
             deployment_ptu_service_tiers=deployment_ptu_service_tiers,
         )
-        resp = self._client.transport.request_api(
-            "GET",
-            _BASE_PATH,
-            params=_build_list_params(page_no, page_size, **filter_kwargs),
-            sdk_module=MODULE,
+        resp = self._models_get(
+            _build_list_params(page_no, page_size, **filter_kwargs),
+            refresh=refresh,
+            raw=raw,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
@@ -632,11 +705,9 @@ class Models:
                 extra_body,
                 max_retries=max_retries,
             ),
-            client=self._client,
         )
         if raw:
             return resp
-        resp.raise_for_status()
         result = _parse_list(
             resp.json(),
             strict=self._client.config.strict_validation,
@@ -661,6 +732,7 @@ class Models:
                 extra_query=extra_query,
                 extra_body=extra_body,
                 max_retries=max_retries,
+                refresh=refresh,
             ),
             requested_page_no=page_no,
             requested_page_size=page_size,
@@ -679,6 +751,7 @@ class Models:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: Literal[False] = False,
     ) -> Model:
         ...
@@ -695,6 +768,7 @@ class Models:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: Literal[True],
     ) -> "APIResponse":
         ...
@@ -710,14 +784,17 @@ class Models:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: bool = False,
     ) -> Union[Model, "APIResponse"]:
-        # Server filters by model name via query params.
-        resp = self._client.transport.request_api(
-            "GET",
-            _BASE_PATH,
-            params={"model": model, "page_no": 1, "page_size": 1},
-            sdk_module=MODULE,
+        # Server filters by model name via query params. Shares the catalog
+        # cache with list/is_available: the same (region, workspace,
+        # credential, query) reads one response. ``refresh=True`` forces a
+        # fresh fetch; errors and ``raw=True`` are never cached.
+        resp = self._models_get(
+            {"model": model, "page_no": 1, "page_size": 1},
+            refresh=refresh,
+            raw=raw,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
@@ -727,11 +804,9 @@ class Models:
                 extra_body,
                 max_retries=max_retries,
             ),
-            client=self._client,
         )
         if raw:
             return resp
-        resp.raise_for_status()
         body = resp.json()
         models = _parse_get_models(body)
         region = self._client.config.region
@@ -806,6 +881,7 @@ class Models:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
     ) -> Iterator[Model]:
         """Iterate every model across all pages, lazily.
 
@@ -815,6 +891,8 @@ class Models:
         ``page_size`` defaults to 100 to cut round-trips. Each yielded
         :class:`Model` carries the injected ``served_region`` / ``workspace``
         / ``service_site`` context. Only the current Client Region is read.
+        Pages share the catalog cache; ``refresh=True`` forces every page to
+        be fetched fresh.
         """
         page = self.list(
             page_no=1,
@@ -839,6 +917,7 @@ class Models:
             extra_query=extra_query,
             extra_body=extra_body,
             max_retries=max_retries,
+            refresh=refresh,
         )
         for following in page.iter_pages():
             yield from following
@@ -867,6 +946,7 @@ class Models:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
     ) -> List[Model]:
         """Collect every model across all pages into one list.
 
@@ -897,6 +977,7 @@ class Models:
                 extra_query=extra_query,
                 extra_body=extra_body,
                 max_retries=max_retries,
+                refresh=refresh,
             ),
         )
 
@@ -911,6 +992,7 @@ class Models:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
     ) -> bool:
         """Whether ``model`` is in the current Client Region's catalog.
 
@@ -920,14 +1002,15 @@ class Models:
         when it returns none. Transport/HTTP errors propagate rather than
         being read as "unavailable". ``model`` must be a non-empty id, so an
         empty filter cannot masquerade as the whole catalog being a match.
+        Shares the catalog cache with ``get``; ``refresh=True`` forces a
+        fresh fetch.
         """
         if not model or not model.strip():
             raise ValueError("model must be a non-empty model id")
-        resp = self._client.transport.request_api(
-            "GET",
-            _BASE_PATH,
-            params={"model": model, "page_no": 1, "page_size": 1},
-            sdk_module=MODULE,
+        resp = self._models_get(
+            {"model": model, "page_no": 1, "page_size": 1},
+            refresh=refresh,
+            raw=False,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
@@ -937,9 +1020,7 @@ class Models:
                 extra_body,
                 max_retries=max_retries,
             ),
-            client=self._client,
         )
-        resp.raise_for_status()
         return bool(_parse_get_models(resp.json()))
 
 
@@ -948,6 +1029,62 @@ class AsyncModels:
         self._client = client
         self.limits = AsyncModelLimits(client)
         self.permissions = AsyncModelPermissions(client)
+        self._catalog_cache = _CatalogCache()
+
+    async def _models_get(
+        self,
+        params: Mapping[str, Any],
+        *,
+        refresh: bool,
+        raw: bool,
+        timeout: Optional[float],
+        api_key: Optional[str],
+        workspace: Optional[str],
+        options: Any,
+    ) -> "APIResponse":
+        """Async :meth:`Models._models_get`; same cache, awaited fetch.
+
+        The cache lookup/store are synchronous and never await inside the
+        lock, so sharing one ``_CatalogCache`` on a single event loop is
+        safe.
+        """
+        if raw:
+            return await self._client.transport.request_api(
+                "GET",
+                _BASE_PATH,
+                params=params,
+                sdk_module=MODULE,
+                timeout=timeout,
+                api_key=api_key,
+                workspace=workspace,
+                options=options,
+                client=self._client,
+            )
+        key = catalog_key(
+            self._client.config,
+            params,
+            api_key=api_key,
+            workspace=workspace,
+        )
+        if not refresh:
+            cached = self._catalog_cache.get(key)
+            if cached is not None:
+                return cached
+        resp = await self._client.transport.request_api(
+            "GET",
+            _BASE_PATH,
+            params=params,
+            sdk_module=MODULE,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            options=options,
+            client=self._client,
+        )
+        resp.raise_for_status()
+        if response_error(resp.http_response) is None:
+            self._catalog_cache.set(key, resp)
+        return resp
 
     @overload
     async def list(
@@ -975,6 +1112,7 @@ class AsyncModels:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: Literal[False] = False,
     ) -> ModelList:
         ...
@@ -1005,6 +1143,7 @@ class AsyncModels:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: Literal[True],
     ) -> "APIResponse":
         ...
@@ -1034,6 +1173,7 @@ class AsyncModels:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: bool = False,
     ) -> Union[ModelList, "APIResponse"]:
         filter_kwargs = dict(
@@ -1051,11 +1191,10 @@ class AsyncModels:
             deployment_methods=deployment_methods,
             deployment_ptu_service_tiers=deployment_ptu_service_tiers,
         )
-        resp = await self._client.transport.request_api(
-            "GET",
-            _BASE_PATH,
-            params=_build_list_params(page_no, page_size, **filter_kwargs),
-            sdk_module=MODULE,
+        resp = await self._models_get(
+            _build_list_params(page_no, page_size, **filter_kwargs),
+            refresh=refresh,
+            raw=raw,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
@@ -1065,11 +1204,9 @@ class AsyncModels:
                 extra_body,
                 max_retries=max_retries,
             ),
-            client=self._client,
         )
         if raw:
             return resp
-        resp.raise_for_status()
         result = _parse_list(
             resp.json(),
             strict=self._client.config.strict_validation,
@@ -1094,6 +1231,7 @@ class AsyncModels:
                 extra_query=extra_query,
                 extra_body=extra_body,
                 max_retries=max_retries,
+                refresh=refresh,
             ),
             requested_page_no=page_no,
             requested_page_size=page_size,
@@ -1112,6 +1250,7 @@ class AsyncModels:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: Literal[False] = False,
     ) -> Model:
         ...
@@ -1128,6 +1267,7 @@ class AsyncModels:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: Literal[True],
     ) -> "APIResponse":
         ...
@@ -1143,14 +1283,16 @@ class AsyncModels:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
         raw: bool = False,
     ) -> Union[Model, "APIResponse"]:
-        # Server filters by model name via query params.
-        resp = await self._client.transport.request_api(
-            "GET",
-            _BASE_PATH,
-            params={"model": model, "page_no": 1, "page_size": 1},
-            sdk_module=MODULE,
+        # Server filters by model name via query params. Shares the catalog
+        # cache with list/is_available; ``refresh=True`` forces a fresh
+        # fetch, errors and ``raw=True`` are never cached.
+        resp = await self._models_get(
+            {"model": model, "page_no": 1, "page_size": 1},
+            refresh=refresh,
+            raw=raw,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
@@ -1160,11 +1302,9 @@ class AsyncModels:
                 extra_body,
                 max_retries=max_retries,
             ),
-            client=self._client,
         )
         if raw:
             return resp
-        resp.raise_for_status()
         body = resp.json()
         models = _parse_get_models(body)
         region = self._client.config.region
@@ -1239,13 +1379,15 @@ class AsyncModels:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
     ) -> AsyncIterator[Model]:
         """Async :meth:`Models.iter`: ``async for m in client.models.iter(...)``.
 
         Walks every page of the current Client Region's filtered catalog,
         fetching the next page lazily only as iteration advances. Each model
         carries the injected ``served_region`` / ``workspace`` /
-        ``service_site`` context.
+        ``service_site`` context. Pages share the catalog cache;
+        ``refresh=True`` forces every page to be fetched fresh.
         """
         page = await self.list(
             page_no=1,
@@ -1270,6 +1412,7 @@ class AsyncModels:
             extra_query=extra_query,
             extra_body=extra_body,
             max_retries=max_retries,
+            refresh=refresh,
         )
         async for following in page.iter_pages_async():
             for item in following.items:
@@ -1299,6 +1442,7 @@ class AsyncModels:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
     ) -> List[Model]:
         """Async :meth:`Models.list_all`; collects the whole filtered catalog."""
         return [
@@ -1325,6 +1469,7 @@ class AsyncModels:
                 extra_query=extra_query,
                 extra_body=extra_body,
                 max_retries=max_retries,
+                refresh=refresh,
             )
         ]
 
@@ -1339,15 +1484,19 @@ class AsyncModels:
         extra_query: Optional[Mapping[str, Any]] = None,
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
+        refresh: bool = False,
     ) -> bool:
-        """Async :meth:`Models.is_available`; current Client Region only."""
+        """Async :meth:`Models.is_available`; current Client Region only.
+
+        Shares the catalog cache with ``get``; ``refresh=True`` forces a
+        fresh fetch.
+        """
         if not model or not model.strip():
             raise ValueError("model must be a non-empty model id")
-        resp = await self._client.transport.request_api(
-            "GET",
-            _BASE_PATH,
-            params={"model": model, "page_no": 1, "page_size": 1},
-            sdk_module=MODULE,
+        resp = await self._models_get(
+            {"model": model, "page_no": 1, "page_size": 1},
+            refresh=refresh,
+            raw=False,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
@@ -1357,9 +1506,7 @@ class AsyncModels:
                 extra_body,
                 max_retries=max_retries,
             ),
-            client=self._client,
         )
-        resp.raise_for_status()
         return bool(_parse_get_models(resp.json()))
 
 
