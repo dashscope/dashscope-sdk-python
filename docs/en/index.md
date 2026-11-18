@@ -107,6 +107,26 @@ asyncio.run(main())
 `client.audio.live` runs full-duplex voice sessions over WebSocket — see the
 [Qwen Live guide](guides/qwen-live-python-sdk.md) for a complete walkthrough.
 
+## Command line (CLI 2.0)
+
+Installing the SDK also installs the `dashscope` command. The 2.0 CLI
+mirrors the SDK resources, so anything you can do with `Client` you can
+also script from a shell:
+
+```bash
+dashscope version                 # print the SDK version
+dashscope auth login              # save an API key
+dashscope chat create --model qwen-plus --prompt "Hello!"
+dashscope -o json ft list         # machine-readable output for scripting
+```
+
+It covers chat, multimodal, embeddings, images/videos, audio, files,
+fine-tuning, agentic RL and more, with global options for protocol,
+region and output format. Running `dashscope` with no arguments starts
+the optional interactive AI assistant (`pip install "dashscope[acli]"`).
+The frozen 1.x command tree remains available as `dashscope1`.
+See [Command Line Interface](cli.md).
+
 ## Protocols
 
 The same call can speak three wire protocols:

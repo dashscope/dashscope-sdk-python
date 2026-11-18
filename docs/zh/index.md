@@ -106,6 +106,24 @@ asyncio.run(main())
 `client.audio.live` 通过 WebSocket 运行全双工语音会话——完整接入
 流程见 [Qwen Live 指南](guides/qwen-live-python-sdk.md)。
 
+## 命令行（CLI 2.0）
+
+安装 SDK 的同时会安装 `dashscope` 命令。2.0 CLI 与 SDK 资源一一对应，
+`Client` 能做的任何事情都可以直接在 shell 里脚本化：
+
+```bash
+dashscope version                 # 打印 SDK 版本
+dashscope auth login              # 保存 API Key
+dashscope chat create --model qwen-plus --prompt "你好！"
+dashscope -o json ft list         # 机器可读输出，便于脚本处理
+```
+
+覆盖对话、多模态、向量嵌入、图像/视频、音频、文件、微调、智能体
+强化学习等能力，并提供协议、区域与输出格式等全局选项。不带任何
+参数运行 `dashscope` 会启动可选的交互式 AI 助手
+（`pip install "dashscope[acli]"`）。冻结的 1.x 命令树仍以
+`dashscope1` 提供。详见[命令行工具](cli.md)。
+
 ## 协议
 
 同一个调用可以使用三种传输协议：
