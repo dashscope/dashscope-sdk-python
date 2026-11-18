@@ -13,12 +13,8 @@ from .tokenizer_base import Tokenizer
 
 QWEN_SERIALS = ["qwen-7b-chat", "qwen-turbo", "qwen-plus", "qwen-max"]
 _VOCAB_NAME = "qwen.tiktoken"
-# The vocab ships next to this module in source checkouts, but is excluded
-# from wheels (MANIFEST.in); installed packages download it on first use.
-_VOCAB_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    _VOCAB_NAME,
-)
+# The vocab is no longer bundled in the repository; it is downloaded from
+# ModelScope on first use and cached under ~/.cache/dashscope/tokenizers.
 _VOCAB_URL = (
     "https://www.modelscope.cn/models/Qwen/Qwen-7B-Chat/resolve/master/"
     + _VOCAB_NAME
@@ -80,8 +76,6 @@ def _resolve_vocab_path() -> str:
     override = os.environ.get(_VOCAB_ENV)
     if override:
         return os.path.expanduser(override)
-    if os.path.isfile(_VOCAB_PATH):
-        return _VOCAB_PATH
     cached = os.path.join(_VOCAB_CACHE_DIR, _VOCAB_NAME)
     if os.path.isfile(cached) and _sha256(cached) == _VOCAB_SHA256:
         return cached
@@ -92,8 +86,8 @@ def _resolve_vocab_path() -> str:
 def get_tokenizer(model: str) -> Tokenizer:
     """Get a tokenizer based on model name.
 
-    The vocab file ships with source checkouts; installed wheels download
-    it on first use from ModelScope into ``~/.cache/dashscope/tokenizers``.
+    The vocab file is downloaded on first use from ModelScope into
+    ``~/.cache/dashscope/tokenizers``.
     Set ``DASHSCOPE_QWEN_VOCAB`` to a local file path for offline use.
 
     Args:
