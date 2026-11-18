@@ -208,6 +208,47 @@ class TestSyncCache:
         client.models.list(service_site="intl")  # 6
         assert len(calls) == 6
 
+    def test_extra_query_bypasses_cache(self):
+        calls = []
+
+        def handler(request):
+            calls.append(dict(request.url.params))
+            return _page([{"model": f"m{len(calls)}"}])
+
+        client = _make_client(handler)
+        client.models.list()  # 1: cached
+        client.models.list()  # hit
+        assert len(calls) == 1
+        # extra_query changes the effective query: no stale page-1 hit.
+        result = client.models.list(extra_query={"page_no": 2})
+        assert len(calls) == 2
+        assert calls[-1]["page_no"] == "2"
+        assert result.models[0].model == "m2"
+        # ...and the bypassed read must not pollute the plain entry.
+        assert client.models.list().models[0].model == "m1"
+        assert len(calls) == 2
+
+    def test_extra_headers_bypasses_cache(self):
+        calls = []
+
+        def handler(request):
+            calls.append(request.headers.get("x-dashscope-workspace"))
+            return _page([{"model": f"m{len(calls)}"}])
+
+        client = _make_client(handler, workspace="ws-a")
+        client.models.list()  # 1: cached under ws-a
+        client.models.list()  # hit
+        assert len(calls) == 1
+        # A workspace header override must not read ws-a's entry.
+        result = client.models.list(
+            extra_headers={"X-DashScope-WorkSpace": "ws-b"},
+        )
+        assert len(calls) == 2
+        assert calls[-1] == "ws-b"
+        assert result.models[0].model == "m2"
+        assert client.models.list().models[0].model == "m1"
+        assert len(calls) == 2
+
     def test_raw_bypasses_cache(self):
         calls = []
 
@@ -395,6 +436,48 @@ class TestAsyncCache:
         assert fresh.models[0].model == "m2"
         assert len(calls) == 2
         assert (await client.models.list()).models[0].model == "m2"
+        assert len(calls) == 2
+        await client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_extra_query_bypasses_cache(self):
+        calls = []
+
+        async def handler(request):
+            calls.append(dict(request.url.params))
+            return _page([{"model": f"m{len(calls)}"}])
+
+        client = _make_async_client(handler)
+        await client.models.list()
+        await client.models.list()
+        assert len(calls) == 1
+        result = await client.models.list(extra_query={"page_no": 2})
+        assert len(calls) == 2
+        assert calls[-1]["page_no"] == "2"
+        assert result.models[0].model == "m2"
+        assert (await client.models.list()).models[0].model == "m1"
+        assert len(calls) == 2
+        await client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_extra_headers_bypasses_cache(self):
+        calls = []
+
+        async def handler(request):
+            calls.append(request.headers.get("x-dashscope-workspace"))
+            return _page([{"model": f"m{len(calls)}"}])
+
+        client = _make_async_client(handler, workspace="ws-a")
+        await client.models.list()
+        await client.models.list()
+        assert len(calls) == 1
+        result = await client.models.list(
+            extra_headers={"X-DashScope-WorkSpace": "ws-b"},
+        )
+        assert len(calls) == 2
+        assert calls[-1] == "ws-b"
+        assert result.models[0].model == "m2"
+        assert (await client.models.list()).models[0].model == "m1"
         assert len(calls) == 2
         await client.aclose()
 

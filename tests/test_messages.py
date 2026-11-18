@@ -26,7 +26,11 @@ import httpx
 import pytest
 
 from dashscope import AsyncClient, Client
-from dashscope.errors import BadRequestError, DashScopeError
+from dashscope.errors import (
+    APIResponseValidationError,
+    BadRequestError,
+    DashScopeError,
+)
 from dashscope.protocols.anthropic import WEB_SEARCH_BILLING_HEADER
 from dashscope.transport._ident import sdk_client_value
 from dashscope.types import AnthropicMessage
@@ -932,6 +936,125 @@ def test_stream_get_final_message_accumulates():
     client.close()
 
 
+_PARTIAL_USAGE_FRAMES = [
+    {
+        "type": "message_start",
+        "message": {
+            "id": "msg_p",
+            "type": "message",
+            "role": "assistant",
+            "model": "qwen4-max",
+            "content": [],
+            "usage": {
+                "input_tokens": 15,
+                "output_tokens": 0,
+                "cache_read_input_tokens": 7,
+            },
+        },
+    },
+    {
+        "type": "content_block_start",
+        "index": 0,
+        "content_block": {"type": "text", "text": ""},
+    },
+    {
+        "type": "content_block_delta",
+        "index": 0,
+        "delta": {"type": "text_delta", "text": "Hi"},
+    },
+    {"type": "content_block_stop", "index": 0},
+    {
+        "type": "message_delta",
+        "delta": {"stop_reason": "end_turn", "stop_sequence": None},
+        # Spec-conformant delta usage carries only output_tokens.
+        "usage": {"output_tokens": 42},
+    },
+    {"type": "message_stop"},
+]
+
+
+def test_stream_partial_delta_usage_keeps_start_counters():
+    client = _make_client(_stream_handler(_PARTIAL_USAGE_FRAMES))
+    stream = client.messages.create(
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
+        stream=True,
+    )
+    final = stream.get_final_message()
+    assert final.usage.input_tokens == 15
+    assert final.usage.cache_read_input_tokens == 7
+    assert final.usage.output_tokens == 42
+    client.close()
+
+
+_DRIFT_STOP_FRAMES = [
+    {
+        "type": "message_start",
+        "message": {
+            "id": "msg_d",
+            "type": "message",
+            "role": "assistant",
+            "model": "qwen4-max",
+            "content": [],
+            "usage": {"input_tokens": 1, "output_tokens": 0},
+        },
+    },
+    {
+        "type": "message_delta",
+        # stop_reason drifts to an int: event parsing stays tolerant, the
+        # final aggregation must honor the client's strict_validation.
+        "delta": {"stop_reason": 123, "stop_sequence": None},
+        "usage": {"output_tokens": 2},
+    },
+    {"type": "message_stop"},
+]
+
+
+def test_stream_final_message_honors_strict_validation():
+    client = _make_client(
+        _stream_handler(_DRIFT_STOP_FRAMES),
+        strict_validation=True,
+    )
+    stream = client.messages.create(
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
+        stream=True,
+    )
+    with pytest.raises(APIResponseValidationError):
+        stream.get_final_message()
+    client.close()
+
+    # Tolerant default: the drifted field degrades instead of raising.
+    client = _make_client(_stream_handler(_DRIFT_STOP_FRAMES))
+    stream = client.messages.create(
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
+        stream=True,
+    )
+    final = stream.get_final_message()
+    assert final.id == "msg_d"
+    client.close()
+
+
+async def test_async_stream_final_message_honors_strict_validation():
+    client = _make_async_client(
+        _stream_handler(_DRIFT_STOP_FRAMES),
+        strict_validation=True,
+    )
+    stream = await client.messages.create(
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
+        stream=True,
+    )
+    with pytest.raises(APIResponseValidationError):
+        await stream.get_final_message()
+    await client.aclose()
+
+
 def test_stream_get_final_message_tool_input_json():
     frames = [
         {
@@ -1167,6 +1290,21 @@ async def test_async_stream_text_and_final_message():
     final = await stream.get_final_message()
     assert final.text == "Hello"
     assert final.usage.output_tokens == 1078
+    await client.aclose()
+
+
+async def test_async_stream_partial_delta_usage_keeps_start_counters():
+    client = _make_async_client(_stream_handler(_PARTIAL_USAGE_FRAMES))
+    stream = await client.messages.create(
+        model="qwen4-max",
+        max_tokens=1024,
+        messages=_USER_MESSAGES,
+        stream=True,
+    )
+    final = await stream.get_final_message()
+    assert final.usage.input_tokens == 15
+    assert final.usage.cache_read_input_tokens == 7
+    assert final.usage.output_tokens == 42
     await client.aclose()
 
 

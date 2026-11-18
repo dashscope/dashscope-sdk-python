@@ -467,8 +467,19 @@ def _validate_upload(file_path: str, purpose: str) -> None:
     if not os.path.isfile(file_path):
         raise _io_error(FileNotFoundError(f"file not found: {file_path}"))
     # Batch input must be JSONL; file-extract accepts binary documents.
-    if purpose == "batch" and not _is_valid_jsonl(file_path):
-        raise ValueError(f"file {file_path} is not in valid jsonl format")
+    if purpose == "batch":
+        if not _is_valid_jsonl(file_path):
+            raise ValueError(f"file {file_path} is not in valid jsonl format")
+        # Same rule as validate_input: blank lines are tolerated, but an
+        # all-blank file carries no rows and must not pass the pre-check.
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                if not any(line.strip() for line in f):
+                    raise ValueError(
+                        f"file {file_path} has no batch input rows",
+                    )
+        except OSError as exc:
+            raise _io_error(exc) from exc
 
 
 def _upload_form(file_path: str, purpose: str):

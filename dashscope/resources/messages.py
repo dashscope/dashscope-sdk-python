@@ -66,6 +66,8 @@ from dashscope.types.anthropic_messages import (
 from dashscope.types.common import with_headers
 
 if TYPE_CHECKING:
+    import httpx
+
     from dashscope.transport._response import APIResponse
 
 _MESSAGES_PATH = "/v1/messages"
@@ -320,7 +322,9 @@ class _MessageBuilder:
                 "model": message.model,
             }
             if message.usage is not None:
-                self._usage = message.usage.model_dump(exclude_none=True)
+                # exclude_unset, not exclude_none: int fields default to 0,
+                # so a wire frame omitting them must not dump those zeros.
+                self._usage = message.usage.model_dump(exclude_unset=True)
 
     def _on_content_block_start(self, event: AnthropicStreamEvent) -> None:
         index = event.index
@@ -382,9 +386,16 @@ class _MessageBuilder:
         if "stop_sequence" in delta:
             self._stop_sequence = delta.get("stop_sequence")
         if event.usage is not None:
-            self._usage.update(event.usage.model_dump(exclude_none=True))
+            # Spec-conformant message_delta usage carries only output_tokens;
+            # exclude_unset keeps the message_start input/cache counters.
+            self._usage.update(event.usage.model_dump(exclude_unset=True))
 
-    def build(self) -> AnthropicMessage:
+    def build(
+        self,
+        *,
+        strict: bool = False,
+        response: Optional["httpx.Response"] = None,
+    ) -> AnthropicMessage:
         if not self._saw_stop:
             raise DashScopeError(
                 "message stream ended without a message_stop event",
@@ -400,6 +411,8 @@ class _MessageBuilder:
                 "stop_sequence": self._stop_sequence,
                 "usage": self._usage or None,
             },
+            strict=strict,
+            response=response,
         )
 
 
@@ -412,8 +425,16 @@ class MessageStream:
     :class:`AnthropicMessage` from the event sequence.
     """
 
-    def __init__(self, inner: Stream[AnthropicStreamEvent]) -> None:
+    def __init__(
+        self,
+        inner: Stream[AnthropicStreamEvent],
+        *,
+        strict: bool = False,
+        response: Optional["httpx.Response"] = None,
+    ) -> None:
         self._inner = inner
+        self._strict = strict
+        self._response = response
 
     def __iter__(self) -> Iterator[AnthropicStreamEvent]:
         return iter(self._inner)
@@ -440,7 +461,7 @@ class MessageStream:
         builder = _MessageBuilder()
         for event in self:
             builder.feed(event)
-        final = builder.build()
+        final = builder.build(strict=self._strict, response=self._response)
         final.headers = self.headers
         return final
 
@@ -456,8 +477,16 @@ class MessageStream:
 class AsyncMessageStream:
     """Async twin of :class:`MessageStream`."""
 
-    def __init__(self, inner: AsyncStream[AnthropicStreamEvent]) -> None:
+    def __init__(
+        self,
+        inner: AsyncStream[AnthropicStreamEvent],
+        *,
+        strict: bool = False,
+        response: Optional["httpx.Response"] = None,
+    ) -> None:
         self._inner = inner
+        self._strict = strict
+        self._response = response
 
     def __aiter__(self):
         return self._inner.__aiter__()
@@ -490,7 +519,7 @@ class AsyncMessageStream:
         builder = _MessageBuilder()
         async for event in self:
             builder.feed(event)
-        final = builder.build()
+        final = builder.build(strict=self._strict, response=self._response)
         final.headers = self.headers
         return final
 
@@ -689,6 +718,8 @@ class Messages:
                         response=response,
                     ),
                 ),
+                strict=self._client.config.strict_validation,
+                response=response,
             )
         resp = transport.request_api(
             "POST",
@@ -877,6 +908,8 @@ class AsyncMessages:
                         response=response,
                     ),
                 ),
+                strict=self._client.config.strict_validation,
+                response=response,
             )
         resp = await transport.request_api(
             "POST",

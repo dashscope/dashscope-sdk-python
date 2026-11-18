@@ -640,6 +640,78 @@ def test_models_list_falls_back_to_item_count_when_total_missing():
     assert page.total_count == 2
 
 
+def _no_total_handler(catalog, seen=None):
+    def handler(request):
+        params = request.url.params
+        page_no = int(params.get("page_no", 1))
+        page_size = int(params.get("page_size", 10))
+        if seen is not None:
+            seen.append(page_no)
+        start = (page_no - 1) * page_size
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "r",
+                "output": {
+                    "models": catalog[start : start + page_size],
+                    "page_no": page_no,
+                    "page_size": page_size,
+                    # No ``total``: traversal must continue on full pages.
+                },
+            },
+        )
+
+    return handler
+
+
+def test_models_list_all_without_total_walks_full_pages():
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    seen = []
+    client = _make_client(_no_total_handler(catalog, seen))
+    assert [m.model for m in client.models.list_all(page_size=2)] == [
+        "m0",
+        "m1",
+        "m2",
+        "m3",
+        "m4",
+    ]
+    # The short third page ends the walk; no fourth request.
+    assert seen == [1, 2, 3]
+    client.close()
+
+
+def test_models_list_all_without_total_exact_multiple():
+    catalog = [{"model": f"m{i}"} for i in range(4)]
+    seen = []
+    client = _make_client(_no_total_handler(catalog, seen))
+    assert [m.model for m in client.models.list_all(page_size=2)] == [
+        "m0",
+        "m1",
+        "m2",
+        "m3",
+    ]
+    # A full last page cannot be told from a middle one: one extra fetch
+    # returns the empty page that ends the walk.
+    assert seen == [1, 2, 3]
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_models_async_list_all_without_total_walks_full_pages():
+    catalog = [{"model": f"m{i}"} for i in range(5)]
+    seen = []
+    client = _make_async_client(_no_total_handler(catalog, seen))
+    assert [m.model for m in await client.models.list_all(page_size=2)] == [
+        "m0",
+        "m1",
+        "m2",
+        "m3",
+        "m4",
+    ]
+    assert seen == [1, 2, 3]
+    await client.aclose()
+
+
 def test_models_list_parses_a_bare_list_page():
     # A page delivered as a bare list carries no ``page_no`` / ``total`` to
     # read, so it is taken as one whole page. The generic envelope lifter

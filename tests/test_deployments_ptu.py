@@ -347,6 +347,35 @@ def test_scale_reuses_caller_idempotency_key():
     client.close()
 
 
+def _assert_scale_reuses_variant_key(variant):
+    captured = {}
+
+    def handler(request):
+        captured["headers"] = request.headers
+        captured["raw"] = request.headers.raw
+        return httpx.Response(200, json=_deployment_output())
+
+    client = _make_client(handler)
+    client.deployments.scale(
+        "pm-abc123",
+        ptu_capacity=_PTU_CAPACITY,
+        extra_headers={variant: "my-key"},
+    )
+    # One key on the wire, not a caller/SDK pair with conflicting values
+    # (httpx joins duplicate header lines with ", ").
+    assert captured["headers"]["x-acs-req-uuid"] == "my-key"
+    assert captured["headers"]["x-dashscope-requestid"] == "my-key"
+    names = [name.lower() for name, _ in captured["raw"]]
+    assert names.count(b"x-acs-req-uuid") == 1
+    assert names.count(b"x-dashscope-requestid") == 1
+    client.close()
+
+
+def test_scale_reuses_case_variant_idempotency_key():
+    for variant in ("X-Acs-Req-Uuid", "x-dashscope-requestid"):
+        _assert_scale_reuses_variant_key(variant)
+
+
 # --- renew / overflow ----------------------------------------------------
 
 
@@ -555,6 +584,37 @@ def test_instance_list_camelcase_pagination():
     assert isinstance(page.records[0], CapacityInstance)
     assert page.records[0].instance_id == "ci-1"
     assert page.records[0].can_scale is True
+    client.close()
+
+
+def test_instance_list_snake_case_pagination():
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "request_id": "req-list",
+                "output": {
+                    "records": [_instance_output()["output"]],
+                    "total_count": 7,
+                    "page_no": 1,
+                    "page_size": 1,
+                    "page_count": 7,
+                },
+            },
+        )
+
+    client = _make_client(handler)
+    page = client.deployments.capacity_instances.list(
+        "pm-abc123",
+        page_no=1,
+        page_size=1,
+    )
+    # The snake_case totals must survive: falling back to len(records)/20
+    # would report one full page and stop pagination early.
+    assert page.total_count == 7
+    assert page.page == 1
+    assert page.items_per_page == 1
+    assert page.page_count == 7
     client.close()
 
 

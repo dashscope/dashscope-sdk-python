@@ -24,7 +24,7 @@ import httpx
 import pytest
 
 from dashscope import AsyncClient, Client
-from dashscope.errors import BadRequestError
+from dashscope.errors import BadRequestError, DashScopeError
 from dashscope.resources.batch_chat import (
     BATCH_DEFAULT_TIMEOUT,
     BATCH_GATEWAY_BASE,
@@ -166,6 +166,34 @@ def test_wire_body_openai_shape(clean_env):
     # Non-streaming: no stream flag on the batch wire.
     assert "stream" not in body
     client.close()
+
+
+def test_strict_protocol_options_reject_unknown_params(clean_env):
+    client = _make_client(
+        _ok_handler(),
+        protocol_options={"strict": True},
+    )
+    with pytest.raises(DashScopeError, match="strict mode"):
+        client.batch_chat.completions.create(
+            model="qwen-plus",
+            messages="hi",
+            repetition_penalty=1.1,
+        )
+    client.close()
+
+
+async def test_async_strict_protocol_options_reject_unknown_params(clean_env):
+    client = _make_async_client(
+        _ok_handler(),
+        protocol_options={"strict": True},
+    )
+    with pytest.raises(DashScopeError, match="strict mode"):
+        await client.batch_chat.completions.create(
+            model="qwen-plus",
+            messages="hi",
+            repetition_penalty=1.1,
+        )
+    await client.aclose()
 
 
 def test_string_messages_normalized(clean_env):

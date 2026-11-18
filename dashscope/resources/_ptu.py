@@ -230,18 +230,25 @@ def _idempotency_headers(
 ) -> Dict[str, str]:
     """Mirror one idempotency key across both header spellings.
 
-    Read priority is ``x-acs-req-uuid`` > ``X-DashScope-RequestId``; when
+    Read priority is ``x-acs-req-uuid`` > ``X-DashScope-RequestId``, matched
+    case-insensitively (header names are case-insensitive on the wire); when
     neither is supplied a fresh UUID is generated. Both headers are set to
     the SAME value so the gateway dedups a network retry of this write.
-    A caller-supplied key is preserved (``setdefault``), letting them reuse
-    an operation deliberately or rotate to a new business operation.
+    A caller-supplied key is preserved, letting them reuse an operation
+    deliberately or rotate to a new business operation. Variant casings of
+    either name are normalized to the canonical pair so two conflicting
+    spellings never reach the wire together.
     """
     headers = dict(extra_headers or {})
-    key = headers.get("x-acs-req-uuid") or headers.get("X-DashScope-RequestId")
+    lowered = {name.lower(): value for name, value in headers.items()}
+    key = lowered.get("x-acs-req-uuid") or lowered.get("x-dashscope-requestid")
     if not key:
         key = uuid.uuid4().hex
-    headers.setdefault("x-acs-req-uuid", key)
-    headers.setdefault("X-DashScope-RequestId", key)
+    for name in list(headers):
+        if name.lower() in ("x-acs-req-uuid", "x-dashscope-requestid"):
+            del headers[name]
+    headers["x-acs-req-uuid"] = key
+    headers["X-DashScope-RequestId"] = key
     return headers
 
 
@@ -396,14 +403,25 @@ def _parse_instance_list(
     records = data.get("records")
     if not isinstance(records, list):
         records = []
+    # Honor every alias the model declares: a snake_case answer must not
+    # fall back to len(records)/20 and truncate pagination early.
     return parse_model(
         CapacityInstanceList,
         {
             "records": records,
-            "total_count": data.get("items", len(records)),
-            "page": data.get("page", 1),
-            "items_per_page": data.get("itemsPerPage", 20),
-            "page_count": data.get("pageCount", 0),
+            "total_count": data.get(
+                "items",
+                data.get("total_count", len(records)),
+            ),
+            "page": data.get("page", data.get("page_no", 1)),
+            "items_per_page": data.get(
+                "itemsPerPage",
+                data.get("items_per_page", data.get("page_size", 20)),
+            ),
+            "page_count": data.get(
+                "pageCount",
+                data.get("page_count", 0),
+            ),
             **response_envelope(data),
         },
         strict=strict,

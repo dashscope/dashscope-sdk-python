@@ -294,14 +294,17 @@ def _parse_list(
     A body carrying the page as a bare list has no ``page_no`` / ``total`` to
     read, so the list is taken as one whole page: the generic envelope
     lifter only unwraps a *dict*, and letting this shape through it would
-    parse as an empty catalog rather than as the malformed one it is. The
-    ``total`` fallback to ``len(models)`` keeps ``total_count`` meaningful
-    for gateways that omit it, matching ``files.list``.
+    parse as an empty catalog rather than as the malformed one it is. When
+    a dict page omits ``total``, ``total_count`` falls back to
+    ``len(models)`` for display, but the page is marked ``_total_unknown``
+    so traversal continues while pages come back full instead of stopping
+    after page 1.
 
     ``region`` / ``workspace`` / ``service_site`` are stamped onto every model
     as SDK-injected query context (see :func:`_with_context`).
     """
     data = body.get("output") or body.get("data") or {}
+    total_unknown = False
     if isinstance(data, dict):
         models = data.get("models")
         # A retyped ``models`` would both poison the ``len()`` below (a
@@ -312,7 +315,12 @@ def _parse_list(
             models = []
         page_no = data.get("page_no", 1)
         page_size = data.get("page_size", 10)
-        total = data.get("total", len(models))
+        total = data.get("total")
+        if total is None:
+            # No total to do offset arithmetic against: traversal falls
+            # back to full-page continuation instead of stopping at page 1.
+            total_unknown = True
+            total = len(models)
     else:
         # Only a genuine list can be read as a whole page; ``len()`` on a
         # drifted scalar would escape as a bare TypeError from here.
@@ -329,7 +337,7 @@ def _parse_list(
         else m
         for m in models
     ]
-    return parse_model(
+    result = parse_model(
         ModelList,
         {
             "page_no": page_no,
@@ -341,6 +349,8 @@ def _parse_list(
         strict=strict,
         response=response,
     )
+    result._total_unknown = total_unknown  # pylint: disable=protected-access
+    return result
 
 
 def _parse_get_models(body: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -417,22 +427,28 @@ def _parse_meta_page(
     array (``quotas`` / ``permissions``) -- so they share this lifter and the
     :class:`~dashscope.types.pagination.BasePage` traversal. ``data`` stays
     accepted for gateways that re-wrap the page OpenAI-style. A non-list item
-    field reads as empty rather than poisoning ``len()``; ``total`` falls back
-    to the item count when the gateway omits it.
+    field reads as empty rather than poisoning ``len()``; when the gateway
+    omits ``total``, ``total_count`` falls back to the item count for display
+    and the page is marked ``_total_unknown`` so traversal continues while
+    pages come back full.
     """
     data = body.get("output") or body.get("data") or {}
+    total_unknown = False
     if isinstance(data, dict):
         items = data.get(items_key)
         if not isinstance(items, list):
             items = []
         page_no = data.get("page_no", 1)
         page_size = data.get("page_size", 20)
-        total = data.get("total", len(items))
+        total = data.get("total")
+        if total is None:
+            total_unknown = True
+            total = len(items)
     else:
         items = data if isinstance(data, list) else []
         page_no, page_size, total = 1, 20, len(items)
     items = [item for item in items if isinstance(item, dict)]
-    return parse_model(
+    result = parse_model(
         cls,
         {
             "page_no": page_no,
@@ -444,6 +460,8 @@ def _parse_meta_page(
         strict=strict,
         response=response,
     )
+    result._total_unknown = total_unknown  # pylint: disable=protected-access
+    return result
 
 
 def _meta_items(body: Dict[str, Any], items_key: str) -> List[Dict[str, Any]]:
@@ -516,7 +534,10 @@ class Models:
         miss the response is fetched, error-checked, and cached only when it
         is genuinely successful, so errors are never cached even in
         non-raising mode. ``refresh=True`` skips the lookup but still updates
-        the entry. The cached response is re-parsed by each caller, so every
+        the entry. Options carrying ``extra_query`` / ``extra_headers``
+        bypass the cache entirely: they change the effective query or can
+        override the auth/workspace headers, neither of which the key
+        captures. The cached response is re-parsed by each caller, so every
         call hands back fresh model objects rather than a shared instance.
         """
         if raw:
@@ -531,13 +552,16 @@ class Models:
                 options=options,
                 client=self._client,
             )
+        cacheable = options is None or not (
+            options.extra_query or options.extra_headers
+        )
         key = catalog_key(
             self._client.config,
             params,
             api_key=api_key,
             workspace=workspace,
         )
-        if not refresh:
+        if cacheable and not refresh:
             cached = self._catalog_cache.get(key)
             if cached is not None:
                 return cached
@@ -553,7 +577,7 @@ class Models:
             client=self._client,
         )
         resp.raise_for_status()
-        if response_error(resp.http_response) is None:
+        if cacheable and response_error(resp.http_response) is None:
             self._catalog_cache.set(key, resp)
         return resp
 
@@ -1041,7 +1065,8 @@ class AsyncModels:
 
         The cache lookup/store are synchronous and never await inside the
         lock, so sharing one ``_CatalogCache`` on a single event loop is
-        safe.
+        safe. Like the sync seam, options carrying ``extra_query`` /
+        ``extra_headers`` bypass the cache.
         """
         if raw:
             return await self._client.transport.request_api(
@@ -1055,13 +1080,16 @@ class AsyncModels:
                 options=options,
                 client=self._client,
             )
+        cacheable = options is None or not (
+            options.extra_query or options.extra_headers
+        )
         key = catalog_key(
             self._client.config,
             params,
             api_key=api_key,
             workspace=workspace,
         )
-        if not refresh:
+        if cacheable and not refresh:
             cached = self._catalog_cache.get(key)
             if cached is not None:
                 return cached
@@ -1077,7 +1105,7 @@ class AsyncModels:
             client=self._client,
         )
         resp.raise_for_status()
-        if response_error(resp.http_response) is None:
+        if cacheable and response_error(resp.http_response) is None:
             self._catalog_cache.set(key, resp)
         return resp
 

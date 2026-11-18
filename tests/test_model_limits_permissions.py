@@ -143,6 +143,23 @@ def test_limits_iter_pages_crosses_all_pages_and_keeps_filters():
     assert all(s["model"] == "m" for s in seen)
 
 
+def test_limits_iter_pages_without_total_walks_full_pages():
+    catalog = [_quota(f"m{i}") for i in range(5)]
+    seen: List[Any] = []
+
+    def handler(request):
+        seen.append(dict(request.url.params))
+        body = _slice_page(catalog, "quotas", dict(request.url.params))
+        del body["output"]["total"]
+        return httpx.Response(200, json=body)
+
+    client = _make_client(handler)
+    page = client.models.limits.list(page_no=1, page_size=2)
+    collected = [q.model for p in page.iter_pages() for q in p]
+    assert collected == ["m0", "m1", "m2", "m3", "m4"]
+    assert [int(s["page_no"]) for s in seen] == [1, 2, 3]
+
+
 def test_limits_null_model_limit_is_preserved():
     catalog = [
         {

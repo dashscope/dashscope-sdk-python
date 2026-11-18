@@ -156,6 +156,33 @@ def test_upload_batch_purpose_requires_jsonl(tmp_path):
     client.close()
 
 
+def test_upload_blank_lines_match_validate_input(tmp_path):
+    row = (
+        '{"custom_id": "r1", "method": "POST", '
+        '"url": "/v1/chat/completions", '
+        '"body": {"model": "qwen-plus", "messages": []}}'
+    )
+    path = tmp_path / "blank.jsonl"
+    path.write_text(f"{row}\n\n{row.replace('r1', 'r2')}\n", encoding="utf-8")
+    client = _make_client(lambda r: httpx.Response(200, json=_FILE_BODY))
+    # validate_input tolerates blank lines; the upload gate must agree.
+    assert client.batches.validate_input(str(path)) == 2
+    resp = client.batches.files.upload(file_path=str(path), purpose="batch")
+    assert resp.id == "file-batch-abc123"
+    client.close()
+
+
+def test_upload_empty_file_rejected_like_validate_input(tmp_path):
+    path = tmp_path / "empty.jsonl"
+    path.write_text("\n \n", encoding="utf-8")
+    client = _make_client(lambda r: httpx.Response(200, json=_FILE_BODY))
+    with pytest.raises(ValueError, match="no batch input rows"):
+        client.batches.validate_input(str(path))
+    with pytest.raises(ValueError, match="no batch input rows"):
+        client.batches.files.upload(file_path=str(path), purpose="batch")
+    client.close()
+
+
 def test_upload_retry_resends_full_body(tmp_path, monkeypatch):
     bodies = []
 

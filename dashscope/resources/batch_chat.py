@@ -44,6 +44,7 @@ from typing_extensions import Literal
 
 from dashscope._config import Config
 from dashscope.errors import response_error
+from dashscope.protocols import get_protocol
 from dashscope.protocols.openai import OpenAIProtocol
 from dashscope.transport._options import request_options
 from dashscope.types._parse import parse_model
@@ -70,8 +71,9 @@ BATCH_MIN_TIMEOUT = 60.0
 BATCH_MAX_TIMEOUT = 3600.0
 
 # Batch Chat is always OpenAI-compatible, independent of the client's chat
-# protocol. The adapter is stateless for non-streaming use, so one shared
-# instance is safe; response-parse strictness still follows the client.
+# protocol. Response parsing is stateless, so one shared instance is safe
+# there (strictness is passed per call). Request building is resolved per
+# client instead, so protocol_options such as ``strict`` are honored.
 _PROTOCOL = OpenAIProtocol()
 
 __all__ = [
@@ -115,6 +117,7 @@ def _messages(
 
 def _build_body(
     *,
+    protocol: OpenAIProtocol,
     model: str,
     messages: Union[str, List[MessageInput]],
     tools: Optional[List[Dict[str, Any]]],
@@ -140,7 +143,7 @@ def _build_body(
 ) -> Dict[str, Any]:
     if not model or not model.strip():
         raise ValueError("model must be a non-empty string")
-    request = _PROTOCOL.build_chat_request(
+    request = protocol.build_chat_request(
         model=model,
         messages=_messages(messages),
         stream=False,
@@ -212,6 +215,10 @@ class BatchChatCompletions:
 
     def __init__(self, client) -> None:
         self._client = client
+        self._protocol = get_protocol(
+            "openai",
+            protocol_options=client._protocol_options,
+        )
 
     @overload
     def create(
@@ -339,6 +346,7 @@ class BatchChatCompletions:
         before any error check.
         """
         body = _build_body(
+            protocol=self._protocol,
             model=model,
             messages=messages,
             tools=tools,
@@ -389,6 +397,10 @@ class AsyncBatchChatCompletions:
 
     def __init__(self, client) -> None:
         self._client = client
+        self._protocol = get_protocol(
+            "openai",
+            protocol_options=client._protocol_options,
+        )
 
     @overload
     async def create(
@@ -500,6 +512,7 @@ class AsyncBatchChatCompletions:
     ) -> Union[ChatCompletion, "APIResponse"]:
         """Async twin of :meth:`BatchChatCompletions.create`."""
         body = _build_body(
+            protocol=self._protocol,
             model=model,
             messages=messages,
             tools=tools,
