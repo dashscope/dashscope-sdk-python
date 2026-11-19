@@ -1,7 +1,10 @@
 # MkDocs 2.0 removes the plugin system; Material/mkdocstrings require 1.x
 mkdocs>=1.6,<2
 mkdocs-material>=9.5
-mkdocstrings[python]>=0.26
+# Verified combination: merge_init_into_class + show_if_no_docstring render
+# constructor signatures and undocumented model fields on this pair.
+mkdocstrings[python]>=1.0.8,<2
+mkdocstrings-python>=2.0.11,<3
 # Multi-language site (English default + Chinese), FastAPI-style selector
 mkdocs-static-i18n>=1.2
 # Signature formatting for mkdocstrings (separate_signature)

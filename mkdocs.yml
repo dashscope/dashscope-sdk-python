@@ -117,6 +117,7 @@ plugins:
             Audio: 语音（Audio）
             Client Resources: 客户端资源
             Protocols: 协议适配器
+            AgentStudio: 托管智能体（AgentStudio）
             Agentic RL: 强化学习微调
             Types: 类型（Types）
             Errors: 错误（Errors）

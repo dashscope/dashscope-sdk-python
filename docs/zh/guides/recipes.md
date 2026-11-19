@@ -31,6 +31,8 @@ with Client() as client:
     print(resp.output_text)
 ```
 
+示例图片来自阿里云公开文档素材；替换为你自己的可公网访问 URL 即可。
+
 ## 图像生成
 
 `generate()` 提交任务并等待完成；完成后的 job 携带结果 URL。

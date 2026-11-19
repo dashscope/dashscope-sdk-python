@@ -32,6 +32,9 @@ with Client() as client:
     print(resp.output_text)
 ```
 
+The sample image is a public Aliyun docs asset — replace it with your own
+publicly reachable URL.
+
 ## Image generation
 
 `generate()` submits the task and waits for it; the finished job carries
