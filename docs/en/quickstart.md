@@ -3,7 +3,7 @@ description: "Install dashscope, configure your API key and make your first chat
 ---
 # Quickstart
 
-The dashscope 2.0 API centers on a typed [Client](reference/client.md) (and its
+The dashscope API centers on a typed [Client](reference/client.md) (and its
 async twin `AsyncClient`) with resource namespaces such as `client.chat`,
 `client.images` and `client.audio`. This page gets you from install to your
 first chat completion.
@@ -115,7 +115,7 @@ asyncio.run(main())
 
 ## Error handling
 
-All 2.0 failures raise subclasses of
+All failures raise subclasses of
 [DashScopeError][dashscope.errors.DashScopeError] carrying `code`,
 `status_code`, `request_id` and the response `body`:
 

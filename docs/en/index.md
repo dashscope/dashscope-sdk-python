@@ -20,7 +20,7 @@ agentic RL, managed agents and applications.
 [Get an API key](https://bailian.console.aliyun.com/){ .md-button }
 </div>
 
-Version 2.0 is a typed, resource-style client — `dashscope.Client()` — modeled
+The dashscope SDK is a typed, resource-style client — `dashscope.Client()` — modeled
 on the ergonomics of the OpenAI SDK: one client holds a shared connection pool,
 every capability hangs off it as a typed resource, responses are typed objects,
 and failures raise exceptions by default.

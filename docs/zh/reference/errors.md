@@ -3,7 +3,7 @@ description: "DashScopeError 异常层级与错误码 API 参考。"
 ---
 # 错误（Errors）
 
-2.0 的所有异常都继承自 `DashScopeError`，携带 `message`、`code`、
+SDK 的所有异常都继承自 `DashScopeError`，携带 `message`、`code`、
 `status_code`、`request_id`、`body` 与 `headers`。捕获基类即可处理任何
 SDK 或 API 失败，也可捕获具体子类做更精细的控制。
 

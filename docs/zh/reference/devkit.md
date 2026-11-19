@@ -7,7 +7,7 @@ description: "dev mock 模式与本地自诊断 API 参考。"
 生产成功路径上不会导入本包。
 
 - **Dev mock** —— `static` / `replay` / `record` 三种模式走通
-  2.0 HTTP 请求路径。`static` 与 `replay` 离线运行，不消耗云端
+  SDK 的 HTTP 请求路径。`static` 与 `replay` 离线运行，不消耗云端
   token；`record` 会向服务发送真实请求，可能产生费用，并保存响应
   供后续回放。仅覆盖 HTTP，不覆盖
   WebSocket 传输。代码中用 `dashscope.enable_dev_mock(...)` 启用，

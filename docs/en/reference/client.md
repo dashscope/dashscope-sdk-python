@@ -3,7 +3,7 @@ description: "API reference for dashscope Client, AsyncClient, Config, Settings 
 ---
 # Client & Configuration
 
-The 2.0 entry points: `Client` (sync) and `AsyncClient` (async), plus
+The client entry points: `Client` (sync) and `AsyncClient` (async), plus
 configuration and module-level helpers.
 
 !!! note "Async scope"

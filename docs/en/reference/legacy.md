@@ -7,7 +7,7 @@ status: deprecated
 The 1.x API classes are archived under `dashscope.legacy_1x` and remain
 importable from the `dashscope` root module for backward compatibility
 (`from dashscope import Generation` still works). The layer is frozen: it
-receives no new features. New code should use the 2.0 [Client](client.md).
+receives no new features. New code should use the new [Client](client.md).
 
 !!! warning "Frozen layer"
     The 1.x surface receives no new features. `Assistants` / `Threads`

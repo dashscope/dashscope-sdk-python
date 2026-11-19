@@ -3,7 +3,7 @@ description: "API reference for the DashScopeError exception hierarchy and error
 ---
 # Errors
 
-All 2.0 exceptions inherit from `DashScopeError` and carry `message`, `code`,
+All SDK exceptions inherit from `DashScopeError` and carry `message`, `code`,
 `status_code`, `request_id`, `body` and `headers`. Catch the base class to
 handle any SDK or API failure, or catch specific subclasses for finer control.
 

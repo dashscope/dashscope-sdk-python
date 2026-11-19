@@ -3,7 +3,7 @@ description: "安装 dashscope、配置 API Key，几分钟内完成第一次对
 ---
 # 快速开始
 
-dashscope 2.0 API 以带类型标注的 [Client](reference/client.md)（及其异步版本
+dashscope API 以带类型标注的 [Client](reference/client.md)（及其异步版本
 `AsyncClient`）为核心，通过 `client.chat`、`client.images`、`client.audio`
 等资源命名空间组织各能力。本页带你从安装走到第一次对话补全。
 
@@ -112,7 +112,7 @@ asyncio.run(main())
 
 ## 错误处理
 
-2.0 的所有失败都会抛出 [DashScopeError][dashscope.errors.DashScopeError] 的子类，
+所有失败都会抛出 [DashScopeError][dashscope.errors.DashScopeError] 的子类，
 携带 `code`、`status_code`、`request_id` 和响应 `body`：
 
 ```python

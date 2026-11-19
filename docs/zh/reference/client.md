@@ -3,7 +3,7 @@ description: "dashscope Client、AsyncClient、Config、Settings 与模块级辅
 ---
 # 客户端与配置
 
-2.0 入口：`Client`（同步）与 `AsyncClient`（异步），以及配置和模块级辅助函数。
+客户端入口：`Client`（同步）与 `AsyncClient`（异步），以及配置和模块级辅助函数。
 
 !!! note "异步范围"
     `AsyncClient` 镜像同步接口，但双工语音 WebSocket 会话

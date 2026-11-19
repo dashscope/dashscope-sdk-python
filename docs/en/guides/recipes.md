@@ -1,5 +1,5 @@
 ---
-description: "Copy-paste recipes for every dashscope 2.0 capability: multimodal, images, videos, embeddings, rerank, speech, apps, files and models."
+description: "Copy-paste recipes for every dashscope capability: multimodal, images, videos, embeddings, rerank, speech, apps, files and models."
 ---
 # Capability recipes
 

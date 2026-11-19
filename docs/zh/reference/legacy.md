@@ -6,7 +6,7 @@ status: deprecated
 
 1.x API 类已归档至 `dashscope.legacy_1x`，为保持向后兼容仍可从
 `dashscope` 根模块导入（`from dashscope import Generation` 仍可用）。
-兼容层已冻结：不再新增能力。新代码请使用 2.0 [客户端](client.md)。
+兼容层已冻结：不再新增能力。新代码请使用新的[客户端](client.md)。
 
 !!! warning "冻结层"
     1.x 接口不再新增能力。访问 `Assistants` / `Threads`

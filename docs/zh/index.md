@@ -20,7 +20,7 @@ description: "阿里云百炼（DashScope）官方 Python SDK：类型化同步/
 [获取 API Key](https://bailian.console.aliyun.com/){ .md-button }
 </div>
 
-2.0 是类型化、资源式客户端——`dashscope.Client()`——沿用 OpenAI SDK
+dashscope SDK 是类型化、资源式客户端——`dashscope.Client()`——沿用 OpenAI SDK
 的使用体验：一个客户端持有共享连接池，每种能力以类型化资源挂在
 其上，响应是类型化对象，失败默认抛出异常。
 

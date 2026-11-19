@@ -1,9 +1,9 @@
 ---
-description: "Feature overview of the dashscope 2.0 SDK: typed resources, sync/async, protocols, streaming, errors, dev mock, CLI and 1.x compatibility."
+description: "Feature overview of the dashscope SDK: typed resources, sync/async, protocols, streaming, errors, dev mock, CLI and 1.x compatibility."
 ---
 # Features
 
-The dashscope 2.0 SDK is a typed, resource-style client for Alibaba Cloud
+The dashscope SDK is a typed, resource-style client for Alibaba Cloud
 Model Studio (DashScope). Highlights:
 
 ## Typed resource client
