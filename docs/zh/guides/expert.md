@@ -12,19 +12,21 @@ SDK 内置了交互式 AI 助手 **DashScope SDK Expert**，由可选依赖
 ## 安装
 
 ```bash
-pip install -U "dashscope[acli]"
+pip install -U "dashscope[expert]"
 ```
 
-在 `acli` 之上，可选 extra 为助手追加能力：
+在 `expert` 之上，可选 extra 为助手追加能力：
 
 | Extra | 提供 |
 | --- | --- |
-| `acli` | 交互式 AI 助手（DashScope SDK Expert）。 |
-| `acli-openai` | 让助手使用 OpenAI 兼容的模型服务方。 |
-| `acli-anthropic` | 让助手使用 Anthropic 模型服务方。 |
-| `acli-voice` | 助手的语音输入与语音播报。 |
-| `acli-camera` | 助手的摄像头采集图片输入。 |
-| `acli-all` | 以上全部（含 `acli`）。 |
+| `expert` | 交互式 AI 助手（DashScope SDK Expert）。 |
+| `expert-openai` | 让助手使用 OpenAI 兼容的模型服务方。 |
+| `expert-anthropic` | 让助手使用 Anthropic 模型服务方。 |
+| `expert-voice` | 助手的语音输入与语音播报。 |
+| `expert-camera` | 助手的摄像头采集图片输入。 |
+| `expert-all` | 以上全部（含 `expert`）。 |
+
+原有的 `acli*` extra 名作为向后兼容别名保留，依赖完全相同。
 
 ## 启动
 
@@ -71,11 +73,11 @@ dashscope -k sk-xxx expert "如何上传文件？"
 
 ## 故障排查
 
-- **运行 `dashscope` 只打印安装提示** —— 缺少 `acli` extra（或
+- **运行 `dashscope` 只打印安装提示** —— 缺少 `expert` extra（或
   Python 低于 3.10）。在 Python 3.10+ 下执行
-  `pip install -U "dashscope[acli]"`。
+  `pip install -U "dashscope[expert]"`。
 - **提示 `dashscope-agenticx` 已安装但不兼容** —— 运行时未提供本
-  SDK 期望的接口。执行 `pip install -U "dashscope[acli]"` 升级；
+  SDK 期望的接口。执行 `pip install -U "dashscope[expert]"` 升级；
   仍无法解决请反馈该不匹配问题。
 
 ## 完整使用指南

@@ -70,7 +70,7 @@ the interactive AgenticX agent instead of the command tree. It requires the
 optional extra and Python 3.10+:
 
 ```bash
-pip install -U "dashscope[acli]"
+pip install -U "dashscope[expert]"
 dashscope                         # launches the agent (TUI by default)
 dashscope expert --cli            # plain REPL instead of the TUI
 dashscope expert "question"       # ask once and exit

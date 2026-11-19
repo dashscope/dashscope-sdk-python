@@ -32,12 +32,14 @@ pip install -U dashscope
 
 | Extra | 提供的能力 | 安装命令 |
 |-------|----------|---------|
-| `acli` | 交互式 AI 助手（DashScope SDK Expert） | `pip install "dashscope[acli]"` |
-| `acli-openai` | 让助手使用 OpenAI 兼容的模型服务方 | `pip install "dashscope[acli-openai]"` |
-| `acli-anthropic` | 让助手使用 Anthropic 模型服务方 | `pip install "dashscope[acli-anthropic]"` |
-| `acli-voice` | 助手的语音输入与语音播报 | `pip install "dashscope[acli-voice]"` |
-| `acli-camera` | 助手的摄像头采集图片输入 | `pip install "dashscope[acli-camera]"` |
-| `acli-all` | 以上全部（含 `acli`） | `pip install "dashscope[acli-all]"` |
+| `expert` | 交互式 AI 助手（DashScope SDK Expert） | `pip install "dashscope[expert]"` |
+| `expert-openai` | 让助手使用 OpenAI 兼容的模型服务方 | `pip install "dashscope[expert-openai]"` |
+| `expert-anthropic` | 让助手使用 Anthropic 模型服务方 | `pip install "dashscope[expert-anthropic]"` |
+| `expert-voice` | 助手的语音输入与语音播报 | `pip install "dashscope[expert-voice]"` |
+| `expert-camera` | 助手的摄像头采集图片输入 | `pip install "dashscope[expert-camera]"` |
+| `expert-all` | 以上全部（含 `expert`） | `pip install "dashscope[expert-all]"` |
+
+原有的 `acli*` extra 名作为向后兼容别名保留，依赖完全相同。
 
 从源码安装：
 
@@ -517,7 +519,7 @@ SDK 集成了交互式 AI 助手 **DashScope SDK Expert**，由可选依赖 `das
 
 - 直接运行 `dashscope`（不带参数）即可启动助手。首次运行时会提示将 Expert 配置和按领域划分的 Skills 下载到 `./.agenticx/`；之后也可以运行 `agenticx expert download dashscope-sdk-expert` 安装。
 - 直接提问代替翻文档 —— 如 `dashscope expert "如何流式输出对话结果"`（一次性提问后退出）。在助手内输入 `/help` 查看可用命令；`dashscope expert --help` 查看全部形式。
-- 使用 Python 3.10+ 时，通过 `acli` extra 安装：`pip install "dashscope[acli]"`。需要语音/摄像头输入可加装 `acli-voice` / `acli-camera`，或直接用 `acli-all` 装齐 —— 详见[安装](#安装)一节的 extra 表格。
+- 使用 Python 3.10+ 时，通过 `expert` extra 安装：`pip install "dashscope[expert]"`。需要语音/摄像头输入可加装 `expert-voice` / `expert-camera`，或直接用 `expert-all` 装齐 —— 详见[安装](#安装)一节的 extra 表格。
 - 完整使用指南：[DashScope SDK Expert 文档](https://help.aliyun.com/zh/model-studio/dashscope-sdk-expert)。
 
 ## 命令行

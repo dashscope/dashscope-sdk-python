@@ -92,7 +92,7 @@ pip install -U dashscope
 
 The base install covers SDK API calls, the `dashscope` CLI, Agentic RL
 fine-tuning and the local tokenizer. Optional extras configure the interactive
-AI assistant, e.g. `pip install "dashscope[acli]"` (see
+AI assistant, e.g. `pip install "dashscope[expert]"` (see
 [SDK Expert](guides/expert.md)).
 
 ## Examples
@@ -191,7 +191,7 @@ dashscope -o json ft list         # machine-readable output for scripting
 It covers chat, multimodal, embeddings, images/videos, audio, files,
 fine-tuning, agentic RL and more, with global options for protocol,
 region and output format. Running `dashscope` with no arguments starts
-the optional interactive AI assistant (`pip install "dashscope[acli]"`).
+the optional interactive AI assistant (`pip install "dashscope[expert]"`).
 **The frozen 1.x command tree remains available as `dashscope1`.**
 See [Command Line Interface](cli.md).
 
@@ -203,7 +203,7 @@ examples and diagnoses errors right in your terminal. It needs Python 3.10+
 and the optional extra:
 
 ```bash
-pip install -U "dashscope[acli]"
+pip install -U "dashscope[expert]"
 dashscope                                       # interactive assistant
 dashscope expert "how do I stream chat output?" # ask once and exit
 ```

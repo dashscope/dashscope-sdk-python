@@ -14,19 +14,21 @@ is not installed by default.
 ## Install
 
 ```bash
-pip install -U "dashscope[acli]"
+pip install -U "dashscope[expert]"
 ```
 
-Optional extras add assistant capabilities on top of `acli`:
+Optional extras add assistant capabilities on top of `expert`:
 
 | Extra | Provides |
 | --- | --- |
-| `acli` | Interactive AI assistant (DashScope SDK Expert). |
-| `acli-openai` | Run the assistant on an OpenAI-compatible model provider. |
-| `acli-anthropic` | Run the assistant on an Anthropic model provider. |
-| `acli-voice` | Voice input and spoken replies in the assistant. |
-| `acli-camera` | Camera capture for image input in the assistant. |
-| `acli-all` | All of the above (includes `acli`). |
+| `expert` | Interactive AI assistant (DashScope SDK Expert). |
+| `expert-openai` | Run the assistant on an OpenAI-compatible model provider. |
+| `expert-anthropic` | Run the assistant on an Anthropic model provider. |
+| `expert-voice` | Voice input and spoken replies in the assistant. |
+| `expert-camera` | Camera capture for image input in the assistant. |
+| `expert-all` | All of the above (includes `expert`). |
+
+The original `acli*` extra names remain as backward-compatible aliases with identical dependencies.
 
 ## Launch
 
@@ -76,12 +78,12 @@ knowledge index. It is pure configuration — editable anytime.
 
 ## Troubleshooting
 
-- **`dashscope` prints an install tip instead of starting** — the `acli`
+- **`dashscope` prints an install tip instead of starting** — the `expert`
   extra is missing (or Python is older than 3.10). Run
-  `pip install -U "dashscope[acli]"` under Python 3.10+.
+  `pip install -U "dashscope[expert]"` under Python 3.10+.
 - **The tip says `dashscope-agenticx` is installed but incompatible** —
   the runtime does not provide the interface this SDK expects. Upgrade
-  with `pip install -U "dashscope[acli]"`; if that does not help, report
+  with `pip install -U "dashscope[expert]"`; if that does not help, report
   the mismatch.
 
 ## Full walkthrough

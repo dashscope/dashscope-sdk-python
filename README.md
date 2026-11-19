@@ -32,12 +32,14 @@ The base install covers SDK API calls, the `dashscope` CLI command, Agentic RL f
 
 | Extra | Provides | Install |
 |-------|----------|---------|
-| `acli` | Interactive AI assistant (DashScope SDK Expert) | `pip install "dashscope[acli]"` |
-| `acli-openai` | Run the assistant on an OpenAI-compatible model provider | `pip install "dashscope[acli-openai]"` |
-| `acli-anthropic` | Run the assistant on an Anthropic model provider | `pip install "dashscope[acli-anthropic]"` |
-| `acli-voice` | Voice input and spoken replies in the assistant | `pip install "dashscope[acli-voice]"` |
-| `acli-camera` | Camera capture for image input in the assistant | `pip install "dashscope[acli-camera]"` |
-| `acli-all` | All of the above (includes `acli`) | `pip install "dashscope[acli-all]"` |
+| `expert` | Interactive AI assistant (DashScope SDK Expert) | `pip install "dashscope[expert]"` |
+| `expert-openai` | Run the assistant on an OpenAI-compatible model provider | `pip install "dashscope[expert-openai]"` |
+| `expert-anthropic` | Run the assistant on an Anthropic model provider | `pip install "dashscope[expert-anthropic]"` |
+| `expert-voice` | Voice input and spoken replies in the assistant | `pip install "dashscope[expert-voice]"` |
+| `expert-camera` | Camera capture for image input in the assistant | `pip install "dashscope[expert-camera]"` |
+| `expert-all` | All of the above (includes `expert`) | `pip install "dashscope[expert-all]"` |
+
+The original `acli*` extra names remain as backward-compatible aliases with identical dependencies.
 
 To install from a source checkout:
 
@@ -517,7 +519,7 @@ The SDK integrates an interactive AI assistant, **DashScope SDK Expert**, powere
 
 - Run `dashscope` with no arguments to start the assistant. On first run it offers to download the Expert profile and per-domain skills into `./.agenticx/`; the same profile can be installed later with `agenticx expert download dashscope-sdk-expert`.
 - Ask it instead of reading docs — e.g. `dashscope expert "how do I stream chat output"` (asks once and exits). Type `/help` inside the assistant for available commands; `dashscope expert --help` shows all forms.
-- With Python 3.10+, install the `acli` extra: `pip install "dashscope[acli]"`. Add `acli-voice` / `acli-camera` for voice and camera input, or `acli-all` for everything — see the [extras table](#installation).
+- With Python 3.10+, install the `expert` extra: `pip install "dashscope[expert]"`. Add `expert-voice` / `expert-camera` for voice and camera input, or `expert-all` for everything — see the [extras table](#installation).
 - Full walkthrough: [DashScope SDK Expert guide](https://help.aliyun.com/en/model-studio/dashscope-sdk-expert).
 
 ## Command line

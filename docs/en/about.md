@@ -36,7 +36,7 @@ Third-party notices (e.g. the bundled certifi CA bundle) are listed in
   names like `AgentStudioError` are aliases), while Agentic RL keeps
   dedicated `AgenticRLError` subclasses within that same hierarchy.
 - Python 3.9+ is required; the optional interactive assistant
-  (`dashscope[acli]`) requires Python 3.10+.
+  (`dashscope[expert]`) requires Python 3.10+.
 - Current SDK version: **{{ sdk_version }}** — see
   [Release Notes](release-notes.md).
 

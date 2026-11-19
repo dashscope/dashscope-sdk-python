@@ -68,7 +68,7 @@ dashscope -k sk-xxx --output json ft list
 AgenticX 智能体，而不是命令树。需要可选 extra 与 Python 3.10+：
 
 ```bash
-pip install -U "dashscope[acli]"
+pip install -U "dashscope[expert]"
 dashscope                         # 启动智能体（默认 TUI）
 dashscope expert --cli            # 用纯 REPL 代替 TUI
 dashscope expert "问题"            # 一次性提问后退出

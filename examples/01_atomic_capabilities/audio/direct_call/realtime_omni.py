@@ -109,7 +109,7 @@ def make_parser():
             "--output reply.wav\n"
             "python -m examples.01_atomic_capabilities.audio.direct_call.realtime_omni --microphone "
             "--seconds 10 --output reply.wav\n"
-            "安装源码：python -m pip install -e '.[acli-voice]'。"
+            "安装源码：python -m pip install -e '.[expert-voice]'。"
             "配置 DASHSCOPE_API_KEY / DASHSCOPE_WORKSPACE / DASHSCOPE_REGION。\n"
             "使用手动结束单轮输入模式，不启用独立 Qwen-ASR/Qwen-TTS。"
             "Omni 3.8 协议已适配，但本示例未进行云端验证；实际调用可能计费。"

@@ -87,7 +87,7 @@ jobs:
         with:
           python-version: '3.12'
       # Base CLI scope: the package plus PyInstaller only. The optional
-      # acli/voice/camera extras (incl. the AgenticX agent) are intentionally
+      # expert/voice/camera extras (incl. the AgenticX agent) are intentionally
       # NOT bundled, so the bare-`dashscope` agent path is unavailable in the
       # binary by design; the v2 command tree is what ships.
       - run: python -m pip install . "pyinstaller>=6.0"

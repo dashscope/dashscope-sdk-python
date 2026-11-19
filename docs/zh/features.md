@@ -82,7 +82,7 @@ dashscope SDK 是面向阿里云百炼（Model Studio / DashScope）的
 
 - `dashscope` CLI 覆盖对话、语音、图像、文件、微调、部署、RL、应用等，
   全局选项一致，支持机器可读输出（`-o json`）。
-- 可选交互式 AI 助手：`pip install "dashscope[acli]"`，见
+- 可选交互式 AI 助手：`pip install "dashscope[expert]"`，见
   [SDK 专家（AgenticX）](guides/expert.md)。
 
 见[命令行工具](cli.md)。

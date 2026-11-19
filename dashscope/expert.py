@@ -30,11 +30,11 @@ def _agenticx_import_tip(exception) -> str:
         # A module already in sys.modules may carry no spec metadata.
         installed = True
     if not installed:
-        # `\[` keeps rich from eating the extra name: an unescaped [acli] is
+        # `\[` keeps rich from eating the extra name: an unescaped [expert] is
         # parsed as a style tag, which renders the copy-pasteable command as
         # `pip install dashscope` and installs the SDK without the agent.
         return (
-            "[yellow]Tip:[/yellow] Install dashscope\\[acli] with Python "
+            "[yellow]Tip:[/yellow] Install dashscope\\[expert] with Python "
             f"3.10+ to enable the agent ({exception})."
         )
     try:
@@ -45,7 +45,7 @@ def _agenticx_import_tip(exception) -> str:
         f"[yellow]Tip:[/yellow] dashscope-agenticx {found} is installed "
         "but does not provide the interface this SDK expects "
         f"({exception}).\n"
-        "[dim]Try: pip install -U 'dashscope\\[acli]'; if that does not "
+        "[dim]Try: pip install -U 'dashscope\\[expert]'; if that does not "
         "help, report the mismatch.[/dim]"
     )
 

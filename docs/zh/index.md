@@ -91,7 +91,7 @@ pip install -U dashscope
 
 基础安装覆盖 SDK API 调用、`dashscope` CLI、Agentic RL 微调与本地
 分词器。可选 extras 用于配置交互式 AI 助手，例如
-`pip install "dashscope[acli]"`（见
+`pip install "dashscope[expert]"`（见
 [SDK 专家（AgenticX）](guides/expert.md)）。
 
 ## 示例
@@ -187,7 +187,7 @@ dashscope -o json ft list         # 机器可读输出，便于脚本处理
 覆盖对话、多模态、向量嵌入、图像/视频、音频、文件、微调、智能体
 强化学习等能力，并提供协议、区域与输出格式等全局选项。不带任何
 参数运行 `dashscope` 会启动可选的交互式 AI 助手
-（`pip install "dashscope[acli]"`）。**冻结的 1.x 命令树仍以
+（`pip install "dashscope[expert]"`）。**冻结的 1.x 命令树仍以
 `dashscope1` 提供。**详见[命令行工具](cli.md)。
 
 ## AI 助手（SDK Expert）
@@ -198,7 +198,7 @@ dashscope -o json ft list         # 机器可读输出，便于脚本处理
 与可选 extra：
 
 ```bash
-pip install -U "dashscope[acli]"
+pip install -U "dashscope[expert]"
 dashscope                                     # 交互式助手
 dashscope expert "如何流式输出对话结果？"       # 一次性提问后退出
 ```

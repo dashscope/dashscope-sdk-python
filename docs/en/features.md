@@ -90,7 +90,7 @@ See [AgentStudio](reference/agentstudio.md) and
 - The `dashscope` CLI covers chat, audio, images, files, fine-tunes,
   deployments, RL, apps and more with consistent global options and
   machine-readable output (`-o json`).
-- Optional interactive AI assistant via `pip install "dashscope[acli]"` —
+- Optional interactive AI assistant via `pip install "dashscope[expert]"` —
   see [SDK Expert (AgenticX)](guides/expert.md).
 
 See [CLI](cli.md).

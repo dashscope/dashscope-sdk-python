@@ -32,7 +32,7 @@ SDK 采用
   `dashscope.errors` 体系上：AgentStudio 直接抛出主 SDK 异常，
   `AgentStudioError` 等历史名称只是别名；Agentic RL 保留专用的
   `AgenticRLError` 子类，但同属该体系。
-- 需要 Python 3.9+；可选交互式助手（`dashscope[acli]`）需要 Python 3.10+。
+- 需要 Python 3.9+；可选交互式助手（`dashscope[expert]`）需要 Python 3.10+。
 - 当前 SDK 版本：**{{ sdk_version }}** —— 见[发行说明](release-notes.md)。
 
 ## 获取帮助
