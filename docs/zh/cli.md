@@ -4,7 +4,7 @@ description: "dashscope 命令行：全局选项、退出码与全部命令组�
 # 命令行工具（CLI）
 
 安装 SDK 时会同时安装 `dashscope` 命令（以及归档 1.x 命令树的
-`dashscope1`）。CLI 与 SDK 资源一一对应，`Client` 能做的事都可以
+`dashscope1`）。CLI 覆盖主要 SDK 资源，多数能力可以直接
 用 shell 脚本完成。
 
 ```bash
@@ -27,6 +27,9 @@ dashscope -k sk-xxx --output json ft list
 | `--region` | 服务地域，如 `cn-beijing`、`ap-southeast-1`。 |
 | `--timeout` | 单次请求超时（秒）。 |
 | `-o`, `--output` | 输出格式；机器格式保持 stdout 可解析（如 `json`）。 |
+| `-c KEY=VALUE` | 本次调用覆盖一个配置键；可重复。SDK 键（`api_key`、`protocol`、`timeout` 等）传给客户端；CLI 键（`output`、`default_model`）设置默认值。 |
+| `-v`, `--verbose` | 显示请求元数据，失败时打印完整 traceback。 |
+| `--no-color` | 禁用彩色输出；也遵循 `$NO_COLOR`。 |
 
 错误以 `Error [category]: message` 输出到 stderr。退出码：`0` 成功，
 `1` 服务端/限流/网络，`2` 命令行错误，`3` 鉴权，`4` 未找到。

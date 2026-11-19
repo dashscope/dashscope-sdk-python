@@ -4,8 +4,8 @@ description: "The dashscope command line: global options, exit codes and every c
 # Command Line Interface
 
 Installing the SDK also installs the `dashscope` command (and `dashscope1`
-for the archived 1.x command tree). The CLI mirrors the SDK resources, so
-anything you can do with `Client` you can also script from a shell.
+for the archived 1.x command tree). The CLI covers the main SDK
+resources, so most capabilities can be scripted straight from a shell.
 
 ```bash
 dashscope version                 # print the SDK version (a subcommand, not --version)
@@ -27,6 +27,9 @@ Global options come **before** the subcommand:
 | `--region` | Service region, e.g. `cn-beijing`, `ap-southeast-1`. |
 | `--timeout` | Per-request timeout in seconds. |
 | `-o`, `--output` | Output format; machine formats keep stdout parseable (e.g. `json`). |
+| `-c KEY=VALUE` | Override one config key for this invocation; repeatable. SDK keys (`api_key`, `protocol`, `timeout`, ...) are passed to the client; CLI keys (`output`, `default_model`) set defaults. |
+| `-v`, `--verbose` | Show request metadata and tracebacks on failure. |
+| `--no-color` | Disable colored output; also honours `$NO_COLOR`. |
 
 Errors go to stderr as `Error [category]: message`. Exit codes: `0` ok,
 `1` server / rate-limit / network, `2` bad command line, `3` auth,

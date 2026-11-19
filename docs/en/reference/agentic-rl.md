@@ -18,9 +18,42 @@ components.
 
 ::: dashscope.applications.finetune.agentic_rl.SubmitResult
 
-## Function decorators
+## Reward decorators
 
-Register plain Python functions as rollout / reward components:
+These three decorators target the **reward processor**, not rollout
+function registration: `reward_func` is a class decorator applied to an
+`AbstractRewardProcessor` subclass (it generates `process()` for you);
+`sub_reward_func` and `aggregate_func` decorate processor methods to
+declare sub-rewards and aggregation logic. Minimal example:
+
+```python
+from dashscope.applications.finetune.reinforcement import (
+    AbstractRewardProcessor,
+    RewardInput,
+    RewardOutput,
+    Reward,
+    TaskStatus,
+    reward_func,
+    sub_reward_func,
+)
+
+@reward_func("MyReward")
+class MyReward(AbstractRewardProcessor):
+    @sub_reward_func("length", sub_weight=1.0)
+    def length(self, input_data: RewardInput) -> RewardOutput:
+        messages = input_data.agent_output.messages
+        text = str(messages[0].get("content", "")) if messages else ""
+        return RewardOutput(
+            reward=Reward(reward_score=min(len(text) / 100, 1.0)),
+            status=TaskStatus.SUCCESS,
+        )
+```
+
+Without an `aggregate_func`, sub-rewards are combined as a weighted sum
+using `sub_weight`. Rollouts are authored differently: subclass
+`AbstractRolloutProcessor` and implement `process()` (optionally override
+`setup()`); these decorators are not involved — see "Processor base
+classes & demos" below.
 
 ::: dashscope.applications.finetune.reinforcement.component.reward_func
 

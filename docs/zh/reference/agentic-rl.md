@@ -17,9 +17,40 @@ description: "Agentic RL 微调 API 参考：提交入口与 reward/rollout 编�
 
 ::: dashscope.applications.finetune.agentic_rl.SubmitResult
 
-## 函数装饰器
+## Reward 装饰器
 
-把普通 Python 函数注册为 rollout / reward 组件：
+这三个装饰器面向 **reward processor**，不是 rollout 函数的注册接口：
+`reward_func` 是类装饰器，挂在 `AbstractRewardProcessor` 子类上并
+自动生成 `process()`；`sub_reward_func` 与 `aggregate_func` 装饰
+processor 的方法，分别声明子奖励与聚合逻辑。最小示例：
+
+```python
+from dashscope.applications.finetune.reinforcement import (
+    AbstractRewardProcessor,
+    RewardInput,
+    RewardOutput,
+    Reward,
+    TaskStatus,
+    reward_func,
+    sub_reward_func,
+)
+
+@reward_func("MyReward")
+class MyReward(AbstractRewardProcessor):
+    @sub_reward_func("length", sub_weight=1.0)
+    def length(self, input_data: RewardInput) -> RewardOutput:
+        messages = input_data.agent_output.messages
+        text = str(messages[0].get("content", "")) if messages else ""
+        return RewardOutput(
+            reward=Reward(reward_score=min(len(text) / 100, 1.0)),
+            status=TaskStatus.SUCCESS,
+        )
+```
+
+不写 `aggregate_func` 时，默认按 `sub_weight` 加权求和。
+rollout 的编写方式不同：继承 `AbstractRolloutProcessor` 并实现
+`process()`（可选覆写 `setup()`），不使用这些装饰器，
+见下方「处理器基类与示例」。
 
 ::: dashscope.applications.finetune.reinforcement.component.reward_func
 

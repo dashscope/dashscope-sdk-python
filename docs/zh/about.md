@@ -27,8 +27,11 @@ SDK 采用
   类型化响应与异常。
 - 完整 1.x 公共接口仍可从历史路径导入，由 `dashscope.legacy_1x` 下
   的冻结门面实现；不再新增能力。
-- AgentStudio 与 Agentic RL 是应用子 SDK，拥有独立的客户端、
-  返回与错误契约。
+- AgentStudio 与 Agentic RL 是应用子 SDK，拥有独立的客户端与返回类型
+  （AgentStudio 还有专用的资源与分页接口）；错误则统一构建在
+  `dashscope.errors` 体系上：AgentStudio 直接抛出主 SDK 异常，
+  `AgentStudioError` 等历史名称只是别名；Agentic RL 保留专用的
+  `AgenticRLError` 子类，但同属该体系。
 - 需要 Python 3.9+；可选交互式助手（`dashscope[acli]`）需要 Python 3.10+。
 - 当前 SDK 版本：**{{ sdk_version }}** —— 见[发行说明](release-notes.md)。
 

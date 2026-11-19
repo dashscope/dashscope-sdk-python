@@ -138,16 +138,34 @@ client = dashscope.Client()  # 读取 DASHSCOPE_API_KEY
 
 ### 流式运行它
 
-```python
-with client.chat.completions.create(
-    model="qwen-plus",
-    messages=[{"role": "user", "content": "写一首关于海的俳句"}],
-    stream=True,
-) as stream:
+传入 `stream=True` 得到 `ChatStream`。流是一次性的，两种消费方式
+二选一——不能先遍历增量、再调用 `get_final_message()` 聚合：
+
+=== "消费增量"
+
+    ```python
+    stream = client.chat.completions.create(
+        model="qwen-plus",
+        messages=[{"role": "user", "content": "写一首关于海的俳句"}],
+        stream=True,
+    )
     for text in stream.text_stream:
         print(text, end="", flush=True)
-    final = stream.get_final_message()
-```
+    ```
+
+=== "直接聚合"
+
+    ```python
+    stream = client.chat.completions.create(
+        model="qwen-plus",
+        messages=[{"role": "user", "content": "写一首关于海的俳句"}],
+        stream=True,
+    )
+    final = stream.get_final_message()  # 消费整个流并组装为类型化响应
+    print(final.output_text)
+    ```
+
+流耗尽时自动关闭连接；中途放弃可调用 `stream.close()` 提前释放。
 
 ### 和它对话（实时语音）
 
@@ -156,8 +174,8 @@ with client.chat.completions.create(
 
 ## 命令行（CLI）
 
-安装 SDK 的同时会安装 `dashscope` 命令。CLI 与 SDK 资源一一对应，
-`Client` 能做的任何事情都可以直接在 shell 里脚本化：
+安装 SDK 的同时会安装 `dashscope` 命令。CLI 覆盖主要 SDK 资源，
+多数能力可以直接在 shell 里脚本化：
 
 ```bash
 dashscope version                 # 打印 SDK 版本

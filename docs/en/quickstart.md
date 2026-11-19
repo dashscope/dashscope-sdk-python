@@ -115,7 +115,8 @@ asyncio.run(main())
 
 ## Error handling
 
-All failures raise subclasses of
+Failed calls (connection failures, HTTP errors and server-side business
+errors) raise subclasses of
 [DashScopeError][dashscope.errors.DashScopeError] carrying `code`,
 `status_code`, `request_id` and the response `body`:
 
@@ -131,6 +132,16 @@ try:
 except DashScopeError as exc:
     print(exc.code, exc.status_code, exc.request_id, exc.message)
 ```
+
+!!! note "Two boundaries"
+    - Local configuration and argument validation may raise `ValueError`
+      (e.g. an invalid region or an empty `file_id`); those are not
+      `DashScopeError`s.
+    - Streaming has two phases: a failure to establish the stream raises
+      `DashScopeError` as above; once the stream is established, low-level
+      transport errors during iteration (e.g. `httpx.ReadTimeout`) propagate
+      unchanged. The SDK does not reconnect automatically — catch and
+      handle them in the caller.
 
 See [Errors](reference/errors.md) for the full hierarchy (rate limits,
 authentication, timeouts, WebSocket errors, ...).

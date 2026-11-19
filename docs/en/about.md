@@ -29,8 +29,12 @@ Third-party notices (e.g. the bundled certifi CA bundle) are listed in
 - The complete 1.x public surface remains importable from its historical
   paths and is implemented by frozen facades under `dashscope.legacy_1x`;
   it receives no new features.
-- AgentStudio and Agentic RL are application sub-SDKs with their own client,
-  return and error contracts.
+- AgentStudio and Agentic RL are application sub-SDKs with their own
+  client and typed returns (AgentStudio also has dedicated resources and
+  pagination); their errors build on the unified `dashscope.errors`
+  hierarchy: AgentStudio raises the main SDK exceptions directly (legacy
+  names like `AgentStudioError` are aliases), while Agentic RL keeps
+  dedicated `AgenticRLError` subclasses within that same hierarchy.
 - Python 3.9+ is required; the optional interactive assistant
   (`dashscope[acli]`) requires Python 3.10+.
 - Current SDK version: **{{ sdk_version }}** — see

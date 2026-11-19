@@ -215,3 +215,27 @@ Each section lists the sync and async classes and their response models.
 ::: dashscope.resources.reinforcement_learning.RegisteredFunctions
 
 ::: dashscope.resources.reinforcement_learning.UploadedData
+
+## Shared async-task models
+
+Long-running services (images, videos, transcription, batch embeddings)
+share one task contract: `jobs.create(...)` submits and returns a
+`PENDING`/`RUNNING` `Job`; `jobs.fetch(task_id)` reads one snapshot;
+`jobs.wait(job)` polls with exponential backoff until a terminal status
+(`SUCCEEDED` / `FAILED` / `CANCELED` / `UNKNOWN`) or the wait `timeout`
+(default 24 hours) expires; `jobs.cancel(task_id)` cancels a `PENDING`
+task. The one-call `generate()` helpers submit and wait in one step.
+
+A `FAILED` task raises by default; with `Client(raise_on_error=False)`
+it comes back as the `Job` envelope instead — check `job.status` /
+`job.is_error`. `UNKNOWN` is terminal too: the gateway reports it for a
+task id that does not exist, so check `job.succeeded` rather than
+relying on `wait()` to raise. See
+[Types — raw responses & parsing](types.md#raw-responses-parsing) for
+how `strict_validation`, `raise_on_error` and `raw=True` interact.
+
+::: dashscope.resources._jobs.Job
+
+::: dashscope.resources._jobs.JobResult
+
+::: dashscope.resources._jobs.JobList

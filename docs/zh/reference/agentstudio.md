@@ -18,9 +18,19 @@ client.sessions.events.send(session.id, [user_message("你好！")])
 with client.sessions.events.stream(session.id) as stream:
     for event in stream:
         print(event.type)
-        if event.type == "session_status":
+        # session_status 也可能是 running，只在结束态退出
+        if event.session_status in ("idle", "terminated"):
             break
 ```
+
+!!! note "会话状态与文本消费"
+    `session_status` 事件既可能报告 `running`（运行中），也可能报告
+    `idle` / `terminated` 等结束态——不能把第一个 `session_status`
+    当作运行结束。只关心文本回复时，直接用 `stream.text_stream`：
+    它产出智能体消息的文本，并在会话到达结束态时自动停止。
+    若智能体使用需要审批的工具，会话会以 `idle` +
+    `stop_reason.type == "requires_action"` 暂停等待审批：用
+    `user_tool_approval_response` 提交审批结果后会话继续运行。
 
 每个资源类都有异步孪生类（`AsyncAgents`、`AsyncSessions`……），
 通过 `AsyncClient` 以相同方式使用。

@@ -112,7 +112,8 @@ asyncio.run(main())
 
 ## 错误处理
 
-所有失败都会抛出 [DashScopeError][dashscope.errors.DashScopeError] 的子类，
+调用失败（连接失败、HTTP 错误与服务端业务错误）会抛出
+[DashScopeError][dashscope.errors.DashScopeError] 的子类，
 携带 `code`、`status_code`、`request_id` 和响应 `body`：
 
 ```python
@@ -127,6 +128,13 @@ try:
 except DashScopeError as exc:
     print(exc.code, exc.status_code, exc.request_id, exc.message)
 ```
+
+!!! note "两个边界"
+    - 本地配置与参数校验可能抛出 `ValueError`（如非法 region、
+      空 `file_id`），不属于 `DashScopeError`。
+    - 流式调用分两个阶段：建流失败按上述规则抛出 `DashScopeError`；
+      建流成功后，迭代中断流等底层传输异常（如 `httpx.ReadTimeout`）
+      会原样传播，SDK 不会自动重连，需要调用方自行捕获处理。
 
 完整的异常层级（限流、鉴权、超时、WebSocket 错误等）见 [错误（Errors）](reference/errors.md)。
 

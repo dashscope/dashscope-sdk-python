@@ -139,16 +139,36 @@ client = dashscope.Client()  # reads DASHSCOPE_API_KEY
 
 ### Stream it
 
-```python
-with client.chat.completions.create(
-    model="qwen-plus",
-    messages=[{"role": "user", "content": "Write a haiku about the sea"}],
-    stream=True,
-) as stream:
+Pass `stream=True` to get a `ChatStream`. The stream is single-pass — pick
+one of the two consumption styles; you cannot iterate the deltas first and
+call `get_final_message()` afterwards:
+
+=== "Consume deltas"
+
+    ```python
+    stream = client.chat.completions.create(
+        model="qwen-plus",
+        messages=[{"role": "user", "content": "Write a haiku about the sea"}],
+        stream=True,
+    )
     for text in stream.text_stream:
         print(text, end="", flush=True)
-    final = stream.get_final_message()
-```
+    ```
+
+=== "Aggregate directly"
+
+    ```python
+    stream = client.chat.completions.create(
+        model="qwen-plus",
+        messages=[{"role": "user", "content": "Write a haiku about the sea"}],
+        stream=True,
+    )
+    final = stream.get_final_message()  # consumes the whole stream
+    print(final.output_text)
+    ```
+
+The connection closes automatically when the stream is exhausted; call
+`stream.close()` to release it early.
 
 ### Talk to it (realtime voice)
 
@@ -158,8 +178,8 @@ with client.chat.completions.create(
 ## Command line (CLI)
 
 Installing the SDK also installs the `dashscope` command. The CLI
-mirrors the SDK resources, so anything you can do with `Client` you can
-also script from a shell:
+covers the main SDK resources, so most capabilities can be scripted
+straight from a shell:
 
 ```bash
 dashscope version                 # print the SDK version

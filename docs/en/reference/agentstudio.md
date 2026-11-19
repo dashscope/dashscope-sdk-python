@@ -19,9 +19,21 @@ client.sessions.events.send(session.id, [user_message("Hello!")])
 with client.sessions.events.stream(session.id) as stream:
     for event in stream:
         print(event.type)
-        if event.type == "session_status":
+        # session_status may also report running; stop only on a terminal state
+        if event.session_status in ("idle", "terminated"):
             break
 ```
+
+!!! note "Session status and text consumption"
+    A `session_status` event may report `running` (still working) as well
+    as terminal states such as `idle` / `terminated` — do not treat the
+    first `session_status` as the end of the run. When you only need the
+    text reply, use `stream.text_stream`: it yields the text of agent
+    messages and stops automatically once the session reaches a terminal
+    state. If the agent uses tools that require approval, the session
+    pauses at `idle` with `stop_reason.type == "requires_action"`; submit
+    the decision with `user_tool_approval_response` and the session
+    resumes.
 
 Every resource class has an async twin (`AsyncAgents`, `AsyncSessions`, ...)
 used the same way through `AsyncClient`.

@@ -149,13 +149,25 @@ plugins:
             separate_signature: true
             show_signature_annotations: true
             # Kind badges (class/function/method) in headings and TOC.
-            # merge_init_into_class / signature_crossrefs were tested and
-            # render no effect on mkdocstrings <=1.0.8 / handler <=2.0.11,
-            # so they are deliberately not set.
             show_symbol_type_heading: true
             show_symbol_type_toc: true
+            # Constructor parameters are public API contract: render them
+            # on the class itself. merge_init_into_class only sees members
+            # that survive the filters, so "!^_" alone silently dropped
+            # __init__ and the merge rendered nothing (the earlier "no
+            # effect" observation); re-include __init__ explicitly below.
+            merge_init_into_class: true
+            # Undocumented members are still contract: pydantic model
+            # fields, dataclass fields (Config), Settings properties and
+            # the ChatStream consumption helpers carry no docstrings but
+            # must show their names, types and defaults in the Reference.
+            show_if_no_docstring: true
             filters:
               - "!^_"
+              # Last matching filter wins: keep __init__ for the merge above.
+              - "^__init__$"
+              # pydantic's model_config is library plumbing, not SDK API.
+              - "!^model_"
 
 nav:
   - DashScope Python SDK: index.md

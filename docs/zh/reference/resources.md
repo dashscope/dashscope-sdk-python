@@ -215,3 +215,25 @@ description: "客户端资源命名空间 API 参考：向量嵌入、图像、�
 ::: dashscope.resources.reinforcement_learning.RegisteredFunctions
 
 ::: dashscope.resources.reinforcement_learning.UploadedData
+
+## 共享异步任务模型
+
+长耗时服务（图像、视频、转写、批量向量）共享同一套任务契约：
+`jobs.create(...)` 提交并返回 `PENDING`/`RUNNING` 的 `Job`；
+`jobs.fetch(task_id)` 读取一次快照；`jobs.wait(job)` 以指数退避轮询，
+直到终态（`SUCCEEDED` / `FAILED` / `CANCELED` / `UNKNOWN`）或等待
+`timeout`（默认 24 小时）到期；`jobs.cancel(task_id)` 取消 `PENDING`
+任务。一步式 `generate()` 则提交并等待完成。
+
+`FAILED` 任务默认抛出异常；`Client(raise_on_error=False)` 时以 `Job`
+信封返回——检查 `job.status` / `job.is_error`。`UNKNOWN` 也是终态：
+网关对不存在的任务 ID 报告该状态，因此请检查 `job.succeeded`，
+不要依赖 `wait()` 抛异常来区分。`strict_validation`、`raise_on_error`
+与 `raw=True` 的关系见
+[类型——原始响应与解析](types.md#raw-responses-parsing)。
+
+::: dashscope.resources._jobs.Job
+
+::: dashscope.resources._jobs.JobResult
+
+::: dashscope.resources._jobs.JobList

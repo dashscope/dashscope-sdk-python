@@ -36,9 +36,13 @@ See [Protocols](reference/protocols.md).
 ## Streaming that reads like text
 
 - `ChatStream` exposes `.text_stream`, `.reasoning_stream` and
-  `.get_final_message()` — iterate plain strings, get the assembled
-  typed message at the end.
-- SSE transport with automatic retry and reconnect handling.
+  `.get_final_message()` — either iterate plain strings, or aggregate the
+  whole stream into a typed message; the stream is single-pass, so pick
+  one style.
+- SSE transport; connection failures and retryable HTTP statuses are
+  retried before the stream is established. A stream that breaks
+  mid-iteration is not reconnected or resumed automatically — handle it
+  in the caller.
 
 See [Chat](reference/chat.md).
 
@@ -74,8 +78,9 @@ See [Devkit](reference/devkit.md).
 
 - `dashscope.applications.agentstudio`: a self-contained sub-SDK for managed
   agents, sessions, environments, deployments, memory, skills and vaults.
-- `dashscope.applications.finetune.AgenticRL` plus decorators to author
-  rollout / reward functions locally.
+- `dashscope.applications.finetune.AgenticRL` submits training jobs;
+  author rollout processors locally and register reward processors
+  with decorators.
 
 See [AgentStudio](reference/agentstudio.md) and
 [Agentic RL](reference/agentic-rl.md).

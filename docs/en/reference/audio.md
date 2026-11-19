@@ -28,6 +28,8 @@ WebSocket sessions and Qwen Live, plus voice/vocabulary customization.
 
 ::: dashscope.resources.audio.http_tts.HttpSynthesisStream
 
+::: dashscope.resources.audio.http_tts.AsyncHttpSynthesisStream
+
 ## Recognition (ASR)
 
 ::: dashscope.resources.audio.asr.Asr

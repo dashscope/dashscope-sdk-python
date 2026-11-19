@@ -36,8 +36,10 @@ dashscope SDK 是面向阿里云百炼（Model Studio / DashScope）的
 ## 像读文本一样的流式
 
 - `ChatStream` 提供 `.text_stream`、`.reasoning_stream` 与
-  `.get_final_message()`——迭代纯字符串，结束时拿到组装好的类型化消息。
-- SSE 传输，自动重试与重连处理。
+  `.get_final_message()`——要么迭代纯字符串，要么一次性聚合整个流
+  得到类型化消息；流是一次性的，两种方式二选一。
+- SSE 传输；建流前自动重试连接失败与可重试的 HTTP 状态。
+  建流后中断不会自动重连或续传，由调用方处理。
 
 见[对话（Chat）](reference/chat.md)。
 
@@ -70,8 +72,8 @@ dashscope SDK 是面向阿里云百炼（Model Studio / DashScope）的
 
 - `dashscope.applications.agentstudio`：独立子 SDK，覆盖托管智能体、
   会话、环境、部署、记忆、技能与密钥库。
-- `dashscope.applications.finetune.AgenticRL` 加装饰器，
-  本地编写 rollout / reward 函数。
+- `dashscope.applications.finetune.AgenticRL` 提交训练任务；
+  本地编写 rollout 处理器，用装饰器注册 reward 处理器。
 
 见 [AgentStudio](reference/agentstudio.md)与
 [强化学习微调](reference/agentic-rl.md)。

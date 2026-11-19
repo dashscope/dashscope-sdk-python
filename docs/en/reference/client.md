@@ -18,11 +18,22 @@ configuration and module-level helpers.
 
 ## Configuration
 
+`strict_validation` and `raise_on_error` interact with the per-call
+`raw=True` escape hatch — see
+[Types — raw responses & parsing](types.md#raw-responses-parsing).
+
 ::: dashscope._config.Config
 
 ::: dashscope._config.Settings
 
 ## Top-level helpers
+
+!!! warning "`set_region` is a legacy 1.x helper"
+    `dashscope.set_region()` only updates the historical module-level
+    endpoint variables (`base_http_api_url` etc.) used by
+    `dashscope.legacy_1x`; it does **not** affect `Client` / `AsyncClient`
+    configuration resolution. For the current client use
+    `Client(region=..., workspace=...)` or `dashscope.settings.region`.
 
 ::: dashscope.chat
 

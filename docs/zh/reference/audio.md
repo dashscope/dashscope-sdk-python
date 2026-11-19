@@ -28,6 +28,8 @@ description: "语音合成、识别、实时会话与音色定制 API 参考。"
 
 ::: dashscope.resources.audio.http_tts.HttpSynthesisStream
 
+::: dashscope.resources.audio.http_tts.AsyncHttpSynthesisStream
+
 ## 语音识别（ASR）
 
 ::: dashscope.resources.audio.asr.Asr
