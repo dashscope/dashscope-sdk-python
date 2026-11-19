@@ -582,12 +582,13 @@ class Runs(
         Args:
             thread_id (str): The thread of the run id to be updated.
             run_id (str): The run id to update.
-            model (str): The model to use.
             metadata (Dict, optional):
                 Custom key-value pairs associate with run. Defaults to None.
             workspace (str): The DashScope workspace id.
             api_key (str, optional):
                 The DashScope workspace id. Defaults to None.
+            **kwargs (Any):
+                model (str): The model to use.
 
         Raises:
             InputRequired: thread id and run is required.

@@ -95,11 +95,15 @@ _MAAS_REGIONS = {*MAAS_REGIONS, "cn-beijing"}
 
 
 def set_region(region: str, workspace_id: str = None):
-    """Switch to a specific MaaS region.
+    """Switch to a specific MaaS region (legacy 1.x helper).
 
     Updates base_http_api_url, base_compatible_api_url and
     base_websocket_api_url to point to the MaaS endpoint for the
-    given region and workspace.
+    given region and workspace. These module-level variables are
+    only read by ``dashscope.legacy_1x``; this call does not affect
+    ``Client`` / ``AsyncClient`` configuration resolution. For the
+    current client use ``Client(region=..., workspace=...)`` or
+    ``dashscope.settings.region`` instead.
 
     Args:
         region (str): The MaaS region, e.g. "ap-southeast-1",

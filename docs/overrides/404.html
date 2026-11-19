@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{#-
+  Override of the theme's static 404 template. mkdocs renders it once,
+  without a page context and with absolute URLs, because GitHub Pages
+  serves it for every missing path. zh readers hop to zh/404/ via the
+  script below; the bilingual link covers JS-disabled clients.
+-#}
+{% block htmltitle %}
+  <title>Page not found - {{ config.site_name }}</title>
+{% endblock %}
+
+{% block content %}
+  <h1>Page not found</h1>
+  <p>
+    The page you requested does not exist — it may have moved during the
+    2.x documentation restructure.
+  </p>
+  <ul>
+    <li><a href="{{ base_url }}">Back to the home page</a></li>
+    <li><a href="{{ base_url }}quickstart/">Quickstart</a></li>
+    <li>Use the search box above to find the symbol or guide you need.</li>
+  </ul>
+  <p lang="zh">
+    页面不存在——可能在 2.x 文档重构中被移动。
+    <a href="{{ base_url }}zh/404/" hreflang="zh">查看中文页面</a>。
+  </p>
+  <script>
+    // GitHub Pages serves this root 404 for every missing path, including
+    // /zh/... ones; hop to the localized page so zh readers stay in zh.
+    (function () {
+      var p = location.pathname;
+      if (p.indexOf("/zh/") !== -1 && p.slice(-8) !== "/zh/404/") {
+        location.replace("{{ base_url }}zh/404/");
+      }
+    })();
+  </script>
+{% endblock %}

@@ -104,7 +104,7 @@ class ImageSynthesis(BaseAsyncApi):
             enable_sequential (bool, optional): Enable sequential generation mode.
             thinking_mode (str, optional): Thinking mode for generation. Supported values: fast, balanced, quality.
             color_palette (str, optional): Color palette specification for consistent styling.
-            **kwargs:
+            **kwargs (Any):
                 similarity(float, `optional`): The similarity between the
                     output image and the input image
                 sketch_weight(int, optional): How much the input sketch
@@ -688,7 +688,7 @@ class AioImageSynthesis(BaseAsyncAioApi):
             enable_sequential (bool, optional): Enable sequential generation mode.
             thinking_mode (str, optional): Thinking mode for generation. Supported values: fast, balanced, quality.
             color_palette (str, optional): Color palette specification for consistent styling.
-            **kwargs:
+            **kwargs (Any):
                 similarity(float, `optional`): The similarity between the
                     output image and the input image
                 sketch_weight(int, optional): How much the input sketch

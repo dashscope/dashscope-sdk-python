@@ -35,7 +35,7 @@ class HistoryItem(dict):
         Args:
             role (str): The role name.
             text (str): The text history. Default ot None.
-            kwargs: The key/value pair of history content.
+            **kwargs (Any): The key/value pair of history content.
 
         Raises:
             InvalidInput: The key and value must pair.
@@ -53,7 +53,7 @@ class HistoryItem(dict):
 
         Args:
             key (str): The key of the content.
-            value (Any): The history content.
+            content (Any): The history content.
         """
         self[self.role].append({key: content})
 
@@ -131,7 +131,7 @@ class Conversation(BaseApi):
 
         Args:
             history (dict): The conversation initialization settings.
-               will be recorded in the system history list.
+                will be recorded in the system history list.
                 Defaults to None.
         """
         super().__init__()

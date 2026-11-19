@@ -296,7 +296,7 @@ class TranslationRecognizerRealtime(BaseApi):
         sample_rate (int): The input audio sample rate.
         workspace (str): The dashscope workspace id.
 
-        **kwargs:
+        **kwargs (Any):
             phrase_id (list, `optional`): The ID of phrase.
             disfluency_removal_enabled(bool, `optional`): Filter mood words,
                 turned off by default.
@@ -489,9 +489,8 @@ class TranslationRecognizerRealtime(BaseApi):
            Please call 'stop()' after you have completed translation & recognition.  # noqa: E501
 
         Args:
-            phrase_id (str, `optional`): The ID of phrase.
-
-            **kwargs:
+            **kwargs (Any):
+                phrase_id (str, `optional`): The ID of phrase.
                 disfluency_removal_enabled(bool, `optional`):
                     Filter mood words, turned off by default.
                 diarization_enabled (bool, `optional`):
@@ -569,7 +568,7 @@ class TranslationRecognizerRealtime(BaseApi):
             file (str): The path to the local audio file.
             phrase_id (str, `optional`): The ID of phrase.
 
-            **kwargs:
+            **kwargs (Any):
                 disfluency_removal_enabled(bool, `optional`):
                     Filter mood words, turned off by default.
                 diarization_enabled (bool, `optional`):
@@ -815,7 +814,7 @@ class TranslationRecognizerChat(BaseApi):
         sample_rate (int): The input audio sample rate.
         workspace (str): The dashscope workspace id.
 
-        **kwargs:
+        **kwargs (Any):
             phrase_id (list, `optional`): The ID of phrase.
             disfluency_removal_enabled(bool, `optional`): Filter mood words,
                 turned off by default.
@@ -1025,9 +1024,8 @@ class TranslationRecognizerChat(BaseApi):
            Please call 'stop()' after you have completed translation & recognition.  # noqa: E501
 
         Args:
-            phrase_id (str, `optional`): The ID of phrase.
-
-            **kwargs:
+            **kwargs (Any):
+                phrase_id (str, `optional`): The ID of phrase.
                 disfluency_removal_enabled(bool, `optional`):
                     Filter mood words, turned off by default.
                 diarization_enabled (bool, `optional`):

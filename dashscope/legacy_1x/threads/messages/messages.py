@@ -267,15 +267,16 @@ class Messages(CreateMixin, ListObjectMixin, GetStatusMixin, UpdateMixin):
         Args:
             thread_id (str): The thread id.
             message_id (str): The message id.
-            content (str): The message content.
-            role (str, optional): The message role. Defaults to 'user'.
-            file_ids (List[str], optional):
-                The file_ids include in message. Defaults to [].
             metadata (Optional[object], optional):
                 The custom key/value pairs. Defaults to None.
             workspace (str, optional):
                 The DashScope workspace id. Defaults to None.
             api_key (str, optional): The DashScope api key. Defaults to None.
+            **kwargs (Any):
+                content (str): The message content.
+                role (str, optional): The message role. Defaults to 'user'.
+                file_ids (List[str], optional):
+                    The file_ids include in message. Defaults to [].
 
         Returns:
             ThreadMessage: The `ThreadMessage` object.

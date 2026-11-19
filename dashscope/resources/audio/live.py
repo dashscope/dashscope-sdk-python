@@ -293,73 +293,84 @@ class LiveSession(WsSessionBase):
                     if ws is not self._ws:
                         self._check_unfinished()
                         return None
-                    if raw is None or raw == "" or raw == b"":
-                        raise APIConnectionError(
-                            "live websocket disconnected before session.closed",
-                        )
                     try:
-                        if isinstance(raw, (bytes, bytearray)):
-                            raw = raw.decode("utf-8")
-                        event = json.loads(raw)
-                    except (ValueError, TypeError) as exc:
-                        raise WsEventError(
-                            "expected a UTF-8 JSON event object",
-                            body=raw,
-                        ) from exc
-                    if not isinstance(event, dict):
-                        raise WsEventError(
-                            "expected a JSON event object",
-                            body=event,
-                        )
-                    if (
-                        not isinstance(event.get("type"), str)
-                        or not event["type"]
-                    ):
-                        raise WsEventError(
-                            "expected a non-empty string event type",
-                            body=event,
-                        )
-                    self.last_message = event
-                    self._track_event(event)
-                    if event["type"] == EVENT_SESSION_CLOSED:
-                        self._finished = True
-                        closing_ws = self._detach_socket()
-                        self._check_unfinished()
-                    elif event["type"] == EVENT_ERROR:
-                        error = event.get("error")
-                        if error is None:
-                            error = {}
-                        if not isinstance(error, dict):
+                        if raw is None or raw == "" or raw == b"":
+                            raise APIConnectionError(
+                                "live websocket disconnected before session.closed",
+                            )
+                        try:
+                            if isinstance(raw, (bytes, bytearray)):
+                                raw = raw.decode("utf-8")
+                            event = json.loads(raw)
+                        except (ValueError, TypeError) as exc:
                             raise WsEventError(
-                                "expected a JSON error object",
+                                "expected a UTF-8 JSON event object",
+                                body=raw,
+                            ) from exc
+                        if not isinstance(event, dict):
+                            raise WsEventError(
+                                "expected a JSON event object",
                                 body=event,
                             )
-                        code = error.get("code")
-                        if code is None or code == "":
-                            code = event.get("code")
-                        if code is not None and not isinstance(code, str):
+                        if (
+                            not isinstance(event.get("type"), str)
+                            or not event["type"]
+                        ):
                             raise WsEventError(
-                                "expected a string error code",
+                                "expected a non-empty string event type",
                                 body=event,
                             )
-                        failure = error_from_business_code(
-                            message=error.get("message") or "live error",
-                            code=code,
-                            body=event,
-                        )
-                        failure.status_code = None
-                        recoverable = (
-                            error.get("type") == "invalid_request_error"
-                        )
-                        if recoverable:
-                            if self._finish_event_id is not None and (
-                                error.get("event_id") == self._finish_event_id
-                            ):
-                                self._finish_requested = False
-                                self._finish_event_id = None
-                        else:
-                            self._failure = failure
+                        self.last_message = event
+                        self._track_event(event)
+                        if event["type"] == EVENT_SESSION_CLOSED:
+                            self._finished = True
                             closing_ws = self._detach_socket()
+                            self._check_unfinished()
+                        elif event["type"] == EVENT_ERROR:
+                            error = event.get("error")
+                            if error is None:
+                                error = {}
+                            if not isinstance(error, dict):
+                                raise WsEventError(
+                                    "expected a JSON error object",
+                                    body=event,
+                                )
+                            code = error.get("code")
+                            if code is None or code == "":
+                                code = event.get("code")
+                            if code is not None and not isinstance(code, str):
+                                raise WsEventError(
+                                    "expected a string error code",
+                                    body=event,
+                                )
+                            failure = error_from_business_code(
+                                message=error.get("message") or "live error",
+                                code=code,
+                                body=event,
+                            )
+                            failure.status_code = None
+                            recoverable = (
+                                error.get("type") == "invalid_request_error"
+                            )
+                            if recoverable:
+                                if self._finish_event_id is not None and (
+                                    error.get("event_id")
+                                    == self._finish_event_id
+                                ):
+                                    self._finish_requested = False
+                                    self._finish_event_id = None
+                            else:
+                                self._failure = failure
+                                closing_ws = self._detach_socket()
+                    except BaseException as exc:
+                        # Detach within the same state-lock hold so a concurrent
+                        # send observes the closed session instead of racing the
+                        # cleanup into _send_raw (lock inversion).
+                        if ws is self._ws and generation == self._generation:
+                            if isinstance(exc, DashScopeError):
+                                self._failure = exc
+                            closing_ws = self._detach_socket()
+                        raise
             except BaseException as exc:
                 with self._lock:
                     if ws is self._ws and generation == self._generation:
