@@ -17,11 +17,14 @@ the full completion once the request is scheduled, so there is no
 
 Billing/timeout semantics differ from real-time Chat: only successfully
 executed requests are billed (a request that times out unscheduled is not
-billed and may be retried); the catalog price matches real-time but Batch
-Chat carries a limited-time 50% discount; it is an independent billing
-item that does not support prepaid plans, new-user free quota or context
-cache. The server holds the connection up to 3600s; a custom ``timeout``
-must be within 60..3600s and defaults to 3600s.
+billed); the catalog price matches real-time but Batch Chat carries a
+limited-time 50% discount; it is an independent billing item that does not
+support prepaid plans, new-user free quota or context cache. The server
+holds the connection up to 3600s; a custom ``timeout`` must be within
+60..3600s and defaults to 3600s. The transport cannot tell whether a
+dropped/timed-out request was already scheduled (and billed), so
+``create`` defaults to ``max_retries=0`` rather than the client's
+real-time Chat retry default.
 
 Contract:
 https://help.aliyun.com/zh/model-studio/openai-compatible-batch-chat
@@ -337,8 +340,11 @@ class BatchChatCompletions:
         60..3600s (the server's max connection hold).
 
         Only successful requests are billed; a request that times out
-        unscheduled is not billed and may be retried (``max_retries``
-        follows the client default unless overridden). Batch Chat is an
+        unscheduled is not billed. The transport cannot tell whether a
+        dropped request was already scheduled, so this defaults to
+        ``max_retries=0`` (no automatic retry) -- unlike real-time Chat.
+        Passing ``max_retries`` explicitly re-enables retry and the
+        caller owns the duplicate-billing risk. Batch Chat is an
         independent billing item at a limited-time 50% discount, with no
         prepaid plans, new-user free quota or context cache.
 
@@ -383,7 +389,7 @@ class BatchChatCompletions:
                 extra_headers,
                 extra_query,
                 extra_body,
-                max_retries=max_retries,
+                max_retries=0 if max_retries is None else max_retries,
             ),
             client=self._client,
         )
@@ -549,7 +555,7 @@ class AsyncBatchChatCompletions:
                 extra_headers,
                 extra_query,
                 extra_body,
-                max_retries=max_retries,
+                max_retries=0 if max_retries is None else max_retries,
             ),
             client=self._client,
         )

@@ -957,3 +957,146 @@ async def test_async_wait_polls_until_terminal():
     assert op.succeeded
     assert len(polls) == 2
     await client.aclose()
+
+
+# --- ID guards and percent-encoding ----------------------------------------
+
+
+def _no_wire(request):
+    raise AssertionError("invalid id must not reach the wire")
+
+
+@pytest.mark.parametrize("bad", ["", "   "])
+@pytest.mark.parametrize(
+    ("name", "call"),
+    [
+        ("get", lambda c, m: c.deployments.get(m)),
+        ("scale", lambda c, m: c.deployments.scale(m, capacity=1)),
+        (
+            "renew",
+            lambda c, m: c.deployments.renew(m, pre_paid_info=_PRE_PAID),
+        ),
+        (
+            "overflow",
+            lambda c, m: c.deployments.update_overflow_strategy(
+                m,
+                overflow_strategy="enable",
+            ),
+        ),
+        ("delete", lambda c, m: c.deployments.delete(m)),
+        ("stream", lambda c, m: list(c.deployments.stream_events(m))),
+        (
+            "instances.list",
+            lambda c, m: c.deployments.capacity_instances.list(m),
+        ),
+        (
+            "instances.get",
+            lambda c, m: c.deployments.capacity_instances.get(m, "ci-1"),
+        ),
+        (
+            "operations.get",
+            lambda c, m: c.deployments.capacity_operations.get(m, "op-1"),
+        ),
+    ],
+)
+def test_empty_deployed_model_rejected_before_wire(name, call, bad):
+    # An empty id would degenerate the URL to a collection path, including
+    # on mutating endpoints (DELETE, scale, renew).
+    client = _make_client(_no_wire)
+    with pytest.raises(ValueError, match="deployed_model"):
+        call(client, bad)
+    client.close()
+
+
+@pytest.mark.parametrize("bad", ["", "   "])
+@pytest.mark.parametrize(
+    ("name", "call"),
+    [
+        (
+            "instances.get",
+            lambda c, i: c.deployments.capacity_instances.get("pm-1", i),
+        ),
+        (
+            "instances.scale",
+            lambda c, i: c.deployments.capacity_instances.scale(
+                "pm-1",
+                i,
+                ptu_capacity=_PTU_CAPACITY,
+            ),
+        ),
+        (
+            "instances.renew",
+            lambda c, i: c.deployments.capacity_instances.renew(
+                "pm-1",
+                i,
+                pre_paid_info=_PRE_PAID,
+            ),
+        ),
+        (
+            "instances.delete",
+            lambda c, i: c.deployments.capacity_instances.delete("pm-1", i),
+        ),
+        (
+            "operations.get",
+            lambda c, i: c.deployments.capacity_operations.get("pm-1", i),
+        ),
+        (
+            "operations.wait",
+            lambda c, i: c.deployments.capacity_operations.wait("pm-1", i),
+        ),
+    ],
+)
+def test_empty_instance_or_operation_id_rejected_before_wire(name, call, bad):
+    client = _make_client(_no_wire)
+    with pytest.raises(ValueError, match="non-empty string"):
+        call(client, bad)
+    client.close()
+
+
+async def test_async_empty_ids_rejected_before_wire():
+    client = _make_async_client(_no_wire)
+    with pytest.raises(ValueError, match="deployed_model"):
+        await client.deployments.get("")
+    with pytest.raises(ValueError, match="deployed_model"):
+        await client.deployments.delete("   ")
+    with pytest.raises(ValueError, match="deployed_model"):
+        _ = [event async for event in client.deployments.stream_events("")]
+    with pytest.raises(ValueError, match="instance_id"):
+        await client.deployments.capacity_instances.get("pm-1", "")
+    with pytest.raises(ValueError, match="operation_id"):
+        await client.deployments.capacity_operations.get("pm-1", "")
+    await client.aclose()
+
+
+def test_deployed_model_percent_encoded_in_path():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        return httpx.Response(200, json=_deployment_output())
+
+    client = _make_client(handler)
+    client.deployments.get("pm/a?b#c")
+    # '/', '?' and '#' stay inside one path segment instead of retargeting
+    # the request to another path or query.
+    assert seen == [b"/api/v1/deployments/pm%2Fa%3Fb%23c"]
+    client.close()
+
+
+def test_capacity_ids_percent_encoded_in_path():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        if "capacity-operations" in request.url.path:
+            return httpx.Response(200, json=_operation_output("SUCCEEDED"))
+        return httpx.Response(200, json=_instance_output())
+
+    client = _make_client(handler)
+    client.deployments.capacity_instances.get("pm/a", "ci/b")
+    client.deployments.capacity_operations.get("pm/a", "op/b")
+    assert seen == [
+        b"/api/v1/deployments/pm%2Fa/capacity-instances/ci%2Fb",
+        b"/api/v1/deployments/pm%2Fa/capacity-operations/op%2Fb",
+    ]
+    client.close()

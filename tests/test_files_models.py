@@ -1207,3 +1207,27 @@ async def test_async_models_list_injects_context():
     assert m.served_region == "eu-central-1"
     assert m.workspace == "ws-eu"
     assert m.service_site == "international"
+
+
+@pytest.mark.parametrize("model", ["", "   "])
+def test_models_get_empty_id_rejected_before_wire(model):
+    # An empty model filter matches the whole catalog, so get("") would
+    # silently answer with the first entry instead of failing.
+    def handler(request):
+        raise AssertionError("empty model id must not reach the wire")
+
+    client = _make_client(handler)
+    with pytest.raises(ValueError, match="non-empty model id"):
+        client.models.get(model)
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_models_get_empty_id_rejected_before_wire():
+    def handler(request):
+        raise AssertionError("empty model id must not reach the wire")
+
+    client = _make_async_client(handler)
+    with pytest.raises(ValueError, match="non-empty model id"):
+        await client.models.get("")
+    await client.aclose()

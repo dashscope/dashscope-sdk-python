@@ -37,6 +37,7 @@ from dashscope.resources._ptu import (
     PrePaidInfo,
     PtuCapacity,
     _idempotency_headers,
+    _path_id,
     _pre_paid_info_body,
     _ptu_capacity_body,
     _purchase_retries,
@@ -513,6 +514,7 @@ class Deployments:
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
+        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{deployed_model}",
@@ -708,6 +710,7 @@ class Deployments:
         if ptu_capacity is not None:
             max_retries = _purchase_retries(max_retries)
             headers = _idempotency_headers(extra_headers)
+        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = self._client.transport.request_api(
             "PUT",
             f"{_BASE_PATH}/{deployed_model}/scale",
@@ -803,6 +806,7 @@ class Deployments:
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check.
         """
+        deployed_model = _path_id(deployed_model, "deployed_model")
         body = _renew_body(pre_paid_info, is_change, ptu_capacity, instance_id)
         resp = self._client.transport.request_api(
             "PUT",
@@ -891,6 +895,7 @@ class Deployments:
         """
         if overflow_strategy not in ("enable", "disable"):
             raise ValueError("overflow_strategy must be 'enable' or 'disable'")
+        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = self._client.transport.request_api(
             "PUT",
             f"{_BASE_PATH}/{deployed_model}/update-overflowstrategy",
@@ -970,6 +975,7 @@ class Deployments:
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
+        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = self._client.transport.request_api(
             "DELETE",
             f"{_BASE_PATH}/{deployed_model}",
@@ -1009,6 +1015,7 @@ class Deployments:
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
     ) -> Iterator[DeploymentEvent]:
+        deployed_model_id = _path_id(deployed_model_id, "deployed_model_id")
         response = self._client.transport.open_stream(
             "GET",
             f"{_BASE_PATH}/{deployed_model_id}/stream",
@@ -1241,6 +1248,7 @@ class AsyncDeployments:
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
+        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{deployed_model}",
@@ -1430,6 +1438,7 @@ class AsyncDeployments:
         if ptu_capacity is not None:
             max_retries = _purchase_retries(max_retries)
             headers = _idempotency_headers(extra_headers)
+        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = await self._client.transport.request_api(
             "PUT",
             f"{_BASE_PATH}/{deployed_model}/scale",
@@ -1522,6 +1531,7 @@ class AsyncDeployments:
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check.
         """
+        deployed_model = _path_id(deployed_model, "deployed_model")
         body = _renew_body(pre_paid_info, is_change, ptu_capacity, instance_id)
         resp = await self._client.transport.request_api(
             "PUT",
@@ -1609,6 +1619,7 @@ class AsyncDeployments:
         """
         if overflow_strategy not in ("enable", "disable"):
             raise ValueError("overflow_strategy must be 'enable' or 'disable'")
+        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = await self._client.transport.request_api(
             "PUT",
             f"{_BASE_PATH}/{deployed_model}/update-overflowstrategy",
@@ -1688,6 +1699,7 @@ class AsyncDeployments:
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
+        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = await self._client.transport.request_api(
             "DELETE",
             f"{_BASE_PATH}/{deployed_model}",
@@ -1727,6 +1739,7 @@ class AsyncDeployments:
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
     ) -> AsyncIterator[DeploymentEvent]:
+        deployed_model_id = _path_id(deployed_model_id, "deployed_model_id")
         response = await self._client.transport.open_stream(
             "GET",
             f"{_BASE_PATH}/{deployed_model_id}/stream",

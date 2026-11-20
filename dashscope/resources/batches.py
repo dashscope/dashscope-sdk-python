@@ -62,6 +62,7 @@ from typing import (
     Union,
     overload,
 )
+from urllib.parse import quote
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PrivateAttr
 
@@ -458,9 +459,12 @@ def _endpoint_base(config: Config) -> str:
     )
 
 
-def _require_file_id(file_id: str) -> None:
+def _require_file_id(file_id: str) -> str:
     if not file_id or not file_id.strip():
         raise ValueError("file_id must be a non-empty string")
+    # Percent-encode so a '/', '?' or '#' inside the id cannot retarget
+    # the request to another path or query.
+    return quote(file_id, safe="")
 
 
 def _validate_upload(file_path: str, purpose: str) -> None:
@@ -662,9 +666,12 @@ def _parse_batch_list(
     )
 
 
-def _require_batch_id(batch_id: str) -> None:
+def _require_batch_id(batch_id: str) -> str:
     if not batch_id or not batch_id.strip():
         raise ValueError("batch_id must be a non-empty string")
+    # Percent-encode so a '/', '?' or '#' inside the id cannot retarget
+    # the request to another path or query.
+    return quote(batch_id, safe="")
 
 
 def _batch_id(batch: Union[Batch, str]) -> str:
@@ -1002,7 +1009,7 @@ class BatchFiles:
         results. Returns :class:`FileContent` (bytes) with a ``text`` view
         and ``write_to_file``.
         """
-        _require_file_id(file_id)
+        file_id = _require_file_id(file_id)
         resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{file_id}/content",
@@ -1178,7 +1185,7 @@ class BatchFiles:
         raw: bool = False,
     ) -> Union[BatchFile, "APIResponse"]:
         """Fetch one file's metadata (``GET /files/{id}``)."""
-        _require_file_id(file_id)
+        file_id = _require_file_id(file_id)
         resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{file_id}",
@@ -1245,7 +1252,7 @@ class BatchFiles:
         raw: bool = False,
     ) -> Union[FileDeletion, "APIResponse"]:
         """Delete one file (``DELETE /files/{id}``)."""
-        _require_file_id(file_id)
+        file_id = _require_file_id(file_id)
         resp = self._client.transport.request_api(
             "DELETE",
             f"{_BASE_PATH}/{file_id}",
@@ -1392,7 +1399,7 @@ class AsyncBatchFiles:
         raw: bool = False,
     ) -> Union[FileContent, "APIResponse"]:
         """Async twin of :meth:`BatchFiles.content`."""
-        _require_file_id(file_id)
+        file_id = _require_file_id(file_id)
         resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{file_id}/content",
@@ -1563,7 +1570,7 @@ class AsyncBatchFiles:
         raw: bool = False,
     ) -> Union[BatchFile, "APIResponse"]:
         """Async twin of :meth:`BatchFiles.get`."""
-        _require_file_id(file_id)
+        file_id = _require_file_id(file_id)
         resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/{file_id}",
@@ -1630,7 +1637,7 @@ class AsyncBatchFiles:
         raw: bool = False,
     ) -> Union[FileDeletion, "APIResponse"]:
         """Async twin of :meth:`BatchFiles.delete`."""
-        _require_file_id(file_id)
+        file_id = _require_file_id(file_id)
         resp = await self._client.transport.request_api(
             "DELETE",
             f"{_BASE_PATH}/{file_id}",
@@ -1811,7 +1818,7 @@ class Batches:
 
         Only tasks created within the last 30 days are retrievable.
         """
-        _require_batch_id(batch_id)
+        batch_id = _require_batch_id(batch_id)
         resp = self._client.transport.request_api(
             "GET",
             f"{_BATCH_PATH}/{batch_id}",
@@ -2004,7 +2011,7 @@ class Batches:
         Moves the job to ``cancelling`` then ``cancelled``; work already
         done is still billed. Returns the updated :class:`Batch`.
         """
-        _require_batch_id(batch_id)
+        batch_id = _require_batch_id(batch_id)
         resp = self._client.transport.request_api(
             "POST",
             f"{_BATCH_PATH}/{batch_id}/cancel",
@@ -2372,7 +2379,7 @@ class AsyncBatches:
         raw: bool = False,
     ) -> Union[Batch, "APIResponse"]:
         """Async twin of :meth:`Batches.get`."""
-        _require_batch_id(batch_id)
+        batch_id = _require_batch_id(batch_id)
         resp = await self._client.transport.request_api(
             "GET",
             f"{_BATCH_PATH}/{batch_id}",
@@ -2553,7 +2560,7 @@ class AsyncBatches:
         raw: bool = False,
     ) -> Union[Batch, "APIResponse"]:
         """Async twin of :meth:`Batches.cancel`."""
-        _require_batch_id(batch_id)
+        batch_id = _require_batch_id(batch_id)
         resp = await self._client.transport.request_api(
             "POST",
             f"{_BATCH_PATH}/{batch_id}/cancel",

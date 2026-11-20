@@ -578,8 +578,13 @@ class CompressJobs:
         """Create a compression (quantization) job.
 
         ``model`` must be a full-parameter fine-tune supported by the
-        template; ``template_id`` is required. ``raw=True`` returns the
-        :class:`~dashscope.transport.APIResponse` before any error check.
+        template; ``template_id`` is required. The wire has no
+        idempotency key, so this defaults to ``max_retries=0`` (no
+        automatic retry) -- a retried create could otherwise spawn a
+        duplicate billed job. Passing ``max_retries`` explicitly
+        re-enables retry and the caller owns that risk. ``raw=True``
+        returns the :class:`~dashscope.transport.APIResponse` before any
+        error check.
         """
         body = _build_create_body(
             model,
@@ -602,7 +607,7 @@ class CompressJobs:
                 extra_headers,
                 extra_query,
                 extra_body,
-                max_retries=max_retries,
+                max_retries=0 if max_retries is None else max_retries,
             ),
             client=self._client,
         )
@@ -668,6 +673,7 @@ class CompressJobs:
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check.
         """
+        job_id = _job_id(job_id)
         resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/jobs/{job_id}",
@@ -895,6 +901,7 @@ class CompressJobs:
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check.
         """
+        job_id = _job_id(job_id)
         resp = self._client.transport.request_api(
             "POST",
             f"{_BASE_PATH}/jobs/{job_id}/cancel",
@@ -972,6 +979,7 @@ class CompressJobs:
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check.
         """
+        job_id = _job_id(job_id)
         resp = self._client.transport.request_api(
             "DELETE",
             f"{_BASE_PATH}/jobs/{job_id}",
@@ -1055,6 +1063,7 @@ class CompressJobs:
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check.
         """
+        job_id = _job_id(job_id)
         resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/jobs/{job_id}/logs",
@@ -1353,7 +1362,7 @@ class AsyncCompressJobs:
                 extra_headers,
                 extra_query,
                 extra_body,
-                max_retries=max_retries,
+                max_retries=0 if max_retries is None else max_retries,
             ),
             client=self._client,
         )
@@ -1415,6 +1424,7 @@ class AsyncCompressJobs:
         raw: bool = False,
     ) -> Union[CompressJob, "APIResponse"]:
         """Async twin of :meth:`CompressJobs.get`."""
+        job_id = _job_id(job_id)
         resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/jobs/{job_id}",
@@ -1633,6 +1643,7 @@ class AsyncCompressJobs:
         raw: bool = False,
     ) -> Union[JobStatus, "APIResponse"]:
         """Async twin of :meth:`CompressJobs.cancel`."""
+        job_id = _job_id(job_id)
         resp = await self._client.transport.request_api(
             "POST",
             f"{_BASE_PATH}/jobs/{job_id}/cancel",
@@ -1706,6 +1717,7 @@ class AsyncCompressJobs:
         raw: bool = False,
     ) -> Union[JobStatus, "APIResponse"]:
         """Async twin of :meth:`CompressJobs.delete`."""
+        job_id = _job_id(job_id)
         resp = await self._client.transport.request_api(
             "DELETE",
             f"{_BASE_PATH}/jobs/{job_id}",
@@ -1785,6 +1797,7 @@ class AsyncCompressJobs:
         raw: bool = False,
     ) -> Union[JobLogs, "APIResponse"]:
         """Async twin of :meth:`CompressJobs.logs`."""
+        job_id = _job_id(job_id)
         resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/jobs/{job_id}/logs",

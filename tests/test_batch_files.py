@@ -444,6 +444,45 @@ def test_empty_file_id_rejected_locally(file_id):
     client.close()
 
 
+def test_file_id_percent_encoded_in_path():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        if request.url.path.endswith("/content"):
+            return httpx.Response(200, content=_JSONL)
+        if request.method == "DELETE":
+            return httpx.Response(
+                200,
+                json={"id": "f1", "object": "file", "deleted": True},
+            )
+        return httpx.Response(200, json=_FILE_BODY)
+
+    client = _make_client(handler)
+    tricky = "file/batch?x#y"
+    client.batches.files.get(tricky)
+    client.batches.files.content(tricky)
+    client.batches.files.delete(tricky)
+    # '/', '?' and '#' stay inside one path segment instead of retargeting
+    # the request to another path or query.
+    encoded = b"/api/v1/files/file%2Fbatch%3Fx%23y"
+    assert seen == [encoded, encoded + b"/content", encoded]
+    client.close()
+
+
+async def test_async_file_id_percent_encoded_in_path():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        return httpx.Response(200, json=_FILE_BODY)
+
+    client = _make_async_client(handler)
+    await client.batches.files.get("file/batch?x#y")
+    assert seen == [b"/api/v1/files/file%2Fbatch%3Fx%23y"]
+    await client.aclose()
+
+
 # --------------------------------------------------------------------------
 # error mapping
 # --------------------------------------------------------------------------

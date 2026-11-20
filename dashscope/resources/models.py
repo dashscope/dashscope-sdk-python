@@ -473,6 +473,14 @@ def _meta_items(body: Dict[str, Any], items_key: str) -> List[Dict[str, Any]]:
     return []
 
 
+def _require_model_id(model: str) -> None:
+    # An empty model filter matches the whole catalog, so a standalone
+    # ``get("")`` would silently answer with the first entry instead of
+    # failing. Same guard as ``is_available``.
+    if not model or not model.strip():
+        raise ValueError("model must be a non-empty model id")
+
+
 def _build_limits_params(
     page_no: int,
     page_size: int,
@@ -810,6 +818,7 @@ class Models:
         # cache with list/is_available: the same (region, workspace,
         # credential, query) reads one response. ``refresh=True`` forces a
         # fresh fetch; errors and ``raw=True`` are never cached.
+        _require_model_id(model)
         resp = self._models_get(
             {"model": model, "page_no": 1, "page_size": 1},
             refresh=refresh,
@@ -1312,6 +1321,7 @@ class AsyncModels:
         # Server filters by model name via query params. Shares the catalog
         # cache with list/is_available; ``refresh=True`` forces a fresh
         # fetch, errors and ``raw=True`` are never cached.
+        _require_model_id(model)
         resp = await self._models_get(
             {"model": model, "page_no": 1, "page_size": 1},
             refresh=refresh,
@@ -1707,6 +1717,7 @@ class ModelLimits:
         no quota for ``model`` and ``raise_on_error`` is set; otherwise returns
         an empty :class:`ModelQuota` envelope. ``raw=True`` skips the check.
         """
+        _require_model_id(model)
         resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/limits",
@@ -1913,6 +1924,7 @@ class AsyncModelLimits:
         raw: bool = False,
     ) -> Union[ModelQuota, "APIResponse"]:
         """Async :meth:`ModelLimits.get`."""
+        _require_model_id(model)
         resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/limits",
@@ -2155,6 +2167,7 @@ class ModelPermissions:
         ``Model.NotExist`` when no entry matches and ``raise_on_error`` is set;
         otherwise returns an empty :class:`ModelPermission` envelope.
         """
+        _require_model_id(model)
         resp = self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/permissions",
@@ -2384,6 +2397,7 @@ class AsyncModelPermissions:
         raw: bool = False,
     ) -> Union[ModelPermission, "APIResponse"]:
         """Async :meth:`ModelPermissions.get`."""
+        _require_model_id(model)
         resp = await self._client.transport.request_api(
             "GET",
             f"{_BASE_PATH}/permissions",

@@ -336,6 +336,37 @@ def test_empty_batch_id_rejected_locally(batch_id):
     client.close()
 
 
+def test_batch_id_percent_encoded_in_path():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        return httpx.Response(200, json=_BATCH_BODY)
+
+    client = _make_client(handler)
+    tricky = "batch/a?b#c"
+    client.batches.get(tricky)
+    client.batches.cancel(tricky)
+    # '/', '?' and '#' stay inside one path segment instead of retargeting
+    # the request to another path or query.
+    encoded = b"/api/v1/batches/batch%2Fa%3Fb%23c"
+    assert seen == [encoded, encoded + b"/cancel"]
+    client.close()
+
+
+async def test_async_batch_id_percent_encoded_in_path():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        return httpx.Response(200, json=_BATCH_BODY)
+
+    client = _make_async_client(handler)
+    await client.batches.get("batch/a?b#c")
+    assert seen == [b"/api/v1/batches/batch%2Fa%3Fb%23c"]
+    await client.aclose()
+
+
 # --------------------------------------------------------------------------
 # list (cursor pagination)
 # --------------------------------------------------------------------------

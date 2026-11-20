@@ -595,3 +595,65 @@ async def test_async_wait_polls_until_terminal():
     assert job.status == "SUCCEEDED"
     assert delays == [1.0]
     await client.aclose()
+
+
+# --- retry policy + job id guards ------------------------------------------
+
+
+def test_create_default_no_retry():
+    attempts = []
+
+    def handler(request):
+        attempts.append(1)
+        return httpx.Response(503, json={"message": "busy"})
+
+    client = _make_client(handler)
+    with pytest.raises(DashScopeError):
+        client.fine_tunes.compress.jobs.create(
+            model="qwen3.5-flash-ft",
+            template_id="tpl-1",
+        )
+    # No idempotency key on the wire -> create must not auto-retry.
+    assert len(attempts) == 1
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_create_default_no_retry():
+    attempts = []
+
+    def handler(request):
+        attempts.append(1)
+        return httpx.Response(503, json={"message": "busy"})
+
+    client = _make_async_client(handler)
+    with pytest.raises(DashScopeError):
+        await client.fine_tunes.compress.jobs.create(
+            model="qwen3.5-flash-ft",
+            template_id="tpl-1",
+        )
+    assert len(attempts) == 1
+    await client.aclose()
+
+
+@pytest.mark.parametrize("op", ["get", "cancel", "delete", "logs"])
+def test_empty_job_id_rejected_before_wire(op):
+    def handler(request):
+        raise AssertionError("empty job id must not reach the wire")
+
+    client = _make_client(handler)
+    with pytest.raises(DashScopeError, match="job id required"):
+        getattr(client.fine_tunes.compress.jobs, op)("")
+    client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("op", ["get", "cancel", "delete", "logs"])
+async def test_async_empty_job_id_rejected_before_wire(op):
+    def handler(request):
+        raise AssertionError("empty job id must not reach the wire")
+
+    client = _make_async_client(handler)
+    with pytest.raises(DashScopeError, match="job id required"):
+        await getattr(client.fine_tunes.compress.jobs, op)("")
+    await client.aclose()

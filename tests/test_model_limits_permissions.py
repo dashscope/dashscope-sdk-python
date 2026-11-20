@@ -414,3 +414,30 @@ async def test_async_meta_page_rejects_sync_traversal():
     page = await client.models.limits.list(page_no=1, page_size=2)
     with pytest.raises(TypeError, match="iter_pages_async"):
         list(page.iter_pages())
+
+
+# --- empty-id guards -------------------------------------------------------
+
+
+@pytest.mark.parametrize("model", ["", "   "])
+@pytest.mark.parametrize("sub", ["limits", "permissions"])
+def test_meta_get_empty_id_rejected_before_wire(sub, model):
+    # An empty model filter matches the whole catalog, so get("") would
+    # silently answer with the first entry instead of failing.
+    def handler(request):
+        raise AssertionError("empty model id must not reach the wire")
+
+    client = _make_client(handler)
+    with pytest.raises(ValueError, match="non-empty model id"):
+        getattr(client.models, sub).get(model)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sub", ["limits", "permissions"])
+async def test_async_meta_get_empty_id_rejected_before_wire(sub):
+    def handler(request):
+        raise AssertionError("empty model id must not reach the wire")
+
+    client = _make_async_client(handler)
+    with pytest.raises(ValueError, match="non-empty model id"):
+        await getattr(client.models, sub).get("")

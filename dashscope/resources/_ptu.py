@@ -46,6 +46,7 @@ from typing import (
     Union,
     overload,
 )
+from urllib.parse import quote
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -262,6 +263,18 @@ def _purchase_retries(max_retries: Optional[int]) -> int:
     return 0 if max_retries is None else max_retries
 
 
+def _path_id(value: str, name: str) -> str:
+    """Validate one URL path id and percent-encode it.
+
+    An empty id would degenerate the URL to a collection path (including
+    on mutating endpoints); a ``/``, ``?`` or ``#`` inside an id would
+    silently retarget the request. Encoding keeps the id one segment.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return quote(value, safe="")
+
+
 def _ptu_capacity_body(capacity: Any) -> Dict[str, Any]:
     """Normalize and validate a ``ptu_capacity`` write payload."""
     if isinstance(capacity, PtuCapacity):
@@ -466,7 +479,8 @@ class CapacityInstances:
         self._client = client
 
     def _path(self, deployed_model: str) -> str:
-        return f"{_BASE_PATH}/{deployed_model}/capacity-instances"
+        model = _path_id(deployed_model, "deployed_model")
+        return f"{_BASE_PATH}/{model}/capacity-instances"
 
     @overload
     def create(
@@ -720,6 +734,7 @@ class CapacityInstances:
         The ModelCode and instance id must match; a post-paid repurchase
         reuses the same instance id.
         """
+        instance_id = _path_id(instance_id, "instance_id")
         resp = self._client.transport.request_api(
             "GET",
             f"{self._path(deployed_model)}/{instance_id}",
@@ -807,6 +822,7 @@ class CapacityInstances:
         ``can_scale`` first; an 8-hour trial instance cannot scale.
         Defaults to ``max_retries=0`` with an idempotency key.
         """
+        instance_id = _path_id(instance_id, "instance_id")
         body = _instance_scale_body(ptu_capacity, order_type)
         resp = self._client.transport.request_api(
             "PUT",
@@ -900,6 +916,7 @@ class CapacityInstances:
         ``can_renew`` first; an 8-hour trial instance cannot renew.
         Defaults to ``max_retries=0`` with an idempotency key.
         """
+        instance_id = _path_id(instance_id, "instance_id")
         body = _renew_body(pre_paid_info, is_change, ptu_capacity)
         resp = self._client.transport.request_api(
             "PUT",
@@ -988,6 +1005,7 @@ class CapacityInstances:
         (PREPAID_UNSUBSCRIBE_REQUIRED). Defaults to ``max_retries=0`` with
         an idempotency key. ``reason`` is sent as a query parameter.
         """
+        instance_id = _path_id(instance_id, "instance_id")
         params: Dict[str, Any] = {}
         if reason is not None:
             params["reason"] = reason
@@ -1032,9 +1050,9 @@ class CapacityOperations:
         self._client = client
 
     def _path(self, deployed_model: str, operation_id: str) -> str:
-        return (
-            f"{_BASE_PATH}/{deployed_model}/capacity-operations/{operation_id}"
-        )
+        model = _path_id(deployed_model, "deployed_model")
+        operation = _path_id(operation_id, "operation_id")
+        return f"{_BASE_PATH}/{model}/capacity-operations/{operation}"
 
     @overload
     def get(
@@ -1188,7 +1206,8 @@ class AsyncCapacityInstances:
         self._client = client
 
     def _path(self, deployed_model: str) -> str:
-        return f"{_BASE_PATH}/{deployed_model}/capacity-instances"
+        model = _path_id(deployed_model, "deployed_model")
+        return f"{_BASE_PATH}/{model}/capacity-instances"
 
     @overload
     async def create(
@@ -1426,6 +1445,7 @@ class AsyncCapacityInstances:
         raw: bool = False,
     ) -> Union[CapacityInstance, "APIResponse"]:
         """Fetch one capacity instance (deleted instances stay queryable)."""
+        instance_id = _path_id(instance_id, "instance_id")
         resp = await self._client.transport.request_api(
             "GET",
             f"{self._path(deployed_model)}/{instance_id}",
@@ -1508,6 +1528,7 @@ class AsyncCapacityInstances:
         raw: bool = False,
     ) -> Union[CapacityOperation, "APIResponse"]:
         """Resize one instance to an ABSOLUTE ``ptu_capacity``."""
+        instance_id = _path_id(instance_id, "instance_id")
         body = _instance_scale_body(ptu_capacity, order_type)
         resp = await self._client.transport.request_api(
             "PUT",
@@ -1596,6 +1617,7 @@ class AsyncCapacityInstances:
         raw: bool = False,
     ) -> Union[CapacityOperation, "APIResponse"]:
         """Renew one pre-paid instance (no ``order_type`` on renew)."""
+        instance_id = _path_id(instance_id, "instance_id")
         body = _renew_body(pre_paid_info, is_change, ptu_capacity)
         resp = await self._client.transport.request_api(
             "PUT",
@@ -1678,6 +1700,7 @@ class AsyncCapacityInstances:
         raw: bool = False,
     ) -> Union[CapacityOperation, "APIResponse"]:
         """Release one instance (queued asynchronously, no JSON body)."""
+        instance_id = _path_id(instance_id, "instance_id")
         params: Dict[str, Any] = {}
         if reason is not None:
             params["reason"] = reason
@@ -1718,9 +1741,9 @@ class AsyncCapacityOperations:
         self._client = client
 
     def _path(self, deployed_model: str, operation_id: str) -> str:
-        return (
-            f"{_BASE_PATH}/{deployed_model}/capacity-operations/{operation_id}"
-        )
+        model = _path_id(deployed_model, "deployed_model")
+        operation = _path_id(operation_id, "operation_id")
+        return f"{_BASE_PATH}/{model}/capacity-operations/{operation}"
 
     @overload
     async def get(

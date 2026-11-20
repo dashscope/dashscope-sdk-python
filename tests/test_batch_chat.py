@@ -460,3 +460,65 @@ async def test_async_timeout_validation(clean_env):
             timeout=3601,
         )
     await client.aclose()
+
+
+# --------------------------------------------------------------------------
+# retry policy (billed POST: scheduled-or-not is unknowable after a drop)
+# --------------------------------------------------------------------------
+
+
+def test_create_default_no_retry(clean_env):
+    attempts = []
+
+    def handler(request):
+        attempts.append(1)
+        return httpx.Response(503, json={"message": "busy"})
+
+    client = _make_client(handler)
+    with pytest.raises(DashScopeError):
+        client.batch_chat.completions.create(model="qwen-plus", messages="hi")
+    # The transport cannot tell whether the request was already scheduled
+    # (and billed) -> create must not auto-retry on the client default.
+    assert len(attempts) == 1
+    client.close()
+
+
+def test_create_explicit_max_retries_retries(clean_env, monkeypatch):
+    attempts = []
+
+    def handler(request):
+        attempts.append(1)
+        if len(attempts) < 3:
+            return httpx.Response(503, json={"message": "busy"})
+        return httpx.Response(200, json=_COMPLETION)
+
+    from dashscope.transport import http as transport_http
+
+    monkeypatch.setattr(transport_http, "_sleep", lambda seconds: None)
+    client = _make_client(handler)
+    resp = client.batch_chat.completions.create(
+        model="qwen-plus",
+        messages="hi",
+        max_retries=2,
+    )
+    assert isinstance(resp, ChatCompletion)
+    assert len(attempts) == 3
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_create_default_no_retry(clean_env):
+    attempts = []
+
+    def handler(request):
+        attempts.append(1)
+        return httpx.Response(503, json={"message": "busy"})
+
+    client = _make_async_client(handler)
+    with pytest.raises(DashScopeError):
+        await client.batch_chat.completions.create(
+            model="qwen-plus",
+            messages="hi",
+        )
+    assert len(attempts) == 1
+    await client.aclose()
