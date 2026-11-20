@@ -213,6 +213,11 @@ def _is_valid_jsonl(file_path: str) -> bool:
     try:
         with open(file_path, encoding="utf-8") as f:
             for line in f:
+                # Blank lines are skipped, matching the batch row scanner
+                # (batches._validate_input_rows) so validate_input and the
+                # upload gate agree on the same file.
+                if not line.strip():
+                    continue
                 try:
                     json.loads(line)
                 except json.decoder.JSONDecodeError:

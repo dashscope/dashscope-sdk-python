@@ -31,6 +31,7 @@ not require a ``workspace``.
 from __future__ import annotations
 
 import os
+import re
 import threading
 import warnings
 from dataclasses import dataclass
@@ -234,10 +235,66 @@ def _legacy_fallback(host: str) -> str:
     return host
 
 
+# RFC1123 DNS label: lowercase letters/digits/hyphen, 1-63 chars, no
+# leading/trailing hyphen. ``region`` and ``workspace`` are interpolated
+# into the gateway host (``{workspace}.{region}.maas.aliyuncs.com``), so
+# any character outside this set (dot, slash, ``@``, uppercase, ...) could
+# rewrite the host and must be rejected before it reaches a URL.
+_SAFE_LABEL_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
+
+
+def _is_safe_region_label(region: str) -> bool:
+    return isinstance(region, str) and bool(_SAFE_LABEL_RE.match(region))
+
+
 def _validate_region(region: str) -> str:
-    if region not in VALID_REGIONS:
+    """Format-check a region that may be interpolated into a gateway host.
+
+    The static whitelist is no longer a hard gate -- it would block newly
+    launched regions before an SDK upgrade. Membership is decided by
+    :func:`_gateway_region` from the workspace/base_url context; here we
+    only reject labels that could rewrite the host.
+    """
+    if not _is_safe_region_label(region):
         raise ValueError(
-            f"invalid region {region!r}, expected one of {VALID_REGIONS}",
+            f"invalid region {region!r}: expected a lowercase DNS label "
+            f"(letters, digits, hyphens), e.g. 'cn-beijing'",
+        )
+    return region
+
+
+def _gateway_region(region: str, workspace: Optional[str]) -> str:
+    """Apply the region allowance policy for a default gateway host.
+
+    - workspace configured: any safe label passes; an unknown region
+      (not in ``VALID_REGIONS``) warns instead of rejecting, so a newly
+      launched region works without an SDK upgrade.
+    - no workspace (legacy shared gateway): the region must have a known
+      gateway mapping, otherwise the shared endpoint cannot be built.
+
+    The workspace is host-interpolated too, so it must also be a safe
+    label. An explicit ``base_url`` bypasses this entirely (the caller
+    never builds a default host).
+    """
+    region = _validate_region(region)
+    if workspace:
+        if not _is_safe_region_label(workspace):
+            raise ValueError(
+                f"invalid workspace {workspace!r}: expected a lowercase "
+                f"DNS label (letters, digits, hyphens)",
+            )
+        if region not in VALID_REGIONS:
+            warnings.warn(
+                f"region {region!r} is not a known DashScope region; "
+                f"passing it through to the workspace gateway. Ensure "
+                f"the workspace and API key belong to this region.",
+                UserWarning,
+                stacklevel=2,
+            )
+    elif region not in LEGACY_GATEWAY_HOSTS:
+        raise ValueError(
+            f"invalid region {region!r}: no shared gateway mapping; "
+            f"configure a workspace or an explicit base_url",
         )
     return region
 
@@ -261,7 +318,7 @@ def _protocol_default_base_url(
     workspace: Optional[str],
     region: Optional[str] = None,
 ) -> str:
-    region = _validate_region(region or DEFAULT_REGION)
+    region = _gateway_region(region or DEFAULT_REGION, workspace)
     if workspace:
         host = WORKSPACE_GATEWAY_TEMPLATE.format(
             workspace=workspace,
@@ -294,6 +351,26 @@ def compatible_mode_base_url(
     return _protocol_default_base_url("openai", workspace, region)
 
 
+def anthropic_base_url(
+    workspace: Optional[str],
+    region: Optional[str] = None,
+    configured_base_url: Optional[str] = None,
+) -> str:
+    """Endpoint root for the Anthropic-compatible Messages API.
+
+    Messages lives under ``/apps/anthropic`` (the wire path is
+    ``/v1/messages`` beneath it), independent of the chat ``protocol``
+    setting -- the same rule ``compatible_mode_base_url`` applies. An
+    explicit base_url stays the service root (callers point it at
+    ``.../apps/anthropic``); otherwise the default gateway host carries
+    the fixed anthropic path. The root deliberately does not end in
+    ``/v1`` so clients appending ``/v1/messages`` do not double it.
+    """
+    if configured_base_url is not None:
+        return configured_base_url
+    return _protocol_default_base_url("anthropic", workspace, region)
+
+
 def workspace_ws_url(
     workspace: Optional[str],
     path: str,
@@ -307,7 +384,7 @@ def workspace_ws_url(
     gateway (``wss://dashscope.aliyuncs.com`` for cn-beijing) with a
     warning.
     """
-    region = _validate_region(region or DEFAULT_REGION)
+    region = _gateway_region(region or DEFAULT_REGION, workspace)
     if workspace:
         host = WORKSPACE_WS_GATEWAY_TEMPLATE.format(
             workspace=workspace,
@@ -443,6 +520,14 @@ class Settings:
     @region.setter
     def region(self, value: str) -> None:
         _validate_region(value)
+        if value not in VALID_REGIONS:
+            warnings.warn(
+                f"region {value!r} is not a known DashScope region; it "
+                f"will pass through to the workspace gateway (or require "
+                f"an explicit base_url / known shared-gateway mapping).",
+                UserWarning,
+                stacklevel=2,
+            )
         with self._lock:
             self._explicit["region"] = value
 

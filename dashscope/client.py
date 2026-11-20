@@ -17,17 +17,22 @@ from dashscope._config import Config, resolve_config
 from dashscope.protocols import ChatProtocol, get_protocol
 from dashscope.resources.apps import Apps, AsyncApps
 from dashscope.resources.audio import AsyncAudio, Audio
+from dashscope.resources.batch_chat import AsyncBatchChat, BatchChat
+from dashscope.resources.batches import AsyncBatches, Batches
 from dashscope.resources.chat import AsyncChat, Chat
+from dashscope.resources.conversations import AsyncConversations, Conversations
 from dashscope.resources.decision import AsyncDecision, Decision
 from dashscope.resources.deployments import AsyncDeployments, Deployments
 from dashscope.resources.embeddings import AsyncEmbeddings, Embeddings
 from dashscope.resources.files import AsyncFiles, Files
 from dashscope.resources.fine_tunes import AsyncFineTunes, FineTunes
 from dashscope.resources.images import AsyncImages, Images
+from dashscope.resources.messages import AsyncMessages, Messages
 from dashscope.resources.models import AsyncModels, Models
 from dashscope.resources.multimodal import AsyncMultimodal, Multimodal
 from dashscope.resources.rerank import AsyncRerank, Rerank
 from dashscope.resources.reinforcement_learning import AsyncRl, Rl
+from dashscope.resources.responses import AsyncResponses, Responses
 from dashscope.resources.tingwu import AsyncTingWu, TingWu
 from dashscope.resources.tokenization import AsyncTokenization, Tokenization
 from dashscope.resources.videos import AsyncVideos, Videos
@@ -135,6 +140,11 @@ class Client:
         self.decision = Decision(self)
         self.tokenization = Tokenization(self)
         self.files = Files(self)
+        self.batches = Batches(self)
+        self.batch_chat = BatchChat(self)
+        self.responses = Responses(self)
+        self.conversations = Conversations(self)
+        self.messages = Messages(self)
         self.models = Models(self)
         self.images = Images(self)
         self.videos = Videos(self)
@@ -397,6 +407,11 @@ class AsyncClient:
         self.decision = AsyncDecision(self)
         self.tokenization = AsyncTokenization(self)
         self.files = AsyncFiles(self)
+        self.batches = AsyncBatches(self)
+        self.batch_chat = AsyncBatchChat(self)
+        self.responses = AsyncResponses(self)
+        self.conversations = AsyncConversations(self)
+        self.messages = AsyncMessages(self)
         self.models = AsyncModels(self)
         self.images = AsyncImages(self)
         self.videos = AsyncVideos(self)

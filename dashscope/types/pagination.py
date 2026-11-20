@@ -98,6 +98,10 @@ class BasePage(ResponseBase, Generic[T]):
     # ``page_size``; see :meth:`bind_pagination`.
     _requested_no: Optional[int] = PrivateAttr(default=None)
     _requested_size: Optional[int] = PrivateAttr(default=None)
+    # Set by the parser when the gateway omitted ``total``: offset arithmetic
+    # against a len(items) fallback would stop after the first full page, so
+    # traversal continues while pages come back full instead.
+    _total_unknown: bool = PrivateAttr(default=False)
 
     page_no: int = 1
     page_size: int = 10
@@ -160,8 +164,13 @@ class BasePage(ResponseBase, Generic[T]):
 
         Offset arithmetic only: it trusts the server's ``total_count`` and
         does not consult ``_fetch_next``, so it stays meaningful on a page
-        built without a callback (e.g. parsed straight from a body).
+        built without a callback (e.g. parsed straight from a body). When
+        the gateway omitted ``total`` (``_total_unknown``), a full page
+        implies more data and a short/empty page ends the walk -- equating
+        the missing total with the first page's length would truncate.
         """
+        if self._total_unknown:
+            return len(self.items) >= self._cursor_size
         return self._cursor_no * self._cursor_size < self.total_count
 
     def next_page(self) -> Optional["BasePage[T]"]:

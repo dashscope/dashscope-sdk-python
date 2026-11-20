@@ -1560,6 +1560,67 @@ def test_live38_raw_send_event_bypasses_helper_validation(
     assert ws.close_calls == ws.recv_calls == 0
 
 
+@pytest.mark.parametrize("model", _LIVE38_MODELS)
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Parse RealtimeEvent error: Common error!",
+        "Invalid value for field 'session.output_modalities'.",
+    ],
+    ids=["legacy-generic", "field-specific"],
+)
+def test_live38_invalid_output_modalities_surfaces_server_message(
+    model_opened,
+    message,
+):
+    # Regression: the server replaced the generic parse error with a
+    # field-specific rejection for invalid output_modalities; the SDK
+    # must pass the server message through and keep the session usable.
+    session, ws = model_opened
+    session.update_session(output_modalities=["video"])
+    request_id = json.loads(ws.sent[-1])["event_id"]
+    assert _payloads(ws) == [
+        {
+            "type": "session.update",
+            "session": {"output_modalities": ["video"]},
+        },
+    ]
+    rejected = {
+        "type": "error",
+        "event_id": "server-error",
+        "error": {
+            "type": "invalid_request_error",
+            "code": "InvalidParameter",
+            "message": message,
+            "event_id": request_id,
+        },
+    }
+    ws.inbox.append(rejected)
+    with pytest.raises(BadRequestError, match=re.escape(message)) as caught:
+        session.recv_event()
+    assert caught.value.code == "InvalidParameter"
+    assert caught.value.body == rejected
+    assert session.last_message == rejected
+    assert ws.close_calls == 0
+
+    session.update_session(output_modalities=["text", "audio"])
+    assert _payloads(ws)[-1] == {
+        "type": "session.update",
+        "session": {"output_modalities": ["text", "audio"]},
+    }
+    updated = {
+        "type": "session.updated",
+        "session": {
+            "id": "live-session",
+            "output_modalities": ["text", "audio"],
+        },
+    }
+    ws.inbox.append(updated)
+    assert session.recv_event() == updated
+    assert session.session_id == "live-session"
+    assert ws.close_calls == 0
+
+
 @pytest.mark.parametrize("model", _QWEN_AUDIO_MODELS)
 @pytest.mark.parametrize(
     "options, expected",
