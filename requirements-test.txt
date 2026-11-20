@@ -15,3 +15,6 @@ rich>=13.0.0
 dashscope-agenticx[tui]>=1.0.0,<2; python_version >= "3.10"
 PyYAML>=6.0
 tomli>=2.0; python_version < "3.11"
+# Optional [management] extra exercised by the ManagementClient tests
+alibabacloud_credentials>=1.0.0
+alibabacloud_openapi_util>=0.2.0
