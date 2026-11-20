@@ -131,7 +131,9 @@ def test_management_logger_carries_redaction_filter():
     # Idempotent: a second fetch must not stack duplicate filters.
     again = get_management_logger("management.test")
     assert again is logger
-    assert sum(isinstance(f, SecretRedactionFilter) for f in logger.filters) == 1
+    assert (
+        sum(isinstance(f, SecretRedactionFilter) for f in logger.filters) == 1
+    )
 
 
 def test_management_logger_masks_short_sk_token(caplog):
