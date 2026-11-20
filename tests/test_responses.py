@@ -358,6 +358,48 @@ def test_get_requires_non_empty_id():
     client.close()
 
 
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_empty_response_id_rejected_before_wire(bad):
+    def handler(request):
+        raise AssertionError("request must not reach the wire")
+
+    client = _make_client(handler)
+    for call in (
+        client.responses.get,
+        client.responses.delete,
+        client.responses.input_items.list,
+    ):
+        with pytest.raises(ValueError, match="response_id"):
+            call(bad)
+    client.close()
+
+
+def test_response_id_percent_encoded_in_path():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        if request.method == "DELETE":
+            return httpx.Response(
+                200,
+                json={"id": "resp/a?b#c", "deleted": True},
+            )
+        if request.url.path.endswith("/input_items"):
+            return httpx.Response(200, json=_INPUT_ITEMS_BODY)
+        return httpx.Response(200, json=_RESPONSE_BODY)
+
+    client = _make_client(handler)
+    tricky = "resp/a?b#c"
+    client.responses.get(tricky)
+    client.responses.delete(tricky)
+    client.responses.input_items.list(tricky)
+    # '/', '?' and '#' stay inside one path segment instead of retargeting
+    # the request to another path or query.
+    encoded = b"/api/v1/responses/resp%2Fa%3Fb%23c"
+    assert seen == [encoded, encoded, encoded + b"/input_items"]
+    client.close()
+
+
 def test_delete_returns_id_and_deleted_no_object():
     def handler(request):
         assert request.method == "DELETE"
@@ -860,4 +902,36 @@ async def test_async_routing_default_gateway(clean_env):
     )
     await client.responses.get("resp_1")
     assert urls == [_WS_HOST + _COMPAT_RESPONSES + "/resp_1"]
+    await client.aclose()
+
+
+async def test_async_response_id_percent_encoded_in_path():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        if request.url.path.endswith("/input_items"):
+            return httpx.Response(200, json=_INPUT_ITEMS_BODY)
+        return httpx.Response(200, json=_RESPONSE_BODY)
+
+    client = _make_async_client(handler)
+    await client.responses.get("resp/a?b#c")
+    await client.responses.input_items.list("resp/a?b#c")
+    encoded = b"/api/v1/responses/resp%2Fa%3Fb%23c"
+    assert seen == [encoded, encoded + b"/input_items"]
+    await client.aclose()
+
+
+@pytest.mark.parametrize("bad", ["", "   "])
+async def test_async_empty_response_id_rejected_before_wire(bad):
+    def handler(request):
+        raise AssertionError("request must not reach the wire")
+
+    client = _make_async_client(handler)
+    with pytest.raises(ValueError, match="response_id"):
+        await client.responses.get(bad)
+    with pytest.raises(ValueError, match="response_id"):
+        await client.responses.delete(bad)
+    with pytest.raises(ValueError, match="response_id"):
+        await client.responses.input_items.list(bad)
     await client.aclose()

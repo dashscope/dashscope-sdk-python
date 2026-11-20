@@ -38,6 +38,7 @@ from typing import (
     Sequence,
     Union,
 )
+from urllib.parse import quote
 
 from pydantic import BaseModel
 
@@ -93,14 +94,18 @@ def _conversation_id(value: Union[Conversation, str]) -> str:
     cid = value.id if isinstance(value, Conversation) else value
     if not cid or not str(cid).strip():
         raise ValueError("conversation_id must be a non-empty string")
-    return str(cid)
+    # Percent-encode so a '/', '?' or '#' inside the id cannot retarget
+    # the request to another path or query.
+    return quote(str(cid), safe="")
 
 
 def _item_id(value: Union[ConversationItem, str]) -> str:
     iid = value.id if isinstance(value, ConversationItem) else value
     if not iid or not str(iid).strip():
         raise ValueError("item_id must be a non-empty string")
-    return str(iid)
+    # Percent-encode so a '/', '?' or '#' inside the id cannot retarget
+    # the request to another path or query.
+    return quote(str(iid), safe="")
 
 
 def _validate_metadata(

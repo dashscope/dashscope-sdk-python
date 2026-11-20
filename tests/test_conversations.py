@@ -709,3 +709,142 @@ async def test_async_raw():
     assert isinstance(raw, APIResponse)
     assert raw.json()["id"] == _CONV_ID
     await client.aclose()
+
+
+# --------------------------------------------------------------------------
+# path-id guards (percent-encoding, rejection before the wire)
+# --------------------------------------------------------------------------
+
+_TRICKY_CONV = "conv/a?b#c"
+_TRICKY_ITEM = "msg/x?y#z"
+_ENCODED_CONV = b"/api/v1/conversations/conv%2Fa%3Fb%23c"
+_ENCODED_ITEM = b"/items/msg%2Fx%3Fy%23z"
+_VALID_ITEMS = [
+    {
+        "type": "message",
+        "role": "user",
+        "content": [{"type": "input_text", "text": "hi"}],
+    },
+]
+
+
+def _id_guard_handler(seen):
+    def handler(request):
+        seen.append(request.url.raw_path)
+        path = request.url.path
+        if path.endswith("/items"):
+            body = (
+                _ITEMS_CREATE_BODY
+                if request.method == "POST"
+                else _ITEMS_LIST_BODY
+            )
+        elif "/items/" in path:
+            body = (
+                _ITEM_DELETED_BODY
+                if request.method == "DELETE"
+                else _ITEM_BODY
+            )
+        elif request.method == "DELETE":
+            body = _CONV_DELETED_BODY
+        else:
+            body = _CONVERSATION_BODY
+        return httpx.Response(200, json=body)
+
+    return handler
+
+
+def test_conversation_and_item_ids_percent_encoded_in_path():
+    seen = []
+    client = _make_client(_id_guard_handler(seen))
+    client.conversations.get(_TRICKY_CONV)
+    client.conversations.update(_TRICKY_CONV, metadata={"topic": "x"})
+    client.conversations.delete(_TRICKY_CONV)
+    client.conversations.items.create(_TRICKY_CONV, items=_VALID_ITEMS)
+    client.conversations.items.list(_TRICKY_CONV)
+    client.conversations.items.get(_TRICKY_CONV, _TRICKY_ITEM)
+    client.conversations.items.delete(_TRICKY_CONV, _TRICKY_ITEM)
+    # '/', '?' and '#' stay inside one path segment instead of retargeting
+    # the request to another path or query.
+    assert seen == [
+        _ENCODED_CONV,
+        _ENCODED_CONV,
+        _ENCODED_CONV,
+        _ENCODED_CONV + b"/items",
+        _ENCODED_CONV + b"/items",
+        _ENCODED_CONV + _ENCODED_ITEM,
+        _ENCODED_CONV + _ENCODED_ITEM,
+    ]
+    client.close()
+
+
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_empty_conversation_id_rejected_before_wire(bad):
+    def handler(request):
+        raise AssertionError("request must not reach the wire")
+
+    client = _make_client(handler)
+    with pytest.raises(ValueError, match="conversation_id"):
+        client.conversations.get(bad)
+    with pytest.raises(ValueError, match="conversation_id"):
+        client.conversations.update(bad, metadata={"k": "v"})
+    with pytest.raises(ValueError, match="conversation_id"):
+        client.conversations.delete(bad)
+    with pytest.raises(ValueError, match="conversation_id"):
+        client.conversations.items.create(bad, items=_VALID_ITEMS)
+    with pytest.raises(ValueError, match="conversation_id"):
+        client.conversations.items.list(bad)
+    with pytest.raises(ValueError, match="conversation_id"):
+        client.conversations.items.get(bad, _ITEM_ID)
+    with pytest.raises(ValueError, match="conversation_id"):
+        client.conversations.items.delete(bad, _ITEM_ID)
+    client.close()
+
+
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_empty_item_id_rejected_before_wire(bad):
+    def handler(request):
+        raise AssertionError("request must not reach the wire")
+
+    client = _make_client(handler)
+    with pytest.raises(ValueError, match="item_id"):
+        client.conversations.items.get(_CONV_ID, bad)
+    with pytest.raises(ValueError, match="item_id"):
+        client.conversations.items.delete(_CONV_ID, bad)
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_ids_percent_encoded_in_path():
+    seen = []
+    client = _make_async_client(_id_guard_handler(seen))
+    await client.conversations.get(_TRICKY_CONV)
+    await client.conversations.items.get(_TRICKY_CONV, _TRICKY_ITEM)
+    await client.conversations.items.delete(_TRICKY_CONV, _TRICKY_ITEM)
+    assert seen == [
+        _ENCODED_CONV,
+        _ENCODED_CONV + _ENCODED_ITEM,
+        _ENCODED_CONV + _ENCODED_ITEM,
+    ]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["", "   "])
+async def test_async_empty_ids_rejected_before_wire(bad):
+    def handler(request):
+        raise AssertionError("request must not reach the wire")
+
+    client = _make_async_client(handler)
+    with pytest.raises(ValueError, match="conversation_id"):
+        await client.conversations.get(bad)
+    with pytest.raises(ValueError, match="conversation_id"):
+        await client.conversations.update(bad, metadata={"k": "v"})
+    with pytest.raises(ValueError, match="conversation_id"):
+        await client.conversations.delete(bad)
+    with pytest.raises(ValueError, match="conversation_id"):
+        await client.conversations.items.list(bad)
+    with pytest.raises(ValueError, match="item_id"):
+        await client.conversations.items.get(_CONV_ID, bad)
+    with pytest.raises(ValueError, match="item_id"):
+        await client.conversations.items.delete(_CONV_ID, bad)
+    await client.aclose()

@@ -40,6 +40,7 @@ from typing import (
     Union,
     overload,
 )
+from urllib.parse import quote
 
 from pydantic import BaseModel
 
@@ -100,7 +101,9 @@ def _response_id(value: Union[Response, str]) -> str:
     rid = value.id if isinstance(value, Response) else value
     if not rid or not str(rid).strip():
         raise ValueError("response_id must be a non-empty string")
-    return str(rid)
+    # Percent-encode so a '/', '?' or '#' inside the id cannot retarget
+    # the request to another path or query.
+    return quote(str(rid), safe="")
 
 
 def _normalize_config(
