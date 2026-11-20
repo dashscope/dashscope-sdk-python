@@ -13,11 +13,15 @@ key value never reaches a log line, a traceback, or ``err.body``.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
+
+from dashscope._logging import get_logger
 
 __all__ = [
     "REDACTED",
     "SecretRedactionFilter",
+    "get_management_logger",
     "mask_secret",
     "redact_body",
 ]
@@ -79,7 +83,8 @@ class SecretRedactionFilter(logging.Filter):
     Key-oriented redaction (``redact_body``) cannot catch a secret that
     was interpolated into a free-text message, so this filter also masks
     ``sk-`` prefixed API key values wherever they appear in the formatted
-    record. Attached to the management logger only.
+    record. Attached to every management logger via
+    ``get_management_logger``.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -90,11 +95,27 @@ class SecretRedactionFilter(logging.Filter):
         return True
 
 
+# Word-bounded so keys adjacent to '=' or embedded in JSON are caught
+# without touching lookalikes such as "task-123". {5,} keeps the old
+# space-split threshold (token length > 7).
+_SK_RE = re.compile(r"\bsk-[A-Za-z0-9_-]{5,}")
+
+
 def _mask_sk_tokens(message: str) -> str:
-    out = []
-    for token in message.split(" "):
-        if token.startswith("sk-") and len(token) > 7:
-            out.append(mask_secret(token))
-        else:
-            out.append(token)
-    return " ".join(out)
+    return _SK_RE.sub(lambda m: mask_secret(m.group()), message)
+
+
+_SECRET_FILTER = SecretRedactionFilter()
+
+
+def get_management_logger(name: str) -> logging.Logger:
+    """A core SDK logger with the management secret filter attached.
+
+    Logger-level filters only run on the emitting logger (not on records
+    propagated from children), so every management module must fetch its
+    logger through here rather than calling ``get_logger`` directly.
+    """
+    logger = get_logger(name)
+    if _SECRET_FILTER not in logger.filters:
+        logger.addFilter(_SECRET_FILTER)
+    return logger

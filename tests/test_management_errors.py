@@ -122,6 +122,16 @@ def test_code_takes_precedence_over_status():
     assert isinstance(management_error(env), RateLimitError)
 
 
+def test_non_string_code_falls_back_to_status():
+    # A numeric code must not crash the crosswalk with AttributeError;
+    # _class_by_code coerces like _is_success does.
+    env = read_envelope(
+        {"success": False, "code": 500, "message": "boom"},
+        500,
+    )
+    assert isinstance(management_error(env), InternalServerError)
+
+
 def test_gateway_error_without_success_flag():
     body = {
         "Code": "InvalidAccessKeyId",

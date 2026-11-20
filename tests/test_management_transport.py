@@ -11,6 +11,7 @@ import pytest
 pytest.importorskip("alibabacloud_credentials")
 pytest.importorskip("alibabacloud_openapi_util")
 
+from dashscope._config import DEFAULT_TIMEOUT  # noqa: E402
 from dashscope.errors import APIConnectionError  # noqa: E402
 from dashscope.management import _transport  # noqa: E402
 from dashscope.management import (  # noqa: E402
@@ -247,6 +248,104 @@ def test_connection_error_maps_to_dashscope_error():
     client.close()
 
 
+def test_write_method_not_retried_on_5xx():
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return httpx.Response(500, json={"code": "InternalError"})
+
+    client = make_client(handler, max_retries=2)
+    resp = client.transport.request(
+        "POST",
+        "/modelstudio/workspaces",
+        action="CreateWorkspace",
+        body={"name": "prod"},
+    )
+    assert resp.status_code == 500
+    assert calls["n"] == 1
+    client.close()
+
+
+def test_write_method_not_retried_on_transport_error():
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        raise httpx.ConnectError("boom", request=request)
+
+    client = make_client(handler, max_retries=2)
+    with pytest.raises(APIConnectionError):
+        client.transport.request(
+            "DELETE",
+            "/modelstudio/apikeys/1",
+            action="DeleteApiKey",
+        )
+    assert calls["n"] == 1
+    client.close()
+
+
+# --- timeout ----------------------------------------------------------------
+
+
+def test_per_call_timeout_overrides_client_timeout():
+    seen = []
+    client = make_client(_capture_handler(seen), timeout=30.0)
+    client.workspaces.list(timeout=1.5)
+    assert seen[0].extensions["timeout"]["read"] == 1.5
+    client.close()
+
+
+def test_client_timeout_applies_without_per_call_override():
+    seen = []
+    client = make_client(_capture_handler(seen), timeout=30.0)
+    client.workspaces.list()
+    timeout = seen[0].extensions["timeout"]
+    assert timeout["read"] == 30.0
+    assert timeout["connect"] == 5.0
+    client.close()
+
+
+def test_default_timeout_without_any_override(monkeypatch):
+    # The helper injects a client (whose own httpx default would apply),
+    # so force the SDK-owned path: keep the constructor kwargs but swap
+    # in a mock transport.
+    seen = []
+    real_client = httpx.Client
+
+    def mock_client(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(_capture_handler(seen))
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", mock_client)
+    client = ManagementClient(access_key_id=AK, access_key_secret=SK)
+    client.workspaces.list()
+    timeout = seen[0].extensions["timeout"]
+    assert timeout["read"] == DEFAULT_TIMEOUT
+    assert timeout["connect"] == 5.0
+    client.close()
+
+
+def test_injected_client_timeout_preserved():
+    seen = []
+    http_client = httpx.Client(
+        transport=httpx.MockTransport(_capture_handler(seen)),
+        timeout=99.0,
+    )
+    client = ManagementClient(
+        http_client=http_client,
+        access_key_id=AK,
+        access_key_secret=SK,
+    )
+    client.workspaces.list()
+    assert seen[0].extensions["timeout"]["read"] == 99.0
+    # A per-call override still wins over the injected client default.
+    client.workspaces.list(timeout=2.0)
+    assert seen[1].extensions["timeout"]["read"] == 2.0
+    client.close()
+    http_client.close()
+
+
 # --- async ----------------------------------------------------------------
 
 
@@ -274,3 +373,30 @@ async def test_async_with_options_region():
     assert other.transport.host == "modelstudio.eu-central-1.aliyuncs.com"
     await client.aclose()
     await other.aclose()
+
+
+async def test_async_write_method_not_retried():
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return httpx.Response(503, json={})
+
+    client = make_async_client(handler, max_retries=2)
+    resp = await client.transport.request(
+        "POST",
+        "/modelstudio/workspaces",
+        action="CreateWorkspace",
+        body={"name": "prod"},
+    )
+    assert resp.status_code == 503
+    assert calls["n"] == 1
+    await client.aclose()
+
+
+async def test_async_per_call_timeout_overrides_client_timeout():
+    seen = []
+    client = make_async_client(_capture_handler(seen), timeout=30.0)
+    await client.workspaces.list(timeout=1.5)
+    assert seen[0].extensions["timeout"]["read"] == 1.5
+    await client.aclose()

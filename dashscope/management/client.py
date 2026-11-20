@@ -23,8 +23,8 @@ from typing import Any, Mapping, Optional, Union
 
 import httpx
 
-from dashscope._logging import get_logger
 from dashscope.management._credentials import CredentialResolver
+from dashscope.management._redaction import get_management_logger
 from dashscope.management._transport import AsyncTransport, SyncTransport
 from dashscope.management.api_keys import ApiKeys, AsyncApiKeys
 from dashscope.management.billing import AsyncBilling, Billing
@@ -33,7 +33,7 @@ from dashscope.management.workspaces import AsyncWorkspaces, Workspaces
 
 __all__ = ["AsyncManagementClient", "ManagementClient", "ManagementConfig"]
 
-logger = get_logger("management.client")
+logger = get_management_logger("management.client")
 
 DEFAULT_REGION = "cn-beijing"
 KNOWN_REGIONS = frozenset(

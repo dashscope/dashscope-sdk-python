@@ -42,7 +42,9 @@ class CredentialResolver:
     Precedence: a pre-built ``credential`` client wins, then an explicit
     ``config`` dict, then explicit ``access_key_id`` / ``access_key_secret``
     (with ``security_token`` selecting the STS provider type), then the
-    library default chain.
+    library default chain. A *partial* explicit AK (id without secret, or
+    a lone token) raises instead of falling through: silently signing with
+    ambient host credentials would swap a tenant's identity.
     """
 
     def __init__(
@@ -60,7 +62,15 @@ class CredentialResolver:
             self._client = _CredentialsClient(
                 _CredentialsConfig(**dict(config)),
             )
-        elif access_key_id and access_key_secret:
+        elif access_key_id or access_key_secret or security_token:
+            # Fail loudly on a partial explicit credential: the default
+            # chain below picks up the host's env/IMDS identity, which in
+            # a multi-tenant backend is a silent cross-tenant swap.
+            if not (access_key_id and access_key_secret):
+                raise ValueError(
+                    "access_key_id and access_key_secret must be provided "
+                    "together; refusing to fall back to ambient credentials",
+                )
             self._client = _CredentialsClient(
                 _CredentialsConfig(
                     type="sts" if security_token else "access_key",

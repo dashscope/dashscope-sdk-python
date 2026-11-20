@@ -13,6 +13,7 @@ import pytest
 pytest.importorskip("alibabacloud_credentials")
 pytest.importorskip("alibabacloud_openapi_util")
 
+from dashscope.management import _credentials  # noqa: E402
 from dashscope.management._credentials import (  # noqa: E402
     CredentialResolver,
     ResolvedCredential,
@@ -95,6 +96,34 @@ def test_config_wins_over_ak():
         access_key_secret="ignored-sk",
     )
     assert resolver.resolve().access_key_id == "config-ak"
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"access_key_id": AK},
+        {"access_key_secret": SK},
+        {"security_token": TOKEN},
+        {"access_key_id": AK, "security_token": TOKEN},
+        {"access_key_id": AK, "access_key_secret": ""},
+    ],
+)
+def test_partial_explicit_credential_rejected(kwargs):
+    # A partial AK must fail loudly, never sign with ambient credentials.
+    with pytest.raises(ValueError, match="together"):
+        CredentialResolver(**kwargs)
+
+
+def test_default_chain_only_without_explicit_credential(monkeypatch):
+    seen = []
+
+    class _StubClient:
+        def __init__(self, config=None):
+            seen.append(config)
+
+    monkeypatch.setattr(_credentials, "_CredentialsClient", _StubClient)
+    CredentialResolver()
+    assert seen == [None]
 
 
 def test_provider_name_propagates():

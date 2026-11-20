@@ -140,6 +140,9 @@ def _error_class(
 
 
 def _class_by_code(code: str) -> Optional[Type[DashScopeError]]:
+    # Coerce like _is_success: a numeric code in a failure envelope must
+    # not crash the crosswalk with an AttributeError.
+    code = str(code)
     if code.startswith("Throttling"):
         return RateLimitError
     if code in _AUTH_CODES:

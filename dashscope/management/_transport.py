@@ -25,13 +25,13 @@ from typing import Any, Mapping, Optional, Union
 import httpx
 
 from dashscope._config import DEFAULT_TIMEOUT
-from dashscope._logging import get_logger
 from dashscope.errors import (
     APIConnectionError,
     APITimeoutError,
     DashScopeError,
 )
 from dashscope.management._credentials import CredentialResolver
+from dashscope.management._redaction import get_management_logger
 from dashscope.management._signer import sign_request
 from dashscope.transport import _ident
 from dashscope.transport._options import (
@@ -47,10 +47,17 @@ from dashscope.transport.http import default_user_agent
 
 __all__ = ["AsyncTransport", "SyncTransport"]
 
-logger = get_logger("management.transport")
+logger = get_management_logger("management.transport")
 
 _MODULE = "management"
 _DEFAULT_CONNECT_TIMEOUT = 5.0
+
+# Transparent retries are limited to safe methods. Write ops (G3/G4)
+# must never be replayed on a transport error or 5xx -- a retried
+# create/reset/delete can duplicate a billable or destructive side
+# effect -- so non-read methods get a single attempt until an op
+# explicitly opts into idempotent retry.
+_RETRYABLE_METHODS = frozenset({"GET", "HEAD"})
 
 
 def _resolve_timeout(
@@ -101,11 +108,19 @@ class _Transport:
         timeout: Union[float, httpx.Timeout, None] = None,
         max_retries: int = 2,
         limits: Optional[httpx.Limits] = None,
+        injected_client: bool = False,
     ) -> None:
         self._host = endpoint or f"modelstudio.{region}.aliyuncs.com"
         self._resolver = resolver
         self._user_agent = user_agent or default_user_agent(_MODULE)
-        self._timeout = _resolve_timeout(timeout, DEFAULT_TIMEOUT)
+        self._default_timeout = _resolve_timeout(timeout, DEFAULT_TIMEOUT)
+        # An injected client keeps its own timeout unless the caller set
+        # one explicitly here (mirrors transport/http.py).
+        self._request_timeout = (
+            None
+            if injected_client and timeout is None
+            else self._default_timeout
+        )
         self._max_retries = max(max_retries, 0)
         self._limits = limits
 
@@ -136,7 +151,9 @@ class _Transport:
             "extra_headers": (
                 options.extra_headers if options is not None else None
             ),
-            "timeout": resolve_timeout(self._timeout, options),
+            # Call-level options win; the client default is applied in
+            # _build_request only when the call set no timeout.
+            "timeout": resolve_timeout(None, options),
         }
 
     def _build_request(
@@ -157,12 +174,18 @@ class _Transport:
             sdk_headers=prep["sdk"],
             extra_headers=prep["extra_headers"],
         )
+        timeout = prep["timeout"]
+        if timeout is None:
+            timeout = self._request_timeout
+        # httpx reads an explicit timeout=None as "disable timeouts";
+        # the kwarg must be omitted to keep the client-level default.
+        timeout_kwarg = {} if timeout is None else {"timeout": timeout}
         return http_client.build_request(
             signed.method,
             signed.url,
             headers=signed.headers,
             content=signed.content,
-            timeout=prep["timeout"],
+            **timeout_kwarg,
         )
 
 
@@ -173,10 +196,10 @@ class SyncTransport(_Transport):
         http_client: Optional[httpx.Client] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(injected_client=http_client is not None, **kwargs)
         self._owns_client = http_client is None
         self._client = http_client or httpx.Client(
-            timeout=self._timeout,
+            timeout=self._default_timeout,
             **({"limits": self._limits} if self._limits is not None else {}),
         )
 
@@ -203,6 +226,7 @@ class SyncTransport(_Transport):
             options=options,
         )
         max_retries = prep["max_retries"]
+        retryable = method.upper() in _RETRYABLE_METHODS
         response = None
         for attempt in range(max_retries + 1):
             credential = self._resolver.resolve()
@@ -214,14 +238,17 @@ class SyncTransport(_Transport):
                 finally:
                     response.close()
             except httpx.TransportError as exc:
-                if attempt >= max_retries:
+                if not retryable or attempt >= max_retries:
                     raise _map_transport_error(
                         exc,
                         prep["client_request_id"],
                     ) from exc
                 time.sleep(backoff_delay(attempt, None))
                 continue
-            if not should_retry(response.status_code, response.headers):
+            if not retryable or not should_retry(
+                response.status_code,
+                response.headers,
+            ):
                 return response
             if attempt >= max_retries:
                 return response
@@ -267,10 +294,10 @@ class AsyncTransport(_Transport):
         http_client: Optional[httpx.AsyncClient] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(**kwargs)
+        super().__init__(injected_client=http_client is not None, **kwargs)
         self._owns_client = http_client is None
         self._client = http_client or httpx.AsyncClient(
-            timeout=self._timeout,
+            timeout=self._default_timeout,
             **({"limits": self._limits} if self._limits is not None else {}),
         )
 
@@ -297,6 +324,7 @@ class AsyncTransport(_Transport):
             options=options,
         )
         max_retries = prep["max_retries"]
+        retryable = method.upper() in _RETRYABLE_METHODS
         response = None
         for attempt in range(max_retries + 1):
             credential = await self._resolver.resolve_async()
@@ -308,14 +336,17 @@ class AsyncTransport(_Transport):
                 finally:
                     await response.aclose()
             except httpx.TransportError as exc:
-                if attempt >= max_retries:
+                if not retryable or attempt >= max_retries:
                     raise _map_transport_error(
                         exc,
                         prep["client_request_id"],
                     ) from exc
                 await asyncio.sleep(backoff_delay(attempt, None))
                 continue
-            if not should_retry(response.status_code, response.headers):
+            if not retryable or not should_retry(
+                response.status_code,
+                response.headers,
+            ):
                 return response
             if attempt >= max_retries:
                 return response
