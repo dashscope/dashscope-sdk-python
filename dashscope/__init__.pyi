@@ -41,11 +41,16 @@ def close_shared_sync_session() -> None: ...
 def set_region(region: str, workspace_id: Optional[str] = ...) -> None: ...
 
 # Lazily resolved compatibility modules.
+# ``applications`` is a real 2.0 subpackage: re-export it as a module so type
+# checkers and griffe keep access to its submodules (e.g. applications.finetune
+# and applications.agentstudio). Declaring it as ``applications: Any`` would
+# let griffe's stub merge shadow the submodule with a plain attribute.
+from dashscope import applications as applications
+
 aigc: Any
 agentstudio: Any
 api_entities: Any
 app: Any
-applications: Any
 assistants: Any
 audio: Any
 cli: Any
