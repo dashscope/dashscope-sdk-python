@@ -104,11 +104,11 @@ def read_envelope(body: Any, status_code: int) -> Envelope:
 
 
 def _is_success(success: Any, code: Any, status_code: int) -> bool:
+    if not 200 <= status_code < 300:
+        return False
     if success is True:
         return True
     if success is False:
-        return False
-    if not 200 <= status_code < 300:
         return False
     return code is None or str(code) in _SUCCESS_CODES
 

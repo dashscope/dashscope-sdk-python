@@ -17,8 +17,9 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
+from dashscope.errors import APIResponseValidationError
 from dashscope.management._errors import (
     Envelope,
     decode_body,
@@ -26,6 +27,7 @@ from dashscope.management._errors import (
     read_envelope,
 )
 from dashscope.management._pagination import TokenPage
+from dashscope.management._redaction import redact_body
 from dashscope.transport._response import APIResponse
 from dashscope.types._parse import parse_model
 from dashscope.types.common import with_headers
@@ -41,6 +43,40 @@ __all__ = [
 
 _M = TypeVar("_M", bound=BaseModel)
 _T = TypeVar("_T")
+
+
+def _parse_model(
+    cls: Type[_M],
+    data: Dict[str, Any],
+    *,
+    strict: bool,
+    response: httpx.Response,
+) -> _M:
+    """Keep strict validation diagnostics without exposing credentials."""
+    try:
+        return parse_model(cls, data, strict=strict, response=response)
+    except APIResponseValidationError as exc:
+        exc.body = redact_body(exc.body)
+        exc.response = httpx.Response(
+            response.status_code,
+            headers=redact_body(dict(response.headers)),
+            json=redact_body(decode_body(response)),
+        )
+        if isinstance(exc.cause, ValidationError):
+            # Pydantic retains the raw input even when its string rendering
+            # is masked. Keep locations/types, not that exception object.
+            errors = exc.cause.errors(
+                include_input=False,
+                include_context=False,
+                include_url=False,
+            )
+            exc.cause = ValueError(
+                f"validation errors: {[(e['loc'], e['type']) for e in errors]}",
+            )
+        else:
+            exc.cause = None
+        exc.__context__ = None
+        raise exc from None
 
 
 def resolve(
@@ -96,11 +132,11 @@ def parse_one(
     )
     response = api_response.http_response
     if error is not None:
-        model = parse_model(cls, {}, strict=strict, response=response)
+        model = _parse_model(cls, {}, strict=strict, response=response)
     else:
         payload = body if data_field is None else body.get(data_field)
         data = payload if isinstance(payload, dict) else {}
-        model = parse_model(cls, data, strict=strict, response=response)
+        model = _parse_model(cls, data, strict=strict, response=response)
     return attach_envelope(model, envelope, response, error)
 
 
@@ -121,7 +157,7 @@ def parse_token_page(
     response = api_response.http_response
     page_cls = TokenPage[item_cls]  # type: ignore[valid-type]
     if error is not None:
-        page = parse_model(page_cls, {}, strict=strict, response=response)
+        page = _parse_model(page_cls, {}, strict=strict, response=response)
     else:
         payload = body.get(data_field)
         flat = {
@@ -130,7 +166,7 @@ def parse_token_page(
             "max_results": body.get("maxResults"),
             "total_count": body.get("totalCount"),
         }
-        page = parse_model(page_cls, flat, strict=strict, response=response)
+        page = _parse_model(page_cls, flat, strict=strict, response=response)
     page = attach_envelope(page, envelope, response, error)
     if fetch_next is not None:
         page.bind_pagination(fetch_next)
@@ -164,7 +200,7 @@ def parse_base_page(
     )
     response = api_response.http_response
     if error is not None:
-        page = parse_model(page_cls, {}, strict=strict, response=response)
+        page = _parse_model(page_cls, {}, strict=strict, response=response)
     else:
         flat = {
             items_field: items,
@@ -172,7 +208,7 @@ def parse_base_page(
             "page_size": page_size,
             "total_count": total_count,
         }
-        page = parse_model(page_cls, flat, strict=strict, response=response)
+        page = _parse_model(page_cls, flat, strict=strict, response=response)
     page = attach_envelope(page, envelope, response, error)
     if fetch_next is not None:
         page.bind_pagination(fetch_next, requested_no, requested_size)

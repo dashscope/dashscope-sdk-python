@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import traceback
 
 import httpx
 import pytest
@@ -14,6 +15,7 @@ import pytest
 pytest.importorskip("alibabacloud_credentials")
 pytest.importorskip("alibabacloud_openapi_util")
 
+from dashscope.errors import APIResponseValidationError  # noqa: E402
 from dashscope.management._redaction import (  # noqa: E402
     SecretRedactionFilter,
     get_management_logger,
@@ -199,4 +201,78 @@ async def test_async_list_and_get_masked():
     key = await client.api_keys.get(1)
     assert key.api_key_value.get_secret_value() == SECRET
     assert SECRET not in repr(key)
+    await client.aclose()
+
+
+def _invalid_key_body(method, bad_field):
+    key = {"apiKeyId": 1, "apiKeyValue": SECRET}
+    key[bad_field] = (
+        "invalid-int" if bad_field == "apiKeyId" else {"value": SECRET}
+    )
+    if method == "get":
+        return ms_body(apiKey=key)
+    return ms_body(apiKeys=[key])
+
+
+def _assert_redacted_validation(error, original, body):
+    assert SECRET not in str(error)
+    assert SECRET not in repr(error.body)
+    assert SECRET not in repr(error.cause)
+    assert SECRET not in error.response.text
+    assert error.response.status_code == 200
+    assert error.__cause__ is None
+    assert error.__context__ is None
+    rendered = "".join(
+        traceback.format_exception(type(error), error, error.__traceback__),
+    )
+    assert SECRET not in rendered
+    assert original.json() == body
+    assert "apiKey" in str(error.cause)
+
+
+@pytest.mark.parametrize("method", ["get", "list"])
+@pytest.mark.parametrize("bad_field", ["apiKeyId", "apiKeyValue"])
+@pytest.mark.parametrize("raise_on_error", [True, False])
+def test_strict_api_key_validation_redacts_all_error_paths(
+    method,
+    bad_field,
+    raise_on_error,
+):
+    body = _invalid_key_body(method, bad_field)
+    original = httpx.Response(200, json=body)
+    client = make_client(
+        lambda request: original,
+        strict_validation=True,
+        raise_on_error=raise_on_error,
+    )
+    with pytest.raises(APIResponseValidationError) as caught:
+        if method == "get":
+            client.api_keys.get(1)
+        else:
+            client.api_keys.list()
+    _assert_redacted_validation(caught.value, original, body)
+    client.close()
+
+
+@pytest.mark.parametrize("method", ["get", "list"])
+@pytest.mark.parametrize("bad_field", ["apiKeyId", "apiKeyValue"])
+@pytest.mark.parametrize("raise_on_error", [True, False])
+async def test_async_strict_api_key_validation_redacts_all_error_paths(
+    method,
+    bad_field,
+    raise_on_error,
+):
+    body = _invalid_key_body(method, bad_field)
+    original = httpx.Response(200, json=body)
+    client = make_async_client(
+        lambda request: original,
+        strict_validation=True,
+        raise_on_error=raise_on_error,
+    )
+    with pytest.raises(APIResponseValidationError) as caught:
+        if method == "get":
+            await client.api_keys.get(1)
+        else:
+            await client.api_keys.list()
+    _assert_redacted_validation(caught.value, original, body)
     await client.aclose()

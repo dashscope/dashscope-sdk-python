@@ -162,12 +162,20 @@ class _Transport:
         credential: Any,
         http_client: Any,
     ) -> httpx.Request:
+        params = dict(http_client.params)
+        if len(params) != len(http_client.params.multi_items()):
+            raise ValueError(
+                "Repeated HTTP-client default query parameters are not "
+                "supported; pass OpenAPI arrays through extra_query instead",
+            )
+        # Per-call filters override client defaults before canonicalization.
+        params.update(prep["params"] or {})
         signed = sign_request(
             method=prep["method"],
             host=self._host,
             path=prep["path"],
             action=prep["action"],
-            query=prep["params"],
+            query=params,
             body=prep["content"],
             credential=credential,
             user_agent=self._user_agent,
@@ -180,13 +188,17 @@ class _Transport:
         # httpx reads an explicit timeout=None as "disable timeouts";
         # the kwarg must be omitted to keep the client-level default.
         timeout_kwarg = {} if timeout is None else {"timeout": timeout}
-        return http_client.build_request(
+        request = http_client.build_request(
             signed.method,
             signed.url,
             headers=signed.headers,
             content=signed.content,
             **timeout_kwarg,
         )
+        # build_request re-merges Client.params and re-encodes the query.
+        # Preserve its timeout/extensions but restore the signed wire URL.
+        request.url = httpx.URL(signed.url)
+        return request
 
 
 class SyncTransport(_Transport):

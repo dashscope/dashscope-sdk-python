@@ -47,6 +47,19 @@ def test_tokenplan_success_true_is_not_error():
     assert read_envelope(body, 200).success is True
 
 
+@pytest.mark.parametrize("flag", ["success", "Success"])
+@pytest.mark.parametrize("status", [401, 403, 429, 500, 503])
+def test_success_flag_cannot_override_http_failure(flag, status):
+    body = {flag: True, "code": "200"}
+    assert read_envelope(body, status).success is False
+    error = check_management_response(
+        _response(body, status),
+        raise_on_error=False,
+    )
+    assert error is not None
+    assert error.status_code == status
+
+
 def test_success_false_is_error_even_at_http200():
     body = {"code": "200", "success": False, "message": "boom"}
     env = read_envelope(body, 200)

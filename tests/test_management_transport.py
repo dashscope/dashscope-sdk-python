@@ -28,6 +28,9 @@ from tests.management_helpers import (  # noqa: E402
     ms_body,
     query_of,
 )
+from tests.test_management_signer import (  # noqa: E402
+    _gateway_recompute,
+)
 
 WORKSPACES = ms_body(workspaces=[{"workspaceId": "ws-1"}], totalCount=1)
 
@@ -400,3 +403,100 @@ async def test_async_per_call_timeout_overrides_client_timeout():
     await client.workspaces.list(timeout=1.5)
     assert seen[0].extensions["timeout"]["read"] == 1.5
     await client.aclose()
+
+
+def _assert_wire_signature(request):
+    from types import SimpleNamespace
+
+    auth = request.headers["authorization"]
+    names = auth.split("SignedHeaders=", 1)[1].split(",", 1)[0].split(";")
+    wire = SimpleNamespace(
+        method=request.method,
+        url=str(request.url),
+        headers={name: request.headers[name] for name in names},
+    )
+    assert auth == _gateway_recompute(wire, ak=AK, sk=SK)
+
+
+def _assert_default_query_and_filters(request):
+    query = query_of(request)
+    assert query["locale"] == "zh-CN"
+    assert query["maxResults"] == "10"
+    assert query["workspaceName"] == "a b+/~"
+    assert query["nextToken"] == "token=+/~"
+    assert "workspaceName=a%20b%2B%2F~" in str(request.url)
+    _assert_wire_signature(request)
+
+
+def test_injected_client_default_query_is_signed_without_losing_filters():
+    seen = []
+    http_client = httpx.Client(
+        transport=httpx.MockTransport(_capture_handler(seen)),
+        params={"locale": "zh-CN", "maxResults": "99"},
+    )
+    client = ManagementClient(
+        access_key_id=AK,
+        access_key_secret=SK,
+        http_client=http_client,
+    )
+    client.workspaces.list(
+        max_results=10,
+        workspace_name="a b+/~",
+        next_token="token=+/~",
+    )
+    _assert_default_query_and_filters(seen[0])
+    assert http_client.params["maxResults"] == "99"
+    http_client.close()
+
+
+async def test_async_injected_client_default_query_is_signed():
+    seen = []
+    http_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(_capture_handler(seen)),
+        params={"locale": "zh-CN", "maxResults": "99"},
+    )
+    client = AsyncManagementClient(
+        access_key_id=AK,
+        access_key_secret=SK,
+        http_client=http_client,
+    )
+    await client.workspaces.list(
+        max_results=10,
+        workspace_name="a b+/~",
+        next_token="token=+/~",
+    )
+    _assert_default_query_and_filters(seen[0])
+    await http_client.aclose()
+
+
+def test_injected_default_query_preserves_openapi_array_serialization():
+    seen = []
+    http_client = httpx.Client(
+        transport=httpx.MockTransport(_capture_handler(seen)),
+        params={"locale": "zh-CN"},
+    )
+    client = ManagementClient(
+        access_key_id=AK,
+        access_key_secret=SK,
+        http_client=http_client,
+    )
+    client.token_plan.seats.list(status_list=["NORMAL", "STOP"])
+    assert query_of(seen[0])["StatusList.1"] == "NORMAL"
+    assert query_of(seen[0])["StatusList.2"] == "STOP"
+    _assert_wire_signature(seen[0])
+    http_client.close()
+
+
+def test_repeated_default_query_is_rejected_instead_of_losing_values():
+    http_client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: pytest.fail("no wire")),
+        params=[("StatusList", "NORMAL"), ("StatusList", "STOP")],
+    )
+    client = ManagementClient(
+        access_key_id=AK,
+        access_key_secret=SK,
+        http_client=http_client,
+    )
+    with pytest.raises(ValueError, match="Repeated HTTP-client"):
+        client.workspaces.list()
+    http_client.close()
