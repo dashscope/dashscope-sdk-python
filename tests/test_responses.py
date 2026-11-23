@@ -935,3 +935,53 @@ async def test_async_empty_response_id_rejected_before_wire(bad):
     with pytest.raises(ValueError, match="response_id"):
         await client.responses.input_items.list(bad)
     await client.aclose()
+
+
+def _two_page_input_items_handler(seen):
+    def handler(request):
+        seen.append(request.url.raw_path)
+        after = request.url.params.get("after")
+        item_id = "msg_2" if after else "msg_1"
+        return httpx.Response(
+            200,
+            json={
+                "data": [{"id": item_id}],
+                "first_id": item_id,
+                "last_id": item_id,
+                "has_more": after is None,
+            },
+        )
+
+    return handler
+
+
+_TRICKY_RESP = "resp/a?b#c"
+_ENCODED_RESP_ITEMS = b"/api/v1/responses/resp%2Fa%3Fb%23c/input_items"
+
+
+def test_input_items_pagination_does_not_double_encode_response_id():
+    seen = []
+    client = _make_client(_two_page_input_items_handler(seen))
+    page = client.responses.input_items.list(_TRICKY_RESP)
+    ids = [item.id for p in page.iter_pages() for item in p]
+    assert ids == ["msg_1", "msg_2"]
+    # Page 2 must reuse the caller's raw id, not the encoded page-1 value.
+    assert seen == [
+        _ENCODED_RESP_ITEMS,
+        _ENCODED_RESP_ITEMS + b"?after=msg_1",
+    ]
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_input_items_pagination_does_not_double_encode_response_id():
+    seen = []
+    client = _make_async_client(_two_page_input_items_handler(seen))
+    page = await client.responses.input_items.list(_TRICKY_RESP)
+    ids = [item.id async for p in page.iter_pages_async() for item in p]
+    assert ids == ["msg_1", "msg_2"]
+    assert seen == [
+        _ENCODED_RESP_ITEMS,
+        _ENCODED_RESP_ITEMS + b"?after=msg_1",
+    ]
+    await client.aclose()

@@ -528,7 +528,7 @@ class InputItems:
         if not result.is_error:
             result.bind_pagination(
                 lambda cursor: self.list(
-                    rid,
+                    response_id,
                     after=cursor,
                     limit=limit,
                     order=order,
@@ -597,7 +597,7 @@ class AsyncInputItems:
         if not result.is_error:
             result.bind_pagination(
                 lambda cursor: self.list(
-                    rid,
+                    response_id,
                     after=cursor,
                     limit=limit,
                     order=order,

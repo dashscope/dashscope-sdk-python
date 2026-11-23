@@ -385,7 +385,7 @@ class ConversationItems:
         if not result.is_error:
             result.bind_pagination(
                 lambda cursor: self.list(
-                    cid,
+                    conversation_id,
                     after=cursor,
                     limit=limit,
                     order=order,
@@ -584,7 +584,7 @@ class AsyncConversationItems:
         if not result.is_error:
             result.bind_pagination(
                 lambda cursor: self.list(
-                    cid,
+                    conversation_id,
                     after=cursor,
                     limit=limit,
                     order=order,

@@ -32,6 +32,7 @@ from typing import (
     Union,
     overload,
 )
+from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict
 
@@ -329,9 +330,11 @@ def _parse_logs(
 
 def _job_id(job: Union[CompressJob, str]) -> str:
     job_id = job.job_id if isinstance(job, CompressJob) else job
-    if not job_id:
+    if not job_id or not str(job_id).strip():
         raise DashScopeError("compress job id required")
-    return job_id
+    # Percent-encode so a '/', '?' or '#' inside the id cannot retarget
+    # the request to another path or query.
+    return quote(str(job_id), safe="")
 
 
 def _build_create_body(
@@ -1063,6 +1066,7 @@ class CompressJobs:
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check.
         """
+        raw_id = job_id
         job_id = _job_id(job_id)
         resp = self._client.transport.request_api(
             "GET",
@@ -1086,7 +1090,7 @@ class CompressJobs:
         resp.raise_for_status()
         return with_headers(
             _parse_logs(
-                job_id,
+                raw_id,
                 resp.json(),
                 strict=self._client.config.strict_validation,
                 response=resp.http_response,
@@ -1115,7 +1119,10 @@ class CompressJobs:
         as the :class:`CompressJob` envelope instead of raising. ``_sleep``
         is a test seam — it replaces the pause between polls.
         """
-        job_id = _job_id(job)
+        # Validate up front but poll with the raw id: ``get`` encodes on
+        # every call, so handing it an encoded id would double-encode.
+        job_id = (job.job_id or "") if isinstance(job, CompressJob) else job
+        _job_id(job_id)
         sleep_fn = _sleep or time.sleep
         deadline = time.monotonic() + timeout
         current = (
@@ -1797,6 +1804,7 @@ class AsyncCompressJobs:
         raw: bool = False,
     ) -> Union[JobLogs, "APIResponse"]:
         """Async twin of :meth:`CompressJobs.logs`."""
+        raw_id = job_id
         job_id = _job_id(job_id)
         resp = await self._client.transport.request_api(
             "GET",
@@ -1820,7 +1828,7 @@ class AsyncCompressJobs:
         resp.raise_for_status()
         return with_headers(
             _parse_logs(
-                job_id,
+                raw_id,
                 resp.json(),
                 strict=self._client.config.strict_validation,
                 response=resp.http_response,
@@ -1844,7 +1852,10 @@ class AsyncCompressJobs:
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
     ) -> CompressJob:
         """Async twin of :meth:`CompressJobs.wait`, same compat-mode contract."""
-        job_id = _job_id(job)
+        # Validate up front but poll with the raw id: ``get`` encodes on
+        # every call, so handing it an encoded id would double-encode.
+        job_id = (job.job_id or "") if isinstance(job, CompressJob) else job
+        _job_id(job_id)
         sleep_fn = _sleep or asyncio.sleep
         deadline = time.monotonic() + timeout
         current = (

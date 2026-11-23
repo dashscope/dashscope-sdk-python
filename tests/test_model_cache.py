@@ -10,6 +10,7 @@ non-aliasing and a thread-safety smoke.
 
 from __future__ import annotations
 
+import json
 import threading
 
 import httpx
@@ -249,6 +250,29 @@ class TestSyncCache:
         assert client.models.list().models[0].model == "m1"
         assert len(calls) == 2
 
+    def test_extra_body_bypasses_cache(self):
+        calls = []
+
+        def handler(request):
+            body = json.loads(request.content) if request.content else {}
+            calls.append(body)
+            return _page([{"model": f"m{len(calls)}"}])
+
+        client = _make_client(handler)
+        client.models.get("qwen-plus")  # 1: cached
+        client.models.get("qwen-plus")  # hit
+        assert len(calls) == 1
+        # extra_body becomes a JSON body even on GET: a different request
+        # must not read the plain entry.
+        result = client.models.get("qwen-plus", extra_body={"x": 1})
+        assert len(calls) == 2
+        assert calls[-1] == {"x": 1}
+        assert result.model == "m2"
+        # ...and the bypassed read must not pollute the plain entry.
+        assert client.models.get("qwen-plus").model == "m1"
+        assert len(calls) == 2
+        client.close()
+
     def test_raw_bypasses_cache(self):
         calls = []
 
@@ -478,6 +502,27 @@ class TestAsyncCache:
         assert calls[-1] == "ws-b"
         assert result.models[0].model == "m2"
         assert (await client.models.list()).models[0].model == "m1"
+        assert len(calls) == 2
+        await client.aclose()
+
+    @pytest.mark.asyncio
+    async def test_extra_body_bypasses_cache(self):
+        calls = []
+
+        async def handler(request):
+            body = json.loads(request.content) if request.content else {}
+            calls.append(body)
+            return _page([{"model": f"m{len(calls)}"}])
+
+        client = _make_async_client(handler)
+        await client.models.get("qwen-plus")
+        await client.models.get("qwen-plus")
+        assert len(calls) == 1
+        result = await client.models.get("qwen-plus", extra_body={"x": 1})
+        assert len(calls) == 2
+        assert calls[-1] == {"x": 1}
+        assert result.model == "m2"
+        assert (await client.models.get("qwen-plus")).model == "m1"
         assert len(calls) == 2
         await client.aclose()
 

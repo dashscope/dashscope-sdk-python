@@ -542,11 +542,12 @@ class Models:
         miss the response is fetched, error-checked, and cached only when it
         is genuinely successful, so errors are never cached even in
         non-raising mode. ``refresh=True`` skips the lookup but still updates
-        the entry. Options carrying ``extra_query`` / ``extra_headers``
-        bypass the cache entirely: they change the effective query or can
-        override the auth/workspace headers, neither of which the key
-        captures. The cached response is re-parsed by each caller, so every
-        call hands back fresh model objects rather than a shared instance.
+        the entry. Options carrying ``extra_query`` / ``extra_headers`` /
+        ``extra_body`` bypass the cache entirely: they change the effective
+        query, can override the auth/workspace headers, or add a JSON body
+        (even on GET), none of which the key captures. The cached response
+        is re-parsed by each caller, so every call hands back fresh model
+        objects rather than a shared instance.
         """
         if raw:
             return self._client.transport.request_api(
@@ -561,7 +562,7 @@ class Models:
                 client=self._client,
             )
         cacheable = options is None or not (
-            options.extra_query or options.extra_headers
+            options.extra_query or options.extra_headers or options.extra_body
         )
         key = catalog_key(
             self._client.config,
@@ -1075,7 +1076,7 @@ class AsyncModels:
         The cache lookup/store are synchronous and never await inside the
         lock, so sharing one ``_CatalogCache`` on a single event loop is
         safe. Like the sync seam, options carrying ``extra_query`` /
-        ``extra_headers`` bypass the cache.
+        ``extra_headers`` / ``extra_body`` bypass the cache.
         """
         if raw:
             return await self._client.transport.request_api(
@@ -1090,7 +1091,7 @@ class AsyncModels:
                 client=self._client,
             )
         cacheable = options is None or not (
-            options.extra_query or options.extra_headers
+            options.extra_query or options.extra_headers or options.extra_body
         )
         key = catalog_key(
             self._client.config,

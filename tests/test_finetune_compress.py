@@ -657,3 +657,138 @@ async def test_async_empty_job_id_rejected_before_wire(op):
     with pytest.raises(DashScopeError, match="job id required"):
         await getattr(client.fine_tunes.compress.jobs, op)("")
     await client.aclose()
+
+
+@pytest.mark.parametrize("op", ["get", "cancel", "delete", "logs"])
+def test_whitespace_job_id_rejected_before_wire(op):
+    def handler(request):
+        raise AssertionError("whitespace job id must not reach the wire")
+
+    client = _make_client(handler)
+    with pytest.raises(DashScopeError, match="job id required"):
+        getattr(client.fine_tunes.compress.jobs, op)("   ")
+    client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("op", ["get", "cancel", "delete", "logs"])
+async def test_async_whitespace_job_id_rejected_before_wire(op):
+    def handler(request):
+        raise AssertionError("whitespace job id must not reach the wire")
+
+    client = _make_async_client(handler)
+    with pytest.raises(DashScopeError, match="job id required"):
+        await getattr(client.fine_tunes.compress.jobs, op)("   ")
+    await client.aclose()
+
+
+_TRICKY_JOB = "cj/a?b#c"
+_ENCODED_JOB = b"/api/v1/fine-tunes/compress/jobs/cj%2Fa%3Fb%23c"
+_JOB_SUFFIX = {
+    "get": b"",
+    "cancel": b"/cancel",
+    "delete": b"",
+    "logs": b"/logs?offset=0&line=100",
+}
+
+
+@pytest.mark.parametrize("op", ["get", "cancel", "delete", "logs"])
+def test_job_id_percent_encoded_in_path(op):
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        return httpx.Response(200, json=_job_payload("RUNNING"))
+
+    client = _make_client(handler)
+    getattr(client.fine_tunes.compress.jobs, op)(_TRICKY_JOB)
+    # '/', '?' and '#' stay inside one path segment instead of retargeting
+    # the request to another path or query.
+    assert seen == [_ENCODED_JOB + _JOB_SUFFIX[op]]
+    client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("op", ["get", "cancel", "delete", "logs"])
+async def test_async_job_id_percent_encoded_in_path(op):
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        return httpx.Response(200, json=_job_payload("RUNNING"))
+
+    client = _make_async_client(handler)
+    await getattr(client.fine_tunes.compress.jobs, op)(_TRICKY_JOB)
+    assert seen == [_ENCODED_JOB + _JOB_SUFFIX[op]]
+    await client.aclose()
+
+
+def test_wait_does_not_double_encode_job_id():
+    seen = []
+    statuses = iter(["RUNNING", "SUCCEEDED"])
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        return httpx.Response(200, json=_job_payload(next(statuses)))
+
+    client = _make_client(handler)
+    job = client.fine_tunes.compress.jobs.wait(
+        _TRICKY_JOB,
+        _sleep=lambda _: None,
+    )
+    assert job.status == "SUCCEEDED"
+    # wait polls through get(), which encodes once per call.
+    assert seen == [_ENCODED_JOB, _ENCODED_JOB]
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_wait_does_not_double_encode_job_id():
+    seen = []
+    statuses = iter(["RUNNING", "SUCCEEDED"])
+
+    def handler(request):
+        seen.append(request.url.raw_path)
+        return httpx.Response(200, json=_job_payload(next(statuses)))
+
+    async def no_sleep(_):
+        return None
+
+    client = _make_async_client(handler)
+    job = await client.fine_tunes.compress.jobs.wait(
+        _TRICKY_JOB,
+        _sleep=no_sleep,
+    )
+    assert job.status == "SUCCEEDED"
+    assert seen == [_ENCODED_JOB, _ENCODED_JOB]
+    await client.aclose()
+
+
+def test_logs_keeps_raw_job_id_in_result():
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={"request_id": "req-l", "output": {"logs": ["a", "b"]}},
+        )
+
+    client = _make_client(handler)
+    logs = client.fine_tunes.compress.jobs.logs(_TRICKY_JOB)
+    # The parsed envelope echoes the caller's id, not the encoded form.
+    assert logs.job_id == _TRICKY_JOB
+    assert logs.content == "a\nb"
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_logs_keeps_raw_job_id_in_result():
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={"request_id": "req-l", "output": {"logs": ["a", "b"]}},
+        )
+
+    client = _make_async_client(handler)
+    logs = await client.fine_tunes.compress.jobs.logs(_TRICKY_JOB)
+    assert logs.job_id == _TRICKY_JOB
+    assert logs.content == "a\nb"
+    await client.aclose()

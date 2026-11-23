@@ -848,3 +848,50 @@ async def test_async_empty_ids_rejected_before_wire(bad):
     with pytest.raises(ValueError, match="item_id"):
         await client.conversations.items.delete(_CONV_ID, bad)
     await client.aclose()
+
+
+def _two_page_handler(seen):
+    def handler(request):
+        seen.append(request.url.raw_path)
+        after = request.url.params.get("after")
+        item_id = "msg_2" if after else "msg_1"
+        return httpx.Response(
+            200,
+            json={
+                "data": [{**_ITEM_BODY, "id": item_id}],
+                "first_id": item_id,
+                "last_id": item_id,
+                "has_more": after is None,
+                "object": "list",
+            },
+        )
+
+    return handler
+
+
+def test_items_pagination_does_not_double_encode_conversation_id():
+    seen = []
+    client = _make_client(_two_page_handler(seen))
+    page = client.conversations.items.list(_TRICKY_CONV)
+    ids = [item.id for p in page.iter_pages() for item in p]
+    assert ids == ["msg_1", "msg_2"]
+    # Page 2 must reuse the caller's raw id, not the encoded page-1 value.
+    assert seen == [
+        _ENCODED_CONV + b"/items",
+        _ENCODED_CONV + b"/items?after=msg_1",
+    ]
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_async_items_pagination_does_not_double_encode_conversation_id():
+    seen = []
+    client = _make_async_client(_two_page_handler(seen))
+    page = await client.conversations.items.list(_TRICKY_CONV)
+    ids = [item.id async for p in page.iter_pages_async() for item in p]
+    assert ids == ["msg_1", "msg_2"]
+    assert seen == [
+        _ENCODED_CONV + b"/items",
+        _ENCODED_CONV + b"/items?after=msg_1",
+    ]
+    await client.aclose()
