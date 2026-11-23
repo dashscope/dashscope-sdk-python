@@ -23,27 +23,10 @@ from typing import (
     Union,
     overload,
 )
+from urllib.parse import quote
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
-from dashscope.resources._ptu import (
-    AsyncCapacityInstances,
-    AsyncCapacityOperations,
-    CapacityInstance,
-    CapacityInstanceList,
-    CapacityInstances,
-    CapacityOperation,
-    CapacityOperations,
-    PrePaidInfo,
-    PtuCapacity,
-    _idempotency_headers,
-    _path_id,
-    _pre_paid_info_body,
-    _ptu_capacity_body,
-    _purchase_retries,
-    _renew_body,
-    _validate_order_type,
-)
 from dashscope.resources._sse import (
     _aiter_sse,
     _iter_sse,
@@ -72,20 +55,11 @@ _BASE_PATH = "/deployments"
 MODULE = "finetune"
 
 __all__ = [
-    "AsyncCapacityInstances",
-    "AsyncCapacityOperations",
     "AsyncDeployments",
-    "CapacityInstance",
-    "CapacityInstanceList",
-    "CapacityInstances",
-    "CapacityOperation",
-    "CapacityOperations",
     "Deployment",
     "DeploymentEvent",
     "DeploymentList",
     "Deployments",
-    "PrePaidInfo",
-    "PtuCapacity",
 ]
 
 
@@ -120,18 +94,6 @@ class Deployment(ResponseBase):
     )
     modifier: Optional[str] = None
     creator: Optional[str] = None
-    # PTU throughput-reservation fields (plan="ptu"); empty for MU/lora.
-    name: Optional[str] = None
-    plan: Optional[str] = None
-    ptu_service_tier: Optional[str] = None
-    ptu_capacity: Optional[PtuCapacity] = None
-    pre_paid_info: Optional[PrePaidInfo] = None
-    pre_paid_instance_id: Optional[str] = None
-    pre_paid_gmt_expired: Optional[str] = None
-    overflow_strategy: Optional[str] = None
-    fail_reason: Optional[str] = None
-    operation_id: Optional[str] = None
-    instance_id: Optional[str] = None
 
 
 class DeploymentList(ResponseBase):
@@ -227,123 +189,74 @@ def _parse_event(
     )
 
 
-def _validate_ptu_create(
-    plan: Optional[str],
-    charge_type: Optional[str],
-    ptu_capacity: Any,
-    pre_paid_info: Any,
-) -> None:
-    # PTU expresses capacity as ptu_capacity (kTPM), not instance count.
-    # charge_type and ptu_capacity are required; pre_paid billing
-    # additionally requires pre_paid_info.
-    if plan != "ptu":
-        return
-    if charge_type is None:
-        raise ValueError("plan='ptu' requires charge_type")
-    if ptu_capacity is None:
-        raise ValueError("plan='ptu' requires ptu_capacity")
-    if charge_type == "pre_paid" and pre_paid_info is None:
-        raise ValueError("pre_paid charge_type requires pre_paid_info")
+def _path_id(value: str, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return quote(value, safe="")
+
+
+def _release_body(
+    body: Mapping[str, Any],
+    extra_body: Optional[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Keep generic deployment options without enabling deferred PTU writes."""
+    merged = deep_merge(body, extra_body or {})
+    if merged.get("plan") == "ptu" or any(
+        merged.get(field) is not None
+        for field in ("ptu_capacity", "pre_paid_info")
+    ):
+        raise ValueError(
+            "PTU throughput reservation is deferred and is not available "
+            "in this release",
+        )
+    return merged
 
 
 def _build_create_body(
     model: str,
-    capacity: Optional[int],
+    capacity: int,
     model_version: Optional[str],
     suffix: Optional[str],
     plan: Optional[str],
     template_id: Optional[str],
     deploy_spec: Optional[Dict[str, Any]],
     billing_method: Optional[str],
-    service_tier: Optional[str] = None,
-    charge_type: Optional[str] = None,
-    ptu_capacity: Any = None,
-    pre_paid_info: Any = None,
-    name: Optional[str] = None,
-    extra_body: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     # Wire spellings; the public names are ``model`` / ``model_version``.
-    body: Dict[str, Any] = {"model_name": model}
-    if capacity is not None:
-        body["capacity"] = capacity
-    optional = {
-        "model_version": model_version,
-        "suffix": suffix,
-        "plan": plan,
-        "template_id": template_id,
-        # MU deployments reject the create call unless both are present.
-        "deploy_spec": deploy_spec,
-        "billing_method": billing_method,
-        "name": name,
-        "service_tier": service_tier,
-        "charge_type": charge_type,
-    }
-    body.update({k: v for k, v in optional.items() if v is not None})
-    if ptu_capacity is not None:
-        body["ptu_capacity"] = _ptu_capacity_body(ptu_capacity)
-    if pre_paid_info is not None:
-        body["pre_paid_info"] = _pre_paid_info_body(pre_paid_info)
-    body = deep_merge(body, extra_body or {})
-    _validate_ptu_create(
-        body.get("plan"),
-        body.get("charge_type"),
-        body.get("ptu_capacity"),
-        body.get("pre_paid_info"),
-    )
-    return body
+    body: Dict[str, Any] = {"model_name": model, "capacity": capacity}
+    if model_version is not None:
+        body["model_version"] = model_version
+    if suffix is not None:
+        body["suffix"] = suffix
+    if plan is not None:
+        body["plan"] = plan
+    if template_id is not None:
+        body["template_id"] = template_id
 
-
-def _build_scale_body(
-    deployed_model: str,
-    capacity: Optional[int],
-    ptu_capacity: Any,
-    instance_id: Optional[str],
-    pre_paid_info: Any,
-    order_type: Optional[str],
-    extra_body: Optional[Mapping[str, Any]] = None,
-) -> Dict[str, Any]:
-    body: Dict[str, Any] = {"deployed_model": deployed_model}
-    if capacity is not None:
-        body["capacity"] = capacity
-    if ptu_capacity is not None:
-        # PTU scale is an ABSOLUTE target, not an increment.
-        body["ptu_capacity"] = _ptu_capacity_body(ptu_capacity)
-    if instance_id is not None:
-        body["instance_id"] = instance_id
-    if pre_paid_info is not None:
-        body["pre_paid_info"] = _pre_paid_info_body(pre_paid_info)
-    if order_type is not None:
-        body["order_type"] = order_type
-    body = deep_merge(body, extra_body or {})
-    if body.get("capacity") is None and body.get("ptu_capacity") is None:
-        raise ValueError("scale requires capacity or ptu_capacity")
-    _validate_order_type(body.get("order_type"))
+    # MU deployments reject the create call unless both are present.
+    if deploy_spec is not None:
+        body["deploy_spec"] = deploy_spec
+    if billing_method is not None:
+        body["billing_method"] = billing_method
     return body
 
 
 class Deployments:
     def __init__(self, client) -> None:
         self._client = client
-        self.capacity_instances = CapacityInstances(client)
-        self.capacity_operations = CapacityOperations(client)
 
     @overload
     def create(
         self,
         *,
         model: str,
-        capacity: Optional[int] = None,
+        capacity: int,
         model_version: Optional[str] = None,
         suffix: Optional[str] = None,
         plan: Optional[str] = None,
         template_id: Optional[str] = None,
         deploy_spec: Optional[Dict[str, Any]] = None,
         billing_method: Optional[str] = None,
-        service_tier: Optional[str] = None,
-        charge_type: Optional[str] = None,
-        ptu_capacity: Any = None,
-        pre_paid_info: Any = None,
-        name: Optional[str] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -360,18 +273,13 @@ class Deployments:
         self,
         *,
         model: str,
-        capacity: Optional[int] = None,
+        capacity: int,
         model_version: Optional[str] = None,
         suffix: Optional[str] = None,
         plan: Optional[str] = None,
         template_id: Optional[str] = None,
         deploy_spec: Optional[Dict[str, Any]] = None,
         billing_method: Optional[str] = None,
-        service_tier: Optional[str] = None,
-        charge_type: Optional[str] = None,
-        ptu_capacity: Any = None,
-        pre_paid_info: Any = None,
-        name: Optional[str] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -387,18 +295,13 @@ class Deployments:
         self,
         *,
         model: str,
-        capacity: Optional[int] = None,
+        capacity: int,
         model_version: Optional[str] = None,
         suffix: Optional[str] = None,
         plan: Optional[str] = None,
         template_id: Optional[str] = None,
         deploy_spec: Optional[Dict[str, Any]] = None,
         billing_method: Optional[str] = None,
-        service_tier: Optional[str] = None,
-        charge_type: Optional[str] = None,
-        ptu_capacity: Any = None,
-        pre_paid_info: Any = None,
-        name: Optional[str] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -408,20 +311,9 @@ class Deployments:
         max_retries: Optional[int] = None,
         raw: bool = False,
     ) -> Union[Deployment, "APIResponse"]:
-        """Create a deployment of ``model``.
+        """Create a deployment of ``model`` with ``capacity`` instances.
 
-        For MU/lora plans pass ``capacity`` (instance count). For PTU
-        throughput reservation pass ``plan="ptu"`` with ``charge_type``
-        (``pre_paid`` / ``post_paid``) and ``ptu_capacity`` (kTPM mapping);
-        ``pre_paid`` additionally requires ``pre_paid_info``. Optional PTU
-        fields: ``service_tier`` (``ptu_fast`` default / ``ptu_default``),
-        ``name``, ``suffix``.
-
-        A PTU create is a billable purchase, so it defaults to
-        ``max_retries=0`` (a blind retry could spawn a duplicate ModelCode).
-        The first ModelCode creation is deliberately NOT given an
-        idempotency key -- the contract reserves that for instance writes;
-        on a create timeout, confirm the existing ModelCode before retrying.
+        PTU throughput reservation is deferred in this release.
 
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check, so a caller can read the status, headers and
@@ -436,15 +328,8 @@ class Deployments:
             template_id,
             deploy_spec,
             billing_method,
-            service_tier,
-            charge_type,
-            ptu_capacity,
-            pre_paid_info,
-            name,
-            extra_body,
         )
-        if body.get("plan") == "ptu":
-            max_retries = _purchase_retries(max_retries)
+        body = _release_body(body, extra_body)
         resp = self._client.transport.request_api(
             "POST",
             _BASE_PATH,
@@ -523,10 +408,9 @@ class Deployments:
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
-        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = self._client.transport.request_api(
             "GET",
-            f"{_BASE_PATH}/{deployed_model}",
+            f"{_BASE_PATH}/{_path_id(deployed_model, 'deployed_model')}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -638,11 +522,7 @@ class Deployments:
         self,
         deployed_model: str,
         *,
-        capacity: Optional[int] = None,
-        ptu_capacity: Any = None,
-        instance_id: Optional[str] = None,
-        pre_paid_info: Any = None,
-        order_type: Optional[str] = None,
+        capacity: int,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -659,11 +539,7 @@ class Deployments:
         self,
         deployed_model: str,
         *,
-        capacity: Optional[int] = None,
-        ptu_capacity: Any = None,
-        instance_id: Optional[str] = None,
-        pre_paid_info: Any = None,
-        order_type: Optional[str] = None,
+        capacity: int,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -679,11 +555,7 @@ class Deployments:
         self,
         deployed_model: str,
         *,
-        capacity: Optional[int] = None,
-        ptu_capacity: Any = None,
-        instance_id: Optional[str] = None,
-        pre_paid_info: Any = None,
-        order_type: Optional[str] = None,
+        capacity: int,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -693,33 +565,16 @@ class Deployments:
         max_retries: Optional[int] = None,
         raw: bool = False,
     ) -> Union[Deployment, "APIResponse"]:
-        """Resize a deployment.
-
-        MU/lora: pass ``capacity`` (instance count). PTU: pass
-        ``ptu_capacity`` as an ABSOLUTE kTPM target (not an increment),
-        optionally ``instance_id`` (required when the ModelCode holds more
-        than one instance, else CAPACITY_INSTANCE_REQUIRED),
-        ``pre_paid_info`` and ``order_type`` (UPGRADE / DOWNGRADE). A PTU
-        scale is billable, so it defaults to ``max_retries=0`` and carries
-        an idempotency key. Scaling to all-zero is not a delete.
+        """Resize a deployment to ``capacity`` instances.
 
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
-        body = _build_scale_body(
-            deployed_model,
-            capacity,
-            ptu_capacity,
-            instance_id,
-            pre_paid_info,
-            order_type,
+        body = _release_body(
+            {"deployed_model": deployed_model, "capacity": capacity},
             extra_body,
         )
-        headers = extra_headers
-        if body.get("ptu_capacity") is not None:
-            max_retries = _purchase_retries(max_retries)
-            headers = _idempotency_headers(extra_headers)
         deployed_model = _path_id(deployed_model, "deployed_model")
         resp = self._client.transport.request_api(
             "PUT",
@@ -730,193 +585,8 @@ class Deployments:
             api_key=api_key,
             workspace=workspace,
             options=request_options(
-                headers,
-                extra_query,
-                max_retries=max_retries,
-            ),
-            client=self._client,
-        )
-        if raw:
-            return resp
-        resp.raise_for_status()
-        return with_headers(
-            _parse(
-                resp.json(),
-                strict=self._client.config.strict_validation,
-                response=resp.http_response,
-            ),
-            resp.http_response,
-        )
-
-    @overload
-    def renew(
-        self,
-        deployed_model: str,
-        *,
-        pre_paid_info: Any,
-        instance_id: Optional[str] = None,
-        is_change: Optional[bool] = None,
-        ptu_capacity: Any = None,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: Literal[False] = False,
-    ) -> Deployment:
-        ...
-
-    @overload
-    def renew(
-        self,
-        deployed_model: str,
-        *,
-        pre_paid_info: Any,
-        instance_id: Optional[str] = None,
-        is_change: Optional[bool] = None,
-        ptu_capacity: Any = None,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: Literal[True],
-    ) -> "APIResponse":
-        ...
-
-    def renew(
-        self,
-        deployed_model: str,
-        *,
-        pre_paid_info: Any,
-        instance_id: Optional[str] = None,
-        is_change: Optional[bool] = None,
-        ptu_capacity: Any = None,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: bool = False,
-    ) -> Union[Deployment, "APIResponse"]:
-        """Renew a pre-paid PTU ModelCode (no ``order_type`` on renew).
-
-        ``pre_paid_info`` is required; ``instance_id`` selects one instance
-        when the ModelCode holds several. Changing ``ptu_capacity`` requires
-        ``is_change=True``. Billable, so defaults to ``max_retries=0`` with
-        an idempotency key. Returns the refreshed :class:`Deployment`.
-
-        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
-        before any error check.
-        """
-        deployed_model = _path_id(deployed_model, "deployed_model")
-        body = _renew_body(pre_paid_info, is_change, ptu_capacity, instance_id)
-        resp = self._client.transport.request_api(
-            "PUT",
-            f"{_BASE_PATH}/{deployed_model}/renew",
-            json=body,
-            sdk_module=MODULE,
-            timeout=timeout,
-            api_key=api_key,
-            workspace=workspace,
-            options=request_options(
-                _idempotency_headers(extra_headers),
-                extra_query,
-                extra_body,
-                max_retries=_purchase_retries(max_retries),
-            ),
-            client=self._client,
-        )
-        if raw:
-            return resp
-        resp.raise_for_status()
-        return with_headers(
-            _parse(
-                resp.json(),
-                strict=self._client.config.strict_validation,
-                response=resp.http_response,
-            ),
-            resp.http_response,
-        )
-
-    @overload
-    def update_overflow_strategy(
-        self,
-        deployed_model: str,
-        *,
-        overflow_strategy: str,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: Literal[False] = False,
-    ) -> Deployment:
-        ...
-
-    @overload
-    def update_overflow_strategy(
-        self,
-        deployed_model: str,
-        *,
-        overflow_strategy: str,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: Literal[True],
-    ) -> "APIResponse":
-        ...
-
-    def update_overflow_strategy(
-        self,
-        deployed_model: str,
-        *,
-        overflow_strategy: str,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: bool = False,
-    ) -> Union[Deployment, "APIResponse"]:
-        """Set the whole-ModelCode overflow strategy (lowercase).
-
-        ``enable`` lets traffic beyond the reserved capacity overflow to
-        pay-as-you-go (extra cost); ``disable`` throttles it. This is a
-        config toggle, not a purchase, so normal retries apply.
-
-        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
-        before any error check.
-        """
-        if overflow_strategy not in ("enable", "disable"):
-            raise ValueError("overflow_strategy must be 'enable' or 'disable'")
-        deployed_model = _path_id(deployed_model, "deployed_model")
-        resp = self._client.transport.request_api(
-            "PUT",
-            f"{_BASE_PATH}/{deployed_model}/update-overflowstrategy",
-            json={"overflow_strategy": overflow_strategy},
-            sdk_module=MODULE,
-            timeout=timeout,
-            api_key=api_key,
-            workspace=workspace,
-            options=request_options(
                 extra_headers,
                 extra_query,
-                extra_body,
                 max_retries=max_retries,
             ),
             client=self._client,
@@ -984,10 +654,9 @@ class Deployments:
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
-        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = self._client.transport.request_api(
             "DELETE",
-            f"{_BASE_PATH}/{deployed_model}",
+            f"{_BASE_PATH}/{_path_id(deployed_model, 'deployed_model')}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -1068,26 +737,19 @@ class Deployments:
 class AsyncDeployments:
     def __init__(self, client) -> None:
         self._client = client
-        self.capacity_instances = AsyncCapacityInstances(client)
-        self.capacity_operations = AsyncCapacityOperations(client)
 
     @overload
     async def create(
         self,
         *,
         model: str,
-        capacity: Optional[int] = None,
+        capacity: int,
         model_version: Optional[str] = None,
         suffix: Optional[str] = None,
         plan: Optional[str] = None,
         template_id: Optional[str] = None,
         deploy_spec: Optional[Dict[str, Any]] = None,
         billing_method: Optional[str] = None,
-        service_tier: Optional[str] = None,
-        charge_type: Optional[str] = None,
-        ptu_capacity: Any = None,
-        pre_paid_info: Any = None,
-        name: Optional[str] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -1104,18 +766,13 @@ class AsyncDeployments:
         self,
         *,
         model: str,
-        capacity: Optional[int] = None,
+        capacity: int,
         model_version: Optional[str] = None,
         suffix: Optional[str] = None,
         plan: Optional[str] = None,
         template_id: Optional[str] = None,
         deploy_spec: Optional[Dict[str, Any]] = None,
         billing_method: Optional[str] = None,
-        service_tier: Optional[str] = None,
-        charge_type: Optional[str] = None,
-        ptu_capacity: Any = None,
-        pre_paid_info: Any = None,
-        name: Optional[str] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -1131,18 +788,13 @@ class AsyncDeployments:
         self,
         *,
         model: str,
-        capacity: Optional[int] = None,
+        capacity: int,
         model_version: Optional[str] = None,
         suffix: Optional[str] = None,
         plan: Optional[str] = None,
         template_id: Optional[str] = None,
         deploy_spec: Optional[Dict[str, Any]] = None,
         billing_method: Optional[str] = None,
-        service_tier: Optional[str] = None,
-        charge_type: Optional[str] = None,
-        ptu_capacity: Any = None,
-        pre_paid_info: Any = None,
-        name: Optional[str] = None,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -1152,14 +804,13 @@ class AsyncDeployments:
         max_retries: Optional[int] = None,
         raw: bool = False,
     ) -> Union[Deployment, "APIResponse"]:
-        """Create a deployment of ``model`` (async twin of ``Deployments.create``).
+        """Create a deployment of ``model`` with ``capacity`` instances.
 
-        PTU throughput reservation (``plan="ptu"``) is a billable purchase
-        and defaults to ``max_retries=0``; see the sync method for the full
-        contract and safeguards.
+        PTU throughput reservation is deferred in this release.
 
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
-        before any error check.
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
         """
         body = _build_create_body(
             model,
@@ -1170,15 +821,8 @@ class AsyncDeployments:
             template_id,
             deploy_spec,
             billing_method,
-            service_tier,
-            charge_type,
-            ptu_capacity,
-            pre_paid_info,
-            name,
-            extra_body,
         )
-        if body.get("plan") == "ptu":
-            max_retries = _purchase_retries(max_retries)
+        body = _release_body(body, extra_body)
         resp = await self._client.transport.request_api(
             "POST",
             _BASE_PATH,
@@ -1257,10 +901,9 @@ class AsyncDeployments:
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
-        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = await self._client.transport.request_api(
             "GET",
-            f"{_BASE_PATH}/{deployed_model}",
+            f"{_BASE_PATH}/{_path_id(deployed_model, 'deployed_model')}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -1372,11 +1015,7 @@ class AsyncDeployments:
         self,
         deployed_model: str,
         *,
-        capacity: Optional[int] = None,
-        ptu_capacity: Any = None,
-        instance_id: Optional[str] = None,
-        pre_paid_info: Any = None,
-        order_type: Optional[str] = None,
+        capacity: int,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -1393,11 +1032,7 @@ class AsyncDeployments:
         self,
         deployed_model: str,
         *,
-        capacity: Optional[int] = None,
-        ptu_capacity: Any = None,
-        instance_id: Optional[str] = None,
-        pre_paid_info: Any = None,
-        order_type: Optional[str] = None,
+        capacity: int,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -1413,11 +1048,7 @@ class AsyncDeployments:
         self,
         deployed_model: str,
         *,
-        capacity: Optional[int] = None,
-        ptu_capacity: Any = None,
-        instance_id: Optional[str] = None,
-        pre_paid_info: Any = None,
-        order_type: Optional[str] = None,
+        capacity: int,
         timeout: Optional[float] = None,
         api_key: Optional[str] = None,
         workspace: Optional[str] = None,
@@ -1427,27 +1058,16 @@ class AsyncDeployments:
         max_retries: Optional[int] = None,
         raw: bool = False,
     ) -> Union[Deployment, "APIResponse"]:
-        """Resize a deployment (async twin of ``Deployments.scale``).
-
-        PTU ``ptu_capacity`` is an absolute target and billable, so it
-        defaults to ``max_retries=0`` with an idempotency key.
+        """Resize a deployment to ``capacity`` instances.
 
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
-        before any error check.
+        before any error check, so a caller can read the status, headers and
+        ``elapsed`` of the response or re-parse it itself.
         """
-        body = _build_scale_body(
-            deployed_model,
-            capacity,
-            ptu_capacity,
-            instance_id,
-            pre_paid_info,
-            order_type,
+        body = _release_body(
+            {"deployed_model": deployed_model, "capacity": capacity},
             extra_body,
         )
-        headers = extra_headers
-        if body.get("ptu_capacity") is not None:
-            max_retries = _purchase_retries(max_retries)
-            headers = _idempotency_headers(extra_headers)
         deployed_model = _path_id(deployed_model, "deployed_model")
         resp = await self._client.transport.request_api(
             "PUT",
@@ -1458,189 +1078,8 @@ class AsyncDeployments:
             api_key=api_key,
             workspace=workspace,
             options=request_options(
-                headers,
-                extra_query,
-                max_retries=max_retries,
-            ),
-            client=self._client,
-        )
-        if raw:
-            return resp
-        resp.raise_for_status()
-        return with_headers(
-            _parse(
-                resp.json(),
-                strict=self._client.config.strict_validation,
-                response=resp.http_response,
-            ),
-            resp.http_response,
-        )
-
-    @overload
-    async def renew(
-        self,
-        deployed_model: str,
-        *,
-        pre_paid_info: Any,
-        instance_id: Optional[str] = None,
-        is_change: Optional[bool] = None,
-        ptu_capacity: Any = None,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: Literal[False] = False,
-    ) -> Deployment:
-        ...
-
-    @overload
-    async def renew(
-        self,
-        deployed_model: str,
-        *,
-        pre_paid_info: Any,
-        instance_id: Optional[str] = None,
-        is_change: Optional[bool] = None,
-        ptu_capacity: Any = None,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: Literal[True],
-    ) -> "APIResponse":
-        ...
-
-    async def renew(
-        self,
-        deployed_model: str,
-        *,
-        pre_paid_info: Any,
-        instance_id: Optional[str] = None,
-        is_change: Optional[bool] = None,
-        ptu_capacity: Any = None,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: bool = False,
-    ) -> Union[Deployment, "APIResponse"]:
-        """Renew a pre-paid PTU ModelCode (async twin of ``Deployments.renew``).
-
-        Billable, so defaults to ``max_retries=0`` with an idempotency key.
-
-        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
-        before any error check.
-        """
-        deployed_model = _path_id(deployed_model, "deployed_model")
-        body = _renew_body(pre_paid_info, is_change, ptu_capacity, instance_id)
-        resp = await self._client.transport.request_api(
-            "PUT",
-            f"{_BASE_PATH}/{deployed_model}/renew",
-            json=body,
-            sdk_module=MODULE,
-            timeout=timeout,
-            api_key=api_key,
-            workspace=workspace,
-            options=request_options(
-                _idempotency_headers(extra_headers),
-                extra_query,
-                extra_body,
-                max_retries=_purchase_retries(max_retries),
-            ),
-            client=self._client,
-        )
-        if raw:
-            return resp
-        resp.raise_for_status()
-        return with_headers(
-            _parse(
-                resp.json(),
-                strict=self._client.config.strict_validation,
-                response=resp.http_response,
-            ),
-            resp.http_response,
-        )
-
-    @overload
-    async def update_overflow_strategy(
-        self,
-        deployed_model: str,
-        *,
-        overflow_strategy: str,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: Literal[False] = False,
-    ) -> Deployment:
-        ...
-
-    @overload
-    async def update_overflow_strategy(
-        self,
-        deployed_model: str,
-        *,
-        overflow_strategy: str,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: Literal[True],
-    ) -> "APIResponse":
-        ...
-
-    async def update_overflow_strategy(
-        self,
-        deployed_model: str,
-        *,
-        overflow_strategy: str,
-        timeout: Optional[float] = None,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        extra_headers: Optional[Mapping[str, str]] = None,
-        extra_query: Optional[Mapping[str, Any]] = None,
-        extra_body: Optional[Mapping[str, Any]] = None,
-        max_retries: Optional[int] = None,
-        raw: bool = False,
-    ) -> Union[Deployment, "APIResponse"]:
-        """Set the whole-ModelCode overflow strategy (async twin).
-
-        ``enable`` overflows to pay-as-you-go (extra cost); ``disable``
-        throttles. Config toggle, so normal retries apply.
-
-        ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
-        before any error check.
-        """
-        if overflow_strategy not in ("enable", "disable"):
-            raise ValueError("overflow_strategy must be 'enable' or 'disable'")
-        deployed_model = _path_id(deployed_model, "deployed_model")
-        resp = await self._client.transport.request_api(
-            "PUT",
-            f"{_BASE_PATH}/{deployed_model}/update-overflowstrategy",
-            json={"overflow_strategy": overflow_strategy},
-            sdk_module=MODULE,
-            timeout=timeout,
-            api_key=api_key,
-            workspace=workspace,
-            options=request_options(
                 extra_headers,
                 extra_query,
-                extra_body,
                 max_retries=max_retries,
             ),
             client=self._client,
@@ -1708,10 +1147,9 @@ class AsyncDeployments:
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
-        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = await self._client.transport.request_api(
             "DELETE",
-            f"{_BASE_PATH}/{deployed_model}",
+            f"{_BASE_PATH}/{_path_id(deployed_model, 'deployed_model')}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
