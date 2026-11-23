@@ -5,18 +5,11 @@ description: "dashscope Python SDK 发行说明与变更日志指引，含 2.0 �
 
 逐版本的权威变更日志发布在
 [GitHub Releases](https://github.com/dashscope/dashscope-sdk-python/releases)。
-本页概述主要版本线并链接近期 tag。
+下方近期发布表格在文档构建时从 GitHub Releases 渲染，
+发布新版本后会自动刷新；点击各 tag 可查看完整发布说明。
 当前 SDK 版本：**{{ sdk_version }}**。
 
-## 近期发布
-
-| Tag | 说明 |
-| --- | --- |
-| v2.1.0 | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.1.0) |
-| v2.0.4 | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.4) |
-| v2.0.3 | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.3) |
-| v2.0.2 | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.2) |
-| v2.0.1 | [请参阅发布页面](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.1) |
+{{ release_notes }}
 
 ## 2.0 亮点
 
