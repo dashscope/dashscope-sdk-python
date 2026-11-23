@@ -1100,3 +1100,118 @@ def test_capacity_ids_percent_encoded_in_path():
         b"/api/v1/deployments/pm%2Fa/capacity-operations/op%2Fb",
     ]
     client.close()
+
+
+def _ptu_extra_body_call(client, method, max_retries):
+    if method == "create":
+        return client.deployments.create(
+            model="qwen-plus",
+            extra_body={
+                "plan": "ptu",
+                "charge_type": "post_paid",
+                "ptu_capacity": _PTU_CAPACITY,
+            },
+            max_retries=max_retries,
+        )
+    return client.deployments.scale(
+        "pm-1",
+        extra_body={"ptu_capacity": _PTU_CAPACITY},
+        max_retries=max_retries,
+    )
+
+
+def _ptu_failure_handler(seen, failure):
+    def handler(request):
+        seen.append(request)
+        if failure == "read":
+            raise httpx.ReadError("purchase response lost", request=request)
+        return httpx.Response(503, json={"message": "busy"})
+
+    return handler
+
+
+def _assert_ptu_attempts(seen, method, max_retries):
+    assert len(seen) == (1 if max_retries is None else max_retries + 1)
+    for request in seen:
+        body = json.loads(request.content)
+        assert body["ptu_capacity"] == _PTU_CAPACITY
+        if method == "create":
+            assert body["plan"] == "ptu"
+            assert "x-acs-req-uuid" not in request.headers
+        else:
+            assert request.headers["x-acs-req-uuid"] == (
+                request.headers["x-dashscope-requestid"]
+            )
+            assert request.headers["x-acs-req-uuid"] == (
+                seen[0].headers["x-acs-req-uuid"]
+            )
+
+
+@pytest.mark.parametrize("method", ["create", "scale"])
+@pytest.mark.parametrize("failure", ["read", "status"])
+@pytest.mark.parametrize("max_retries", [None, 2])
+def test_ptu_extra_body_retry_safeguards(
+    monkeypatch,
+    method,
+    failure,
+    max_retries,
+):
+    from dashscope.transport import http as transport_http
+
+    monkeypatch.setattr(transport_http, "_sleep", lambda seconds: None)
+    seen = []
+    client = _make_client(_ptu_failure_handler(seen, failure))
+    with pytest.raises(DashScopeError):
+        _ptu_extra_body_call(client, method, max_retries)
+    _assert_ptu_attempts(seen, method, max_retries)
+    client.close()
+
+
+@pytest.mark.parametrize("method", ["create", "scale"])
+@pytest.mark.parametrize("failure", ["read", "status"])
+@pytest.mark.parametrize("max_retries", [None, 2])
+async def test_async_ptu_extra_body_retry_safeguards(
+    monkeypatch,
+    method,
+    failure,
+    max_retries,
+):
+    from dashscope.transport import http as transport_http
+
+    async def no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(transport_http, "_asleep", no_sleep)
+    seen = []
+    client = _make_async_client(_ptu_failure_handler(seen, failure))
+    with pytest.raises(DashScopeError):
+        await _ptu_extra_body_call(client, method, max_retries)
+    _assert_ptu_attempts(seen, method, max_retries)
+    await client.aclose()
+
+
+def test_ptu_create_validates_merged_body():
+    client = _make_client(_no_wire)
+    with pytest.raises(ValueError, match="charge_type"):
+        client.deployments.create(
+            model="qwen-plus",
+            extra_body={"plan": "ptu"},
+        )
+    client.close()
+
+
+def test_ptu_create_required_fields_can_come_from_extra_body():
+    client = _make_client(
+        lambda request: httpx.Response(200, json=_deployment_output()),
+    )
+    created = client.deployments.create(
+        model="qwen-plus",
+        plan="ptu",
+        extra_body={
+            "charge_type": "pre_paid",
+            "ptu_capacity": _PTU_CAPACITY,
+            "pre_paid_info": _PRE_PAID,
+        },
+    )
+    assert created.plan == "ptu"
+    client.close()

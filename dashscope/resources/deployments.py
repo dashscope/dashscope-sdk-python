@@ -51,7 +51,7 @@ from dashscope.resources._sse import (
     _stream_error,
     _try_json,
 )
-from dashscope.transport._options import request_options
+from dashscope.transport._options import deep_merge, request_options
 from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     JobStatus,
@@ -260,6 +260,7 @@ def _build_create_body(
     ptu_capacity: Any = None,
     pre_paid_info: Any = None,
     name: Optional[str] = None,
+    extra_body: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     # Wire spellings; the public names are ``model`` / ``model_version``.
     body: Dict[str, Any] = {"model_name": model}
@@ -282,7 +283,13 @@ def _build_create_body(
         body["ptu_capacity"] = _ptu_capacity_body(ptu_capacity)
     if pre_paid_info is not None:
         body["pre_paid_info"] = _pre_paid_info_body(pre_paid_info)
-    _validate_ptu_create(plan, charge_type, ptu_capacity, pre_paid_info)
+    body = deep_merge(body, extra_body or {})
+    _validate_ptu_create(
+        body.get("plan"),
+        body.get("charge_type"),
+        body.get("ptu_capacity"),
+        body.get("pre_paid_info"),
+    )
     return body
 
 
@@ -293,10 +300,8 @@ def _build_scale_body(
     instance_id: Optional[str],
     pre_paid_info: Any,
     order_type: Optional[str],
+    extra_body: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
-    if capacity is None and ptu_capacity is None:
-        raise ValueError("scale requires capacity or ptu_capacity")
-    _validate_order_type(order_type)
     body: Dict[str, Any] = {"deployed_model": deployed_model}
     if capacity is not None:
         body["capacity"] = capacity
@@ -309,6 +314,10 @@ def _build_scale_body(
         body["pre_paid_info"] = _pre_paid_info_body(pre_paid_info)
     if order_type is not None:
         body["order_type"] = order_type
+    body = deep_merge(body, extra_body or {})
+    if body.get("capacity") is None and body.get("ptu_capacity") is None:
+        raise ValueError("scale requires capacity or ptu_capacity")
+    _validate_order_type(body.get("order_type"))
     return body
 
 
@@ -432,8 +441,9 @@ class Deployments:
             ptu_capacity,
             pre_paid_info,
             name,
+            extra_body,
         )
-        if plan == "ptu":
+        if body.get("plan") == "ptu":
             max_retries = _purchase_retries(max_retries)
         resp = self._client.transport.request_api(
             "POST",
@@ -446,7 +456,6 @@ class Deployments:
             options=request_options(
                 extra_headers,
                 extra_query,
-                extra_body,
                 max_retries=max_retries,
             ),
             client=self._client,
@@ -705,9 +714,10 @@ class Deployments:
             instance_id,
             pre_paid_info,
             order_type,
+            extra_body,
         )
         headers = extra_headers
-        if ptu_capacity is not None:
+        if body.get("ptu_capacity") is not None:
             max_retries = _purchase_retries(max_retries)
             headers = _idempotency_headers(extra_headers)
         deployed_model = _path_id(deployed_model, "deployed_model")
@@ -722,7 +732,6 @@ class Deployments:
             options=request_options(
                 headers,
                 extra_query,
-                extra_body,
                 max_retries=max_retries,
             ),
             client=self._client,
@@ -1166,8 +1175,9 @@ class AsyncDeployments:
             ptu_capacity,
             pre_paid_info,
             name,
+            extra_body,
         )
-        if plan == "ptu":
+        if body.get("plan") == "ptu":
             max_retries = _purchase_retries(max_retries)
         resp = await self._client.transport.request_api(
             "POST",
@@ -1180,7 +1190,6 @@ class AsyncDeployments:
             options=request_options(
                 extra_headers,
                 extra_query,
-                extra_body,
                 max_retries=max_retries,
             ),
             client=self._client,
@@ -1433,9 +1442,10 @@ class AsyncDeployments:
             instance_id,
             pre_paid_info,
             order_type,
+            extra_body,
         )
         headers = extra_headers
-        if ptu_capacity is not None:
+        if body.get("ptu_capacity") is not None:
             max_retries = _purchase_retries(max_retries)
             headers = _idempotency_headers(extra_headers)
         deployed_model = _path_id(deployed_model, "deployed_model")
@@ -1450,7 +1460,6 @@ class AsyncDeployments:
             options=request_options(
                 headers,
                 extra_query,
-                extra_body,
                 max_retries=max_retries,
             ),
             client=self._client,
