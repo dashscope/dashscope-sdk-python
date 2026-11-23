@@ -130,6 +130,13 @@ setuptools.setup(
             "numpy>=1.20",
             "opencv-python-headless>=4.5",
         ],
+        # RAM OpenAPI ManagementClient (read-only G1/G2/G5). The credential
+        # chain needs the 1.0.x model-based get_credential[_async] API;
+        # openapi_util supplies ACS3-HMAC-SHA256 V3 signing.
+        "management": [
+            "alibabacloud_credentials>=1.0.0",
+            "alibabacloud_openapi_util>=0.2.0",
+        ],
     },
     zip_safe=False,
     cmdclass=cmdclass,
