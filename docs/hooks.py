@@ -104,7 +104,7 @@ def _render_release_notes(lang: str) -> str:
         date = (release.get("published_at") or "")[:10]
         label = "发布说明" if zh else "Release notes"
         parts.append(
-            f"| {tag} | {date} · [{label}]({release.get('html_url')}) |"
+            f"| {tag} | {date} · [{label}]({release.get('html_url')}) |",
         )
     return "\n".join(parts)
 
