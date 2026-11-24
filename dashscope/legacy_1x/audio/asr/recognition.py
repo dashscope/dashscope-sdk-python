@@ -171,7 +171,7 @@ class Recognition(BaseApi):
         sample_rate (int): The input audio sample rate for speech recognition.
         workspace (str): The dashscope workspace id.
 
-        **kwargs:
+        **kwargs (Any):
             phrase_id (list, `optional`): The ID of phrase.
             disfluency_removal_enabled(bool, `optional`): Filter mood words,
                 turned off by default.
@@ -385,7 +385,7 @@ class Recognition(BaseApi):
         Args:
             phrase_id (str, `optional`): The ID of phrase.
 
-            **kwargs:
+            **kwargs (Any):
                 disfluency_removal_enabled(bool, `optional`):
                     Filter mood words, turned off by default.
                 diarization_enabled (bool, `optional`):
@@ -462,7 +462,7 @@ class Recognition(BaseApi):
             file (str): The path to the local audio file.
             phrase_id (str, `optional`): The ID of phrase.
 
-            **kwargs:
+            **kwargs (Any):
                 disfluency_removal_enabled(bool, `optional`):
                     Filter mood words, turned off by default.
                 diarization_enabled (bool, `optional`):

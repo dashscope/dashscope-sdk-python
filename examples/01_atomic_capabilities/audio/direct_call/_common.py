@@ -69,7 +69,7 @@ def load_sounddevice():
     except (ImportError, OSError) as error:
         raise RuntimeError(
             "录音需要 sounddevice 和 PortAudio；请在仓库根目录运行 "
-            "python -m pip install -e '.[acli-voice]'。"
+            "python -m pip install -e '.[expert-voice]'。"
             "Linux 还需安装系统 PortAudio 库。"
         ) from error
     return sounddevice

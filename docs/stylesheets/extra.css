@@ -1,0 +1,251 @@
+/* FastAPI-style template tweaks on top of Material:
+   - white header keeps links readable (primary fg is white)
+   - active top tab gets an underline indicator
+   - page title centered, like fastapi.tiangolo.com */
+:root {
+  --md-typeset-a-color: #3f51b5;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-typeset-a-color: #8c9eff;
+}
+
+.md-tabs__item--active {
+  border-bottom: 2px solid currentColor;
+}
+
+/* Native header drawer button replaces Material's mouse-only label on mobile;
+   the noscript drawer fallback label shares the same styling. The search
+   toggle stays a label (Material JS binds to "header [for=__search]"). */
+.md-header__toggle {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* With scripts disabled the drawer button cannot toggle the checkbox;
+   hide it so only the noscript CSS-only label remains. */
+.no-js button.md-header__toggle--drawer {
+  display: none;
+}
+
+/* The theme's .md-header__button:not([hidden]) { display: inline-block }
+   carries specificity 0,2,0, so a single-class hide rule loses the
+   cascade and the toggle stays visible next to the inline search box
+   on desktop. Double up the class to match the theme selector and win
+   by source order (extra.css loads after main.css). */
+@media screen and (min-width: 60em) {
+  .md-header__button.md-header__toggle--search {
+    display: none;
+  }
+}
+
+@media screen and (min-width: 76.25em) {
+  .md-header__button.md-header__toggle--drawer {
+    display: none;
+  }
+}
+
+.md-typeset h1 {
+  text-align: center;
+}
+
+/* Landing-page hero: version badge row + CTA buttons, centered under
+   the title like fastapi.tiangolo.com / elastic.co */
+.hero-badges {
+  margin: -0.4rem 0 1.2rem;
+  text-align: center;
+}
+
+.md-typeset .hero-badge {
+  display: inline-block;
+  margin: 0 0.15rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 0.6rem;
+  background-color: var(--md-default-fg-color--lightest);
+  color: var(--md-default-fg-color);
+  font-size: 0.64rem;
+}
+
+.md-typeset a.hero-badge:hover {
+  background-color: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color);
+}
+
+.hero-cta {
+  margin: 1.2rem 0;
+  text-align: center;
+}
+
+.hero-cta .md-button {
+  margin: 0.2rem 0.3rem;
+}
+
+/* Segmented EN | 中 language switch (overrides/partials/alternate.html).
+   currentColor tracks the header foreground in both palettes; the active
+   segment inverts it against the header background color. */
+.lang-switch {
+  display: inline-flex;
+  align-self: center;
+  margin: 0 0.2rem;
+  border: 1px solid currentColor;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.lang-switch__item {
+  padding: 0.05rem 0.5rem;
+  color: currentColor;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.4;
+  opacity: 0.65;
+}
+
+.lang-switch__item:hover {
+  opacity: 1;
+}
+
+.lang-switch__item--active,
+.lang-switch__item--active:hover {
+  background-color: currentColor;
+  color: var(--md-primary-fg-color);
+  opacity: 1;
+}
+
+/* Elastic-style per-page action block (see overrides/main.html) */
+.docs-actions {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+  font-size: .7rem;
+}
+
+.docs-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  color: var(--md-typeset-a-color);
+}
+
+.docs-actions svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}
+
+/* Sidebar copy: sits above the "On this page" outline, separated by a
+   rule below instead of above. */
+.docs-actions--sidebar {
+  margin: 0 0 .8rem;
+  padding: 0 0 .8rem;
+  border-top: 0;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+/* Material embeds the toc partial a second time inside the primary nav
+   (mobile drawer); keep the actions exclusive to the secondary sidebar. */
+.md-sidebar--primary .docs-actions--sidebar {
+  display: none;
+}
+
+/* Below 60em the secondary sidebar is hidden, so the content-bottom
+   copy takes over; on desktop it would duplicate the sidebar one. */
+@media screen and (min-width: 60em) {
+  .docs-actions--inline {
+    display: none;
+  }
+}
+
+/* Centered search dialog over a blurred backdrop, like fastapi.tiangolo.com
+   (Zensical) / elastic.co. Material's stock search expands inline in the
+   header; the open state is re-anchored here as a floating modal. Scoped
+   to >=60em: below that the theme's fullscreen panel (and the close-on-
+   outside-click script in overrides/main.html) stays in charge. */
+@media screen and (min-width: 60em) {
+  /* Backdrop: replace the theme's expanding background-colored circle
+     with a fixed translucent veil. pointer-events is restored so the
+     <label for="__search"> catches outside clicks and closes the dialog,
+     matching the mobile behavior. */
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__overlay {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    transform: none;
+    background-color: var(--md-default-bg-color);
+    opacity: 0.7;
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+    cursor: pointer;
+    transition: opacity 0.25s;
+  }
+
+  /* Keep the inline box's slot reserved so the header doesn't jump
+     when the dialog leaves the flow. */
+  [data-md-toggle="search"]:checked ~ .md-header .md-search {
+    width: 11.7rem;
+  }
+
+  /* The dialog itself. right:auto guards RTL, where the theme pins
+     right:0 and an over-constrained fixed box would ignore left.
+     z-index lifts the dialog above the overlay: the centering transform
+     makes it a stacking context, and the theme only assigns z-index 2
+     to the mobile variant, leaving desktop at auto (below the veil). */
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__inner {
+    position: fixed;
+    top: 8vh;
+    left: 50%;
+    right: auto;
+    z-index: 2;
+    float: none;
+    width: min(38rem, calc(100vw - 2.4rem));
+    height: auto;
+    padding: 0;
+    transform: translateX(-50%);
+    border-radius: 0.6rem;
+    background-color: var(--md-default-bg-color);
+    box-shadow: 0 0.4rem 2rem rgba(0, 0, 0, 0.25);
+    transition: none;
+    animation: search-modal-in 0.2s cubic-bezier(0.1, 0.7, 0.1, 1);
+  }
+
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__form {
+    border-bottom: 1px solid var(--md-default-fg-color--lightest);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* Results flow under the form instead of being absolutely pinned,
+     so the dialog grows with its content up to the scroll cap. */
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__output {
+    position: relative;
+    top: 0;
+    bottom: auto;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  [data-md-toggle="search"]:checked ~ .md-header .md-search__scrollwrap {
+    width: 100%;
+    height: auto;
+    max-height: 60vh;
+  }
+}
+
+@keyframes search-modal-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}

@@ -62,6 +62,30 @@ jobs:
         run: |
           python -m pip list --format=columns
 
+      - name: Cache Qwen tokenizer vocab
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/dashscope/tokenizers
+          key: qwen-tokenizer-vocab-v1
+
+      # ModelScope downloads from GitHub runners time out intermittently;
+      # pre-fetch with retries so network blips don't fail the test matrix.
+      - name: Pre-download Qwen tokenizer vocab
+        run: |
+          python - <<'EOF'
+          import time
+          from dashscope.legacy_1x.tokenizers import tokenizer as t
+          for attempt in range(1, 6):
+              try:
+                  print("vocab ready:", t._resolve_vocab_path())
+                  break
+              except RuntimeError as exc:
+                  print(f"attempt {attempt}/5 failed: {exc}")
+                  if attempt == 5:
+                      raise SystemExit(1)
+                  time.sleep(5 * attempt)
+          EOF
+
       - name: Run current tests with coverage
         run: |
           coverage run -m pytest tests --ignore=tests/legacy_1x
@@ -109,6 +133,30 @@ jobs:
           export PIP_DEFAULT_TIMEOUT=300
           pip install -r requirements.txt
           pip install -r requirements-test.txt
+
+      - name: Cache Qwen tokenizer vocab
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/dashscope/tokenizers
+          key: qwen-tokenizer-vocab-v1
+
+      # ModelScope downloads from GitHub runners time out intermittently;
+      # pre-fetch with retries so network blips don't fail the test matrix.
+      - name: Pre-download Qwen tokenizer vocab
+        run: |
+          python - <<'EOF'
+          import time
+          from dashscope.legacy_1x.tokenizers import tokenizer as t
+          for attempt in range(1, 6):
+              try:
+                  print("vocab ready:", t._resolve_vocab_path())
+                  break
+              except RuntimeError as exc:
+                  print(f"attempt {attempt}/5 failed: {exc}")
+                  if attempt == 5:
+                      raise SystemExit(1)
+                  time.sleep(5 * attempt)
+          EOF
 
       - name: Run archived legacy tests
         run: |

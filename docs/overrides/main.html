@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block htmltitle %}
+  {% if page and page.url == "zh/" %}
+  {# The i18n homepage is not marked as page.is_homepage by Material. #}
+  <title>{{ config.site_name }}</title>
+  {% else %}
+  {{ super() }}
+  {% endif %}
+{% endblock %}
+
+{% block extrahead %}
+  {{ super() }}
+  {% if page and page.url == "zh/404/" %}
+  {# The localized 404 is a live 200 page; keep it out of search engines. #}
+  <meta name="robots" content="noindex">
+  {% endif %}
+{% endblock %}
+
+{# Elastic-style per-page action block; desktop shows the sidebar copy
+   from partials/toc.html instead, this one serves viewports <60em. #}
+{% block content %}
+  {{ super() }}
+  {% set zh = (i18n_page_locale | default("en")) == "zh" %}
+  <nav class="docs-actions docs-actions--inline" aria-label="{{ '页面操作' if zh else 'Page actions' }}">
+    <a href="{{ config.repo_url }}/issues/new?title={{ page.title | urlencode }}&amp;labels=documentation" target="_blank" rel="noopener">
+      {% include ".icons/fontawesome/brands/github.svg" %}
+      <span>{{ "报告文档问题" if zh else "Report a docs issue" }}</span>
+    </a>
+  </nav>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  {# Below 60em Material renders search as a fullscreen panel that swallows
+     every click, and the decorative .md-search__overlay circle has
+     pointer-events: none -- so unlike desktop, clicking outside can never
+     toggle #__search and the dialog looks stuck. Restore the desktop
+     "click elsewhere to close" behavior on narrow viewports: a click on
+     the panel outside the form, suggestions and result links closes it. #}
+  <script>
+    document.addEventListener("click", function (ev) {
+      var toggle = document.getElementById("__search");
+      if (
+        !toggle || !toggle.checked ||
+        !window.matchMedia("(max-width: 59.984375em)").matches
+      ) {
+        return;
+      }
+      var target = ev.target;
+      if (!(target instanceof Element)) return;
+      if (
+        target.closest(".md-search__form") ||
+        target.closest(".md-search__suggest") ||
+        target.closest("a")
+      ) {
+        return;
+      }
+      if (target.closest(".md-search__inner")) {
+        toggle.checked = false;
+      }
+    });
+  </script>
+{% endblock %}

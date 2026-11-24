@@ -676,61 +676,77 @@ class RealtimeSession(WsSessionBase):
                         self._check_unfinished()
                         return None
                     received_on_current_connection = True
-                    if raw is None or raw == "" or raw == b"":
-                        closing_ws = self._detach_socket()
-                        self._check_unfinished()
-                        _logger.debug(
-                            "Realtime connection closed, request_id=%s",
-                            self._request_id_for_log(),
-                        )
-                        return None
-                    if isinstance(raw, (bytes, bytearray)):
-                        raw = raw.decode("utf-8")
-                    event = json.loads(raw)
-                    if not isinstance(event, dict):
-                        raise ValueError("expected a JSON event object")
-                    self.last_message = event
-                    self._track_event(event)
-                    if event.get("type") == "session.finished":
-                        self._finished = True
-                        closing_ws = self._detach_socket()
-                        self._check_unfinished()
-                    elif event.get("type") == "error":
-                        error = event.get("error")
-                        if error is None:
-                            error = {}
-                        if not isinstance(error, dict):
-                            raise ValueError("expected a JSON error object")
-                        code = error.get("code")
-                        if code is not None and not isinstance(code, str):
-                            raise ValueError("expected a string error code")
-                        failure = error_from_business_code(
-                            message=error.get("message") or "realtime error",
-                            code=code,
-                            body=event,
-                        )
-                        # Only real IDs belong on exceptions; protocol fallbacks
-                        # and "unknown" are strictly logging context.
-                        explicit_request_id = _event_request_id(event)
-                        if explicit_request_id is not None:
-                            failure.request_id = explicit_request_id
-                        _logger.error(
-                            "Realtime business error, request_id=%s",
-                            self._request_id_for_log(),
-                        )
-                        recoverable = (
-                            error.get("type") == "invalid_request_error"
-                        )
-                        if recoverable:
-                            # The nested event_id identifies the rejected request.
-                            request_id = error.get("event_id")
-                            if (
-                                isinstance(request_id, str)
-                                and request_id in self._pending_response_ids
-                            ):
-                                self._pending_response_ids.remove(request_id)
-                        if not recoverable or self._finish_requested:
+                    try:
+                        if raw is None or raw == "" or raw == b"":
                             closing_ws = self._detach_socket()
+                            self._check_unfinished()
+                            _logger.debug(
+                                "Realtime connection closed, request_id=%s",
+                                self._request_id_for_log(),
+                            )
+                            return None
+                        if isinstance(raw, (bytes, bytearray)):
+                            raw = raw.decode("utf-8")
+                        event = json.loads(raw)
+                        if not isinstance(event, dict):
+                            raise ValueError("expected a JSON event object")
+                        self.last_message = event
+                        self._track_event(event)
+                        if event.get("type") == "session.finished":
+                            self._finished = True
+                            closing_ws = self._detach_socket()
+                            self._check_unfinished()
+                        elif event.get("type") == "error":
+                            error = event.get("error")
+                            if error is None:
+                                error = {}
+                            if not isinstance(error, dict):
+                                raise ValueError(
+                                    "expected a JSON error object",
+                                )
+                            code = error.get("code")
+                            if code is not None and not isinstance(code, str):
+                                raise ValueError(
+                                    "expected a string error code",
+                                )
+                            failure = error_from_business_code(
+                                message=error.get("message")
+                                or "realtime error",
+                                code=code,
+                                body=event,
+                            )
+                            # Only real IDs belong on exceptions; protocol fallbacks
+                            # and "unknown" are strictly logging context.
+                            explicit_request_id = _event_request_id(event)
+                            if explicit_request_id is not None:
+                                failure.request_id = explicit_request_id
+                            _logger.error(
+                                "Realtime business error, request_id=%s",
+                                self._request_id_for_log(),
+                            )
+                            recoverable = (
+                                error.get("type") == "invalid_request_error"
+                            )
+                            if recoverable:
+                                # The nested event_id identifies the rejected request.
+                                request_id = error.get("event_id")
+                                if (
+                                    isinstance(request_id, str)
+                                    and request_id
+                                    in self._pending_response_ids
+                                ):
+                                    self._pending_response_ids.remove(
+                                        request_id,
+                                    )
+                            if not recoverable or self._finish_requested:
+                                closing_ws = self._detach_socket()
+                    except BaseException:
+                        # Detach within the same state-lock hold so a concurrent
+                        # send observes the closed session instead of racing the
+                        # cleanup into _send_raw (lock inversion).
+                        if ws is self._ws and generation == self._generation:
+                            closing_ws = self._detach_socket()
+                        raise
             except BaseException as exc:
                 with self._lock:
                     if generation == self._generation and (

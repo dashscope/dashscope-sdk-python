@@ -58,7 +58,7 @@ def _render(markup: str) -> str:
     """Render rich markup to the plain text a user would read.
 
     Asserting on the raw string would miss markup bugs: an unescaped
-    ``[acli]`` parses as a style tag, silently dropping the extra name from
+    ``[expert]`` parses as a style tag, silently dropping the extra name from
     the command the tip tells the user to copy.
     """
     buffer = io.StringIO()
@@ -413,7 +413,7 @@ class TestImportTip:
             expert._agenticx_import_tip(ImportError("No module named ui")),
         )
 
-        assert "Install dashscope[acli]" in tip
+        assert "Install dashscope[expert]" in tip
         assert "Python 3.10+" in tip
 
     def test_installed_runtime_names_its_version(self, monkeypatch):
@@ -428,7 +428,7 @@ class TestImportTip:
         assert "1.4.0" in tip
         assert "_GUIDE_DOC" in tip
         # Telling this user to install the extra sends them in a circle.
-        assert "Install dashscope[acli]" not in tip
+        assert "Install dashscope[expert]" not in tip
 
     def test_installed_without_metadata_still_blames_the_mismatch(
         self,
@@ -439,4 +439,4 @@ class TestImportTip:
         tip = _render(expert._agenticx_import_tip(ImportError("boom")))
 
         assert "an unknown version" in tip
-        assert "Install dashscope[acli]" not in tip
+        assert "Install dashscope[expert]" not in tip

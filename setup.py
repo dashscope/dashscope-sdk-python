@@ -95,6 +95,11 @@ setuptools.setup(
     author_email="dashscope@alibabacloud.com",
     license="Apache 2.0",
     url=url,
+    project_urls={
+        "Documentation": "https://dashscope.github.io/dashscope-sdk-python/",
+        "Source": "https://github.com/dashscope/dashscope-sdk-python",
+        "Issues": "https://github.com/dashscope/dashscope-sdk-python/issues",
+    },
     packages=setuptools.find_packages(
         exclude=("tests", "tests.*"),
     ),  # pylint: disable=superfluous-parens
@@ -116,7 +121,23 @@ setuptools.setup(
     install_requires=get_dependencies(),
     include_package_data=True,
     extras_require={
-        # Interactive AI assistant; typer/rich are core deps
+        # Interactive AI assistant (DashScope SDK Expert); typer/rich are
+        # core deps. `expert` is the canonical name; the `acli*` names below
+        # are kept as backward-compatible aliases with identical deps.
+        "expert": ["dashscope-agenticx[tui]>=1.0.0,<2"],
+        "expert-anthropic": ["anthropic>=0.40,<2"],
+        "expert-openai": ["openai>=1.30,<4"],
+        "expert-voice": ["sounddevice>=0.4", "numpy>=1.20"],
+        "expert-camera": ["opencv-python-headless>=4.5"],
+        "expert-all": [
+            "dashscope-agenticx[tui]>=1.0.0,<2",
+            "anthropic>=0.40,<2",
+            "openai>=1.30,<4",
+            "sounddevice>=0.4",
+            "numpy>=1.20",
+            "opencv-python-headless>=4.5",
+        ],
+        # Backward-compatible aliases for the original `acli` extra name.
         "acli": ["dashscope-agenticx[tui]>=1.0.0,<2"],
         "acli-anthropic": ["anthropic>=0.40,<2"],
         "acli-openai": ["openai>=1.30,<4"],

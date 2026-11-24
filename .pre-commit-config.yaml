@@ -7,6 +7,9 @@ repos:
       - id: sort-simple-yaml
         exclude: ^tests/legacy_1x/legacy/
       - id: check-yaml
+        # mkdocs.yml uses Material's !!python/name emoji tags; --unsafe
+        # accepts custom tags while still validating YAML syntax.
+        args: [--unsafe]
         exclude: |
           (?x)^(
               meta.yaml
@@ -206,7 +209,9 @@ repos:
     hooks:
       - id: stylelint
         files: \.(css)$
-        exclude: '(.*css_third_party.*|^tests/legacy_1x/legacy/)'
+        # docs/ ships its own Material stylesheet without a stylelint config,
+        # matching the ^docs exemption already used by mypy and pylint.
+        exclude: '(.*css_third_party.*|^tests/legacy_1x/legacy/|^docs/)'
         args: [ '--fix' ]
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: 'v3.0.0'

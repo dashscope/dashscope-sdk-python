@@ -56,7 +56,7 @@ class ImageGeneration(BaseApi, BaseAsyncApi):
                     [{'role': 'user',
                       'content': 'The weather is fine today.'},
                       {'role': 'assistant', 'content': 'Suitable for outings'}]
-            **kwargs:
+            **kwargs (Any):
                 stream(bool, `optional`): Enable server-sent events
                     (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501  # pylint: disable=line-too-long
                     the result will back partially[qwen-turbo,bailian-v1].
@@ -374,7 +374,7 @@ class AioImageGeneration(BaseAioApi, BaseAsyncAioApi):
                     [{'role': 'user',
                       'content': 'The weather is fine today.'},
                       {'role': 'assistant', 'content': 'Suitable for outings'}]
-            **kwargs:
+            **kwargs (Any):
                 stream(bool, `optional`): Enable server-sent events
                     (ref: https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)  # noqa E501  # pylint: disable=line-too-long
                     the result will back partially[qwen-turbo,bailian-v1].

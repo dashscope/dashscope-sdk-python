@@ -1,7 +1,13 @@
-docutils>=0.16.0
-myst_parser
-recommonmark
-sphinx>=5.3.0
-sphinx-book-theme
-sphinx-copybutton
-sphinx_markdown_tables
+# MkDocs 2.0 removes the plugin system; Material/mkdocstrings require 1.x
+mkdocs>=1.6,<2
+mkdocs-material>=9.5
+# Verified combination: merge_init_into_class + show_if_no_docstring render
+# constructor signatures and undocumented model fields on this pair.
+mkdocstrings[python]>=1.0.8,<2
+mkdocstrings-python>=2.0.11,<3
+# Multi-language site (English default + Chinese), FastAPI-style selector
+mkdocs-static-i18n>=1.2
+# Signature formatting for mkdocstrings (separate_signature)
+black
+# Chinese search segmentation for the Material search plugin
+jieba

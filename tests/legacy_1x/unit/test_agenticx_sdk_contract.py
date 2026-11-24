@@ -22,6 +22,16 @@ _ACLI_EXTRAS = frozenset(
         "acli-voice",
     },
 )
+_EXPERT_EXTRAS = frozenset(
+    {
+        "expert",
+        "expert-all",
+        "expert-anthropic",
+        "expert-camera",
+        "expert-openai",
+        "expert-voice",
+    },
+)
 
 
 def test_vendored_acli_is_removed():
@@ -59,7 +69,10 @@ def test_setup_declares_the_acli_extras_and_agenticx_dependency():
             }
     assert groups is not None
     assert not _ACLI_EXTRAS - groups
-    assert source.count("dashscope-agenticx[tui]>=1.0.0,<2") == 2
+    assert not _EXPERT_EXTRAS - groups
+    # `expert` is canonical and `acli*` are kept as aliases, so the agenticx
+    # dependency string appears once per family core plus once per `-all`.
+    assert source.count("dashscope-agenticx[tui]>=1.0.0,<2") == 4
 
 
 @pytest.mark.skipif(

@@ -92,7 +92,7 @@ def main(argv=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Run from the repository root:\n"
-            "  python -m pip install -e '.[acli-voice]'\n"
+            "  python -m pip install -e '.[expert-voice]'\n"
             "  python -m examples.01_atomic_capabilities.audio.direct_call.asr_microphone --list-devices\n"
             "  python -m examples.01_atomic_capabilities.audio.direct_call.asr_microphone --seconds 10 "
             "--transcript microphone.txt\n"

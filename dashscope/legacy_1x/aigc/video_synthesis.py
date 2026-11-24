@@ -131,7 +131,7 @@ class VideoSynthesis(BaseAsyncApi):
             audio_setting (str, optional): Audio setting for video,
                 "auto" or "origin".
             enable_thinking (bool, optional): Whether to use Agentic PE.
-            **kwargs: Additional parameters passed to the API.
+            **kwargs (Any): Additional parameters passed to the API.
 
         Raises:
             InputRequired: The prompt cannot be empty.
@@ -445,7 +445,7 @@ class VideoSynthesis(BaseAsyncApi):
             audio_setting (str, optional): Audio setting for video,
                 "auto" or "origin".
             enable_thinking (bool, optional): Whether to use Agentic PE.
-            **kwargs: Additional parameters passed to the API.
+            **kwargs (Any): Additional parameters passed to the API.
 
         Raises:
             InputRequired: The prompt cannot be empty.
@@ -708,7 +708,7 @@ class AioVideoSynthesis(BaseAsyncAioApi):
             audio_setting (str, optional): Audio setting for video,
                 "auto" or "origin".
             enable_thinking (bool, optional): Whether to use Agentic PE.
-            **kwargs: Additional parameters passed to the API.
+            **kwargs (Any): Additional parameters passed to the API.
 
         Raises:
             InputRequired: The prompt cannot be empty.
@@ -848,7 +848,7 @@ class AioVideoSynthesis(BaseAsyncAioApi):
             shot_type (str, optional): Shot type for video generation.
             enable_thinking (bool, optional): Whether to use Agentic PE.
             audio_setting (str, optional): Audio setting for video,
-            **kwargs: Additional parameters passed to the API.
+            **kwargs (Any): Additional parameters passed to the API.
 
         Raises:
             InputRequired: The prompt cannot be empty.

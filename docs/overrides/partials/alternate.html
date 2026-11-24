@@ -1,0 +1,19 @@
+{#-
+  Segmented EN | 中 language switch instead of Material's translate-icon
+  dropdown (the same 文A button fastapi.tiangolo.com uses). Two locales
+  make a dropdown pointless: show both, highlight the active one, switch
+  in a single click. Overrides partials/alternate.html.
+-#}
+{% set current = i18n_page_locale | default("en") %}
+<div class="md-header__option">
+  <nav class="lang-switch" aria-label="{{ '切换语言' if current == 'zh' else 'Switch language' }}">
+    {% for alt in config.extra.alternate %}
+      {% set active = alt.lang == current %}
+      <a href="{{ alt.link | url }}" hreflang="{{ alt.lang }}" title="{{ alt.name }}"
+         class="lang-switch__item{% if active %} lang-switch__item--active{% endif %}"
+         {% if active %}aria-current="true"{% endif %}>
+        {{ "中" if alt.lang == "zh" else "EN" }}
+      </a>
+    {% endfor %}
+  </nav>
+</div>

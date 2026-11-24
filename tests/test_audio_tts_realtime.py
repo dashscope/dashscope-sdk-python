@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 
 import pytest
 from websocket import (
@@ -481,6 +482,112 @@ def test_realtime_error_event_maps_wire_code():
     assert error.status_code == 200
 
 
+def test_realtime_error_cleanup_completes_before_a_queued_send_can_observe():
+    # A send queued on the state lock must never observe a still-attached
+    # socket after a fatal receive error: cleanup has to finish before the
+    # receive path drops the lock, or the send races it into _send_raw.
+    ws = FakeWebSocket(
+        [
+            json.dumps(
+                {
+                    "type": "error",
+                    # A non-string code raises ValueError after _track_event,
+                    # exercising the exception cleanup path (not the
+                    # business-error branch, which already detached under
+                    # the lock before the fix).
+                    "error": {"code": 123, "message": "gone"},
+                },
+            ),
+        ],
+    )
+    client = _make_client()
+    with client.audio.realtime.connect(
+        model="qwen-omni-turbo-realtime",
+        connector=lambda url, headers: ws,
+    ) as rt:
+        gate = threading.Event()
+        resume = threading.Event()
+        blocked = threading.Event()
+        queued = threading.Event()
+        exit_unlocked = threading.Event()
+        processing_error = []
+        sender_errors = []
+        lock = rt._lock
+
+        class ObservedLock:
+            def __enter__(self):
+                if threading.current_thread().name == "witness-send":
+                    queued.set()
+                return lock.__enter__()
+
+            def __exit__(self, *args):
+                lock.__exit__(*args)
+                if processing_error:
+                    # Widen the post-error unlock window deterministically:
+                    # the queued sender must get the lock before any further
+                    # cleanup.
+                    processing_error.clear()
+                    exit_unlocked.set()
+                    assert resume.wait(5)
+
+        original_track = rt._track_event
+
+        def gated_track(event):
+            original_track(event)
+            if event.get("type") == "error":
+                processing_error.append(True)
+                blocked.set()
+                assert gate.wait(5)
+
+        rt._lock = ObservedLock()
+        rt._track_event = gated_track
+
+        def send():
+            try:
+                rt.send_event({"type": "input_audio_buffer.append"})
+            except BaseException as exc:  # noqa: BLE001 - record any outcome
+                sender_errors.append(exc)
+
+        sender = threading.Thread(
+            target=send,
+            name="witness-send",
+            daemon=True,
+        )
+        receiver_errors = []
+
+        def receive():
+            try:
+                rt.recv_event()
+            except BaseException as exc:  # noqa: BLE001 - record any outcome
+                receiver_errors.append(exc)
+
+        receiver = threading.Thread(target=receive, daemon=True)
+        receiver.start()
+        try:
+            assert blocked.wait(5)
+            sender.start()
+            assert queued.wait(5)
+            gate.set()
+            assert exit_unlocked.wait(5)
+            resume.set()
+            sender.join(5)
+            receiver.join(5)
+            assert not sender.is_alive()
+            assert not receiver.is_alive()
+            assert len(receiver_errors) == 1
+            assert isinstance(receiver_errors[0], ValueError)
+            assert len(sender_errors) == 1
+            assert isinstance(sender_errors[0], RuntimeError)
+            assert "not open" in str(sender_errors[0])
+            assert ws.sent == []
+            assert rt._ws is None
+        finally:
+            gate.set()
+            resume.set()
+            sender.join(3)
+            receiver.join(3)
+
+
 def test_realtime_send_requires_open_session():
     client = _make_client()
     session = client.audio.realtime.connect(model="qwen-omni-turbo-realtime")
@@ -897,7 +1004,6 @@ def test_realtime_retired_reader_does_not_log_current_request_errors(
     monkeypatch,
     reconnect,
 ):
-    import threading
     from concurrent.futures import ThreadPoolExecutor
 
     caplog.set_level(logging.ERROR, logger=_REALTIME_LOGGER)

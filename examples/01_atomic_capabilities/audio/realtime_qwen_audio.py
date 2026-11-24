@@ -102,7 +102,7 @@ def make_parser():
             "--output reply.wav\n"
             "python -m examples.01_atomic_capabilities.audio.realtime_qwen_audio --microphone --seconds 10 "
             "--output reply.wav\n"
-            "安装源码：python -m pip install -e '.[acli-voice]'。"
+            "安装源码：python -m pip install -e '.[expert-voice]'。"
             "配置 DASHSCOPE_API_KEY / DASHSCOPE_WORKSPACE / DASHSCOPE_REGION。\n"
             "固定使用 qwen-audio-3.0-realtime-plus，手动结束单轮输入。"
             "本示例未进行云端验证；实际调用可能计费。"
