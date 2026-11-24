@@ -41,6 +41,16 @@ class _TtyStderr(io.StringIO):
 # sys.stderr patch made during fixture setup.
 @pytest.fixture
 def tty_stderr(monkeypatch):
+    # Rich gates live output on TERM/FORCE_COLOR/TTY_COMPATIBLE as well as
+    # isatty(); a runner exporting TERM=dumb (CI, sandboxed shells) would
+    # silence the spinner and fail the text assertions. Pin them so the
+    # fake TTY behaves identically on every runner; monkeypatch restores
+    # the process environment afterwards.
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("TTY_COMPATIBLE", raising=False)
+    monkeypatch.setenv("NO_COLOR", "1")
+
     def install() -> _TtyStderr:
         stream = _TtyStderr()
         monkeypatch.setattr("sys.stderr", stream)
@@ -186,6 +196,24 @@ class TestSleepHook:
         sleep(0)
         text = stream.getvalue()
         assert text.count("elapsed) waiting for") == 0
+
+    def test_dumb_terminal_stays_silent(self, tty_stderr, monkeypatch):
+        """Rich refuses escape sequences on TERM=dumb; silence is correct."""
+        stream = tty_stderr()
+        monkeypatch.setenv("TERM", "dumb")
+        monkeypatch.setattr(
+            "dashscope.cli.progress.time.sleep",
+            lambda s: None,
+        )
+        waiter = _RecordingWait(result=None)
+        wait_job(
+            _client(waiter),
+            "job-1",
+            timeout=5,
+            renderer=Renderer("table"),
+        )
+        waiter.calls[0][1]["_sleep"](0)
+        assert stream.getvalue() == ""
 
     def test_custom_label(self, tty_stderr, monkeypatch):
         stream = tty_stderr()
