@@ -87,6 +87,8 @@ with client.sessions.events.stream(session.id) as stream:
 
 ::: dashscope.applications.agentstudio.resources.files.AsyncFiles
 
+::: dashscope.applications.agentstudio.resources.files.FileContent
+
 ## 记忆
 
 ::: dashscope.applications.agentstudio.resources.memory_stores.MemoryStores
@@ -130,6 +132,14 @@ with client.sessions.events.stream(session.id) as stream:
 ::: dashscope.applications.agentstudio.resources.webhook_endpoints.WebhookEndpoints
 
 ::: dashscope.applications.agentstudio.resources.webhook_endpoints.AsyncWebhookEndpoints
+
+## 用量（Usage）
+
+`client.usage` —— 工作空间、智能体与会话的用量汇总及趋势。
+
+::: dashscope.applications.agentstudio.resources.usage.Usage
+
+::: dashscope.applications.agentstudio.resources.usage.AsyncUsage
 
 ## 客户端事件辅助函数
 

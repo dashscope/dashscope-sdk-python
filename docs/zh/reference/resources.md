@@ -160,6 +160,8 @@ description: "客户端资源命名空间 API 参考：向量嵌入、图像、�
 
 ::: dashscope.resources.apps.WorkflowMessage
 
+::: dashscope.resources.apps.AppModelUsage
+
 ## 听悟（TingWu）
 
 `client.tingwu` —— 会议转写与分析。
@@ -237,3 +239,7 @@ description: "客户端资源命名空间 API 参考：向量嵌入、图像、�
 ::: dashscope.resources._jobs.JobResult
 
 ::: dashscope.resources._jobs.JobList
+
+::: dashscope.resources._jobs.Jobs
+
+::: dashscope.resources._jobs.AsyncJobs

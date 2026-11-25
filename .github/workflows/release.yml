@@ -161,31 +161,18 @@ jobs:
         with:
           path: artifacts/
 
+      # Group the conventional commits since the previous tag into the
+      # template's Features/Bug Fixes/... sections so the draft Release
+      # ships with a ready-made changelog (Highlights stay manual).
       - name: Render release notes
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           git fetch --tags --force
-          prev_tag=$(git tag --sort=-v:refname | grep -v "^${TAG_NAME}$" | head -1)
-          if [ -n "$prev_tag" ]; then
-            changelog_url="https://github.com/${{ github.repository }}/compare/${prev_tag}...${TAG_NAME}"
-          else
-            changelog_url="https://github.com/${{ github.repository }}/commits/${TAG_NAME}"
-          fi
-          python - "$TAG_NAME" "$changelog_url" <<'PYEOF'
-          import sys
-          from string import Template
-          from pathlib import Path
-
-          tag = sys.argv[1]
-          changelog = sys.argv[2]
-          version = tag.lstrip("v")
-          tpl = Template(Path(".github/release-template.md").read_text())
-          body = tpl.safe_substitute(
-              TAG_NAME=tag, VERSION=version, FULL_CHANGELOG_URL=changelog,
-          )
-          Path("release-body.md").write_text(body)
-          PYEOF
+          python tools/render_release_notes.py \
+            --tag "$TAG_NAME" \
+            --repo "${{ github.repository }}" \
+            --output release-body.md
 
       - name: Detect pre-release
         id: prerelease
