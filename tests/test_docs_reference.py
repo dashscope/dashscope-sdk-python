@@ -28,7 +28,7 @@ def test_every_directive_resolves():
     for locale in gen.REFERENCE_DIRS:
         for page in gen.PAGE_SUBTREES:
             for _, target in gen.parse_entries(
-                _page_text(locale, page).splitlines()
+                _page_text(locale, page).splitlines(),
             ):
                 _, status = gen.resolve(target)
                 assert status == "ok", f"{locale}/{page}: {target} ({status})"
@@ -52,12 +52,15 @@ def test_new_public_class_is_discovered(monkeypatch):
     """A class added to a referenced module (and its __all__) is picked up."""
     embeddings = importlib.import_module("dashscope.resources.embeddings")
     fake = type(
-        "FakeNewModel", (),
+        "FakeNewModel",
+        (),
         {"__module__": "dashscope.resources.embeddings"},
     )
     monkeypatch.setitem(vars(embeddings), "FakeNewModel", fake)
     monkeypatch.setattr(
-        embeddings, "__all__", list(embeddings.__all__) + ["FakeNewModel"],
+        embeddings,
+        "__all__",
+        list(embeddings.__all__) + ["FakeNewModel"],
     )
     text = _page_text("en", "resources.md")
     new_text, added, removed = gen.sync_page(text, "resources.md")
@@ -77,10 +80,13 @@ def test_new_module_with_all_gets_own_section(monkeypatch):
     module.Widget = type("Widget", (), {"__module__": name})
     monkeypatch.setitem(sys.modules, name, module)
     monkeypatch.setattr(
-        gen, "walk_subtree", lambda prefix: [prefix, name],
+        gen,
+        "walk_subtree",
+        lambda prefix: [prefix, name],
     )
     new_text, added, _ = gen.sync_page(
-        _page_text("en", "resources.md"), "resources.md",
+        _page_text("en", "resources.md"),
+        "resources.md",
     )
     assert "::: dashscope.resources.fake_new.Widget" in added
     assert "## Fake New" in new_text
@@ -90,11 +96,15 @@ def test_unexported_class_is_not_discovered(monkeypatch):
     """Without __all__ membership a new class stays undocumented."""
     embeddings = importlib.import_module("dashscope.resources.embeddings")
     fake = type(
-        "InternalHelper", (),
+        "InternalHelper",
+        (),
         {"__module__": "dashscope.resources.embeddings"},
     )
     monkeypatch.setitem(vars(embeddings), "InternalHelper", fake)
-    _, added, _ = gen.sync_page(_page_text("en", "resources.md"), "resources.md")
+    _, added, _ = gen.sync_page(
+        _page_text("en", "resources.md"),
+        "resources.md",
+    )
     assert "::: dashscope.resources.embeddings.InternalHelper" not in added
 
 
@@ -104,7 +114,7 @@ def test_stale_entry_is_removed():
         "::: dashscope.resources.embeddings.Embeddings\n\n"
         "::: dashscope.resources.embeddings.NoSuchSymbol\n"
     )
-    new_text, added, removed = gen.sync_page(text, "resources.md")
+    new_text, _, removed = gen.sync_page(text, "resources.md")
     assert removed == ["dashscope.resources.embeddings.NoSuchSymbol"]
     assert "NoSuchSymbol" not in new_text
     assert "::: dashscope.resources.embeddings.Embeddings" in new_text
@@ -116,7 +126,8 @@ def test_legacy_page_is_frozen(monkeypatch):
         "dashscope.legacy_1x.aigc.generation",
     )
     fake = type(
-        "LegacyNewThing", (),
+        "LegacyNewThing",
+        (),
         {"__module__": "dashscope.legacy_1x.aigc.generation"},
     )
     monkeypatch.setitem(vars(generation), "LegacyNewThing", fake)
@@ -145,7 +156,9 @@ def test_unclassified_public_module_fails_check(monkeypatch):
     """Blind-spot guard: a new public module without __all__ or an
     internal classification must fail --check, not slip through."""
     _fake_public_module(
-        monkeypatch, "dashscope.resources.sneaky_new", with_all=False,
+        monkeypatch,
+        "dashscope.resources.sneaky_new",
+        with_all=False,
     )
     assert gen.main(["--check"]) == 1
 
@@ -161,11 +174,14 @@ def test_publishing_module_with_all_is_discovered(monkeypatch):
     """With __all__ the module is published: --check reports the missing
     page entries (drift) rather than an unclassified gap."""
     _fake_public_module(
-        monkeypatch, "dashscope.resources.sneaky_new", with_all=True,
+        monkeypatch,
+        "dashscope.resources.sneaky_new",
+        with_all=True,
     )
     assert gen.main(["--check"]) == 1  # pages need the new entries
-    new_text, added, _ = gen.sync_page(
-        _page_text("en", "resources.md"), "resources.md",
+    _, added, _ = gen.sync_page(
+        _page_text("en", "resources.md"),
+        "resources.md",
     )
     assert "::: dashscope.resources.sneaky_new.Widget" in added
 

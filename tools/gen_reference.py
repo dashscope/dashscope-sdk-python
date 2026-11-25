@@ -173,8 +173,10 @@ def public_defined(module, include_functions=True):
     for name, obj in vars(module).items():
         if name.startswith("_"):
             continue
-        if not (isinstance(obj, type)
-                or (include_functions and inspect.isfunction(obj))):
+        if not (
+            isinstance(obj, type)
+            or (include_functions and inspect.isfunction(obj))
+        ):
             continue
         if getattr(obj, "__module__", None) != module.__name__:
             continue
@@ -210,19 +212,12 @@ def parse_entries(lines):
     return entries
 
 
-def sync_page(text: str, page: str, extra_covered=frozenset()):
-    """Return (new_text, additions, removals) for one reference page.
-
-    ``extra_covered`` carries canonical identities already documented on
-    other pages, so a re-export (e.g. chat's ChatCompletion, documented
-    under types.md) is not duplicated onto every page that re-exports it.
-    """
-    lines = text.splitlines()
-    entries = parse_entries(lines)
-
+def _scan_entries(entries, page, extra_covered):
+    """Resolve existing directives into covered identities, whole-module
+    renders, per-module entry anchors and stale targets."""
     covered = set(extra_covered)  # canonical (module, qualname) identities
-    whole_modules = set()    # modules rendered wholesale via `::: pkg.mod`
-    module_entries = {}      # module -> [line indices of its entries]
+    whole_modules = set()  # modules rendered wholesale via `::: pkg.mod`
+    module_entries = {}  # module -> [line indices of its entries]
     stale = []
     for idx, target in entries:
         obj, status = resolve(target)
@@ -237,19 +232,49 @@ def sync_page(text: str, page: str, extra_covered=frozenset()):
         else:
             covered.add((obj.__module__, obj.__qualname__))
         module_entries.setdefault(entry_module(target, obj), []).append(idx)
+    return covered, whole_modules, module_entries, stale
 
-    # Discovery scope: referenced modules + owned public subtree modules.
+
+def _discovery_scope(page, module_entries):
+    """Referenced modules + owned public subtree modules."""
     scope = set() if page in FROZEN_PAGES else set(module_entries)
     for prefix in PAGE_SUBTREES[page]:
         for name in walk_subtree(prefix):
             if owner_page(name) == page:
                 scope.add(name)
+    return scope
 
-    additions = {}   # module -> [new symbol names]
+
+def _module_candidates(name, module, module_entries):
+    """Symbols a module may grow with under the publication contract."""
+    exported = getattr(module, "__all__", None)
+    if exported is not None:
+        # Defined here AND explicitly exported: re-export surfaces
+        # (agentstudio root, RL compatibility layer) stay curated.
+        export_set = set(exported)
+        return [
+            (symbol, getattr(module, symbol))
+            for symbol in public_defined(module)
+            if symbol in export_set
+        ]
+    if name in module_entries:
+        # Referenced but no __all__: only grow with defined classes.
+        return [
+            (symbol, getattr(module, symbol))
+            for symbol in public_defined(module, include_functions=False)
+        ]
+    return []
+
+
+def _discover_additions(page, scope, whole_modules, module_entries, covered):
+    """New public symbols per module, updating ``covered`` in place."""
+    additions = {}  # module -> [new symbol names]
     for name in sorted(scope):
         if name in whole_modules or name in EXCLUDE_MODULES:
             continue
-        if any(name == p or name.startswith(p + ".") for p in EXCLUDE_PREFIXES):
+        if any(
+            name == p or name.startswith(p + ".") for p in EXCLUDE_PREFIXES
+        ):
             continue
         leaf = name.rsplit(".", 1)[-1]
         if leaf.startswith("_") and name not in module_entries:
@@ -259,32 +284,18 @@ def sync_page(text: str, page: str, extra_covered=frozenset()):
         except Exception as exc:
             IMPORT_WARNINGS.append((page, f"{name} ({exc})"))
             continue
-        exported = getattr(module, "__all__", None)
-        if exported is not None:
-            # Defined here AND explicitly exported: re-export surfaces
-            # (agentstudio root, RL compatibility layer) stay curated.
-            export_set = set(exported)
-            candidates = [
-                (symbol, getattr(module, symbol))
-                for symbol in public_defined(module)
-                if symbol in export_set
-            ]
-        elif name in module_entries:
-            # Referenced but no __all__: only grow with defined classes.
-            candidates = [
-                (symbol, getattr(module, symbol))
-                for symbol in public_defined(module, include_functions=False)
-            ]
-        else:
-            continue
-        for symbol, obj in candidates:
+        for symbol, obj in _module_candidates(name, module, module_entries):
             key = (obj.__module__, obj.__qualname__)
             if key not in covered:
                 covered.add(key)
                 additions.setdefault(name, []).append(symbol)
+    return additions
 
-    # Placement: after the module's last existing entry, or a new section.
-    anchors = {}     # line index -> [directive lines to insert after it]
+
+def _place_additions(additions, module_entries):
+    """Anchor new directives after the module's last existing entry,
+    or queue a new section."""
+    anchors = {}  # line index -> [directive lines to insert after it]
     new_sections = []
     for module, symbols in additions.items():
         directives = [f"::: {module}.{s}" for s in symbols]
@@ -294,7 +305,11 @@ def sync_page(text: str, page: str, extra_covered=frozenset()):
         else:
             title = module.rsplit(".", 1)[-1].replace("_", " ").title()
             new_sections.append((title, directives))
+    return anchors, new_sections
 
+
+def _render_page(lines, stale, anchors, new_sections):
+    """Page text with stale entries dropped and new directives placed."""
     stale_idx = {idx for idx, _ in stale}
     out = []
     for i, line in enumerate(lines):
@@ -311,7 +326,32 @@ def sync_page(text: str, page: str, extra_covered=frozenset()):
             if j:
                 out.append("")
             out.append(directive)
-    new_text = "\n".join(out) + "\n"
+    return "\n".join(out) + "\n"
+
+
+def sync_page(text: str, page: str, extra_covered=frozenset()):
+    """Return (new_text, additions, removals) for one reference page.
+
+    ``extra_covered`` carries canonical identities already documented on
+    other pages, so a re-export (e.g. chat's ChatCompletion, documented
+    under types.md) is not duplicated onto every page that re-exports it.
+    """
+    lines = text.splitlines()
+    covered, whole_modules, module_entries, stale = _scan_entries(
+        parse_entries(lines),
+        page,
+        extra_covered,
+    )
+    scope = _discovery_scope(page, module_entries)
+    additions = _discover_additions(
+        page,
+        scope,
+        whole_modules,
+        module_entries,
+        covered,
+    )
+    anchors, new_sections = _place_additions(additions, module_entries)
+    new_text = _render_page(lines, stale, anchors, new_sections)
     added = [d for ds in anchors.values() for d in ds]
     added += [d for _, ds in new_sections for d in ds]
     return new_text, added, [t for _, t in stale]
@@ -336,8 +376,10 @@ def find_unclassified(referenced):
                     continue
                 if name in EXCLUDE_MODULES or _is_internal(name):
                     continue
-                if any(name == p or name.startswith(p + ".")
-                       for p in EXCLUDE_PREFIXES):
+                if any(
+                    name == p or name.startswith(p + ".")
+                    for p in EXCLUDE_PREFIXES
+                ):
                     continue
                 if name.rsplit(".", 1)[-1].startswith("_"):
                     continue
@@ -350,43 +392,81 @@ def find_unclassified(referenced):
     return sorted(set(gaps))
 
 
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true",
-                        help="fail instead of writing when pages drift")
-    args = parser.parse_args(argv)
-
-    drift = False
-    locale_targets = {}
-    IMPORT_WARNINGS.clear()
-    # Canonical identities documented anywhere in the reference (en is
-    # the source of truth; zh mirrors it).
-    global_covered = set()
-    global_referenced = set()
+def _global_identities():
+    """Canonical identities and referenced modules across the en pages
+    (en is the source of truth; zh mirrors it)."""
+    covered = set()
+    referenced = set()
     for page in PAGE_SUBTREES:
         text = (REFERENCE_DIRS["en"] / page).read_text(encoding="utf-8")
         for _, target in parse_entries(text.splitlines()):
             obj, status = resolve(target)
             if status == "ok":
-                global_referenced.add(entry_module(target, obj))
+                referenced.add(entry_module(target, obj))
                 if not inspect.ismodule(obj):
-                    global_covered.add((obj.__module__, obj.__qualname__))
+                    covered.add((obj.__module__, obj.__qualname__))
+    return covered, referenced
+
+
+def _sync_locale(locale, directory, global_covered, check):
+    """Sync one locale's pages; return (targets per page, drift)."""
+    targets = {}
+    drift = False
+    for page in PAGE_SUBTREES:
+        path = directory / page
+        text = path.read_text(encoding="utf-8")
+        new_text, added, removed = sync_page(text, page, global_covered)
+        targets[page] = collect_targets(new_text)
+        if new_text != text:
+            drift = True
+            print(f"{locale}/{page}:")
+            for directive in added:
+                print(f"  + {directive}")
+            for target in removed:
+                print(f"  - {target} (no longer resolves)")
+            if not check:
+                path.write_text(new_text, encoding="utf-8")
+    return targets, drift
+
+
+def _report_gaps(gaps):
+    print(
+        "Unclassified public modules (neither documented nor "
+        "declared internal):",
+        file=sys.stderr,
+    )
+    for name in gaps:
+        print(f"  ? {name}", file=sys.stderr)
+    print(
+        "Fix: add __all__ to publish the module, or list it in "
+        "INTERNAL_MODULES / INTERNAL_PREFIXES in "
+        "tools/gen_reference.py.",
+        file=sys.stderr,
+    )
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="fail instead of writing when pages drift",
+    )
+    args = parser.parse_args(argv)
+
+    IMPORT_WARNINGS.clear()
+    global_covered, global_referenced = _global_identities()
+    drift = False
+    locale_targets = {}
     for locale, directory in REFERENCE_DIRS.items():
-        locale_targets[locale] = {}
-        for page in PAGE_SUBTREES:
-            path = directory / page
-            text = path.read_text(encoding="utf-8")
-            new_text, added, removed = sync_page(text, page, global_covered)
-            locale_targets[locale][page] = collect_targets(new_text)
-            if new_text != text:
-                drift = True
-                print(f"{locale}/{page}:")
-                for directive in added:
-                    print(f"  + {directive}")
-                for target in removed:
-                    print(f"  - {target} (no longer resolves)")
-                if not args.check:
-                    path.write_text(new_text, encoding="utf-8")
+        targets, locale_drift = _sync_locale(
+            locale,
+            directory,
+            global_covered,
+            args.check,
+        )
+        locale_targets[locale] = targets
+        drift = drift or locale_drift
 
     # The two locales must document the same symbols.
     for page in PAGE_SUBTREES:
@@ -394,32 +474,35 @@ def main(argv=None) -> int:
         zh = locale_targets["zh"][page]
         if sorted(en) != sorted(zh):
             drift = True
-            print(f"{page}: en/zh entry sets differ: "
-                  f"{sorted(set(en) ^ set(zh))}", file=sys.stderr)
+            print(
+                f"{page}: en/zh entry sets differ: "
+                f"{sorted(set(en) ^ set(zh))}",
+                file=sys.stderr,
+            )
 
     # Blind-spot guard: every public module must be published (__all__
     # or a page entry) or explicitly declared internal.
     gaps = find_unclassified(global_referenced)
     if gaps:
-        print("Unclassified public modules (neither documented nor "
-              "declared internal):", file=sys.stderr)
-        for name in gaps:
-            print(f"  ? {name}", file=sys.stderr)
-        print("Fix: add __all__ to publish the module, or list it in "
-              "INTERNAL_MODULES / INTERNAL_PREFIXES in "
-              "tools/gen_reference.py.", file=sys.stderr)
+        _report_gaps(gaps)
         if args.check:
             drift = True
 
     if IMPORT_WARNINGS:
-        print("Kept despite import failure (optional dependency missing "
-              "or module renamed — verify manually):", file=sys.stderr)
+        print(
+            "Kept despite import failure (optional dependency missing "
+            "or module renamed — verify manually):",
+            file=sys.stderr,
+        )
         for page, target in sorted(set(IMPORT_WARNINGS)):
             print(f"  ! {page}: {target}", file=sys.stderr)
 
     if args.check and drift:
-        print("Reference pages are out of sync with the public API. "
-              "Run: python tools/gen_reference.py", file=sys.stderr)
+        print(
+            "Reference pages are out of sync with the public API. "
+            "Run: python tools/gen_reference.py",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

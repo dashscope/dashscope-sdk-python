@@ -8,7 +8,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = REPO_ROOT / "tools" / "render_release_notes.py"
 
-spec = importlib.util.spec_from_file_location("render_release_notes", SCRIPT_PATH)
+spec = importlib.util.spec_from_file_location(
+    "render_release_notes",
+    SCRIPT_PATH,
+)
 rrn = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(rrn)
 
@@ -95,7 +98,9 @@ def test_render_body_omits_empty_other_section():
 
 def test_previous_tag_skips_current(monkeypatch):
     monkeypatch.setattr(
-        rrn, "git", lambda *a: "v2.1.2\nv2.1.1\nv2.1.0\n",
+        rrn,
+        "git",
+        lambda *a: "v2.1.2\nv2.1.1\nv2.1.0\n",
     )
     assert rrn.previous_tag("v2.1.2") == "v2.1.1"
     assert rrn.previous_tag("v9.9.9") == "v2.1.2"
@@ -116,18 +121,31 @@ def test_commit_messages_splits_on_nul(monkeypatch):
     monkeypatch.setattr(rrn, "git", fake_git)
     messages = rrn.commit_messages("v1..v2")
     assert messages == ["feat: a", "fix: b\n\nbody"]
-    assert captured["args"] == ("log", "--no-merges", "--format=%B%x00", "v1..v2")
+    assert captured["args"] == (
+        "log",
+        "--no-merges",
+        "--format=%B%x00",
+        "v1..v2",
+    )
 
 
 def test_main_writes_body(tmp_path, monkeypatch):
     monkeypatch.setattr(rrn, "previous_tag", lambda tag: "v1.0.0")
     monkeypatch.setattr(
-        rrn, "commit_messages", lambda rev: ["feat(cli): shiny new thing"],
+        rrn,
+        "commit_messages",
+        lambda rev: ["feat(cli): shiny new thing"],
     )
     out = tmp_path / "release-body.md"
     rc = rrn.main(
-        ["--tag", "v1.1.0", "--repo", "dashscope/dashscope-sdk-python",
-         "--output", str(out)],
+        [
+            "--tag",
+            "v1.1.0",
+            "--repo",
+            "dashscope/dashscope-sdk-python",
+            "--output",
+            str(out),
+        ],
     )
     assert rc == 0
     body = out.read_text(encoding="utf-8")

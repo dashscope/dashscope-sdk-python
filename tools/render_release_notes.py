@@ -43,7 +43,11 @@ _SECTIONS = [
     ("BUG_FIXES", "🐛 Bug Fixes", ("fix",)),
     ("REFACTORING", "♻️ Refactoring", ("refactor",)),
     ("DOCUMENTATION", "📚 Documentation", ("docs",)),
-    ("CI_CHORE", "🔧 CI & Chore", ("chore", "ci", "build", "test", "style", "perf")),
+    (
+        "CI_CHORE",
+        "🔧 CI & Chore",
+        ("chore", "ci", "build", "test", "style", "perf"),
+    ),
 ]
 
 
@@ -117,9 +121,7 @@ def group_commits(messages: list) -> dict:
 def render_body(tag: str, changelog_url: str, groups: dict) -> str:
     template = Template(TEMPLATE_PATH.read_text(encoding="utf-8"))
     other = groups.get("OTHER", "None")
-    other_section = (
-        f"### 📌 Other\n\n{other}\n\n" if other != "None" else ""
-    )
+    other_section = f"### 📌 Other\n\n{other}\n\n" if other != "None" else ""
     return template.safe_substitute(
         TAG_NAME=tag,
         VERSION=tag.lstrip("v"),
@@ -132,7 +134,11 @@ def render_body(tag: str, changelog_url: str, groups: dict) -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tag", required=True, help="released tag, e.g. v2.1.2")
+    parser.add_argument(
+        "--tag",
+        required=True,
+        help="released tag, e.g. v2.1.2",
+    )
     parser.add_argument("--repo", required=True, help="owner/name on GitHub")
     parser.add_argument("--output", required=True, help="body file to write")
     args = parser.parse_args(argv)
