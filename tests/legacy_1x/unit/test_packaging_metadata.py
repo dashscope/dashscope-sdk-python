@@ -302,6 +302,100 @@ def test_python_39_config_reader_is_a_core_dependency():
     assert 'tomli>=1.1.0; python_version < "3.11"' in requirements
 
 
+@pytest.fixture
+def docs_workflow():
+    yaml = pytest.importorskip("yaml")
+    path = ROOT / ".github" / "workflows" / "docs.yml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def docs_expression(expression, event_name, ref):
+    """Evaluate the trusted workflow's small Python-compatible subset."""
+    expression = expression.strip().removeprefix("${{").removesuffix("}}")
+    expression = expression.replace("github.event_name", repr(event_name))
+    expression = expression.replace("github.ref", repr(ref))
+    expression = expression.replace("&&", " and ").replace("||", " or ")
+    return eval(
+        " ".join(expression.split()),
+        {
+            "__builtins__": {},
+            "format": lambda pattern, value: pattern.format(value),
+        },
+    )
+
+
+def test_docs_release_dispatches_main_with_scoped_permissions(docs_workflow):
+    # PyYAML's YAML 1.1 loader may interpret the GitHub Actions "on" as True.
+    triggers = docs_workflow.get("on", docs_workflow.get(True))
+    assert "workflow_dispatch" in triggers
+    assert triggers["release"]["types"] == ["published"]
+    dispatch = docs_workflow["jobs"]["dispatch"]
+    assert dispatch["if"] == "github.event_name == 'release'"
+    assert dispatch["permissions"] == {"actions": "write"}
+    step = dispatch["steps"][0]
+    assert step["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert step["run"] == (
+        'gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main'
+    )
+    assert docs_workflow["permissions"] == {"contents": "read"}
+
+
+@pytest.mark.parametrize(
+    "event_name,ref,build_expected,deploy_expected",
+    [
+        ("release", "refs/tags/v2.1.2", False, False),
+        ("push", "refs/heads/main", True, True),
+        ("workflow_dispatch", "refs/heads/main", True, True),
+        ("workflow_dispatch", "refs/heads/dev/v2.1.2-2", True, False),
+        ("pull_request", "refs/pull/242/merge", True, False),
+    ],
+)
+def test_docs_deploys_only_main_pushes_and_dispatches(
+    docs_workflow, event_name, ref, build_expected, deploy_expected
+):
+    jobs = docs_workflow["jobs"]
+    assert docs_expression(jobs["build"]["if"], event_name, ref) is (
+        build_expected
+    )
+    upload = next(
+        step
+        for step in jobs["build"]["steps"]
+        if step.get("uses", "").startswith("actions/upload-pages-artifact@")
+    )
+    for condition in (upload["if"], jobs["deploy"]["if"]):
+        assert docs_expression(condition, event_name, ref) is deploy_expected
+
+
+def test_docs_deployments_share_concurrency_without_cancelling_dispatcher(
+    docs_workflow,
+):
+    concurrency = docs_workflow["concurrency"]
+    assert concurrency["cancel-in-progress"] is True
+    expression = concurrency["group"]
+    push = docs_expression(expression, "push", "refs/heads/main")
+    dispatched = docs_expression(
+        expression, "workflow_dispatch", "refs/heads/main"
+    )
+    release = docs_expression(expression, "release", "refs/tags/v2.1.2")
+    first_pr = docs_expression(
+        expression, "pull_request", "refs/pull/242/merge"
+    )
+    second_pr = docs_expression(
+        expression, "pull_request", "refs/pull/243/merge"
+    )
+    deploy_condition = docs_workflow["jobs"]["deploy"]["if"]
+    for event_name, ref in (
+        ("push", "refs/heads/main"),
+        ("workflow_dispatch", "refs/heads/main"),
+        ("release", "refs/tags/v2.1.2"),
+        ("release", "refs/tags/v2.1.3"),
+    ):
+        if docs_expression(deploy_condition, event_name, ref):
+            assert docs_expression(expression, event_name, ref) == push
+    assert push == dispatched
+    assert len({push, release, first_pr, second_pr}) == 4
+
+
 def test_build_py_removes_stale_deleted_packages(tmp_path):
     """Incremental wheel builds must not resurrect pre-migration modules.
 
