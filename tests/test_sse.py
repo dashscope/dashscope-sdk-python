@@ -206,23 +206,35 @@ def test_native_stream_business_error_maps_to_subclass():
         next(iter(stream))
 
 
+class _OpenEndedSSEBody(httpx.ByteStream):
+    def __iter__(self):
+        yield from super().__iter__()
+        raise AssertionError("read beyond the [DONE] marker")
+
+    async def __aiter__(self):
+        async for chunk in super().__aiter__():
+            yield chunk
+        raise AssertionError("read beyond the [DONE] marker")
+
+
+_DONE_EVENTS = [
+    {
+        "id": "chatcmpl-1",
+        "choices": [{"index": 0, "delta": {"content": "Hi"}}],
+    },
+    "[DONE]",
+]
+
+
 def test_done_marker_ends_stream():
+    response = httpx.Response(
+        200,
+        headers={"Content-Type": "text/event-stream"},
+        stream=_OpenEndedSSEBody(_sse(_DONE_EVENTS).encode()),
+    )
+
     def handler(request):
-        return httpx.Response(
-            200,
-            headers={"Content-Type": "text/event-stream"},
-            text=_sse(
-                [
-                    {
-                        "id": "chatcmpl-1",
-                        "choices": [
-                            {"index": 0, "delta": {"content": "Hi"}},
-                        ],
-                    },
-                    "[DONE]",
-                ],
-            ),
-        )
+        return response
 
     client = _make_client(handler, protocol="openai")
     stream = client.chat.completions.create(
@@ -231,6 +243,36 @@ def test_done_marker_ends_stream():
         stream=True,
     )
     assert list(stream.text_stream) == ["Hi"]
+    assert response.is_closed
+
+
+@pytest.mark.asyncio
+async def test_async_done_marker_ends_stream():
+    response = httpx.Response(
+        200,
+        headers={"Content-Type": "text/event-stream"},
+        stream=_OpenEndedSSEBody(_sse(_DONE_EVENTS).encode()),
+    )
+
+    def handler(request):
+        return response
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+    ) as http_client:
+        client = AsyncClient(
+            api_key="sk-test",
+            protocol="openai",
+            base_url=BASE_URL,
+            http_client=http_client,
+        )
+        stream = await client.chat.completions.create(
+            model="qwen-plus",
+            messages=[{"role": "user", "content": "hi"}],
+            stream=True,
+        )
+        assert [text async for text in stream.text_stream] == ["Hi"]
+        assert response.is_closed
 
 
 def test_stream_error_carries_response_request_id():
