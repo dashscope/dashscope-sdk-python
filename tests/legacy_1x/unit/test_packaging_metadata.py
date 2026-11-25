@@ -351,7 +351,11 @@ def test_docs_release_dispatches_main_with_scoped_permissions(docs_workflow):
     ],
 )
 def test_docs_deploys_only_main_pushes_and_dispatches(
-    docs_workflow, event_name, ref, build_expected, deploy_expected
+    docs_workflow,
+    event_name,
+    ref,
+    build_expected,
+    deploy_expected,
 ):
     jobs = docs_workflow["jobs"]
     assert docs_expression(jobs["build"]["if"], event_name, ref) is (
@@ -374,14 +378,20 @@ def test_docs_deployments_share_concurrency_without_cancelling_dispatcher(
     expression = concurrency["group"]
     push = docs_expression(expression, "push", "refs/heads/main")
     dispatched = docs_expression(
-        expression, "workflow_dispatch", "refs/heads/main"
+        expression,
+        "workflow_dispatch",
+        "refs/heads/main",
     )
     release = docs_expression(expression, "release", "refs/tags/v2.1.2")
     first_pr = docs_expression(
-        expression, "pull_request", "refs/pull/242/merge"
+        expression,
+        "pull_request",
+        "refs/pull/242/merge",
     )
     second_pr = docs_expression(
-        expression, "pull_request", "refs/pull/243/merge"
+        expression,
+        "pull_request",
+        "refs/pull/243/merge",
     )
     deploy_condition = docs_workflow["jobs"]["deploy"]["if"]
     for event_name, ref in (
