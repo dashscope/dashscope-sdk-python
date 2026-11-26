@@ -120,6 +120,24 @@ def _build_api_request(  # pylint: disable=too-many-branches
         InputDataRequired: If input data is missing or invalid.
         UnsupportedApiProtocol: If the API protocol is not supported.
     """
+    # ``timeout`` is the OpenAI-style spelling of ``request_timeout``.
+    # Without this alias it falls through to ``**kwargs`` and is sent to
+    # the service as a model parameter, while the client timeout silently
+    # stays at its default (see error-code report P2-1).
+    if "timeout" in kwargs:
+        alias_timeout = kwargs.pop("timeout")
+        if request_timeout is None:
+            logger.warning(
+                "'timeout' is treated as the client request timeout; "
+                "the canonical keyword is 'request_timeout'.",
+            )
+            request_timeout = alias_timeout
+        else:
+            logger.warning(
+                "Both 'timeout' and 'request_timeout' were provided; "
+                "using 'request_timeout' and ignoring 'timeout'.",
+            )
+
     # Handle stream mode for WebSocket
     if not stream and ws_stream_mode == WebsocketStreamingMode.OUT:
         ws_stream_mode = WebsocketStreamingMode.NONE
