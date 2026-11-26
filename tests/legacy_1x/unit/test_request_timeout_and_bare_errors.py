@@ -77,7 +77,9 @@ class TestBareErrorResponse:
 
     def test_sync_non_json_body_preserved(self):
         response = _bare_response()
-        response._content = b"<html>oops</html>"  # pylint: disable=protected-access
+        response._content = (
+            b"<html>oops</html>"  # pylint: disable=protected-access
+        )
         rsp = _handle_http_failed_response(response)
         assert rsp.message == "<html>oops</html>"
         assert rsp.request_id == "rid-bare"
