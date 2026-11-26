@@ -90,6 +90,8 @@ used the same way through `AsyncClient`.
 
 ::: dashscope.applications.agentstudio.resources.files.AsyncFiles
 
+::: dashscope.applications.agentstudio.resources.files.FileContent
+
 ## Memory
 
 ::: dashscope.applications.agentstudio.resources.memory_stores.MemoryStores
@@ -133,6 +135,14 @@ used the same way through `AsyncClient`.
 ::: dashscope.applications.agentstudio.resources.webhook_endpoints.WebhookEndpoints
 
 ::: dashscope.applications.agentstudio.resources.webhook_endpoints.AsyncWebhookEndpoints
+
+## Usage
+
+`client.usage` — workspace, agent and session usage summaries and trends.
+
+::: dashscope.applications.agentstudio.resources.usage.Usage
+
+::: dashscope.applications.agentstudio.resources.usage.AsyncUsage
 
 ## Client event helpers
 

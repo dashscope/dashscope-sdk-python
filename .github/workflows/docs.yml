@@ -2,8 +2,9 @@ name: Docs
 
 # FastAPI-style docs pipeline: every PR and main push builds the MkDocs
 # Material site to validate it; pushes to main additionally deploy the HTML
-# to GitHub Pages. Docs track main (latest), independent of the tag-driven
-# release.yml flow.
+# to GitHub Pages. Publishing a GitHub Release dispatches a fresh run on
+# main, so both the checkout and deployment ref satisfy the Pages policy.
+# The Release Notes page renders published releases at build time.
 on:
   push:
     branches: [main]
@@ -20,17 +21,36 @@ on:
       - 'mkdocs.yml'
       - 'requirements-doc.txt'
       - '.github/workflows/docs.yml'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.ref }}
+  # Release dispatchers must not cancel the main runs they start. All
+  # actual Pages deployments share a group; PRs stay in separate groups.
+  group: >-
+    ${{ github.event_name == 'release'
+        && format('docs-release-{0}', github.ref)
+        || format('pages-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
+  dispatch:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch docs deployment on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main
+
   build:
+    if: github.event_name != 'release'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,17 +60,39 @@ jobs:
       # mkdocstrings imports the real package, so install it alongside the
       # doc toolchain (httpx/pydantic etc. come in as runtime dependencies).
       - run: python -m pip install -r requirements-doc.txt .
+      # Surface drift in the exact build environment (the pytest guard
+      # runs in the test env, whose optional deps may differ). Non-fatal:
+      # the sync step below still guarantees a complete deployed site.
+      - name: Report reference drift (build env)
+        continue-on-error: true
+        run: python tools/gen_reference.py --check
+      # Grow/shrink the reference ::: lists to match the current public
+      # API before building, so the deployed site never misses a new
+      # symbol even if the committed pages lag behind (the pytest guard
+      # tests/test_docs_reference.py fails such PRs).
+      - name: Sync API reference coverage
+        run: python tools/gen_reference.py
       - name: Build HTML
+        # GITHUB_TOKEN lifts the anonymous GitHub API rate limit for the
+        # release-notes rendering in docs/hooks.py (public data, read-only).
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: mkdocs build --strict
       - name: Upload site artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          github.ref == 'refs/heads/main'
+          && (github.event_name == 'push'
+              || github.event_name == 'workflow_dispatch')
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main'
+      && (github.event_name == 'push'
+          || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       pages: write

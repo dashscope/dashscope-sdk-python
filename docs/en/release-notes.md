@@ -5,18 +5,12 @@ description: "Release notes and changelog pointers for the dashscope Python SDK,
 
 The authoritative, per-release changelog is published on
 [GitHub Releases](https://github.com/dashscope/dashscope-sdk-python/releases).
-This page summarizes the major lines and links to recent tags.
+The recent-releases table below is rendered from GitHub Releases at docs
+build time, so it refreshes automatically when a release is published;
+each tag links to its full release notes.
 Current SDK version: **{{ sdk_version }}**.
 
-## Recent releases
-
-| Tag | Notes |
-| --- | --- |
-| v2.1.0 | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.1.0) |
-| v2.0.4 | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.4) |
-| v2.0.3 | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.3) |
-| v2.0.2 | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.2) |
-| v2.0.1 | [See release page](https://github.com/dashscope/dashscope-sdk-python/releases/tag/v2.0.1) |
+{{ release_notes }}
 
 ## 2.0 highlights
 

@@ -160,6 +160,8 @@ Each section lists the sync and async classes and their response models.
 
 ::: dashscope.resources.apps.WorkflowMessage
 
+::: dashscope.resources.apps.AppModelUsage
+
 ## TingWu
 
 `client.tingwu` — meeting transcription and analysis.
@@ -239,3 +241,7 @@ how `strict_validation`, `raise_on_error` and `raw=True` interact.
 ::: dashscope.resources._jobs.JobResult
 
 ::: dashscope.resources._jobs.JobList
+
+::: dashscope.resources._jobs.Jobs
+
+::: dashscope.resources._jobs.AsyncJobs

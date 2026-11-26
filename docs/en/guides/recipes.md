@@ -35,6 +35,11 @@ with Client() as client:
 The sample image is a public Aliyun docs asset — replace it with your own
 publicly reachable URL.
 
+??? example "Full runnable example: multimodal_chat.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/multimodal_vision/multimodal_chat.py"
+    ```
+
 ## Image generation
 
 `generate()` submits the task and waits for it; the finished job carries
@@ -51,6 +56,11 @@ with Client() as client:
     print(job.image_urls)
 ```
 
+??? example "Full runnable example: images.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/image_video_synthesis/images.py"
+    ```
+
 ## Video generation
 
 ```python
@@ -64,6 +74,11 @@ with Client() as client:
     print(job.video_url)
 ```
 
+??? example "Full runnable example: videos.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/image_video_synthesis/videos.py"
+    ```
+
 ## Text embeddings
 
 ```python
@@ -76,6 +91,11 @@ with Client() as client:
     )
     print(len(resp.embeddings[0].embedding))
 ```
+
+??? example "Full runnable example: embeddings.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/embeddings/embeddings.py"
+    ```
 
 ## Rerank
 
@@ -91,6 +111,11 @@ with Client() as client:
     )
     print(resp.results)
 ```
+
+??? example "Full runnable example: rerank.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/rerank/rerank.py"
+    ```
 
 ## Decision model
 
@@ -125,6 +150,11 @@ with Client() as client:
     print(resp.answers["escalate"].noul)  # P(yes), 0=no 1=yes
 ```
 
+??? example "Full runnable example: decision.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/decision/decision.py"
+    ```
+
 ## Token counting
 
 Pass `messages=[...]` instead of `prompt` to count a chat message list.
@@ -139,6 +169,11 @@ with Client() as client:
     )
     print(resp.input_tokens)
 ```
+
+??? example "Full runnable example: tokenization.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/text_generation/tokenization.py"
+    ```
 
 ## Speech synthesis
 
@@ -161,6 +196,11 @@ with Client() as client:
         f.write(audio)
 ```
 
+??? example "Full runnable example: tts_websocket.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/audio/tts_websocket.py"
+    ```
+
 ## File recognition
 
 !!! note "Sync-only WebSocket API"
@@ -180,6 +220,11 @@ with Client() as client:
 
 See [Audio](../reference/audio.md) and the
 [Qwen Live guide](qwen-live-python-sdk.md) for realtime sessions.
+
+??? example "Full runnable example: asr_file.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/audio/asr_file.py"
+    ```
 
 ## TingWu (offline analysis)
 
@@ -201,6 +246,11 @@ with Client() as client:
     print(result.output)
 ```
 
+??? example "Full runnable example: tingwu.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/audio/tingwu.py"
+    ```
+
 ## Application call
 
 ```python
@@ -210,6 +260,11 @@ with Client() as client:
     resp = client.apps.create(app_id="your-app-id", prompt="Introduce yourself")
     print(resp.text)
 ```
+
+??? example "Full runnable example: apps.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/applications/apps.py"
+    ```
 
 ## File upload
 
@@ -221,6 +276,11 @@ with Client() as client:
     print(file.file_id)
 ```
 
+??? example "Full runnable example: files.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/files/files.py"
+    ```
+
 ## Model list
 
 ```python
@@ -230,6 +290,11 @@ with Client() as client:
     page = client.models.list()
     print(len(page.items), "models available")
 ```
+
+??? example "Full runnable example: models.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/models/models.py"
+    ```
 
 The full interface for the remaining capabilities — batch jobs,
 fine-tunes, model deployments, agentic RL and multimodal embeddings —

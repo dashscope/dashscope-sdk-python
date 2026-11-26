@@ -69,6 +69,13 @@ markdown_extensions:
       # and attributes (h4) stay out of the "On this page" nav.
       toc_depth: 3
   - pymdownx.details
+  # Include real example scripts (docs show the runnable source, so it
+  # can never drift). check_paths fails the build on a missing file.
+  - pymdownx.snippets:
+      base_path:
+        - .
+      check_paths: true
+      dedent_subsections: true
   - pymdownx.superfences
   - pymdownx.highlight:
       # Every highlighted block restarts its anchor counter at zero. With

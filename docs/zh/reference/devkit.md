@@ -51,3 +51,7 @@ description: "dev mock 模式与本地自诊断 API 参考。"
 ::: dashscope.devkit.diagnosis.render
 
 ::: dashscope.devkit.diagnosis.install_excepthook
+
+::: dashscope.devkit.diagnosis.Matcher
+
+::: dashscope.devkit.diagnosis.Rule
