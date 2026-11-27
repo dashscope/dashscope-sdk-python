@@ -283,6 +283,11 @@ class SyncTransport:
         return self._client
 
     @property
+    def owns_http_client(self) -> bool:
+        """Whether this transport created its own HTTP client."""
+        return self._owns_client
+
+    @property
     def user_agent(self) -> Optional[str]:
         """This transport's User-Agent, for seeding non-HTTP channels.
 
@@ -388,8 +393,18 @@ class SyncTransport:
             path,
             has_other_body=any(x is not None for x in (content, data, files)),
         )
+        # pylint: disable-next=protected-access
+        deadline = options._deadline if options is not None else None
         timeout = resolve_timeout(timeout, options)
+        request_timeout = self._request_timeout if timeout is None else timeout
         for attempt in range(max_retries + 1):
+            attempt_timeout = request_timeout
+            if deadline is not None:
+                attempt_timeout = deadline.request_timeout(
+                    self._client.timeout
+                    if request_timeout is None
+                    else request_timeout,
+                )
             response = None
             try:
                 response = self._client.send(
@@ -409,13 +424,7 @@ class SyncTransport:
                             workspace,
                             options,
                         ),
-                        **_timeout_kwarg(
-                            (
-                                self._request_timeout
-                                if timeout is None
-                                else timeout
-                            ),
-                        ),
+                        **_timeout_kwarg(attempt_timeout),
                     ),
                     stream=True,
                 )
@@ -424,6 +433,8 @@ class SyncTransport:
                 finally:
                     response.close()
             except httpx.TransportError as exc:
+                if deadline is not None:
+                    deadline.remaining()
                 request_id = (
                     request_id_from_headers(response.headers)
                     if response is not None
@@ -450,6 +461,8 @@ class SyncTransport:
                         request_id or client_request_id,
                     ) from exc
                 delay = backoff_delay(attempt, None)
+                if deadline is not None:
+                    delay = deadline.retry_delay(delay)
                 logger.info(
                     "retrying %s %s in %.2fs (attempt %d/%d): %s: %s%s",
                     method,
@@ -463,6 +476,8 @@ class SyncTransport:
                 )
                 _sleep(delay)
                 continue
+            if deadline is not None:
+                deadline.remaining()
             request_id = request_id_from_headers(response.headers) or "unknown"
             logger.debug(
                 "request %s %s -> %d (client_request_id=%s, request_id=%s)",
@@ -477,6 +492,8 @@ class SyncTransport:
             if attempt >= max_retries:
                 return response
             delay = backoff_delay(attempt, response.headers)
+            if deadline is not None:
+                delay = deadline.retry_delay(delay)
             logger.info(
                 "retrying %s %s in %.2fs (attempt %d/%d): status %d"
                 " (request_id=%s)",
@@ -763,6 +780,11 @@ class AsyncTransport:
         return self._client
 
     @property
+    def owns_http_client(self) -> bool:
+        """Whether this transport created its own HTTP client."""
+        return self._owns_client
+
+    @property
     def user_agent(self) -> Optional[str]:
         """This transport's User-Agent; see ``SyncTransport.user_agent``."""
         return self._default_headers.get("User-Agent")
@@ -864,8 +886,18 @@ class AsyncTransport:
             path,
             has_other_body=any(x is not None for x in (content, data, files)),
         )
+        # pylint: disable-next=protected-access
+        deadline = options._deadline if options is not None else None
         timeout = resolve_timeout(timeout, options)
+        request_timeout = self._request_timeout if timeout is None else timeout
         for attempt in range(max_retries + 1):
+            attempt_timeout = request_timeout
+            if deadline is not None:
+                attempt_timeout = deadline.request_timeout(
+                    self._client.timeout
+                    if request_timeout is None
+                    else request_timeout,
+                )
             response = None
             try:
                 response = await self._client.send(
@@ -885,13 +917,7 @@ class AsyncTransport:
                             workspace,
                             options,
                         ),
-                        **_timeout_kwarg(
-                            (
-                                self._request_timeout
-                                if timeout is None
-                                else timeout
-                            ),
-                        ),
+                        **_timeout_kwarg(attempt_timeout),
                     ),
                     stream=True,
                 )
@@ -900,6 +926,8 @@ class AsyncTransport:
                 finally:
                     await response.aclose()
             except httpx.TransportError as exc:
+                if deadline is not None:
+                    deadline.remaining()
                 request_id = (
                     request_id_from_headers(response.headers)
                     if response is not None
@@ -926,6 +954,8 @@ class AsyncTransport:
                         request_id or client_request_id,
                     ) from exc
                 delay = backoff_delay(attempt, None)
+                if deadline is not None:
+                    delay = deadline.retry_delay(delay)
                 logger.info(
                     "retrying %s %s in %.2fs (attempt %d/%d): %s: %s%s",
                     method,
@@ -939,6 +969,8 @@ class AsyncTransport:
                 )
                 await _asleep(delay)
                 continue
+            if deadline is not None:
+                deadline.remaining()
             request_id = request_id_from_headers(response.headers) or "unknown"
             logger.debug(
                 "request %s %s -> %d (client_request_id=%s, request_id=%s)",
@@ -953,6 +985,8 @@ class AsyncTransport:
             if attempt >= max_retries:
                 return response
             delay = backoff_delay(attempt, response.headers)
+            if deadline is not None:
+                delay = deadline.retry_delay(delay)
             logger.info(
                 "retrying %s %s in %.2fs (attempt %d/%d): status %d"
                 " (request_id=%s)",

@@ -119,13 +119,27 @@ def management_error(
 ) -> DashScopeError:
     """Build the dashscope error class matching a failed envelope."""
     error_class = _error_class(envelope.code, envelope.status_code)
+    safe = redact_body(
+        {
+            "body": envelope.body,
+            "message": envelope.message,
+            "code": envelope.code,
+            "request_id": envelope.request_id,
+            "headers": dict(headers or {}),
+        },
+    )
     return error_class(
-        envelope.message or "management request failed",
-        code=envelope.code,
+        safe["message"] or "management request failed",
+        code=safe["code"],
         status_code=envelope.status_code,
-        request_id=envelope.request_id,
-        body=redact_body(envelope.body),
-        headers=headers,
+        request_id=safe["request_id"],
+        body=safe["body"],
+        headers=httpx.Headers(
+            safe["headers"],
+            encoding=headers.encoding
+            if isinstance(headers, httpx.Headers)
+            else None,
+        ),
     )
 
 

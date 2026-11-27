@@ -15,7 +15,10 @@ import pytest
 pytest.importorskip("alibabacloud_credentials")
 pytest.importorskip("alibabacloud_openapi_util")
 
-from dashscope.errors import APIResponseValidationError  # noqa: E402
+from dashscope.errors import (  # noqa: E402
+    APIResponseValidationError,
+    BadRequestError,
+)
 from dashscope.management._redaction import (  # noqa: E402
     SecretRedactionFilter,
     get_management_logger,
@@ -276,3 +279,43 @@ async def test_async_strict_api_key_validation_redacts_all_error_paths(
             await client.api_keys.list()
     _assert_redacted_validation(caught.value, original, body)
     await client.aclose()
+
+
+@pytest.mark.parametrize("raise_on_error", [True, False])
+@pytest.mark.parametrize("secret_field", [True, False])
+def test_api_key_failure_masks_free_text(raise_on_error, secret_field):
+    # Echo a regular credential with no sk- prefix or a recognizable key
+    # for which there is no separate field.
+    secret = "fixture-opaque-value" if secret_field else SECRET
+    body = {
+        "success": False,
+        "code": "InvalidParameter",
+        "message": f"Rejected key {secret}",
+        "details": [{"description": f"Key {secret}"}],
+    }
+    if secret_field:
+        body["apiKeyValue"] = secret
+
+    def handler(request):
+        return httpx.Response(
+            400,
+            json=body,
+            headers={"x-context": f"Key {secret}"},
+        )
+
+    client = make_client(handler, raise_on_error=raise_on_error)
+    if raise_on_error:
+        with pytest.raises(BadRequestError) as raised:
+            client.api_keys.list()
+        error = raised.value
+        assert secret not in str(error)
+        assert secret not in repr(error.body)
+        assert secret not in error.headers["x-context"]
+        assert "Rejected key" in error.message
+    else:
+        result = client.api_keys.list()
+        assert result.is_error
+        assert result.code == "InvalidParameter"
+        assert "Rejected key" in result.message
+        assert secret not in result.model_dump_json()
+    client.close()

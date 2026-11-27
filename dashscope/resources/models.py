@@ -517,6 +517,42 @@ def _build_permissions_params(
     return params
 
 
+def _parse_catalog_model(
+    resp: "APIResponse",
+    entry: Dict[str, Any],
+    *,
+    region: Optional[str],
+    workspace: Optional[str],
+    strict: bool,
+) -> Model:
+    return with_headers(
+        parse_model(
+            Model,
+            {
+                **_with_context(
+                    entry,
+                    region=region,
+                    workspace=workspace,
+                    service_site=None,
+                ),
+                **response_envelope(resp.json()),
+            },
+            strict=strict,
+            response=resp.http_response,
+        ),
+        resp.http_response,
+    )
+
+
+def _check_catalog_probe(resp: "APIResponse", raise_on_error: bool) -> None:
+    # Boolean/optional probes have no error envelope. Even when other methods
+    # return errors as data, a probe must distinguish failure from no match.
+    if not raise_on_error:
+        error = response_error(resp.http_response)
+        if error is not None:
+            raise error
+
+
 class Models:
     def __init__(self, client) -> None:
         self._client = client
@@ -561,8 +597,15 @@ class Models:
                 options=options,
                 client=self._client,
             )
-        cacheable = options is None or not (
-            options.extra_query or options.extra_headers or options.extra_body
+        # An injected client's mutable defaults, auth or hooks can change
+        # the actual request independently of the SDK's catalog key.
+        cacheable = self._client.transport.owns_http_client and (
+            options is None
+            or not (
+                options.extra_query
+                or options.extra_headers
+                or options.extra_body
+            )
         )
         key = catalog_key(
             self._client.config,
@@ -865,25 +908,12 @@ class Models:
                 ),
                 resp.http_response,
             )
-        return with_headers(
-            parse_model(
-                Model,
-                # Dict merge, not ``**`` twice: a wire entry carrying an
-                # envelope key of its own would otherwise raise a
-                # duplicate-keyword TypeError instead of being parsed.
-                {
-                    **_with_context(
-                        models[0],
-                        region=region,
-                        workspace=effective_workspace,
-                        service_site=None,
-                    ),
-                    **response_envelope(body),
-                },
-                strict=self._client.config.strict_validation,
-                response=resp.http_response,
-            ),
-            resp.http_response,
+        return _parse_catalog_model(
+            resp,
+            models[0],
+            region=region,
+            workspace=effective_workspace,
+            strict=self._client.config.strict_validation,
         )
 
     def iter(
@@ -1050,7 +1080,37 @@ class Models:
                 max_retries=max_retries,
             ),
         )
+        _check_catalog_probe(resp, self._client.raise_on_error)
         return bool(_parse_get_models(resp.json()))
+
+    def _find_catalog_model(
+        self,
+        model: str,
+        *,
+        timeout: Optional[float],
+        refresh: bool,
+    ) -> Optional[Model]:
+        """Probe and parse the RegionRouter entry with one catalog read."""
+        resp = self._models_get(
+            {"model": model, "page_no": 1, "page_size": 1},
+            refresh=refresh,
+            raw=False,
+            timeout=timeout,
+            api_key=None,
+            workspace=None,
+            options=None,
+        )
+        _check_catalog_probe(resp, self._client.raise_on_error)
+        entries = _parse_get_models(resp.json())
+        if not entries:
+            return None
+        return _parse_catalog_model(
+            resp,
+            entries[0],
+            region=self._client.config.region,
+            workspace=self._client.config.workspace,
+            strict=self._client.config.strict_validation,
+        )
 
 
 class AsyncModels:
@@ -1090,8 +1150,15 @@ class AsyncModels:
                 options=options,
                 client=self._client,
             )
-        cacheable = options is None or not (
-            options.extra_query or options.extra_headers or options.extra_body
+        # An injected client's mutable defaults, auth or hooks can change
+        # the actual request independently of the SDK's catalog key.
+        cacheable = self._client.transport.owns_http_client and (
+            options is None
+            or not (
+                options.extra_query
+                or options.extra_headers
+                or options.extra_body
+            )
         )
         key = catalog_key(
             self._client.config,
@@ -1368,25 +1435,12 @@ class AsyncModels:
                 ),
                 resp.http_response,
             )
-        return with_headers(
-            parse_model(
-                Model,
-                # Dict merge, not ``**`` twice: a wire entry carrying an
-                # envelope key of its own would otherwise raise a
-                # duplicate-keyword TypeError instead of being parsed.
-                {
-                    **_with_context(
-                        models[0],
-                        region=region,
-                        workspace=effective_workspace,
-                        service_site=None,
-                    ),
-                    **response_envelope(body),
-                },
-                strict=self._client.config.strict_validation,
-                response=resp.http_response,
-            ),
-            resp.http_response,
+        return _parse_catalog_model(
+            resp,
+            models[0],
+            region=region,
+            workspace=effective_workspace,
+            strict=self._client.config.strict_validation,
         )
 
     async def iter(
@@ -1541,7 +1595,37 @@ class AsyncModels:
                 max_retries=max_retries,
             ),
         )
+        _check_catalog_probe(resp, self._client.raise_on_error)
         return bool(_parse_get_models(resp.json()))
+
+    async def _find_catalog_model(
+        self,
+        model: str,
+        *,
+        timeout: Optional[float],
+        refresh: bool,
+    ) -> Optional[Model]:
+        """Probe and parse the RegionRouter entry with one catalog read."""
+        resp = await self._models_get(
+            {"model": model, "page_no": 1, "page_size": 1},
+            refresh=refresh,
+            raw=False,
+            timeout=timeout,
+            api_key=None,
+            workspace=None,
+            options=None,
+        )
+        _check_catalog_probe(resp, self._client.raise_on_error)
+        entries = _parse_get_models(resp.json())
+        if not entries:
+            return None
+        return _parse_catalog_model(
+            resp,
+            entries[0],
+            region=self._client.config.region,
+            workspace=self._client.config.workspace,
+            strict=self._client.config.strict_validation,
+        )
 
 
 class ModelLimits:
