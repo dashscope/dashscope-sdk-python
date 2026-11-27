@@ -50,6 +50,14 @@ the parsing / error-mode contract shared by all resources.
 
 ::: dashscope.types.common.JobStatus
 
+::: dashscope.types.common.with_headers
+
+::: dashscope.types.common.flatten_envelope
+
+::: dashscope.types.common.response_body
+
+::: dashscope.types.common.response_envelope
+
 ::: dashscope.types.pagination.BasePage
 
 ## Helpers
@@ -57,6 +65,8 @@ the parsing / error-mode contract shared by all resources.
 ::: dashscope.types.messages.normalize_messages
 
 ::: dashscope.types.messages.extract_text
+
+::: dashscope.types.messages.has_media_parts
 
 ::: dashscope.types.completions.parse_completion
 

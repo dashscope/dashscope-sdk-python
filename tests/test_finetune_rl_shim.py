@@ -16,7 +16,7 @@ import importlib.util
 import json
 import pathlib
 import platform
-import runpy
+import subprocess
 import sys
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -161,21 +161,55 @@ def test_only_the_1x_surface_keeps_the_job_verbs():
 
 # -- laziness -------------------------------------------------------------
 
+# ``test_docs_reference`` (gen_reference's blind-spot guard) and the
+# server-hardening tests legitimately import ``fastapi`` in the same pytest
+# process, so asserting on this process's ``sys.modules`` would depend on
+# test order. Resolve in a fresh interpreter to keep the laziness guarantee
+# observable no matter what ran before.
+
+_FIND_SPEC_SCRIPT = """\
+import importlib.util
+import sys
+
+submit_path = {submit_path!r}
+spec = importlib.util.find_spec(submit_path)
+assert spec is not None
+assert "dashscope/applications/finetune/reinforcement" in spec.origin.replace(
+    "\\\\", "/"
+)
+assert spec.loader.get_code(submit_path) is not None
+assert "fastapi" not in sys.modules
+"""
+
+_RUNPY_SCRIPT = """\
+import runpy
+import sys
+
+submit_path = {submit_path!r}
+name, _, code = runpy._get_module_details(submit_path)
+assert name == submit_path
+assert code is not None
+assert "fastapi" not in sys.modules
+"""
+
+
+def _assert_in_fresh_interpreter(script):
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=pathlib.Path(__file__).resolve().parent.parent,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+
 
 @pytest.mark.parametrize("alias", PATHS)
 def test_server_module_resolves_without_importing_fastapi(alias):
     submit_path = f"{alias}.component.server.server"
-    spec = importlib.util.find_spec(submit_path)
-    assert spec is not None
-    assert (
-        "dashscope/applications/finetune/reinforcement"
-        in spec.origin.replace(
-            "\\",
-            "/",
-        )
+    _assert_in_fresh_interpreter(
+        _FIND_SPEC_SCRIPT.format(submit_path=submit_path),
     )
-    assert spec.loader.get_code(submit_path) is not None
-    assert "fastapi" not in sys.modules
 
 
 @pytest.mark.parametrize("alias", PATHS)
@@ -183,10 +217,9 @@ def test_python_dash_m_resolves_the_compatibility_server_path(alias):
     # ``runpy`` refuses a loader that yields no code object, which is how
     # examples/workspace/scripts/start_local_*.sh launches the server.
     submit_path = f"{alias}.component.server.server"
-    name, _, code = runpy._get_module_details(submit_path)
-    assert name == submit_path
-    assert code is not None
-    assert "fastapi" not in sys.modules
+    _assert_in_fresh_interpreter(
+        _RUNPY_SCRIPT.format(submit_path=submit_path),
+    )
 
 
 @pytest.mark.skipif(

@@ -113,6 +113,11 @@ async def main():
 asyncio.run(main())
 ```
 
+??? example "Full runnable example: chat.py (auto-synced)"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/text_generation/chat.py"
+    ```
+
 ## Error handling
 
 Failed calls (connection failures, HTTP errors and server-side business

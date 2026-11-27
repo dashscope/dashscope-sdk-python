@@ -33,6 +33,11 @@ with Client() as client:
 
 示例图片来自阿里云公开文档素材；替换为你自己的可公网访问 URL 即可。
 
+??? example "完整可运行示例：multimodal_chat.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/multimodal_vision/multimodal_chat.py"
+    ```
+
 ## 图像生成
 
 `generate()` 提交任务并等待完成；完成后的 job 携带结果 URL。
@@ -48,6 +53,11 @@ with Client() as client:
     print(job.image_urls)
 ```
 
+??? example "完整可运行示例：images.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/image_video_synthesis/images.py"
+    ```
+
 ## 视频生成
 
 ```python
@@ -61,6 +71,11 @@ with Client() as client:
     print(job.video_url)
 ```
 
+??? example "完整可运行示例：videos.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/image_video_synthesis/videos.py"
+    ```
+
 ## 文本向量
 
 ```python
@@ -73,6 +88,11 @@ with Client() as client:
     )
     print(len(resp.embeddings[0].embedding))
 ```
+
+??? example "完整可运行示例：embeddings.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/embeddings/embeddings.py"
+    ```
 
 ## 重排序
 
@@ -88,6 +108,11 @@ with Client() as client:
     )
     print(resp.results)
 ```
+
+??? example "完整可运行示例：rerank.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/rerank/rerank.py"
+    ```
 
 ## 决策模型
 
@@ -120,6 +145,11 @@ with Client() as client:
     print(resp.answers["escalate"].noul)  # P(是)，0=否 1=是
 ```
 
+??? example "完整可运行示例：decision.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/decision/decision.py"
+    ```
+
 ## Token 计数
 
 也可传 `messages=[...]` 统计对话消息列表的 token。
@@ -134,6 +164,11 @@ with Client() as client:
     )
     print(resp.input_tokens)
 ```
+
+??? example "完整可运行示例：tokenization.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/text_generation/tokenization.py"
+    ```
 
 ## 语音合成
 
@@ -156,6 +191,11 @@ with Client() as client:
         f.write(audio)
 ```
 
+??? example "完整可运行示例：tts_websocket.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/audio/tts_websocket.py"
+    ```
+
 ## 文件识别
 
 !!! note "仅支持同步的 WebSocket API"
@@ -176,6 +216,11 @@ with Client() as client:
 实时会话见[语音](../reference/audio.md)与
 [Qwen Live 指南](qwen-live-python-sdk.md)。
 
+??? example "完整可运行示例：asr_file.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/audio/asr_file.py"
+    ```
+
 ## 听悟（离线分析）
 
 `call()` 一次 POST 返回解析后的结果。下方 `fileUrl` 与 `appid` 为
@@ -195,6 +240,11 @@ with Client() as client:
     print(result.output)
 ```
 
+??? example "完整可运行示例：tingwu.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/audio/tingwu.py"
+    ```
+
 ## 应用调用
 
 ```python
@@ -204,6 +254,11 @@ with Client() as client:
     resp = client.apps.create(app_id="your-app-id", prompt="介绍一下你自己")
     print(resp.text)
 ```
+
+??? example "完整可运行示例：apps.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/applications/apps.py"
+    ```
 
 ## 文件上传
 
@@ -215,6 +270,11 @@ with Client() as client:
     print(file.file_id)
 ```
 
+??? example "完整可运行示例：files.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/files/files.py"
+    ```
+
 ## 模型列表
 
 ```python
@@ -224,6 +284,11 @@ with Client() as client:
     page = client.models.list()
     print(len(page.items), "个可用模型")
 ```
+
+??? example "完整可运行示例：models.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/models/models.py"
+    ```
 
 其余能力的完整接口——批量任务、微调、模型部署、智能体强化学习、
 多模态向量——见[客户端资源](../reference/resources.md)；实时语音见

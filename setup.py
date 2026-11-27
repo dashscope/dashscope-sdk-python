@@ -40,20 +40,18 @@ def readme():
 
 
 class build_py(_build_py):
-    """Build one clean package tree and bundle the top-level examples.
+    """Build one clean package tree.
 
     Setuptools incrementally copies files into ``build/lib`` but does not
     delete modules removed from the source tree. That is unsafe for the 2.0
     package migration: a stale ``dashscope/client/__init__.py`` shadows the
     new ``dashscope/client.py`` and makes ``from dashscope.client import
     Client`` fail in the built wheel. Remove the package build directory
-    before every build, then copy the current sources and examples only.
+    before every build, then copy the current sources only.
 
-    ``examples/`` lives at the repository root (a sibling of
-    ``dashscope/``) for visibility, but a wheel can only bundle files
-    that sit inside a package directory. Copy the tree into
-    ``<build_lib>/dashscope/examples`` so an installed wheel exposes
-    ``site-packages/dashscope/examples/``.
+    ``examples/`` ships in the sdist (via MANIFEST.in) but not in the
+    wheel: nothing consumes an installed copy since the agent runtime
+    moved to the published dashscope-agenticx package.
     """
 
     def run(self):
@@ -66,17 +64,6 @@ class build_py(_build_py):
         if os.path.isdir(built_package):
             shutil.rmtree(built_package)
         super().run()
-        src = os.path.join(package_root, "examples")
-        dst = os.path.join(self.build_lib, "dashscope", "examples")
-        if not os.path.isdir(src):
-            return
-        if os.path.exists(dst):
-            shutil.rmtree(dst)
-        shutil.copytree(
-            src,
-            dst,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-        )
 
 
 # Hoisted to a module-level name (like ``name``/``url`` above) so the

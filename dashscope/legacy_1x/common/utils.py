@@ -340,6 +340,16 @@ def _handle_http_failed_response(
         )
     else:
         msg = response.content.decode("utf-8")
+        # A bare gateway error (empty body, no content-type) used to
+        # surface as message="" / request_id="", leaving the caller no
+        # clue it was not a model-level 404. Keep the server's real
+        # status, but explain the shape and salvage the header id.
+        request_id = response.headers.get("x-request-id", "")
+        if not msg:
+            msg = (
+                f"HTTP {response.status_code} with empty response body "
+                "and no content-type (bare gateway response)."
+            )
         if flattened_output:
             return {"status_code": response.status_code, "message": msg}  # type: ignore[return-value] # pylint: disable=line-too-long # noqa: E501
         return DashScopeAPIResponse(
@@ -412,6 +422,13 @@ async def _handle_aiohttp_failed_response(
         )
     else:
         msg = await response.text()
+        # Same bare-gateway treatment as the sync path above.
+        request_id = response.headers.get("x-request-id", "")
+        if not msg:
+            msg = (
+                f"HTTP {response.status} with empty response body "
+                "and no content-type (bare gateway response)."
+            )
         if flattened_output:
             return {"status_code": response.status, "message": msg}  # type: ignore[return-value] # pylint: disable=line-too-long # noqa: E501
         return DashScopeAPIResponse(

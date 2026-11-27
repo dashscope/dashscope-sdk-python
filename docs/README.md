@@ -61,8 +61,12 @@ under `/zh/`), with a language selector in the header (provided by the
     every PR (any warning or broken reference fails the build)
     and on pushes to `main` that touch `docs/`, `dashscope/`, `mkdocs.yml` or
     `requirements-doc.txt`. Pushes to `main` additionally deploy the HTML to
-    GitHub Pages (always showing the latest docs, independent of the
-    tag-driven release workflow).
+    GitHub Pages. Publishing a GitHub Release dispatches another docs run
+    on `main` to refresh the release-notes table. Manual runs on `main`
+    also deploy; manual runs on other refs only validate the build.
+    Deployments share one concurrency group, while PR checks and Release
+    dispatchers stay separate. The `github-pages` environment can keep its
+    deployment policy restricted to the `main` branch.
 
     One-time repository setup required: **Settings → Pages → Build and
     deployment → Source = "GitHub Actions"**. After the first successful

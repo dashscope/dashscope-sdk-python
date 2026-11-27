@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+__all__ = ["AsyncUsage", "Usage"]
+
 _PATH_USAGE_SUMMARY = "/usage/summary"
 _PATH_USAGE_TREND = "/usage/trend"
 

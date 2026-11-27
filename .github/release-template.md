@@ -5,30 +5,36 @@ Maintainer guide (please read before publishing; this HTML comment is
 invisible in the rendered Release page):
 
 1. This file is the skeleton for the draft Release body. It is rendered
-   by the `release` job in .github/workflows/release.yml using Python's
+   by tools/render_release_notes.py (invoked by the `release` job in
+   .github/workflows/release.yml) using Python's
    string.Template.safe_substitute.
 2. Placeholders that get substituted automatically at render time:
      TAG_NAME              current tag, e.g. vX.Y.Z
      VERSION               version without the leading `v`, e.g. X.Y.Z
      FULL_CHANGELOG_URL    compare URL against the previous tag
-   Note: these three names must appear as `$` followed by braces in the
+     FEATURES / BUG_FIXES / REFACTORING / DOCUMENTATION / CI_CHORE
+                           bullet lists grouped from the conventional
+                           commit subjects between the previous tag and
+                           this tag (empty sections render as "None")
+     BREAKING_CHANGES      commits marked `type!:` or carrying a
+                           BREAKING CHANGE footer (else "None")
+     OTHER_SECTION         a full "Other" section for subjects with no
+                           recognized type; empty string when none
+   Note: these names must appear as `$` followed by braces in the
    template body to be substituted; this comment intentionally spells
    them without that syntax so it does not substitute itself.
-3. HTML comments under each section are classification hints. Delete or
-   keep them before publishing (kept comments stay invisible to readers
-   and save effort on the next release).
-4. If a section has no content for this release, delete it entirely or
-   write "None".
-5. Classification follows conventional-commit PR title prefixes:
+3. The generated lists are a starting point: edit, reorder or trim them
+   on the draft page before publishing. Classification follows
+   conventional-commit prefixes:
      feat(scope):         -> ✨ Features
      fix(scope):          -> 🐛 Bug Fixes
      refactor(scope):     -> ♻️ Refactoring
      docs(scope):         -> 📚 Documentation
-     chore/ci/build/test: -> 🔧 CI & Chore
-6. Highlights is the "elevator pitch" — pick 1-3 changes users should
+     chore/ci/build/test/style/perf: -> 🔧 CI & Chore
+4. Highlights is the "elevator pitch" — pick 1-3 changes users should
    care about most (new capabilities, breaking changes, or fixes with
-   wide impact).
-7. For pre-release versions (tag contains a/b/rc/post), tick
+   wide impact). It stays manual by design.
+5. For pre-release versions (tag contains a/b/rc/post), tick
    "Set as a pre-release" on the draft page so this release does not
    occupy the /releases/latest endpoint.
 -->
@@ -39,27 +45,27 @@ invisible in the rendered Release page):
 
 ### ✨ Features
 
--
+${FEATURES}
 
 ### ♻️ Refactoring
 
--
+${REFACTORING}
 
 ### 🐛 Bug Fixes
 
--
+${BUG_FIXES}
 
 ### 📚 Documentation
 
--
+${DOCUMENTATION}
 
 ### 🔧 CI & Chore
 
--
+${CI_CHORE}
 
-### ⚠️ Breaking Changes
+${OTHER_SECTION}### ⚠️ Breaking Changes
 
-None
+${BREAKING_CHANGES}
 
 ---
 

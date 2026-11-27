@@ -55,8 +55,11 @@ API 参考通过 mkdocstrings 从源码 docstring 自动生成（`::: 模块.类
     改动涉及 `docs/`、`dashscope/`、`mkdocs.yml` 或
     `requirements-doc.txt` 时执行 `mkdocs build --strict` 校验
     （任何警告或坏引用都会使构建失败）。
-    推送到 `main` 还会把 HTML 部署到 GitHub Pages（始终展示最新文档，
-    与基于 tag 的发布流程相互独立）。
+    推送到 `main` 还会把 HTML 部署到 GitHub Pages。发布 GitHub Release
+    后会触发运行在 `main` 上的文档工作流，刷新发行说明表格。在 `main`
+    上手动运行也会部署，其他 ref 上的手动运行仅校验构建。
+    所有部署共用一个并发组，PR 校验与 Release 触发任务独立分组，
+    `github-pages` 环境仍可保持仅允许 `main` 分支部署的策略。
 
     仓库需要一次性设置：**Settings → Pages → Build and deployment →
     Source = "GitHub Actions"**。首次部署成功后，站点地址为

@@ -110,6 +110,11 @@ async def main():
 asyncio.run(main())
 ```
 
+??? example "完整可运行示例：chat.py（自动同步）"
+    ```python
+    --8<-- "examples/01_atomic_capabilities/text_generation/chat.py"
+    ```
+
 ## 错误处理
 
 调用失败（连接失败、HTTP 错误与服务端业务错误）会抛出

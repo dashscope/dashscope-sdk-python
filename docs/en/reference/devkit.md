@@ -53,3 +53,7 @@ The root module forwards the mock switches: `dashscope.enable_dev_mock`,
 ::: dashscope.devkit.diagnosis.render
 
 ::: dashscope.devkit.diagnosis.install_excepthook
+
+::: dashscope.devkit.diagnosis.Matcher
+
+::: dashscope.devkit.diagnosis.Rule

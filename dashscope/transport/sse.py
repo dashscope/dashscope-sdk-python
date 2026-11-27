@@ -189,6 +189,8 @@ class Stream(Generic[T]):
     def __iter__(self) -> Iterator[T]:
         try:
             for sse in EventSource(self._response).iter_sse():
+                if sse.data == DONE_MARKER:
+                    break
                 body = _next_event(
                     sse.data,
                     self._response.headers,
@@ -247,6 +249,8 @@ class AsyncStream(Generic[T]):
     async def _iterate(self):
         try:
             async for sse in EventSource(self._response).aiter_sse():
+                if sse.data == DONE_MARKER:
+                    break
                 body = _next_event(
                     sse.data,
                     self._response.headers,
