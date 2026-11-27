@@ -148,7 +148,8 @@ class _RouterModels:
 
 def _probe_region(client, model, region, *, timeout, refresh):
     try:
-        available = client.models.is_available(
+        # pylint: disable=protected-access
+        entry = client.models._find_catalog_model(
             model,
             timeout=timeout,
             refresh=refresh,
@@ -159,19 +160,11 @@ def _probe_region(client, model, region, *, timeout, refresh):
             available=False,
             error=_error_text(exc),
         )
-    if not available:
-        return RegionModelInfo(region=region, available=False)
-    try:
-        # is_available already made (or refreshed) the shared catalog read,
-        # so get reuses it from the cache rather than fetching again.
-        entry = client.models.get(model, timeout=timeout)
-    except DashScopeError as exc:
-        return RegionModelInfo(
-            region=region,
-            available=True,
-            error=_error_text(exc),
-        )
-    return RegionModelInfo(region=region, available=True, model=entry)
+    return RegionModelInfo(
+        region=region,
+        available=entry is not None,
+        model=entry,
+    )
 
 
 class RegionRouter:
@@ -232,7 +225,8 @@ class _AsyncRouterModels:
 
 async def _probe_region_async(client, model, region, *, timeout, refresh):
     try:
-        available = await client.models.is_available(
+        # pylint: disable=protected-access
+        entry = await client.models._find_catalog_model(
             model,
             timeout=timeout,
             refresh=refresh,
@@ -243,19 +237,11 @@ async def _probe_region_async(client, model, region, *, timeout, refresh):
             available=False,
             error=_error_text(exc),
         )
-    if not available:
-        return RegionModelInfo(region=region, available=False)
-    try:
-        # is_available already made (or refreshed) the shared catalog read,
-        # so get reuses it from the cache rather than fetching again.
-        entry = await client.models.get(model, timeout=timeout)
-    except DashScopeError as exc:
-        return RegionModelInfo(
-            region=region,
-            available=True,
-            error=_error_text(exc),
-        )
-    return RegionModelInfo(region=region, available=True, model=entry)
+    return RegionModelInfo(
+        region=region,
+        available=entry is not None,
+        model=entry,
+    )
 
 
 class AsyncRegionRouter:

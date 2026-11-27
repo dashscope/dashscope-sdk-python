@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, Iterator
 
 from dashscope._logging import get_logger
 
@@ -56,34 +56,59 @@ def mask_secret(secret: str) -> str:
     return f"{REDACTED}{secret[-4:]}"
 
 
-def redact_body(body: Any) -> Any:
-    """A deep copy of ``body`` with credential-key values replaced.
+def _secret_values(value: Any) -> Iterator[str]:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if str(key).lower() in _SECRET_KEYS:
+                if isinstance(item, str) and item:
+                    yield item
+            else:
+                yield from _secret_values(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _secret_values(item)
 
-    Non-dict/list values pass through untouched; the original is never
-    mutated, so the caller's parsed model keeps its real ``SecretStr``
-    while the error/log copy is safe to print.
+
+def redact_body(body: Any) -> Any:
+    """Copy and scrub credential fields and their echoes in free text.
+
+    Also masks recognizable API keys when there is no dedicated credential
+    field. The original payload remains intact for successful typed reads.
     """
-    if isinstance(body, dict):
-        return {
-            key: (
-                REDACTED
+    values = set(_secret_values(body))
+    pattern = (
+        re.compile(
+            "|".join(map(re.escape, sorted(values, key=len, reverse=True))),
+        )
+        if values
+        else None
+    )
+
+    def redact(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: REDACTED
                 if str(key).lower() in _SECRET_KEYS
-                else redact_body(value)
-            )
-            for key, value in body.items()
-        }
-    if isinstance(body, list):
-        return [redact_body(item) for item in body]
-    return body
+                else redact(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [redact(item) for item in value]
+        if isinstance(value, str):
+            if pattern is not None:
+                value = pattern.sub(REDACTED, value)
+            return _mask_sk_tokens(value)
+        return value
+
+    return redact(body)
 
 
 class SecretRedactionFilter(logging.Filter):
     """Scrub credential-looking tokens from a management log record.
 
-    Key-oriented redaction (``redact_body``) cannot catch a secret that
-    was interpolated into a free-text message, so this filter also masks
-    ``sk-`` prefixed API key values wherever they appear in the formatted
-    record. Attached to every management logger via
+    Log records may contain text that never passed through ``redact_body``,
+    so this filter also masks ``sk-`` prefixed API key values wherever
+    they appear in the formatted record. Attached to every management logger via
     ``get_management_logger``.
     """
 

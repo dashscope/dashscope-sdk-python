@@ -7,8 +7,9 @@ reference data, so repeated identical reads within a short window can be
 served from memory instead of the gateway. The cache is per-Models-instance
 and keyed by Region, workspace, credential identity and the exact query, so
 an entry never crosses tenants or Regions. Only successful responses are
-stored; errors and ``raw=True`` reads bypass it, and ``refresh=True`` forces
-a fresh fetch. Nothing is persisted to disk and no plaintext key is stored.
+stored. Errors, ``raw=True`` reads and externally managed HTTP clients
+bypass it; ``refresh=True`` forces a fresh fetch. Nothing is persisted to
+disk and the cache key holds only a credential fingerprint.
 """
 
 from __future__ import annotations

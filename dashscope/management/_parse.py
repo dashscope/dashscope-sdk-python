@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from dashscope.errors import APIResponseValidationError
+from dashscope.errors import APIResponseValidationError, DashScopeError
 from dashscope.management._errors import (
     Envelope,
     decode_body,
@@ -83,7 +83,7 @@ def resolve(
     api_response: APIResponse,
     *,
     raise_on_error: bool,
-) -> Tuple[Envelope, Dict[str, Any], Optional[Any]]:
+) -> Tuple[Envelope, Dict[str, Any], Optional[DashScopeError]]:
     """Return ``(envelope, body, error)``; raise on failure when asked.
 
     ``error`` is ``None`` on success. In non-raising mode a failure yields
@@ -104,13 +104,19 @@ def attach_envelope(
     model: _M,
     envelope: Envelope,
     response: httpx.Response,
-    error: Optional[Any],
+    error: Optional[DashScopeError],
 ) -> _M:
     """Thread envelope fields and headers onto a parsed model."""
     if error is not None:
-        model.code = envelope.code
-        model.message = envelope.message
+        model.code = error.code
+        model.message = error.message if envelope.message is not None else None
         model.is_error = True
+        model.request_id = error.request_id or error.headers.get(
+            "x-request-id",
+        )
+        model.status_code = envelope.status_code
+        model.headers = dict(error.headers)
+        return model
     if envelope.request_id:
         model.request_id = envelope.request_id
     model.status_code = envelope.status_code

@@ -30,17 +30,17 @@ BASE_URL = "https://api.test.local/api/v1"
 
 
 def _make_client(handler, **kwargs):
-    mock = httpx.MockTransport(handler)
-    http_client = httpx.Client(transport=mock, base_url=BASE_URL)
     kwargs.setdefault("base_url", BASE_URL)
-    return Client(api_key="sk-test", http_client=http_client, **kwargs)
+    client = Client(api_key="sk-test", **kwargs)
+    client.transport.http_client._transport = httpx.MockTransport(handler)
+    return client
 
 
 def _make_async_client(handler, **kwargs):
-    mock = httpx.MockTransport(handler)
-    http_client = httpx.AsyncClient(transport=mock, base_url=BASE_URL)
     kwargs.setdefault("base_url", BASE_URL)
-    return AsyncClient(api_key="sk-test", http_client=http_client, **kwargs)
+    client = AsyncClient(api_key="sk-test", **kwargs)
+    client.transport.http_client._transport = httpx.MockTransport(handler)
+    return client
 
 
 def _page(models, total=None, page_no=1, page_size=10):
@@ -600,3 +600,37 @@ class TestAsyncCache:
         await client.models.list_all(page_size=1, refresh=True)
         assert calls == [1, 2, 1, 2]
         await client.aclose()
+
+
+def test_injected_http_workspace_defaults_never_use_catalog_cache():
+    def handler(req):
+        return _page([{"model": req.headers["X-DashScope-Workspace"]}])
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as http_client:
+        client = Client(
+            api_key="sk-test",
+            base_url=BASE_URL,
+            http_client=http_client,
+        )
+        http_client.headers["X-DashScope-Workspace"] = "workspace-a"
+        assert client.models.list().items[0].model == "workspace-a"
+        http_client.headers["X-DashScope-Workspace"] = "workspace-b"
+        assert client.models.list().items[0].model == "workspace-b"
+
+
+@pytest.mark.asyncio
+async def test_async_injected_query_defaults_never_use_catalog_cache():
+    def handler(req):
+        return _page([{"model": req.url.params["service_site"]}])
+
+    mock = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=mock) as http_client:
+        client = AsyncClient(
+            api_key="sk-test",
+            base_url=BASE_URL,
+            http_client=http_client,
+        )
+        http_client.params = {"service_site": "site-a"}
+        assert (await client.models.list()).items[0].model == "site-a"
+        http_client.params = {"service_site": "site-b"}
+        assert (await client.models.list()).items[0].model == "site-b"

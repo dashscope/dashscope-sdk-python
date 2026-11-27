@@ -21,6 +21,8 @@ from dashscope import (
     RegionRouter,
 )
 
+from dashscope.errors import PermissionDeniedError
+
 BASE_URL = "https://api.test.local/api/v1"
 
 
@@ -59,34 +61,28 @@ def _catalog_handler(catalog, calls):
 
 def _region_client(region, catalog, calls, **kwargs):
     handler = _catalog_handler(catalog, calls)
-    mock = httpx.MockTransport(handler)
-    http_client = httpx.Client(transport=mock, base_url=BASE_URL)
-    return Client(
+    client = Client(
         api_key="sk-test",
         region=region,
         workspace=f"ws-{region}",
         base_url=BASE_URL,
-        http_client=http_client,
         **kwargs,
     )
+    client.transport.http_client._transport = httpx.MockTransport(handler)
+    return client
 
 
 def _async_region_client(region, catalog, calls, **kwargs):
     handler = _catalog_handler(catalog, calls)
-
-    async def async_handler(request):
-        return handler(request)
-
-    mock = httpx.MockTransport(async_handler)
-    http_client = httpx.AsyncClient(transport=mock, base_url=BASE_URL)
-    return AsyncClient(
+    client = AsyncClient(
         api_key="sk-test",
         region=region,
         workspace=f"ws-{region}",
         base_url=BASE_URL,
-        http_client=http_client,
         **kwargs,
     )
+    client.transport.http_client._transport = httpx.MockTransport(handler)
+    return client
 
 
 BJ = [{"model": "qwen-plus"}, {"model": "qwen-max"}]
@@ -310,3 +306,64 @@ class TestAsyncDiscovery:
         assert result.available_in == ["ap-southeast-1"]
         await bad.aclose()
         await sg.aclose()
+
+
+def _permission_failure(request):
+    return httpx.Response(403, json={"code": "Forbidden", "message": "denied"})
+
+
+def test_nonraising_router_keeps_permission_error():
+    region = "cn-beijing"
+    mock = httpx.MockTransport(_permission_failure)
+    with httpx.Client(transport=mock) as http_client:
+        client = Client(
+            api_key="sk-test",
+            region=region,
+            base_url=BASE_URL,
+            http_client=http_client,
+            raise_on_error=False,
+        )
+        router = _router({region: client})
+        info = router.models.available_regions("qwen-plus").regions[region]
+        assert info.available is False
+        assert info.error == "Forbidden: denied"
+        with pytest.raises(PermissionDeniedError):
+            client.models.is_available("qwen-plus")
+
+
+@pytest.mark.asyncio
+async def test_async_nonraising_router_keeps_permission_error():
+    region = "cn-beijing"
+    mock = httpx.MockTransport(_permission_failure)
+    async with httpx.AsyncClient(transport=mock) as http_client:
+        client = AsyncClient(
+            api_key="sk-test",
+            region=region,
+            base_url=BASE_URL,
+            http_client=http_client,
+            raise_on_error=False,
+        )
+        router = _async_router({region: client})
+        result = await router.models.available_regions("qwen-plus")
+        info = result.regions[region]
+        assert info.available is False
+        assert info.error == "Forbidden: denied"
+        with pytest.raises(PermissionDeniedError):
+            await client.models.is_available("qwen-plus")
+
+
+def test_injected_router_probes_each_region_once_without_cache():
+    region = "cn-beijing"
+    calls = []
+    mock = httpx.MockTransport(_catalog_handler(BJ, calls))
+    with httpx.Client(transport=mock) as http_client:
+        client = Client(
+            api_key="sk-test",
+            region=region,
+            base_url=BASE_URL,
+            http_client=http_client,
+        )
+        router = _router({region: client})
+        info = router.models.available_regions("qwen-plus").regions[region]
+        assert info.model.model == "qwen-plus"
+        assert calls == ["qwen-plus"]

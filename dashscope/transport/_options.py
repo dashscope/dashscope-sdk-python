@@ -31,9 +31,12 @@ which is where the layers actually meet.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Union
 
 import httpx
+
+if TYPE_CHECKING:
+    from dashscope.transport._deadline import PollDeadline
 
 __all__ = [
     "RequestOptions",
@@ -64,6 +67,7 @@ class RequestOptions:
     extra_body: Optional[Mapping[str, Any]] = None
     timeout: Optional[Union[float, httpx.Timeout]] = None
     max_retries: Optional[int] = None
+    _deadline: Optional[PollDeadline] = None
 
 
 def request_options(
@@ -73,6 +77,7 @@ def request_options(
     *,
     timeout: Optional[Union[float, httpx.Timeout]] = None,
     max_retries: Optional[int] = None,
+    _deadline: Optional[PollDeadline] = None,
 ) -> Optional[RequestOptions]:
     """Options for a resource call's overrides, or ``None``.
 
@@ -90,6 +95,7 @@ def request_options(
         or extra_body
         or timeout is not None
         or max_retries is not None
+        or _deadline is not None
     ):
         return None
     return RequestOptions(
@@ -98,6 +104,7 @@ def request_options(
         extra_body=extra_body,
         timeout=timeout,
         max_retries=max_retries,
+        _deadline=_deadline,
     )
 
 

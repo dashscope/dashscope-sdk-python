@@ -30,6 +30,7 @@ from typing import (
     Mapping,
     Optional,
     Union,
+    cast,
     overload,
 )
 from urllib.parse import quote
@@ -49,7 +50,8 @@ from dashscope.resources._jobs import (
     SUCCEEDED,
 )
 from dashscope.resources.fine_tunes import JobLogs
-from dashscope.transport._options import request_options
+from dashscope.transport._deadline import PollDeadline
+from dashscope.transport._options import RequestOptions, request_options
 from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     JobStatus,
@@ -676,11 +678,8 @@ class CompressJobs:
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check.
         """
-        job_id = _job_id(job_id)
-        resp = self._client.transport.request_api(
-            "GET",
-            f"{_BASE_PATH}/jobs/{job_id}",
-            sdk_module=MODULE,
+        return self._get(
+            job_id,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
@@ -690,6 +689,28 @@ class CompressJobs:
                 extra_body,
                 max_retries=max_retries,
             ),
+            raw=raw,
+        )
+
+    def _get(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+        raw: bool = False,
+    ) -> Union[CompressJob, "APIResponse"]:
+        job_id = _job_id(job_id)
+        resp = self._client.transport.request_api(
+            "GET",
+            f"{_BASE_PATH}/jobs/{job_id}",
+            sdk_module=MODULE,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            options=options,
             client=self._client,
         )
         if raw:
@@ -1116,49 +1137,43 @@ class CompressJobs:
         """Poll until the job reaches a terminal status.
 
         With ``raise_on_error=False`` a transport-level failure comes back
-        as the :class:`CompressJob` envelope instead of raising. ``_sleep``
-        is a test seam — it replaces the pause between polls.
+        as the :class:`CompressJob` envelope instead of raising. ``timeout``
+        is the budget for the initial read, polling delays, and HTTP retries.
+        ``_sleep`` replaces the pause between polls in tests.
         """
         # Validate up front but poll with the raw id: ``get`` encodes on
         # every call, so handing it an encoded id would double-encode.
         job_id = (job.job_id or "") if isinstance(job, CompressJob) else job
         _job_id(job_id)
         sleep_fn = _sleep or time.sleep
-        deadline = time.monotonic() + timeout
-        current = (
-            job
-            if isinstance(job, CompressJob)
-            else self.get(
+        deadline = PollDeadline(timeout, f"compress job {job_id}")
+        options = request_options(
+            extra_headers,
+            extra_query,
+            extra_body,
+            max_retries=max_retries,
+            _deadline=deadline,
+        )
+
+        def poll() -> CompressJob:
+            deadline.remaining()
+            result = self._get(
                 job_id,
                 api_key=api_key,
                 workspace=workspace,
-                extra_headers=extra_headers,
-                extra_query=extra_query,
-                extra_body=extra_body,
-                max_retries=max_retries,
+                options=options,
             )
-        )
+            deadline.remaining()
+            return cast(CompressJob, result)
+
+        current = job if isinstance(job, CompressJob) else poll()
         interval = poll_interval
         while not current.finished:
             if current.is_error:
                 return current
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise DashScopeError(
-                    f"timed out after {timeout}s waiting for"
-                    f" compress job {job_id}",
-                )
-            sleep_fn(min(interval, remaining))
+            sleep_fn(min(interval, deadline.remaining()))
             interval = min(interval * 2, max_interval)
-            current = self.get(
-                job_id,
-                api_key=api_key,
-                workspace=workspace,
-                extra_headers=extra_headers,
-                extra_query=extra_query,
-                extra_body=extra_body,
-                max_retries=max_retries,
-            )
+            current = poll()
         return self._check_terminal(current, job_id)
 
     def _check_terminal(self, job: CompressJob, job_id: str) -> CompressJob:
@@ -1431,11 +1446,8 @@ class AsyncCompressJobs:
         raw: bool = False,
     ) -> Union[CompressJob, "APIResponse"]:
         """Async twin of :meth:`CompressJobs.get`."""
-        job_id = _job_id(job_id)
-        resp = await self._client.transport.request_api(
-            "GET",
-            f"{_BASE_PATH}/jobs/{job_id}",
-            sdk_module=MODULE,
+        return await self._get(
+            job_id,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
@@ -1445,6 +1457,28 @@ class AsyncCompressJobs:
                 extra_body,
                 max_retries=max_retries,
             ),
+            raw=raw,
+        )
+
+    async def _get(
+        self,
+        job_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+        raw: bool = False,
+    ) -> Union[CompressJob, "APIResponse"]:
+        job_id = _job_id(job_id)
+        resp = await self._client.transport.request_api(
+            "GET",
+            f"{_BASE_PATH}/jobs/{job_id}",
+            sdk_module=MODULE,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            options=options,
             client=self._client,
         )
         if raw:
@@ -1857,41 +1891,37 @@ class AsyncCompressJobs:
         job_id = (job.job_id or "") if isinstance(job, CompressJob) else job
         _job_id(job_id)
         sleep_fn = _sleep or asyncio.sleep
-        deadline = time.monotonic() + timeout
-        current = (
-            job
-            if isinstance(job, CompressJob)
-            else await self.get(
-                job_id,
-                api_key=api_key,
-                workspace=workspace,
-                extra_headers=extra_headers,
-                extra_query=extra_query,
-                extra_body=extra_body,
-                max_retries=max_retries,
-            )
+        deadline = PollDeadline(timeout, f"compress job {job_id}")
+        options = request_options(
+            extra_headers,
+            extra_query,
+            extra_body,
+            max_retries=max_retries,
+            _deadline=deadline,
         )
+
+        async def fetch() -> CompressJob:
+            return cast(
+                CompressJob,
+                await self._get(
+                    job_id,
+                    api_key=api_key,
+                    workspace=workspace,
+                    options=options,
+                ),
+            )
+
+        async def poll() -> CompressJob:
+            return await deadline.run_async(fetch)
+
+        current = job if isinstance(job, CompressJob) else await poll()
         interval = poll_interval
         while not current.finished:
             if current.is_error:
                 return current
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise DashScopeError(
-                    f"timed out after {timeout}s waiting for"
-                    f" compress job {job_id}",
-                )
-            await sleep_fn(min(interval, remaining))
+            await sleep_fn(min(interval, deadline.remaining()))
             interval = min(interval * 2, max_interval)
-            current = await self.get(
-                job_id,
-                api_key=api_key,
-                workspace=workspace,
-                extra_headers=extra_headers,
-                extra_query=extra_query,
-                extra_body=extra_body,
-                max_retries=max_retries,
-            )
+            current = await poll()
         return self._check_terminal(current, job_id)
 
     def _check_terminal(self, job: CompressJob, job_id: str) -> CompressJob:

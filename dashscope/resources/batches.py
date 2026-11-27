@@ -60,6 +60,7 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    cast,
     overload,
 )
 from urllib.parse import quote
@@ -78,7 +79,8 @@ from dashscope.resources._jobs import (
     DEFAULT_WAIT_TIMEOUT,
 )
 from dashscope.resources.files import _io_error, _is_valid_jsonl
-from dashscope.transport._options import request_options
+from dashscope.transport._deadline import PollDeadline
+from dashscope.transport._options import RequestOptions, request_options
 from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     ResponseBase,
@@ -1818,12 +1820,8 @@ class Batches:
 
         Only tasks created within the last 30 days are retrievable.
         """
-        batch_id = _require_batch_id(batch_id)
-        resp = self._client.transport.request_api(
-            "GET",
-            f"{_BATCH_PATH}/{batch_id}",
-            base_url=_endpoint_base(self._client.config),
-            sdk_module=MODULE,
+        return self._get(
+            batch_id,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
@@ -1833,6 +1831,29 @@ class Batches:
                 extra_body,
                 max_retries=max_retries,
             ),
+            raw=raw,
+        )
+
+    def _get(
+        self,
+        batch_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+        raw: bool = False,
+    ) -> Union[Batch, "APIResponse"]:
+        batch_id = _require_batch_id(batch_id)
+        resp = self._client.transport.request_api(
+            "GET",
+            f"{_BATCH_PATH}/{batch_id}",
+            base_url=_endpoint_base(self._client.config),
+            sdk_module=MODULE,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            options=options,
             client=self._client,
         )
         if raw:
@@ -2059,40 +2080,34 @@ class Batches:
         """
         batch_id = _batch_id(batch)
         sleep_fn = _sleep or time.sleep
-        deadline = time.monotonic() + timeout
-        current = (
-            batch
-            if isinstance(batch, Batch)
-            else self.get(
+        deadline = PollDeadline(timeout, f"batch {batch_id}")
+        options = request_options(
+            extra_headers,
+            extra_query,
+            extra_body,
+            max_retries=max_retries,
+            _deadline=deadline,
+        )
+
+        def poll() -> Batch:
+            deadline.remaining()
+            result = self._get(
                 batch_id,
                 api_key=api_key,
                 workspace=workspace,
-                extra_headers=extra_headers,
-                extra_query=extra_query,
-                extra_body=extra_body,
-                max_retries=max_retries,
+                options=options,
             )
-        )
+            deadline.remaining()
+            return cast(Batch, result)
+
+        current = batch if isinstance(batch, Batch) else poll()
         interval = poll_interval
         while not current.finished:
             if current.is_error:
                 return current
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise DashScopeError(
-                    f"timed out after {timeout}s waiting for batch {batch_id}",
-                )
-            sleep_fn(min(interval, remaining))
+            sleep_fn(min(interval, deadline.remaining()))
             interval = min(interval * 2, max_interval)
-            current = self.get(
-                batch_id,
-                api_key=api_key,
-                workspace=workspace,
-                extra_headers=extra_headers,
-                extra_query=extra_query,
-                extra_body=extra_body,
-                max_retries=max_retries,
-            )
+            current = poll()
         return self._check_terminal(current, batch_id)
 
     def _check_terminal(self, batch: Batch, batch_id: str) -> Batch:
@@ -2379,12 +2394,8 @@ class AsyncBatches:
         raw: bool = False,
     ) -> Union[Batch, "APIResponse"]:
         """Async twin of :meth:`Batches.get`."""
-        batch_id = _require_batch_id(batch_id)
-        resp = await self._client.transport.request_api(
-            "GET",
-            f"{_BATCH_PATH}/{batch_id}",
-            base_url=_endpoint_base(self._client.config),
-            sdk_module=MODULE,
+        return await self._get(
+            batch_id,
             timeout=timeout,
             api_key=api_key,
             workspace=workspace,
@@ -2394,6 +2405,29 @@ class AsyncBatches:
                 extra_body,
                 max_retries=max_retries,
             ),
+            raw=raw,
+        )
+
+    async def _get(
+        self,
+        batch_id: str,
+        *,
+        timeout: Optional[float] = None,
+        api_key: Optional[str] = None,
+        workspace: Optional[str] = None,
+        options: Optional[RequestOptions] = None,
+        raw: bool = False,
+    ) -> Union[Batch, "APIResponse"]:
+        batch_id = _require_batch_id(batch_id)
+        resp = await self._client.transport.request_api(
+            "GET",
+            f"{_BATCH_PATH}/{batch_id}",
+            base_url=_endpoint_base(self._client.config),
+            sdk_module=MODULE,
+            timeout=timeout,
+            api_key=api_key,
+            workspace=workspace,
+            options=options,
             client=self._client,
         )
         if raw:
@@ -2599,40 +2633,37 @@ class AsyncBatches:
         """Async twin of :meth:`Batches.wait`."""
         batch_id = _batch_id(batch)
         sleep_fn = _sleep or asyncio.sleep
-        deadline = time.monotonic() + timeout
-        current = (
-            batch
-            if isinstance(batch, Batch)
-            else await self.get(
-                batch_id,
-                api_key=api_key,
-                workspace=workspace,
-                extra_headers=extra_headers,
-                extra_query=extra_query,
-                extra_body=extra_body,
-                max_retries=max_retries,
-            )
+        deadline = PollDeadline(timeout, f"batch {batch_id}")
+        options = request_options(
+            extra_headers,
+            extra_query,
+            extra_body,
+            max_retries=max_retries,
+            _deadline=deadline,
         )
+
+        async def fetch() -> Batch:
+            return cast(
+                Batch,
+                await self._get(
+                    batch_id,
+                    api_key=api_key,
+                    workspace=workspace,
+                    options=options,
+                ),
+            )
+
+        async def poll() -> Batch:
+            return await deadline.run_async(fetch)
+
+        current = batch if isinstance(batch, Batch) else await poll()
         interval = poll_interval
         while not current.finished:
             if current.is_error:
                 return current
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise DashScopeError(
-                    f"timed out after {timeout}s waiting for batch {batch_id}",
-                )
-            await sleep_fn(min(interval, remaining))
+            await sleep_fn(min(interval, deadline.remaining()))
             interval = min(interval * 2, max_interval)
-            current = await self.get(
-                batch_id,
-                api_key=api_key,
-                workspace=workspace,
-                extra_headers=extra_headers,
-                extra_query=extra_query,
-                extra_body=extra_body,
-                max_retries=max_retries,
-            )
+            current = await poll()
         return self._check_terminal(current, batch_id)
 
     def _check_terminal(self, batch: Batch, batch_id: str) -> Batch:
