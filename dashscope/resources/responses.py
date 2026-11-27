@@ -66,6 +66,16 @@ if TYPE_CHECKING:
 
     from dashscope.transport._response import APIResponse
 
+__all__ = [
+    "AsyncInputItems",
+    "AsyncResponseStream",
+    "AsyncResponses",
+    "InputItemList",
+    "InputItems",
+    "ResponseStream",
+    "Responses",
+]
+
 _RESPONSES_PATH = "/responses"
 
 MODULE = "responses"

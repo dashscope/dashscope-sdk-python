@@ -27,6 +27,12 @@ OpenAI 兼容协议或 Anthropic 兼容协议。通过 `Client(protocol="openai"
 
 ::: dashscope.protocols.anthropic.AnthropicProtocol
 
+::: dashscope.protocols.anthropic.detect_web_search_tool
+
+::: dashscope.protocols.anthropic.system_has_billing_header
+
+::: dashscope.protocols.anthropic.ensure_billing_header
+
 ## 注册表
 
 ::: dashscope.protocols.get_protocol

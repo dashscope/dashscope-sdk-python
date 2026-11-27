@@ -104,6 +104,34 @@ description: "客户端资源命名空间 API 参考：向量嵌入、图像、�
 
 ::: dashscope.resources.models.ModelList
 
+::: dashscope.resources.models.ModelPrice
+
+::: dashscope.resources.models.ModelPriceRange
+
+::: dashscope.resources.models.InferenceMetadata
+
+::: dashscope.resources.models.ModelInfo
+
+::: dashscope.resources.models.RateLimit
+
+::: dashscope.resources.models.ModelQuota
+
+::: dashscope.resources.models.QuotaList
+
+::: dashscope.resources.models.PermissionDetail
+
+::: dashscope.resources.models.ModelPermission
+
+::: dashscope.resources.models.PermissionList
+
+::: dashscope.resources.models.ModelLimits
+
+::: dashscope.resources.models.AsyncModelLimits
+
+::: dashscope.resources.models.ModelPermissions
+
+::: dashscope.resources.models.AsyncModelPermissions
+
 ## 微调（Fine-tunes）
 
 `client.fine_tunes` —— 微调任务、日志与事件。
@@ -243,3 +271,107 @@ description: "客户端资源命名空间 API 参考：向量嵌入、图像、�
 ::: dashscope.resources._jobs.Jobs
 
 ::: dashscope.resources._jobs.AsyncJobs
+
+## Batch Chat
+
+::: dashscope.resources.batch_chat.BatchChatCompletions
+
+::: dashscope.resources.batch_chat.AsyncBatchChatCompletions
+
+::: dashscope.resources.batch_chat.BatchChat
+
+::: dashscope.resources.batch_chat.AsyncBatchChat
+
+## Batches
+
+::: dashscope.resources.batches.BatchFile
+
+::: dashscope.resources.batches.RequestCounts
+
+::: dashscope.resources.batches.BatchErrorItem
+
+::: dashscope.resources.batches.BatchErrors
+
+::: dashscope.resources.batches.Batch
+
+::: dashscope.resources.batches.BatchFileList
+
+::: dashscope.resources.batches.BatchList
+
+::: dashscope.resources.batches.FileDeletion
+
+::: dashscope.resources.batches.FileContent
+
+::: dashscope.resources.batches.BatchFiles
+
+::: dashscope.resources.batches.AsyncBatchFiles
+
+::: dashscope.resources.batches.Batches
+
+::: dashscope.resources.batches.AsyncBatches
+
+## Conversations
+
+::: dashscope.resources.conversations.ConversationItemList
+
+::: dashscope.resources.conversations.ConversationItems
+
+::: dashscope.resources.conversations.AsyncConversationItems
+
+::: dashscope.resources.conversations.Conversations
+
+::: dashscope.resources.conversations.AsyncConversations
+
+## Fine Tunes Compress
+
+::: dashscope.resources.fine_tunes_compress.CompressError
+
+::: dashscope.resources.fine_tunes_compress.CompressJob
+
+::: dashscope.resources.fine_tunes_compress.CompressJobList
+
+::: dashscope.resources.fine_tunes_compress.CompressHyperParameter
+
+::: dashscope.resources.fine_tunes_compress.CompressTemplate
+
+::: dashscope.resources.fine_tunes_compress.CompressCustomModel
+
+::: dashscope.resources.fine_tunes_compress.CompressTemplateList
+
+::: dashscope.resources.fine_tunes_compress.CompressTemplates
+
+::: dashscope.resources.fine_tunes_compress.CompressJobs
+
+::: dashscope.resources.fine_tunes_compress.Compress
+
+::: dashscope.resources.fine_tunes_compress.AsyncCompressTemplates
+
+::: dashscope.resources.fine_tunes_compress.AsyncCompressJobs
+
+::: dashscope.resources.fine_tunes_compress.AsyncCompress
+
+## Messages
+
+::: dashscope.resources.messages.MessageStream
+
+::: dashscope.resources.messages.AsyncMessageStream
+
+::: dashscope.resources.messages.Messages
+
+::: dashscope.resources.messages.AsyncMessages
+
+## Responses
+
+::: dashscope.resources.responses.InputItemList
+
+::: dashscope.resources.responses.ResponseStream
+
+::: dashscope.resources.responses.AsyncResponseStream
+
+::: dashscope.resources.responses.InputItems
+
+::: dashscope.resources.responses.AsyncInputItems
+
+::: dashscope.resources.responses.Responses
+
+::: dashscope.resources.responses.AsyncResponses

@@ -28,6 +28,12 @@ setting / `DASHSCOPE_PROTOCOL` environment variable); valid values are
 
 ::: dashscope.protocols.anthropic.AnthropicProtocol
 
+::: dashscope.protocols.anthropic.detect_web_search_tool
+
+::: dashscope.protocols.anthropic.system_has_billing_header
+
+::: dashscope.protocols.anthropic.ensure_billing_header
+
 ## Registry
 
 ::: dashscope.protocols.get_protocol
