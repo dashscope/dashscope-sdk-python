@@ -493,7 +493,7 @@ class RecognitionResponse(DashScopeAPIResponse):
 class SpeechSynthesisOutput(DictMixin):
     sentence: Dict[str, Any]
 
-    def __init__(self, sentence: Dict[str, Any], **kwargs):
+    def __init__(self, sentence: Dict[str, Any] = None, **kwargs):
         super().__init__(sentence=sentence, **kwargs)
 
 
