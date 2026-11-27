@@ -139,23 +139,42 @@ def test_models_boundary_empty_catalog():
     assert seen == [1]
 
 
-def test_models_provider_filter_applies_per_page_only():
-    # total_count stays the pre-filter catalog total; the filter narrows only
-    # the items on each fetched page.
+def test_models_provider_filter_is_server_side():
+    # ``provider`` folds into the server-side ``providers`` filter: the gateway
+    # returns only matching models and a total_count of the *filtered* set, so
+    # pagination walks the filtered catalog instead of slicing each page
+    # client-side (which left total_count pre-filter and hid other-page matches).
     catalog = [
         {"model": "a", "provider": "dashscope"},
         {"model": "b", "provider": "other"},
         {"model": "c", "provider": "dashscope"},
         {"model": "d", "provider": "other"},
     ]
-    client = _make_client(_models_handler(catalog, []))
+    seen_providers: List[Any] = []
 
-    page = client.models.list(page_no=1, page_size=2, provider="dashscope")
-    assert page.total_count == 4  # unfiltered
+    def handler(request):
+        providers = request.url.params.get_list("providers")
+        seen_providers.append(providers)
+        filtered = (
+            [m for m in catalog if m["provider"] in providers]
+            if providers
+            else catalog
+        )
+        params = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json=_slice_page(filtered, "models", params, envelope="output"),
+        )
+
+    client = _make_client(handler)
+    page = client.models.list(page_no=1, page_size=1, provider="dashscope")
+    assert page.total_count == 2  # filtered total, not the catalog's 4
     assert [m.model for m in page] == ["a"]
 
     all_filtered = [m.model for p in page.iter_pages() for m in p]
     assert all_filtered == ["a", "c"]
+    # The filter survives traversal: every fetched page carries providers.
+    assert seen_providers == [["dashscope"], ["dashscope"]]
 
 
 def test_model_dump_excludes_callback():
@@ -178,6 +197,21 @@ def test_model_dump_excludes_callback():
             "source": None,
             "provider": None,
             "open_source": None,
+            "name": None,
+            "description": None,
+            "capabilities": [],
+            "inference_provider": None,
+            "features": [],
+            "prices": [],
+            "published_time": None,
+            "inference_metadata": None,
+            "model_info": None,
+            "equivalent_snapshot": None,
+            # SDK-injected query context (A2): default region, no workspace,
+            # unfiltered service_site.
+            "served_region": "cn-beijing",
+            "workspace": None,
+            "service_site": None,
         },
     ]
 

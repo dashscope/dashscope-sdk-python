@@ -382,7 +382,9 @@ def test_models_list_degrades_a_null_total_count(caplog):
     client = _make_client(handler)
     with caplog.at_level(logging.DEBUG, logger="dashscope._logging"):
         page = client.models.list()
-    assert page.total_count == 0
+    # A null total falls back to the item count and marks the page's total
+    # unknown, so traversal keeps walking full pages instead of stopping.
+    assert page.total_count == 1
     assert page.models[0].model == "qwen-plus"
     assert _drift_records(caplog)
 

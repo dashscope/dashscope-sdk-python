@@ -173,7 +173,6 @@ def _enum_choices() -> Dict[str, Tuple[str, Tuple[str, ...]]]:
     """
     from dashscope._config import (  # pylint: disable=import-outside-toplevel
         VALID_PROTOCOLS,
-        VALID_REGIONS,
     )
     from dashscope.cli.output import (  # pylint: disable=import-outside-toplevel
         OUTPUT_FORMATS,
@@ -181,7 +180,6 @@ def _enum_choices() -> Dict[str, Tuple[str, Tuple[str, ...]]]:
 
     return {
         "protocol": ("protocol", tuple(VALID_PROTOCOLS)),
-        "region": ("region", tuple(VALID_REGIONS)),
         "output": ("output format", tuple(OUTPUT_FORMATS)),
     }
 
@@ -228,6 +226,17 @@ def _validate(key: str, value: Any) -> Any:
             raise usage_error(
                 f"invalid {label} {value!r}, expected one of "
                 f"{', '.join(allowed)}",
+            )
+        return value
+    if key == "region":
+        from dashscope._config import (  # pylint: disable=import-outside-toplevel
+            _is_safe_region_label,
+        )
+
+        if not _is_safe_region_label(value):
+            raise usage_error(
+                f"invalid region {value!r}, expected a lowercase DNS "
+                f"label (letters, digits, hyphens), e.g. 'cn-beijing'",
             )
         return value
     if key in _POSITIVE_SECONDS:

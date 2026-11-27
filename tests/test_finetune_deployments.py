@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 
 import httpx
@@ -1073,3 +1074,143 @@ async def test_job_events_close_on_original_exceptions_and_early_exit(
         assert wire.closed and response.is_closed
     finally:
         await _close_event_client(client, is_async)
+
+
+def _no_deployment_wire(request):
+    pytest.fail(
+        f"deferred or invalid deployment request reached {request.url}",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_async", [False, True])
+@pytest.mark.parametrize("method", ["create", "scale"])
+@pytest.mark.parametrize("raw", [False, True])
+@pytest.mark.parametrize(
+    "extra_body",
+    [
+        {"plan": "ptu"},
+        {"ptu_capacity": {"input_tpm": 100, "output_tpm": 50}},
+        {"pre_paid_info": {"pricing_cycle": "Day", "duration": 1}},
+    ],
+)
+async def test_deferred_ptu_cannot_be_enabled_through_extra_body(
+    is_async,
+    method,
+    raw,
+    extra_body,
+):
+    factory = _make_async_client if is_async else _make_client
+    client = factory(_no_deployment_wire)
+    with pytest.raises(
+        ValueError,
+        match="PTU throughput reservation is deferred",
+    ):
+        if method == "create":
+            result = client.deployments.create(
+                model="qwen-plus",
+                capacity=1,
+                extra_body=extra_body,
+                raw=raw,
+            )
+        else:
+            result = client.deployments.scale(
+                "dep-1",
+                capacity=1,
+                extra_body=extra_body,
+                raw=raw,
+            )
+        if is_async:
+            await result
+    if is_async:
+        await client.aclose()
+    else:
+        client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_async", [False, True])
+async def test_deferred_ptu_plan_and_resources_are_not_available(is_async):
+    factory = _make_async_client if is_async else _make_client
+    client = factory(_no_deployment_wire)
+    for name in (
+        "capacity_instances",
+        "capacity_operations",
+        "renew",
+        "update_overflow_strategy",
+    ):
+        assert not hasattr(client.deployments, name)
+    assert importlib.util.find_spec("dashscope.resources._ptu") is None
+    with pytest.raises(
+        ValueError,
+        match="PTU throughput reservation is deferred",
+    ):
+        result = client.deployments.create(
+            model="qwen-plus",
+            capacity=1,
+            plan="ptu",
+        )
+        if is_async:
+            await result
+    if is_async:
+        await client.aclose()
+    else:
+        client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_async", [False, True])
+@pytest.mark.parametrize("method", ["get", "scale", "delete"])
+async def test_existing_deployment_ids_remain_percent_encoded(
+    is_async,
+    method,
+):
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json={"output": {}})
+
+    factory = _make_async_client if is_async else _make_client
+    client = factory(handler)
+    kwargs = {"capacity": 1} if method == "scale" else {}
+    result = getattr(client.deployments, method)("dep/a?b#c", **kwargs)
+    if is_async:
+        await result
+    suffix = b"/scale" if method == "scale" else b""
+    assert seen[0].url.raw_path == (
+        b"/api/v1/deployments/dep%2Fa%3Fb%23c" + suffix
+    )
+    if method == "scale":
+        assert json.loads(seen[0].content)["deployed_model"] == "dep/a?b#c"
+    if is_async:
+        await client.aclose()
+    else:
+        client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_async", [False, True])
+@pytest.mark.parametrize("method", ["get", "scale", "delete", "stream_events"])
+@pytest.mark.parametrize("bad_id", ["", "   "])
+async def test_existing_deployment_ids_still_reject_empty_values(
+    is_async,
+    method,
+    bad_id,
+):
+    factory = _make_async_client if is_async else _make_client
+    client = factory(_no_deployment_wire)
+    with pytest.raises(ValueError, match="non-empty string"):
+        kwargs = {"capacity": 1} if method == "scale" else {}
+        result = getattr(client.deployments, method)(bad_id, **kwargs)
+        if method == "stream_events":
+            if is_async:
+                _ = [event async for event in result]
+            else:
+                _ = list(result)
+        elif is_async:
+            await result
+    if is_async:
+        await client.aclose()
+    else:
+        client.close()

@@ -53,7 +53,10 @@ jobs:
     if: github.event_name != 'release'
     runs-on: ubuntu-latest
     steps:
+      # Release events carry a tag ref; docs always track main (latest).
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && 'refs/heads/main' || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

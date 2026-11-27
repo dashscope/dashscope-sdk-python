@@ -23,6 +23,7 @@ from typing import (
     Union,
     overload,
 )
+from urllib.parse import quote
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -33,7 +34,7 @@ from dashscope.resources._sse import (
     _stream_error,
     _try_json,
 )
-from dashscope.transport._options import request_options
+from dashscope.transport._options import deep_merge, request_options
 from dashscope.types._parse import parse_model
 from dashscope.types.common import (
     JobStatus,
@@ -188,6 +189,29 @@ def _parse_event(
     )
 
 
+def _path_id(value: str, name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string")
+    return quote(value, safe="")
+
+
+def _release_body(
+    body: Mapping[str, Any],
+    extra_body: Optional[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Keep generic deployment options without enabling deferred PTU writes."""
+    merged = deep_merge(body, extra_body or {})
+    if merged.get("plan") == "ptu" or any(
+        merged.get(field) is not None
+        for field in ("ptu_capacity", "pre_paid_info")
+    ):
+        raise ValueError(
+            "PTU throughput reservation is deferred and is not available "
+            "in this release",
+        )
+    return merged
+
+
 def _build_create_body(
     model: str,
     capacity: int,
@@ -289,6 +313,8 @@ class Deployments:
     ) -> Union[Deployment, "APIResponse"]:
         """Create a deployment of ``model`` with ``capacity`` instances.
 
+        PTU throughput reservation is deferred in this release.
+
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
@@ -303,6 +329,7 @@ class Deployments:
             deploy_spec,
             billing_method,
         )
+        body = _release_body(body, extra_body)
         resp = self._client.transport.request_api(
             "POST",
             _BASE_PATH,
@@ -314,7 +341,6 @@ class Deployments:
             options=request_options(
                 extra_headers,
                 extra_query,
-                extra_body,
                 max_retries=max_retries,
             ),
             client=self._client,
@@ -384,7 +410,7 @@ class Deployments:
         """
         resp = self._client.transport.request_api(
             "GET",
-            f"{_BASE_PATH}/{deployed_model}",
+            f"{_BASE_PATH}/{_path_id(deployed_model, 'deployed_model')}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -545,10 +571,15 @@ class Deployments:
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
+        body = _release_body(
+            {"deployed_model": deployed_model, "capacity": capacity},
+            extra_body,
+        )
+        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = self._client.transport.request_api(
             "PUT",
             f"{_BASE_PATH}/{deployed_model}/scale",
-            json={"deployed_model": deployed_model, "capacity": capacity},
+            json=body,
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -556,7 +587,6 @@ class Deployments:
             options=request_options(
                 extra_headers,
                 extra_query,
-                extra_body,
                 max_retries=max_retries,
             ),
             client=self._client,
@@ -626,7 +656,7 @@ class Deployments:
         """
         resp = self._client.transport.request_api(
             "DELETE",
-            f"{_BASE_PATH}/{deployed_model}",
+            f"{_BASE_PATH}/{_path_id(deployed_model, 'deployed_model')}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -663,6 +693,7 @@ class Deployments:
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
     ) -> Iterator[DeploymentEvent]:
+        deployed_model_id = _path_id(deployed_model_id, "deployed_model_id")
         response = self._client.transport.open_stream(
             "GET",
             f"{_BASE_PATH}/{deployed_model_id}/stream",
@@ -775,6 +806,8 @@ class AsyncDeployments:
     ) -> Union[Deployment, "APIResponse"]:
         """Create a deployment of ``model`` with ``capacity`` instances.
 
+        PTU throughput reservation is deferred in this release.
+
         ``raw=True`` returns the :class:`~dashscope.transport.APIResponse`
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
@@ -789,6 +822,7 @@ class AsyncDeployments:
             deploy_spec,
             billing_method,
         )
+        body = _release_body(body, extra_body)
         resp = await self._client.transport.request_api(
             "POST",
             _BASE_PATH,
@@ -800,7 +834,6 @@ class AsyncDeployments:
             options=request_options(
                 extra_headers,
                 extra_query,
-                extra_body,
                 max_retries=max_retries,
             ),
             client=self._client,
@@ -870,7 +903,7 @@ class AsyncDeployments:
         """
         resp = await self._client.transport.request_api(
             "GET",
-            f"{_BASE_PATH}/{deployed_model}",
+            f"{_BASE_PATH}/{_path_id(deployed_model, 'deployed_model')}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -1031,10 +1064,15 @@ class AsyncDeployments:
         before any error check, so a caller can read the status, headers and
         ``elapsed`` of the response or re-parse it itself.
         """
+        body = _release_body(
+            {"deployed_model": deployed_model, "capacity": capacity},
+            extra_body,
+        )
+        deployed_model = _path_id(deployed_model, "deployed_model")
         resp = await self._client.transport.request_api(
             "PUT",
             f"{_BASE_PATH}/{deployed_model}/scale",
-            json={"deployed_model": deployed_model, "capacity": capacity},
+            json=body,
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -1042,7 +1080,6 @@ class AsyncDeployments:
             options=request_options(
                 extra_headers,
                 extra_query,
-                extra_body,
                 max_retries=max_retries,
             ),
             client=self._client,
@@ -1112,7 +1149,7 @@ class AsyncDeployments:
         """
         resp = await self._client.transport.request_api(
             "DELETE",
-            f"{_BASE_PATH}/{deployed_model}",
+            f"{_BASE_PATH}/{_path_id(deployed_model, 'deployed_model')}",
             sdk_module=MODULE,
             timeout=timeout,
             api_key=api_key,
@@ -1149,6 +1186,7 @@ class AsyncDeployments:
         extra_body: Optional[Mapping[str, Any]] = None,
         max_retries: Optional[int] = None,
     ) -> AsyncIterator[DeploymentEvent]:
+        deployed_model_id = _path_id(deployed_model_id, "deployed_model_id")
         response = await self._client.transport.open_stream(
             "GET",
             f"{_BASE_PATH}/{deployed_model_id}/stream",
