@@ -189,10 +189,8 @@ class SpeechSynthesizer(BaseApi):
                             # SSML/bgm scenario). Keep it as the final
                             # response candidate so usage/status is not lost;
                             # a later output=None final message overwrites it.
-                            _the_final_response = (
-                                SpeechSynthesisResponse.from_api_response(  # noqa E501  # pylint: disable=line-too-long
-                                    part,
-                                )
+                            _the_final_response = SpeechSynthesisResponse.from_api_response(  # noqa E501  # pylint: disable=line-too-long
+                                part,
                             )
                             continue
                         if _callback is not None:
