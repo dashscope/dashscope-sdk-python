@@ -184,9 +184,14 @@ class SpeechSynthesizer(BaseApi):
                             not isinstance(part.output, dict)
                             or "sentence" not in part.output
                         ):
-                            # Non-timestamp message (e.g. extra messages returned
-                            # in the SSML/bgm scenario). Skip it safely instead of
-                            # raising KeyError on part.output["sentence"].
+                            # Non-timestamp message (e.g. a usage-only
+                            # task-finished payload or extra messages in the
+                            # SSML/bgm scenario). Keep it as the final
+                            # response candidate so usage/status is not lost;
+                            # a later output=None final message overwrites it.
+                            _the_final_response = SpeechSynthesisResponse.from_api_response(  # noqa E501  # pylint: disable=line-too-long
+                                part,
+                            )
                             continue
                         if _callback is not None:
                             sentence = SpeechSynthesisResult(
